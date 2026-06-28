@@ -1,0 +1,34 @@
+# Secrets
+.env
+*.pem
+*.key
+vault.key
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+.venv/
+venv/
+venv-*/
+.env.local
+
+# IDE / local
+.qoder/
+.skills_setup_done
+fish_variables
+*.swp
+.DS_Store
+Thumbs.db
+
+# Runtime cache (user machine, not repo)
+.cache/
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/

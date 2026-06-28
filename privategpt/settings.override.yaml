@@ -1,0 +1,5 @@
+# Arka override: use Qdrant Docker instead of embedded local storage (avoids ingest lock errors).
+qdrant:
+  url: ${PGPT_QDRANT_URL:http://127.0.0.1:6333}
+  path: null
+  prefer_grpc: false

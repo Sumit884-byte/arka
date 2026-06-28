@@ -1,0 +1,11 @@
+# Firmamento TurboQuant for Arka RAG — install from git, NOT PyPI.
+#
+# WRONG (pulls PyTorch/CUDA, ~2GB+):
+#   pip install turboquant
+#
+# CORRECT (numpy + scipy only):
+#   arka rag setup
+#   # or: ~/.config/fish/venv-arka/bin/pip install -e ~/Projects/TurboQuant
+#
+numpy>=1.24
+scipy>=1.10
