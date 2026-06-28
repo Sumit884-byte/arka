@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from arka.paths import cache_dir, config_dir, env_file, legacy_fish_home
+from arka.paths import cache_dir, config_dir, env_file
 
 
 def load_env(extra: Path | None = None) -> None:
@@ -13,10 +13,9 @@ def load_env(extra: Path | None = None) -> None:
     if extra:
         paths.append(extra)
     paths.append(env_file())
-    legacy = legacy_fish_home()
-    if legacy:
-        paths.append(legacy / ".env")
-    paths.append(config_dir() / ".env")
+    legacy = Path.home() / ".config" / "fish" / ".env"
+    if legacy.is_file():
+        paths.append(legacy)
 
     seen: set[Path] = set()
     for path in paths:

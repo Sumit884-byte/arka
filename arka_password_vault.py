@@ -13,8 +13,16 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-FISH_DIR = Path.home() / ".config" / "fish"
-CACHE = Path.home() / ".cache" / "fish-agent"
+try:
+    import arka_paths as _ap
+
+    _ap.load_env_file()
+    FISH_DIR = _ap.arka_home()
+    CACHE = _ap.cache_dir()
+except ImportError:
+    FISH_DIR = Path(__file__).resolve().parent
+    CACHE = Path.home() / ".cache" / "fish-agent"
+
 VAULT_FILE = CACHE / "passwords.vault.json"
 KEY_FILE = CACHE / "vault.key"
 
@@ -23,6 +31,13 @@ NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$")
 
 
 def _load_env() -> None:
+    try:
+        import arka_paths
+
+        arka_paths.load_env_file()
+        return
+    except ImportError:
+        pass
     env_path = FISH_DIR / ".env"
     if not env_path.is_file():
         return

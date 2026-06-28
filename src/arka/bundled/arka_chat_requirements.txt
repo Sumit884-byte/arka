@@ -1,0 +1,10 @@
+# Optional deps for arka_chat.py (deep web, maps, math) + model-agnostic LLM
+agno[groq,google,ollama]>=2.5.0
+openai>=1.0.0
+ddgs
+trafilatura
+beautifulsoup4
+sympy
+geopy
+# Optional: YouTube transcripts (yt-dlp fallback if missing)
+youtube-transcript-api>=0.6.0; python_version < "3.14"

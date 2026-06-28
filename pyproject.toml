@@ -63,4 +63,13 @@ Documentation = "https://github.com/arka-agent/arka#readme"
 where = ["src"]
 
 [tool.setuptools.package-data]
-arka = ["bundled/*.py", "bundled/*.example"]
+arka = [
+    "bundled/*.py",
+    "bundled/*.example",
+    "bundled/*.fish",
+    "bundled/*.sh",
+    "bundled/*.txt",
+    "bundled/*.yaml",
+    "bundled/*.html",
+    "bundled/privategpt/*",
+]

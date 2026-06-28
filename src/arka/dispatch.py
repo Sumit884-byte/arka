@@ -6,11 +6,13 @@ import os
 import subprocess
 import sys
 
-from arka.paths import arka_home, cache_dir, config_dir, python_executable, script_path
+from arka.paths import arka_home, bundled_dir, cache_dir, config_dir, python_executable, script_path
 
 
 def apply_env() -> None:
-    os.environ.setdefault("ARKA_HOME", str(arka_home()))
+    bundled = bundled_dir()
+    home = bundled if (bundled / "arka_chat.py").is_file() else arka_home()
+    os.environ["ARKA_HOME"] = str(home)
     os.environ.setdefault("ARKA_CONFIG_DIR", str(config_dir()))
     os.environ.setdefault("ARKA_CACHE_DIR", str(cache_dir()))
 
@@ -20,7 +22,7 @@ def run_script(script: str, args: list[str] | None = None) -> int:
     path = script_path(script)
     if not path.is_file():
         print(f"Missing script: {path}", file=sys.stderr)
-        print("Run: arka setup", file=sys.stderr)
+        print("Reinstall arka-agent or run: python scripts/sync_bundled.py", file=sys.stderr)
         return 1
     cmd = [python_executable(), str(path), *(args or [])]
     return subprocess.call(cmd)

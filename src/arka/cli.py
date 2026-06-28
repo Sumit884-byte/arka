@@ -3,13 +3,24 @@
 from __future__ import annotations
 
 import argparse
+import subprocess
 import sys
 
 from arka import __version__
 from arka.dispatch import run_fish_skill, run_script, run_skill
 from arka.env import load_env
 from arka.fish_bridge import delegate_subcommand, delegate_to_fish
-from arka.paths import arka_home, cache_dir, config_dir, ensure_layout, env_file, fish_config, sync_scripts_to
+from arka.paths import (
+    arka_home,
+    bundled_dir,
+    cache_dir,
+    checkout_root,
+    config_dir,
+    ensure_layout,
+    env_file,
+    fish_config,
+    package_dir,
+)
 from arka.platform_info import has_full_fish_agent, system
 from arka.router import route
 
@@ -33,6 +44,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args[0] == "doctor":
         return _cmd_doctor()
+
+    if args[0] in ("refetch", "update", "sync"):
+        return _cmd_refetch(args[1:])
 
     if args[0] == "route":
         text = " ".join(args[1:]).strip()
@@ -108,6 +122,49 @@ def _run_portable(text: str) -> int:
     return run_chat_ask(text)
 
 
+def _cmd_refetch(extra: list[str]) -> int:
+    """Pull latest git + sync src/arka/bundled + optional pip reinstall."""
+    pull = "--no-pull" not in extra
+    do_install = "--install" in extra or "-i" in extra
+
+    root = checkout_root()
+    if root is None:
+        print("Not inside an Arka git clone.", file=sys.stderr)
+        print("Use: git clone https://github.com/Sumit884-byte/arka && cd arka && arka refetch --install", file=sys.stderr)
+        return 1
+
+    if pull and (root / ".git").is_dir():
+        print("→ git pull")
+        r = subprocess.run(["git", "pull", "--ff-only"], cwd=root)
+        if r.returncode != 0:
+            print("git pull failed (fix conflicts or use: arka refetch --no-pull)", file=sys.stderr)
+            return r.returncode
+
+    sync = root / "scripts" / "sync_bundled.py"
+    if sync.is_file():
+        print("→ sync bundled scripts")
+        r = subprocess.run([sys.executable, str(sync)], cwd=root)
+        if r.returncode != 0:
+            return r.returncode
+    else:
+        print(f"Missing {sync}", file=sys.stderr)
+        return 1
+
+    if do_install:
+        print("→ pip install -e '.[chat]'")
+        r = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "-e", f"{root}[chat]"],
+            cwd=root,
+        )
+        if r.returncode != 0:
+            return r.returncode
+
+    ensure_layout()
+    print(f"✓ Refetch complete — bundle: {bundled_dir()}")
+    print("  arka doctor")
+    return 0
+
+
 def _cmd_route_preview(text: str) -> int:
     r = route(text)
     if r:
@@ -120,14 +177,11 @@ def _cmd_route_preview(text: str) -> int:
 
 def _cmd_setup() -> int:
     home = ensure_layout()
-    copied = sync_scripts_to(home)
     print(f"Arka setup complete ({system()})")
-    print(f"  Home:   {home}")
-    print(f"  Config: {config_dir()}")
-    print(f"  Cache:  {cache_dir()}")
-    print(f"  Env:    {env_file()}")
-    if copied:
-        print(f"  Synced: {len(copied)} files")
+    print(f"  Scripts: (package) {home}")
+    print(f"  Config:  {config_dir()}")
+    print(f"  Cache:   {cache_dir()}")
+    print(f"  Env:     {env_file()}")
     if not env_file().is_file():
         print("  Edit .env and add GEMINI_API_KEY or GROQ_API_KEY")
     print("\nNext: pip install 'arka-agent[chat]'  then  arka ask \"what is Python?\"")
@@ -136,11 +190,13 @@ def _cmd_setup() -> int:
 
 def _cmd_doctor() -> int:
     print(f"arka {__version__} — {system()}")
-    print(f"  ARKA_HOME:    {arka_home()}")
-    print(f"  Config:       {config_dir()}")
-    print(f"  Cache:        {cache_dir()}")
-    print(f"  arka_chat.py: {('ok' if (arka_home() / 'arka_chat.py').is_file() else 'missing — run: arka setup')}")
-    print(f"  Fish agent:   {('yes — ' + str(fish_config())) if has_full_fish_agent() else 'no (portable Python mode)'}")
+    bundled = bundled_dir()
+    print(f"  Package bundle: {bundled}")
+    print(f"  ARKA_HOME:      {arka_home()}")
+    print(f"  Config:         {config_dir()}")
+    print(f"  Cache:          {cache_dir()}")
+    print(f"  arka_chat.py:   {('ok' if (arka_home() / 'arka_chat.py').is_file() else 'missing — run: python scripts/sync_bundled.py')}")
+    print(f"  Fish agent:     {('yes — ' + str(fish_config())) if has_full_fish_agent() else 'no (portable Python mode)'}")
     return 0
 
 
@@ -151,7 +207,8 @@ def _cmd_help() -> int:
 Install:
   pip install arka-agent          # core
   pip install 'arka-agent[chat]'  # web answers, calc, weather
-  arka setup                      # create config dirs + sync scripts
+  arka setup                      # create ~/.config/arka + .env (scripts live in package)
+  arka refetch [--install]        # git pull + sync bundled (after clone or on another PC)
 
 Usage:
   arka <request>                  # natural language (routes to best skill)

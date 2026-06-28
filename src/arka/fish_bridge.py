@@ -2,10 +2,21 @@
 
 from __future__ import annotations
 
+import os
 import shlex
 import subprocess
 
-from arka.paths import fish_config
+from arka.paths import arka_home, bundled_dir, config_dir, fish_config
+
+
+def _fish_env() -> dict[str, str]:
+    env = os.environ.copy()
+    env.setdefault("ARKA_HOME", str(arka_home()))
+    env.setdefault("ARKA_CONFIG_DIR", str(config_dir()))
+    bundled = bundled_dir()
+    if bundled.is_dir():
+        env["ARKA_HOME"] = str(bundled if (bundled / "arka_chat.py").is_file() else arka_home())
+    return env
 
 
 def delegate_to_fish(argv: list[str]) -> int | None:
@@ -26,7 +37,7 @@ def delegate_to_fish(argv: list[str]) -> int | None:
     cfg_q = shlex.quote(str(cfg))
     inner = f"source {cfg_q}; {call} {request}"
     try:
-        result = subprocess.run([fish, "-c", inner], check=False)
+        result = subprocess.run([fish, "-c", inner], check=False, env=_fish_env())
         return result.returncode
     except OSError:
         return None
@@ -45,7 +56,7 @@ def delegate_subcommand(sub: str, rest: list[str]) -> int | None:
     cfg_q = shlex.quote(str(cfg))
     inner = f"source {cfg_q}; {call} {sub} {args}".strip()
     try:
-        result = subprocess.run([fish, "-c", inner], check=False)
+        result = subprocess.run([fish, "-c", inner], check=False, env=_fish_env())
         return result.returncode
     except OSError:
         return None

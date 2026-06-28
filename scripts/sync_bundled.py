@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Copy runtime scripts into src/arka/bundled for pip wheels."""
+"""Copy runtime files into src/arka/bundled for pip wheels (run before build)."""
 
 from __future__ import annotations
 
@@ -9,7 +9,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 BUNDLED = ROOT / "src" / "arka" / "bundled"
 
+# All runtime assets shipped inside the package (no external folder copy needed)
 NAMES = [
+    "arka_paths.py",
     "arka_agent.py",
     "arka_aie.py",
     "arka_batch_summarize.py",
@@ -50,7 +52,18 @@ NAMES = [
     "sarvam_speak.py",
     "sarvam_stt.py",
     "web_answer.py",
+    "spotify_dom.py",
+    "config.fish",
+    "arka_boot.sh",
+    "arka_voice_hf.sh",
+    "termux-boot-arka.sh",
+    "arka_chat_requirements.txt",
+    "arka_turboquant_requirements.txt",
     ".env.example",
+]
+
+OPTIONAL_DIRS = [
+    ("privategpt", "settings.override.yaml"),
 ]
 
 
@@ -63,6 +76,13 @@ def main() -> int:
             continue
         shutil.copy2(src, BUNDLED / name)
         n += 1
+    for subdir, fname in OPTIONAL_DIRS:
+        src = ROOT / subdir / fname
+        if src.is_file():
+            dst_dir = BUNDLED / subdir
+            dst_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dst_dir / fname)
+            n += 1
     print(f"Synced {n} files → {BUNDLED}")
     return 0
 

@@ -12,15 +12,27 @@ A modern, AI-powered Fish shell setup with **Arka** — a voice-capable natural-
 Install Arka as a Python package — works on any OS:
 
 ```bash
-# Recommended: isolated install
-pipx install "arka-agent[chat]"
-# or from this repo:
-pip install -e ".[chat]"
-
-arka setup          # create config dirs, copy scripts, .env template
-arka doctor         # verify install
+git clone https://github.com/Sumit884-byte/arka.git
+cd arka
+./scripts/refetch.sh --install   # pull + sync bundle + pip install
+cp .env.example ~/.config/arka/.env   # add API keys
+arka doctor
 arka ask "what is Rust?"
-arka password set wifi MySecret
+```
+
+Already cloned on another machine — refresh from GitHub:
+
+```bash
+cd arka
+arka refetch --install
+# or: ./scripts/refetch.sh --install
+```
+
+```bash
+# PyPI / pipx (no git clone)
+pipx install "arka-agent[chat]"
+arka setup
+arka doctor
 ```
 
 | Platform | Mode |

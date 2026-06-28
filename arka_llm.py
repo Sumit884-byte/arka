@@ -86,7 +86,14 @@ def env(name: str, default: str = "") -> str:
 
 
 def _load_fish_env() -> None:
-    env_file = __import__("pathlib").Path.home() / ".config/fish/.env"
+    try:
+        import arka_paths
+
+        arka_paths.load_env_file()
+        return
+    except ImportError:
+        pass
+    env_file = __import__("pathlib").Path.home() / ".config" / "fish" / ".env"
     if not env_file.is_file():
         return
     for line in env_file.read_text(encoding="utf-8", errors="replace").splitlines():

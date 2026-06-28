@@ -16,7 +16,14 @@ import urllib.request
 from datetime import datetime
 from pathlib import Path
 
-CACHE_DIR = Path.home() / ".cache" / "fish-agent"
+try:
+    import arka_paths as _ap
+
+    _ap.load_env_file()
+    CACHE_DIR = _ap.cache_dir()
+except ImportError:
+    CACHE_DIR = Path.home() / ".cache" / "fish-agent"
+
 MAPS_DIR = CACHE_DIR / "maps"
 SESSION_FILE = CACHE_DIR / "chat_session.json"
 CONTEXT_FILE = CACHE_DIR / "chat_context.json"
