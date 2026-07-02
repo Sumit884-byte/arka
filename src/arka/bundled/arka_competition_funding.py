@@ -205,7 +205,7 @@ def _parse_funding_headline(headline: str) -> tuple[str, str, str]:
 
     amount_hint = "undisclosed"
     m = re.search(
-        r"(?:\$|usd\s*|₹|rs\.?\s*|inr\s*)?(\d+(?:\.\d+)?)\s*(million|mn|m\b|crore|cr|billion|bn|lakh|lac)",
+        r"(?:\$|usd\s*|₹|rs\.?\s*|inr\s*)?(\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)\s*(million|mn|m\b|crore|cr|billion|bn|lakh|lac)\b",
         headline,
         re.I,
     )
@@ -437,6 +437,119 @@ def format_competition_funding_report(
     return "\n".join(lines), sources
 
 
+def print_competition_funding_terminal(
+    tickers: list[str] | None = None,
+    query: str = "",
+    *,
+    funding_limit: int = 8,
+    competition_limit: int = 5,
+) -> None:
+    from arka_stock_ui import banner, bullet, headline_item, leader_footer, note, pct, section, table, tag
+
+    tickers = tickers or []
+    banner("Competition & funding intel", subtitle="VC/PE deals · rivalry news · peer scoreboard")
+
+    funding_news = fetch_funding_news(limit=funding_limit)
+    section("Recent fundings & deals")
+    if funding_news:
+        signals = extract_funding_signals(funding_news)
+        for i, sig in enumerate(signals[:funding_limit], 1):
+            rnd = tag(sig.round_hint, "info" if sig.round_hint != "unknown" else "neutral")
+            amt = sig.amount_hint if sig.amount_hint != "undisclosed" else "—"
+            headline_item(i, sig.source, sig.headline, max_len=76)
+            bullet(f"{rnd} · {amt} · {sig.sector_hint}", indent=6)
+            if sig.listed_peers:
+                peers = ", ".join(sig.listed_peers[:5])
+                bullet(f"Listed peers: {peers}", indent=4)
+    else:
+        note("No funding headlines fetched.")
+
+    comp_news = fetch_competition_news(limit=competition_limit)
+    section("Competition headlines")
+    if comp_news:
+        for i, item in enumerate(comp_news, 1):
+            headline_item(i, item["source"], item["title"])
+    else:
+        note("No competition headlines fetched.")
+
+    groups = resolve_peer_groups(tickers, query)
+    section("Peer scoreboard")
+    for sector, peers in list(groups.items())[:3]:
+        rows = compare_peer_group(sector, peers)
+        valid = [r for r in rows if r.price is not None]
+        if not valid:
+            continue
+        print(f"\n  {_c_sector(sector)}")
+        table_rows = []
+        for i, row in enumerate(rows, 1):
+            leader = tag("#1", "good") if i == 1 else (tag("#2", "warn") if i == 2 else "")
+            px = f"{row.price:,.2f}" if row.price else "—"
+            table_rows.append([
+                str(i),
+                row.ticker,
+                px,
+                pct(row.chg_1d),
+                pct(row.chg_1mo),
+                f"{row.volatility:.1f}" if row.volatility is not None else "—",
+                f"{row.score:.1f}",
+                leader,
+            ])
+        table(
+            ["#", "Ticker", "Price", "1d", "1mo", "Vol", "Score", ""],
+            table_rows,
+            aligns=["r", "l", "r", "r", "r", "r", "r", "c"],
+        )
+        leader, laggard = valid[0], valid[-1]
+        leader_footer(
+            leader.ticker,
+            laggard.ticker,
+            f"{leader.chg_1mo:+.2f}% 1mo" if leader.chg_1mo is not None else "n/a",
+            f"{laggard.chg_1mo:+.2f}% 1mo" if laggard.chg_1mo is not None else "n/a",
+        )
+
+    try:
+        from arka_stock_fundamentals import build_fundamental_rows, _fmt_num, _fmt_pct
+
+        section("Fundamental ratios (peers)")
+        for sector, peers in list(groups.items())[:2]:
+            tradable = [p for p in peers if not p.startswith("^")][:6]
+            frows = build_fundamental_rows(tradable)
+            if not frows:
+                continue
+            print(f"\n  {_c_sector(sector)}")
+            f_table = []
+            for i, row in enumerate(frows, 1):
+                m = row.metrics
+                f_table.append([
+                    str(i), row.ticker,
+                    _fmt_num(m.get("debtToEquity"), 1),
+                    _fmt_pct(m.get("returnOnEquity")),
+                    _fmt_num(m.get("trailingPE"), 1),
+                    f"{row.quality_score:.0f}",
+                ])
+            table(["#", "Ticker", "D/E", "ROE", "P/E", "Q"], f_table, aligns=["r", "l", "r", "r", "r", "r"])
+    except Exception:
+        pass
+
+    note("Funding themes map to listed peers indirectly — verify before trading.")
+
+
+def _c_num(i: int) -> str:
+    from arka_stock_ui import C, use_color
+    t = f"{i:>2}."
+    return f"{C.DIM}{t}{C.RESET}" if use_color() else t
+
+
+def _c_amt(text: str) -> str:
+    from arka_stock_ui import C, use_color
+    return f"{C.GREEN}{text}{C.RESET}" if use_color() and text != "—" else text
+
+
+def _c_sector(text: str) -> str:
+    from arka_stock_ui import C, use_color
+    return f"{C.BOLD}{C.YELLOW}{text}{C.RESET}" if use_color() else text
+
+
 def is_competition_funding_query(query: str) -> bool:
     low = query.lower()
     return bool(re.search(
@@ -449,15 +562,28 @@ def is_competition_funding_query(query: str) -> bool:
 
 def main() -> int:
     import argparse
+    import sys
+
+    from arka_stock_ui import use_terminal_ui
+
     p = argparse.ArgumentParser(description="Competition + funding intelligence")
     p.add_argument("tickers", nargs="*", help="Optional tickers to focus peer groups")
     p.add_argument("--query", default="", help="Natural language query for sector detection")
     p.add_argument("--funding-limit", type=int, default=8)
+    p.add_argument("--plain", action="store_true")
     args = p.parse_args()
-    report, _ = format_competition_funding_report(
-        args.tickers, args.query, funding_limit=args.funding_limit
-    )
-    print(report)
+    if args.plain:
+        import os
+        os.environ["ARKA_STOCK_PLAIN"] = "1"
+    if use_terminal_ui():
+        print_competition_funding_terminal(
+            args.tickers, args.query, funding_limit=args.funding_limit
+        )
+    else:
+        report, _ = format_competition_funding_report(
+            args.tickers, args.query, funding_limit=args.funding_limit
+        )
+        print(report)
     return 0
 
 

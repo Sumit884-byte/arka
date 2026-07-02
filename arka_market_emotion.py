@@ -420,6 +420,64 @@ def format_emotion_report(news_limit: int = 20) -> tuple[str, list[str]]:
     return "\n".join(lines), ["emotion-news", "emotion-finbert", "crowd-behavior"]
 
 
+def print_emotion_terminal(news_limit: int = 20) -> None:
+    from arka_stock_ui import banner, bullet, fear_greed_bar, headline_item, note, section, stat_row, table, tag
+
+    news = fetch_emotion_news(limit=news_limit)
+    if not news:
+        banner("Market emotion", icon="🎭")
+        note("Could not fetch news for emotion analysis.")
+        return
+
+    agg = analyze_emotions(news)
+    behaviors = predict_crowd_behaviors(agg)
+    banner("Market emotion & crowd forecast", subtitle=f"{agg.total} headlines · live sentiment")
+
+    stat_row("Net emotion sum", f"{agg.net_score:+.1f}")
+    stat_row("Average / headline", f"{agg.avg_score:+.2f}")
+    stat_row(
+        "Split",
+        f"{tag(str(agg.positive), 'good')} pos  "
+        f"{tag(str(agg.negative), 'bad')} neg  "
+        f"{tag(str(agg.neutral), 'neutral')} neutral",
+    )
+    fear_greed_bar(agg.fear_greed_index, _fear_greed_label(agg.fear_greed_index))
+    stat_row("Dominant mood", agg.dominant_emotion.replace("_", " ").title())
+
+    section("Emotion keyword hits")
+    for emo, count in sorted(agg.emotion_counts.items(), key=lambda x: -x[1]):
+        if count > 0 and emo != "neutral_tone":
+            bullet(f"{emo.replace('_', ' ').title()}: {count}")
+
+    section("Top emotional headlines")
+    sorted_h = sorted(agg.headlines, key=lambda h: abs(h.score), reverse=True)
+    for i, h in enumerate(sorted_h[:8], 1):
+        tone = "good" if h.score > 0 else "bad" if h.score < 0 else "neutral"
+        headline_item(i, h.source, f"{tag(h.sentiment, tone)} {h.title}")
+
+    section("Who will likely do what")
+    rows = []
+    for b in behaviors:
+        conf = tag(
+            b.confidence.upper(),
+            "good" if b.confidence == "high" else "warn" if b.confidence == "medium" else "neutral",
+        )
+        rows.append([b.actor, b.likely_action[:52], b.window, conf])
+    table(["Actor", "Likely behavior", "Window", "Conf"], rows, aligns=["l", "l", "l", "c"])
+
+    section("Sector tilt")
+    if agg.fear_greed_index < 40:
+        bullet("Bid: gold, liquid funds, defensives, low-beta large caps")
+        bullet("Avoid: high-beta small caps, leveraged names")
+    elif agg.fear_greed_index > 60:
+        bullet("Bid: momentum leaders, small/mid caps, thematic (AI, defense)")
+        bullet("Risk: sharp reversal if greed headlines fade")
+    else:
+        bullet("Mixed market — stock picking + fundamentals matter more than mood")
+
+    note("Heuristic forecast from headline sentiment, not a survey.")
+
+
 def is_emotion_query(query: str) -> bool:
     low = query.lower()
     return bool(re.search(
@@ -431,11 +489,22 @@ def is_emotion_query(query: str) -> bool:
 
 def main() -> int:
     import argparse
+    import sys
+
+    from arka_stock_ui import use_terminal_ui
+
     p = argparse.ArgumentParser(description="Market emotion & crowd behavior forecast")
     p.add_argument("--limit", type=int, default=20)
+    p.add_argument("--plain", action="store_true")
     args = p.parse_args()
-    report, _ = format_emotion_report(news_limit=args.limit)
-    print(report)
+    if args.plain:
+        import os
+        os.environ["ARKA_STOCK_PLAIN"] = "1"
+    if use_terminal_ui():
+        print_emotion_terminal(news_limit=args.limit)
+    else:
+        report, _ = format_emotion_report(news_limit=args.limit)
+        print(report)
     return 0
 
 

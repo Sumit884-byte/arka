@@ -1636,7 +1636,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         crypto_price pomodoro sports_score live_scores system_monitor excuse bored open_app create_skill \
         calculate_bmi send_whatsapp whatsapp_listen search_stores download_file extract_and_run \
         create_desktop_app fix_graphics_driver install_app install_apt install_flatpak \
-        install_snap install_package install_uv stock_analysis stock \
+        install_snap install_package install_uv stock_analysis stock macro emotion \
         auto_click auto_copy decrypt_pdf classify_files cleanup_downloads watch_zip monitor_x \
         generate_image generate_video youtube_transcript youtube_download yt_download media_transcript transcribe_media summarize_url daily_brief wifi_info \
         folder_summarize playlist_summarize youtube_research yt_research codebase_ingest \
@@ -6266,6 +6266,9 @@ function stock_analysis --description "Stock market intelligence (stock_analysis
     set -l bridge $_ARKA_ROOT/arka_stock_bridge.py
     set -l py (_arka_python)
     set -l stock_dir (_arka_stock_project_dir)
+    if not set -q ARKA_STOCK_PLAIN
+        set -x ARKA_STOCK_TERMINAL 1
+    end
     if test (count $argv) -eq 0
         if test -d "$stock_dir"
             cd "$stock_dir"
@@ -6360,6 +6363,14 @@ end
 
 function stock --description "Alias for stock_analysis"
     stock_analysis $argv
+end
+
+function macro --description "Macro events → stock sector impact + duration"
+    stock macro $argv
+end
+
+function emotion --description "Market sentiment and crowd buy/sell forecast"
+    stock emotion $argv
 end
 
 function open_project --description "Quickly open a project directory in editor"
@@ -9221,7 +9232,8 @@ function _agent_skill_matches_request --description "True if skill fits the user
         case remind
             string match -qr '(?i)\bremind(?:\s+me)?\b' "$cmd"
         case stock stock_analysis
-            string match -qr '(?i)^(stock|market)\s+(news|prices|policy|strategy|volatility|dashboard|context|invest)\b|^(analyze|check)\s+(?:stock\s+)?[A-Z][A-Z0-9.-]{1,12}\b|(where\s+(to|should\s+i)\s+invest|how\s+(to|can\s+i)\s+invest|invest\s+\d|make\s+(?:a\s+)?profit)' "$cmd"
+            string match -qr '(?i)^(macro|emotion|fundamentals|funding|competition)(\s+\d+|\s+[A-Z][A-Z0-9.-]+)*$' "$cmd"
+            or string match -qr '(?i)^(stock|market)\s+(news|prices|policy|strategy|volatility|dashboard|context|invest|macro|emotion|fundamentals|funding|competition)\b|^(analyze|check)\s+(?:stock\s+)?[A-Z][A-Z0-9.-]{1,12}\b|(where\s+(to|should\s+i)\s+invest|how\s+(to|can\s+i)\s+invest|invest\s+\d|make\s+(?:a\s+)?profit)' "$cmd"
         case '*'
             return 0
     end
@@ -9343,6 +9355,24 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         echo "skill|fix_graphics_driver|Fix GPU driver warnings (Linux Mesa + vendor page)"
         return
     end
+    if string match -qr '(?i)^macro(\s+\d+)?$' "$clean"
+        set -l n (string match -r '(?i)^macro\s+(\d+)$' "$clean")[2]
+        if test -n "$n"
+            echo "skill|stock macro $n|Macro events → stock sector impact"
+        else
+            echo "skill|stock macro|Macro events → stock sector impact"
+        end
+        return
+    end
+    if string match -qr '(?i)^emotion(\s+\d+)?$' "$clean"
+        set -l n (string match -r '(?i)^emotion\s+(\d+)$' "$clean")[2]
+        if test -n "$n"
+            echo "skill|stock emotion $n|Market sentiment + crowd forecast"
+        else
+            echo "skill|stock emotion|Market sentiment + crowd forecast"
+        end
+        return
+    end
     if string match -qr '(?i)(weather|forecast|temp|rain|sunny|cloudy|snow|storm|umbrella|will it rain|is it going to rain|is it raining)' "$clean"
         echo "skill|hyperlocal_weather $cmd|Weather via Open-Meteo + IP"
         return
@@ -9359,7 +9389,7 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         echo "skill|predictions|Opportunity predictions: antiques, stocks, strategy"
         return
     end
-    if string match -qr '(?i)^(stock|market)\s+(news|prices|policy|strategy|volatility|dashboard)\b' "$clean"
+    if string match -qr '(?i)^(stock|market)\s+(news|prices|policy|strategy|volatility|dashboard|context|invest|macro|emotion|fundamentals|funding|competition)\b' "$clean"
         set -l stock_cmd (string replace -r -i '^(?:stock|market)\s+' '' "$cmd" | string trim)
         echo "skill|stock $stock_cmd|Stock analysis project"
         return
@@ -9748,6 +9778,35 @@ function _agent_correct_interpretation --description "Fix bad LLM skill picks us
 
     if _agent_is_advisory_question "$cmd"
         echo "agent_ask $cmd"
+        return
+    end
+
+    if string match -qr '(?i)^macro(\s+\d+)?$' "$clean"
+        set -l n (string match -r '(?i)^macro\s+(\d+)$' "$clean")[2]
+        if test -n "$n"
+            echo "stock macro $n"
+        else
+            echo "stock macro"
+        end
+        return
+    end
+    if string match -qr '(?i)^emotion(\s+\d+)?$' "$clean"
+        set -l n (string match -r '(?i)^emotion\s+(\d+)$' "$clean")[2]
+        if test -n "$n"
+            echo "stock emotion $n"
+        else
+            echo "stock emotion"
+        end
+        return
+    end
+    if string match -qr '(?i)^stock\s+macro(\s+\d+)?$' "$interpreted"
+        and string match -qr '(?i)^macro(\s+\d+)?$' "$clean"
+        set -l n (string match -r '(?i)^macro\s+(\d+)$' "$clean")[2]
+        if test -n "$n"
+            echo "stock macro $n"
+        else
+            echo "stock macro"
+        end
         return
     end
 
@@ -11596,7 +11655,21 @@ function agent --description "Run commands safely: executes safe commands automa
         set interpreted "predictions --domain stocks --deep "(string escape --style=script -- $cmd)
     else if string match -qr '(?i)(where\s+(to|should\s+i)\s+invest|how\s+(to|can\s+i)\s+invest|invest\s+\d|make\s+(?:a\s+)?profit|best\s+(?:place|option|way|stock|fund)\s+to\s+(?:invest|put)|\d+\s+for\s+\d+\s*(?:day|week|month))' "$clean_cmd"
         set interpreted "predictions --domain stocks --deep "(string escape --style=script -- $cmd)
-    else if string match -qr '(?i)^(stock|market)\s+(news|prices|policy|strategy|volatility|dashboard|context|invest)\b' "$clean_cmd"
+    else if string match -qr '(?i)^macro(\s+\d+)?$' "$clean_cmd"
+        set -l n (string match -r '(?i)^macro\s+(\d+)$' "$clean_cmd")[2]
+        if test -n "$n"
+            set interpreted "stock macro $n"
+        else
+            set interpreted "stock macro"
+        end
+    else if string match -qr '(?i)^emotion(\s+\d+)?$' "$clean_cmd"
+        set -l n (string match -r '(?i)^emotion\s+(\d+)$' "$clean_cmd")[2]
+        if test -n "$n"
+            set interpreted "stock emotion $n"
+        else
+            set interpreted "stock emotion"
+        end
+    else if string match -qr '(?i)^(stock|market)\s+(news|prices|policy|strategy|volatility|dashboard|context|invest|macro|emotion|fundamentals|funding|competition)\b' "$clean_cmd"
         set -l stock_rest (string replace -r -i '^(?:stock|market)\s+' '' "$cmd" | string trim)
         set interpreted "stock $stock_rest"
     else if string match -qr '(?i)^(analyze|check)\s+(?:stock\s+)?[A-Z][A-Z0-9.-]{1,12}\b' "$clean_cmd"

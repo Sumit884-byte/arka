@@ -67,8 +67,16 @@ def gather_context(tickers: list[str] | None = None, *, include_ml: bool = True)
 
 def run_script(script: str, script_args: list[str], *, timeout: int = 120) -> int:
     path = STOCK_PROJECT / script
+    if not STOCK_PROJECT.is_dir():
+        from arka_stock_ui import stock_project_missing
+        stock_project_missing(str(STOCK_PROJECT))
+        return 1
     if not path.is_file():
-        print(f"Missing {path}", file=sys.stderr)
+        from arka_stock_ui import note, section
+        from arka_stock_ui import banner
+        banner("Stock script missing", icon="⚠️")
+        note(f"Expected: {path}")
+        note("Clone stock_analysis and set ARKA_STOCK_PROJECT in .env")
         return 1
     py = stock_python()
     env = os.environ.copy()

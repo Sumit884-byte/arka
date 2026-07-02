@@ -46,6 +46,7 @@ NAMES = [
     "arka_stock_bridge.py",
     "arka_stock_context_worker.py",
     "arka_stock_fundamentals.py",
+    "arka_stock_ui.py",
     "arka_competition_funding.py",
     "arka_summarize.py",
     "arka_talents.py",

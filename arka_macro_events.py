@@ -356,7 +356,14 @@ def build_event_impacts(events: list[DetectedEvent]) -> list[StockImpact]:
                     impacts.append(imp)
 
     impacts.sort(key=lambda x: x.score, reverse=True)
-    return impacts
+    # One row per ticker — keep strongest score
+    by_ticker: dict[str, StockImpact] = {}
+    for imp in impacts:
+        prev = by_ticker.get(imp.ticker)
+        if prev is None or imp.score > prev.score:
+            by_ticker[imp.ticker] = imp
+    deduped = sorted(by_ticker.values(), key=lambda x: x.score, reverse=True)
+    return deduped
 
 
 def format_macro_event_report(news_limit: int = 8) -> tuple[str, list[str]]:
@@ -430,6 +437,67 @@ def format_macro_event_report(news_limit: int = 8) -> tuple[str, list[str]]:
     return "\n".join(lines), sources
 
 
+def print_macro_event_terminal(news_limit: int = 8) -> None:
+    from arka_stock_ui import banner, bullet, headline_item, note, pct, section, table, tag
+
+    news = fetch_macro_event_news(limit=news_limit)
+    events = detect_macro_events(news)
+    banner("Macro & disaster scan", subtitle="Live RSS · sector impact · hold duration")
+
+    section("Headlines")
+    if news:
+        for i, item in enumerate(news[:news_limit], 1):
+            headline_item(i, item.get("source", "News"), item["title"])
+    else:
+        note("No macro headlines fetched.")
+
+    section("Detected events")
+    if not events:
+        bullet("No disaster/resource/geopolitics patterns in current headlines.")
+        bullet("Watch: oil, monsoon, Middle East, Fed/rates, India policy.")
+        return
+
+    for ev in events:
+        bullet(f"{ev.label} — matched \"{ev.matched_keyword}\"")
+
+    impacts = build_event_impacts(events)
+    if not impacts:
+        return
+
+    section("Stock impact watchlist")
+    rows = []
+    for i, imp in enumerate(impacts[:12], 1):
+        role = tag("BENEFICIARY", "good") if imp.direction == "beneficiary" else tag("PRESSURE", "bad")
+        rows.append([
+            str(i),
+            imp.ticker,
+            imp.sector[:18],
+            role,
+            imp.duration,
+            pct(imp.chg_1d),
+            pct(imp.chg_1mo),
+        ])
+    table(
+        ["#", "Ticker", "Sector", "Role", "Window", "1d", "1mo"],
+        rows,
+        aligns=["r", "l", "l", "l", "l", "r", "r"],
+    )
+
+    section("Duration guide")
+    for ev in events[:4]:
+        spec = EVENT_PLAYBOOK[ev.event_type]
+        ben = spec.get("beneficiaries", [{}])[0]
+        dur = ben.get("duration", "2–8 weeks")
+        bullet(f"{ev.label}: typical trade window {dur}")
+
+    top = [imp for imp in impacts if imp.direction == "beneficiary"][:3]
+    if top:
+        section("Top beneficiaries to research")
+        for imp in top:
+            px = f" @ {imp.price:.2f}" if imp.price else ""
+            bullet(f"{imp.ticker}{px} — {imp.sector} · {imp.move_hint}")
+
+
 def is_macro_relevant_query(query: str) -> bool:
     low = query.lower()
     return bool(re.search(
@@ -442,11 +510,22 @@ def is_macro_relevant_query(query: str) -> bool:
 
 def main() -> int:
     import argparse
+    import sys
+
+    from arka_stock_ui import use_color, use_terminal_ui
+
     p = argparse.ArgumentParser(description="Macro event → stock impact scanner")
     p.add_argument("--limit", type=int, default=8)
+    p.add_argument("--plain", action="store_true", help="Disable colors (or set ARKA_STOCK_PLAIN=1)")
     args = p.parse_args()
-    report, _ = format_macro_event_report(news_limit=args.limit)
-    print(report)
+    if args.plain:
+        import os
+        os.environ["ARKA_STOCK_PLAIN"] = "1"
+    if use_terminal_ui():
+        print_macro_event_terminal(news_limit=args.limit)
+    else:
+        report, _ = format_macro_event_report(news_limit=args.limit)
+        print(report)
     return 0
 
 

@@ -260,34 +260,37 @@ def format_fundamentals_report(
     query: str = "",
 ) -> tuple[str, list[str]]:
     """Full fundamentals section for predictions context."""
-    from arka_competition_funding import PEER_GROUPS, resolve_peer_groups
+    from arka_competition_funding import resolve_peer_groups
 
     tickers = tickers or []
+    tradable = [t.upper() for t in tickers if t and not t.startswith("^")]
     groups = resolve_peer_groups(tickers, query)
-    all_tickers: list[str] = []
-    seen: set[str] = set()
-    for peers in groups.values():
-        for t in peers:
-            if t not in seen and not t.startswith("^"):
-                seen.add(t)
-                all_tickers.append(t)
-    if not all_tickers and tickers:
-        all_tickers = [t.upper() for t in tickers if not t.startswith("^")]
 
     lines = ["## Fundamental analysis (Yahoo Finance, delayed)"]
-    if not all_tickers:
-        all_tickers = ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS"]
+
+    if tradable:
+        lines.append("")
+        lines.append(format_fundamentals_table(tradable, title="### Requested tickers — key ratios"))
+    elif not groups:
+        lines.append("")
+        lines.append(
+            format_fundamentals_table(
+                ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS"],
+                title="### Default watchlist — key ratios",
+            )
+        )
 
     for sector, peers in list(groups.items())[:3]:
-        tradable = [p for p in peers if not p.startswith("^")][:8]
-        if not tradable:
+        sector_tickers = [p for p in peers if not p.startswith("^")][:8]
+        if not sector_tickers:
+            continue
+        if tradable and set(sector_tickers) <= set(tradable):
             continue
         lines.append("")
-        lines.append(format_fundamentals_table(tradable, title=f"### {sector} — key ratios"))
+        lines.append(format_fundamentals_table(sector_tickers, title=f"### {sector} — peer set"))
 
-    # Single-ticker deep dive if one ticker requested
-    if len(tickers) == 1:
-        t = tickers[0].upper()
+    if len(tradable) == 1:
+        t = tradable[0]
         data = fetch_fundamentals_batch([t]).get(t, {})
         if data:
             lines.append("")
@@ -297,7 +300,10 @@ def format_fundamentals_report(
                 if val is None:
                     continue
                 label = FIELD_LABELS.get(key, key)
-                if key in {"returnOnEquity", "profitMargins", "operatingMargins", "revenueGrowth", "earningsGrowth", "dividendYield"}:
+                if key in {
+                    "returnOnEquity", "profitMargins", "operatingMargins",
+                    "revenueGrowth", "earningsGrowth", "dividendYield",
+                }:
                     disp = _fmt_pct(val)
                 elif key in {"totalDebt", "totalCash", "marketCap", "enterpriseValue", "freeCashflow"}:
                     disp = _fmt_num(val)
@@ -306,6 +312,45 @@ def format_fundamentals_report(
                 lines.append(f"- **{label}:** {disp}")
 
     return "\n".join(lines), ["fundamentals-yahoo"]
+
+
+def print_fundamentals_terminal(tickers: list[str]) -> None:
+    from arka_stock_ui import banner, bullet, note, section, table, tag
+
+    tradable = [t.upper() for t in tickers if t and not t.startswith("^")]
+    rows_data = build_fundamental_rows(tradable or ["RELIANCE.NS", "TCS.NS", "INFY.NS"])
+    banner("Fundamental analysis", subtitle="Yahoo Finance · delayed · rule-based quality score")
+
+    if not rows_data:
+        note("Fundamentals unavailable — check tickers and network.")
+        return
+
+    section("Key ratios")
+    table_rows = []
+    for i, row in enumerate(rows_data, 1):
+        m = row.metrics
+        flags = ", ".join(row.flags[:2]) if row.flags else "—"
+        table_rows.append([
+            str(i),
+            row.ticker,
+            _fmt_num(m.get("debtToEquity"), 1),
+            _fmt_pct(m.get("returnOnEquity")),
+            _fmt_num(m.get("trailingPE"), 1),
+            _fmt_pct(m.get("profitMargins")),
+            tag(f"{row.quality_score:.0f}", "good" if row.quality_score >= 70 else "warn" if row.quality_score >= 55 else "bad"),
+            flags,
+        ])
+    table(
+        ["#", "Ticker", "D/E%", "ROE", "P/E", "Margin", "Quality", "Notes"],
+        table_rows,
+        aligns=["r", "l", "r", "r", "r", "r", "c", "l"],
+    )
+
+    best, worst = rows_data[0], rows_data[-1]
+    section("Summary")
+    bullet(f"Best quality: {best.ticker} ({best.quality_score}/100)")
+    bullet(f"Weakest in set: {worst.ticker} ({worst.quality_score}/100)")
+    note("Quality score blends leverage, ROE, liquidity, growth — not a buy rating.")
 
 
 def is_fundamentals_query(query: str) -> bool:
@@ -320,12 +365,23 @@ def is_fundamentals_query(query: str) -> bool:
 
 def main() -> int:
     import argparse
+    import sys
+
+    from arka_stock_ui import use_terminal_ui
+
     p = argparse.ArgumentParser(description="Stock fundamentals comparison")
     p.add_argument("tickers", nargs="+", help="Ticker symbols")
     p.add_argument("--query", default="")
+    p.add_argument("--plain", action="store_true")
     args = p.parse_args()
-    report, _ = format_fundamentals_report(args.tickers, args.query)
-    print(report)
+    if args.plain:
+        import os
+        os.environ["ARKA_STOCK_PLAIN"] = "1"
+    if use_terminal_ui():
+        print_fundamentals_terminal(args.tickers)
+    else:
+        report, _ = format_fundamentals_report(args.tickers, args.query)
+        print(report)
     return 0
 
 
