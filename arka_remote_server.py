@@ -149,14 +149,19 @@ def strip_ansi(text: str) -> str:
 
 
 def extract_speak_text(raw: str) -> str:
-    text = strip_ansi(raw)
-    if "━━━ Answer ━━━" in text:
-        text = text.split("━━━ Answer ━━━", 1)[1]
-    text = " ".join(text.split())
-    max_len = int(os.environ.get("AGENT_SPEAK_MAX", "450"))
-    if len(text) > max_len:
-        text = text[: max_len - 3].rstrip() + "..."
-    return text
+    try:
+        from arka_voice import voice_format
+
+        return voice_format(raw)
+    except ImportError:
+        text = strip_ansi(raw)
+        if "━━━ Answer ━━━" in text:
+            text = text.split("━━━ Answer ━━━", 1)[1]
+        text = " ".join(text.split())
+        max_len = int(os.environ.get("AGENT_SPEAK_MAX", "900"))
+        if len(text) > max_len:
+            text = text[: max_len - 3].rstrip() + "..."
+        return text
 
 
 def run_agent_remote(text: str) -> tuple[str, str, int]:

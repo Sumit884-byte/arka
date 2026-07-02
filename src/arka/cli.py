@@ -26,6 +26,19 @@ from arka.platform_info import fish_install_hint, has_full_fish_agent, skill_mod
 from arka.router import route
 
 
+def _whatsapp_inbox_argv(args: list[str]) -> list[str]:
+    """Map `arka whatsapp [inbox] …` to arka_whatsapp_inbox.py subcommands."""
+    rest = args[:]
+    if rest[:1] == ["inbox"]:
+        rest = rest[1:]
+    if not rest:
+        return ["start"]
+    head = rest[0].lower()
+    if head in ("fg", "foreground", "run"):
+        return ["listen", *rest[1:]]
+    return rest
+
+
 def main(argv: list[str] | None = None) -> int:
     load_env()
     args = argv if argv is not None else sys.argv[1:]
@@ -86,6 +99,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args[0] == "aie":
         return run_script("arka_aie.py", args[1:] or ["status"])
+
+    if args[0] in ("whatsapp", "wa"):
+        return run_script("arka_whatsapp_inbox.py", _whatsapp_inbox_argv(args[1:]))
 
     if args[0] == "remind":
         return run_script("arka_remind.py", args[1:])
