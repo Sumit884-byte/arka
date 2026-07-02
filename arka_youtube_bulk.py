@@ -6,6 +6,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -16,7 +18,8 @@ import webbrowser
 from pathlib import Path
 
 from arka_progress import ProgressBar, progress_enabled
-from arka_compute import export_env_defaults, io_workers, log_compute_summary
+from arka_compute import export_env_defaults, ffmpeg_threads, io_workers, log_compute_summary, yt_dlp_concurrent_fragments
+from arka_ytdlp_progress import build_format_opts, run_ytdlp_download
 
 PROJECT_DIR = Path(
     os.environ.get("YOUTUBE_BULK_DIR", str(Path.home() / "Projects/python/products/youtube_bulk_downloader"))
@@ -26,7 +29,45 @@ CACHE_DIR = Path.home() / ".cache/fish-agent/youtube-bulk"
 PID_FILE = CACHE_DIR / "server.pid"
 LOG_FILE = CACHE_DIR / "server.log"
 DEFAULT_PORT = int(os.environ.get("YOUTUBE_BULK_PORT", "5000"))
-DEFAULT_DOWNLOAD_PATH = Path("/home/s/Videos/YoutubeDownloads")
+
+
+def _default_download_root() -> Path:
+    raw = os.environ.get(
+        "YOUTUBE_BULK_DOWNLOAD_DIR",
+        os.environ.get("YOUTUBE_DOWNLOAD_PATH", str(Path.home() / "Videos/YoutubeDownloads")),
+    )
+    return Path(raw).expanduser()
+
+
+DEFAULT_DOWNLOAD_PATH = _default_download_root()
+
+
+def _has_bulk_app() -> bool:
+    return APP_PY.is_file()
+
+
+def _ytdlp_cmd() -> list[str]:
+    candidates = [
+        Path(sys.executable).parent / "yt-dlp",
+        PROJECT_DIR / ".venv/bin/yt-dlp",
+        Path.home() / "Projects/python/products/youtube_bulk_downloader/.venv/bin/yt-dlp",
+    ]
+    for exe in candidates:
+        if exe.is_file():
+            return [str(exe)]
+    found = shutil.which("yt-dlp")
+    if found:
+        return [found]
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "yt_dlp", "--version"],
+            capture_output=True,
+            check=True,
+            timeout=15,
+        )
+        return [sys.executable, "-m", "yt_dlp"]
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return []
 
 
 def _project_python() -> str:
@@ -95,13 +136,92 @@ def _api_post(path: str, payload: dict) -> dict:
 
 
 def _ensure_project() -> None:
-    if not APP_PY.is_file():
+    if not _has_bulk_app():
         raise SystemExit(f"youtube_bulk: app not found at {APP_PY}")
 
 
+def _playlist_bounds(args: argparse.Namespace) -> tuple[int | None, int | None]:
+    """Return (playliststart, playlistend) for yt-dlp (1-based, inclusive)."""
+    start = args.start
+    end = args.end
+    if args.range:
+        m = re.fullmatch(r"(\d+)\s*-\s*(\d+)", str(args.range).strip())
+        if not m:
+            raise SystemExit(f"Invalid --range {args.range!r} (use e.g. 6-9)")
+        r_start, r_end = int(m.group(1)), int(m.group(2))
+        if r_start < 1:
+            raise SystemExit(f"Playlist start must be >= 1 (got {r_start})")
+        if r_end < r_start:
+            raise SystemExit(f"Playlist end must be >= start (got {r_start}-{r_end})")
+        if start is not None or end is not None:
+            raise SystemExit("Use either --range or --start/--end, not both")
+        start, end = r_start, r_end
+    if args.limit is not None and start is None and end is None:
+        end = args.limit
+    if start is not None and start < 1:
+        raise SystemExit(f"Playlist start must be >= 1 (got {start})")
+    if end is not None and end < 1:
+        raise SystemExit(f"Playlist end must be >= 1 (got {end})")
+    if start is not None and end is not None and end < start:
+        raise SystemExit(f"Playlist end must be >= start (got {start}-{end})")
+    return start, end
+
+
+def _download_ytdlp(args: argparse.Namespace) -> int:
+    if not _ytdlp_cmd():
+        raise SystemExit(
+            "yt-dlp not found — install: pip install yt-dlp\n"
+            "  Or use the external bulk app: set YOUTUBE_BULK_DIR=/path/to/youtube_bulk_downloader"
+        )
+
+    url, dtype = _normalize_download_type(args.url, args.channel)
+    root = _default_download_root()
+    subdir = "Channels" if dtype == "channel" else "Playlists"
+    out_dir = root / subdir
+    out_dir.mkdir(parents=True, exist_ok=True)
+    if dtype == "playlist":
+        out_tpl = str(out_dir / "%(playlist_title|id)s/%(playlist_index)s - %(title)s.%(ext)s")
+    else:
+        out_tpl = str(out_dir / "%(channel)s/%(title)s.%(ext)s")
+
+    ydl_opts: dict = {
+        "outtmpl": out_tpl,
+        "yesplaylist": True,
+        "ignoreerrors": True,
+        **build_format_opts(
+            audio=args.audio,
+            quality=args.quality,
+            threads=ffmpeg_threads(),
+            frags=yt_dlp_concurrent_fragments(),
+        ),
+    }
+    start, end = _playlist_bounds(args)
+    if start is not None:
+        ydl_opts["playliststart"] = start
+    if end is not None:
+        ydl_opts["playlistend"] = end
+
+    phase = "Playlist" if dtype == "playlist" else "Channel"
+    code = run_ytdlp_download(url, ydl_opts, phase=phase)
+    if code == 0 and not progress_enabled():
+        print(f"Done. Saved under {out_dir}/", file=sys.stderr)
+    return code
+
+
 def cmd_status(_args: argparse.Namespace) -> int:
-    _ensure_project()
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    root = _default_download_root()
+    print("━━━ YouTube Bulk Downloader ━━━")
+    if not _has_bulk_app():
+        ytdlp = _ytdlp_cmd()
+        print("Mode:     bundled yt-dlp (no external app)")
+        print(f"yt-dlp:   {' '.join(ytdlp) if ytdlp else 'NOT FOUND — pip install yt-dlp'}")
+        print(f"Save to:  {root}/Playlists/  and  {root}/Channels/")
+        print("")
+        print("Usage: youtube_bulk download <url-or-PLid> [--audio] [--quality 1080] [--limit N] [--start N] [--end N] [--range A-B] [--wait]")
+        print("       arka download PLxxxxxxxxxxxxxxxxxxxx")
+        return 0 if ytdlp else 1
+
     pid = _read_server_pid()
     online = _server_responding()
     print("━━━ YouTube Bulk Downloader ━━━")
@@ -127,7 +247,7 @@ def cmd_status(_args: argparse.Namespace) -> int:
             print(f"Status API error: {exc}", file=sys.stderr)
     print("")
     print("Usage: youtube_bulk [status|start|stop|open|download|library|logs]")
-    print("       youtube_bulk download <url> [--channel] [--audio] [--quality 1080] [--limit N] [--wait]")
+    print("       youtube_bulk download <url> [--channel] [--audio] [--quality 1080] [--limit N] [--start N] [--end N] [--range A-B] [--wait]")
     return 0
 
 
@@ -225,7 +345,7 @@ def _download_via_api(args: argparse.Namespace) -> int:
 
 def _wait_for_download() -> int:
     last_log = 0
-    bar = ProgressBar("Downloading", total=100) if progress_enabled() else None
+    bar = ProgressBar("Download", total=100, unit="done") if progress_enabled() else None
     while True:
         try:
             st = _api_get("/api/status")
@@ -247,7 +367,7 @@ def _wait_for_download() -> int:
         status = st.get("status", "idle")
         if not st.get("active") and status in {"complete", "idle", "error"}:
             if bar is not None:
-                bar.done("Done" if status != "error" else "Error")
+                bar.done("Downloaded" if status != "error" else "Failed")
             elif logs[last_log:]:
                 for line in logs[last_log:]:
                     print(line)
@@ -288,11 +408,12 @@ raise SystemExit(0 if status in ("complete", "idle") else 1)
 
 
 def cmd_download(args: argparse.Namespace) -> int:
-    _ensure_project()
     export_env_defaults()
     log_compute_summary()
     if not args.url:
         raise SystemExit("URL required — playlist, channel URL, or @handle")
+    if not _has_bulk_app():
+        return _download_ytdlp(args)
     if _server_responding():
         return _download_via_api(args)
     print("youtube_bulk: running headless (web UI not started)", file=sys.stderr)
@@ -300,8 +421,9 @@ def cmd_download(args: argparse.Namespace) -> int:
 
 
 def cmd_library(_args: argparse.Namespace) -> int:
-    _ensure_project()
-    if _server_responding():
+    library = {}
+    root = _default_download_root()
+    if _has_bulk_app() and _server_responding():
         try:
             data = _api_get("/api/library")
         except (urllib.error.URLError, json.JSONDecodeError, OSError) as exc:
@@ -309,10 +431,10 @@ def cmd_library(_args: argparse.Namespace) -> int:
             return 1
         library = data.get("library") or {}
     else:
-        library = {}
-        root = DEFAULT_DOWNLOAD_PATH
-        if root.is_dir():
-            for folder in sorted(root.iterdir()):
+        for scan in (root / "Playlists", root / "Channels", root):
+            if not scan.is_dir():
+                continue
+            for folder in sorted(scan.iterdir()):
                 if not folder.is_dir():
                     continue
                 items = []
@@ -321,7 +443,11 @@ def cmd_library(_args: argparse.Namespace) -> int:
                         kind = "audio" if f.suffix.lower() in {".mp3", ".m4a", ".opus"} else "video"
                         items.append({"name": f.name, "type": kind})
                 if items:
-                    library[folder.name] = items
+                    try:
+                        rel = folder.relative_to(root)
+                    except ValueError:
+                        rel = folder.name
+                    library[str(rel)] = items
     if not library:
         print("Library empty.")
         return 0
@@ -364,7 +490,10 @@ def main() -> int:
     p_dl.add_argument("--channel", action="store_true", help="Treat URL as YouTube channel")
     p_dl.add_argument("--audio", action="store_true", help="Extract MP3 instead of video")
     p_dl.add_argument("--quality", default="1080", choices=["1080", "720", "480"])
-    p_dl.add_argument("--limit", type=int, default=None, help="Max newest items (channels)")
+    p_dl.add_argument("--limit", type=int, default=None, help="Max items from start (same as --end when --start omitted)")
+    p_dl.add_argument("--start", type=int, default=None, help="First playlist index, 1-based inclusive")
+    p_dl.add_argument("--end", type=int, default=None, help="Last playlist index, 1-based inclusive")
+    p_dl.add_argument("--range", metavar="START-END", default=None, help="Playlist slice, e.g. 6-9")
     p_dl.add_argument("--wait", action="store_true", help="Block until download finishes")
     p_dl.set_defaults(func=cmd_download)
 

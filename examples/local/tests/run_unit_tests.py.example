@@ -1,0 +1,36 @@
+#!/usr/bin/env python3
+"""Run all local unit/integration tests (not committed)."""
+
+from __future__ import annotations
+
+import subprocess
+import sys
+from pathlib import Path
+
+TESTS_DIR = Path(__file__).resolve().parent
+ROOT = TESTS_DIR.parents[1]
+PY = ROOT / "venv-arka" / "bin" / "python"
+if not PY.is_file():
+    PY = Path(sys.executable)
+
+SCRIPTS = [
+    "test_memory_detect.py",
+    "test_mic.py",
+]
+
+
+def main() -> int:
+    failed = 0
+    for name in SCRIPTS:
+        script = TESTS_DIR / name
+        print(f"=== {name} ===")
+        proc = subprocess.run([str(PY), str(script)], cwd=str(ROOT))
+        if proc.returncode != 0:
+            failed += 1
+        print()
+    print(f"{'All passed' if not failed else f'{failed} failed'}")
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

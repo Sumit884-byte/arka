@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """
-Verify Fish agent skills in ~/.config/fish/config.fish.
+Verify Fish agent skills (local dev — not committed).
+
+Setup (once):
+  mkdir -p local/tests
+  cp examples/local/test_skills.py.example local/test_skills.py
+  cp examples/local/tests/*.py.example local/tests/
+  for f in local/tests/*.py.example; test -f "$f"; and mv "$f" "${f%.example}"; end
 
 Checks:
   1. Every registered skill has a Fish function definition
@@ -8,10 +14,13 @@ Checks:
   3. Skills execute without unexpected errors (smoke tests)
 
 Usage:
-  python3 test.py              # fast: local/offline skills + NL routing
-  python3 test.py --full     # also run network/GUI/long skills
-  python3 test.py --nl-only  # only natural-language routing tests
-  python3 test.py -v         # verbose output
+  python3 local/test_skills.py              # fast: local/offline skills + NL routing
+  python3 local/test_skills.py --full       # also run network/GUI/long skills
+  python3 local/test_skills.py --nl-only    # only natural-language routing tests
+  python3 local/test_skills.py -v           # verbose output
+
+Environment:
+  ARKA_TEST_CONFIG   path to config.fish (default: repo config.fish, else ~/.config/fish/config.fish)
 """
 
 from __future__ import annotations
@@ -28,7 +37,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
 
-CONFIG_FISH = Path.home() / ".config/fish/config.fish"
+ROOT = Path(__file__).resolve().parent.parent
+_default_cfg = ROOT / "config.fish"
+if not _default_cfg.is_file():
+    _default_cfg = Path.home() / ".config/fish/config.fish"
+CONFIG_FISH = Path(os.environ.get("ARKA_TEST_CONFIG", str(_default_cfg)))
 FISH = shutil.which("fish") or "fish"
 DEFAULT_TIMEOUT = 45
 
@@ -308,6 +321,12 @@ def interpret_offline(cmd: str) -> Optional[str]:
         m = re.search(r"(?i)(?:inside|contents of|what is in|what.s in|in)\s+(.+)$", cmd)
         path = m.group(1).strip() if m else ""
         return f"show_folder {path}".strip() if path else "show_folder"
+
+    if re.search(r"(find|search|list|show).*\bfiles?\b", clean) and re.search(
+        r"(less|more|greater|larger|smaller|lesser|under|over|above|below|bigger)|\d+\s*(kb|mb|gb)\b",
+        clean,
+    ):
+        return f"find_files_by_size {cmd}"
 
     if re.search(r"(find.*file|search.*file|look.*for.*file|locate.*file)", clean):
         pat = re.sub(r"(?i)^.*(?:find|search|look for|locate)\s+(?:file\s+)?", "", cmd)
@@ -598,8 +617,9 @@ def test_fallback_helpers(suite: Suite, verbose: bool) -> None:
         )
     )
 
-    body = r"""
-source ~/.config/fish/config.fish
+    cfg = CONFIG_FISH
+    body = f"""
+source '{cfg}'
 function _fb_ok; return 0; end
 function _fb_fail; return 1; end
 _fallback_try _fb_fail _fb_ok --

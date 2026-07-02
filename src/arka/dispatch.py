@@ -71,7 +71,7 @@ def run_fish_skill(skill_line: str) -> int:
     if code is not None:
         return code
     print(f"Unknown skill: {skill_line}", file=sys.stderr)
-    print("Try: arka help  |  arka setup  |  install fish for full Linux skills", file=sys.stderr)
+    print("Try: arka help  |  arka doctor  |  install fish for full 70+ skills", file=sys.stderr)
     return 1
 
 

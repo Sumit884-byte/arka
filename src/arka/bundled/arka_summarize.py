@@ -49,7 +49,7 @@ def summarize_url(url: str, question: str = "Summarize the key points") -> str:
         "then 3-6 bullets. Mention source context if obvious. If asked a question, answer it."
     )
     user = f"URL: {url}\nQuestion: {question}\n\nArticle text:\n{body[:12000]}"
-    return llm_complete(system, user, temperature=0.2).strip()
+    return llm_complete(system, user, temperature=0.2, task="summarize").strip()
 
 
 def main() -> int:

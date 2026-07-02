@@ -6,6 +6,8 @@ from __future__ import annotations
 import argparse
 import csv
 import os
+import platform
+import shutil
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
@@ -69,20 +71,51 @@ def fmt_size(n: int) -> str:
     return f"{size:.1f} TB"
 
 
+def _is_macos() -> bool:
+    try:
+        from arka_platform import cached_platform
+
+        plat = cached_platform()
+        if plat:
+            return plat == "macos"
+    except ImportError:
+        pass
+    return platform.system() == "Darwin"
+
+
 def du_bytes(path: Path) -> int | None:
     if not path.exists():
         return 0
     try:
-        proc = subprocess.run(
-            ["du", "-sb", str(path)],
-            capture_output=True,
-            text=True,
-        )
-        if proc.returncode == 0:
-            return int(proc.stdout.split()[0])
+        if _is_macos():
+            proc = subprocess.run(
+                ["du", "-sk", str(path)],
+                capture_output=True,
+                text=True,
+            )
+            if proc.returncode == 0:
+                return int(proc.stdout.split()[0]) * 1024
+        else:
+            proc = subprocess.run(
+                ["du", "-sb", str(path)],
+                capture_output=True,
+                text=True,
+            )
+            if proc.returncode == 0:
+                return int(proc.stdout.split()[0])
     except (FileNotFoundError, ValueError, IndexError):
+        pass
+    try:
+        total = 0
+        for root, _dirs, files in os.walk(path, onerror=lambda _e: None):
+            for name in files:
+                try:
+                    total += (Path(root) / name).stat().st_size
+                except OSError:
+                    continue
+        return total
+    except OSError:
         return None
-    return None
 
 
 def df_summary(path: Path) -> tuple[str, str, str, str, str]:
@@ -91,9 +124,20 @@ def df_summary(path: Path) -> tuple[str, str, str, str, str]:
         proc = subprocess.run(["df", "-h", str(path)], capture_output=True, text=True)
         if proc.returncode == 0:
             parts = proc.stdout.strip().splitlines()[-1].split()
-            if len(parts) >= 6:
-                return parts[1], parts[2], parts[3], parts[4], parts[5]
+            if len(parts) >= 5:
+                # Linux: ... Size Used Avail Use% Mount
+                # macOS: ... Size Used Avail Capacity iused ifree %iused Mount
+                return parts[1], parts[2], parts[3], parts[4], parts[-1]
     except FileNotFoundError:
+        pass
+    try:
+        usage = shutil.disk_usage(path)
+        total = fmt_size(usage.total)
+        used = fmt_size(usage.used)
+        avail = fmt_size(usage.free)
+        pct = f"{usage.used / usage.total * 100:.0f}%" if usage.total else "?"
+        return total, used, avail, pct, mount
+    except OSError:
         pass
     return "?", "?", "?", "?", mount
 
@@ -103,30 +147,55 @@ def scan_extensions(root: Path, max_depth: int = 3) -> dict[str, int]:
     totals["Other files"] = 0
     if not root.is_dir():
         return totals
+
+    if not _is_macos():
+        try:
+            proc = subprocess.run(
+                ["find", str(root), "-xdev", "-maxdepth", str(max_depth), "-type", "f", "-printf", "%s %f\n"],
+                capture_output=True,
+                text=True,
+            )
+            if proc.returncode == 0:
+                for line in proc.stdout.splitlines():
+                    parts = line.split(" ", 1)
+                    if len(parts) != 2:
+                        continue
+                    try:
+                        size = int(parts[0])
+                    except ValueError:
+                        continue
+                    ext = Path(parts[1]).suffix.lower()
+                    label = "Other files"
+                    for cat, exts in EXT_CATEGORIES:
+                        if ext in exts:
+                            label = cat
+                            break
+                    totals[label] = totals.get(label, 0) + size
+                return totals
+        except FileNotFoundError:
+            pass
+
+    root_parts = len(root.resolve().parts)
     try:
-        proc = subprocess.run(
-            ["find", str(root), "-xdev", "-maxdepth", str(max_depth), "-type", "f", "-printf", "%s %f\n"],
-            capture_output=True,
-            text=True,
-        )
-        if proc.returncode != 0:
-            return totals
-        for line in proc.stdout.splitlines():
-            parts = line.split(" ", 1)
-            if len(parts) != 2:
+        for dirpath, dirnames, filenames in os.walk(root, topdown=True, onerror=lambda _e: None):
+            cur = Path(dirpath)
+            depth = len(cur.resolve().parts) - root_parts
+            if depth >= max_depth:
+                dirnames.clear()
                 continue
-            try:
-                size = int(parts[0])
-            except ValueError:
-                continue
-            ext = Path(parts[1]).suffix.lower()
-            label = "Other files"
-            for cat, exts in EXT_CATEGORIES:
-                if ext in exts:
-                    label = cat
-                    break
-            totals[label] = totals.get(label, 0) + size
-    except FileNotFoundError:
+            for name in filenames:
+                try:
+                    size = (cur / name).stat().st_size
+                except OSError:
+                    continue
+                ext = Path(name).suffix.lower()
+                label = "Other files"
+                for cat, exts in EXT_CATEGORIES:
+                    if ext in exts:
+                        label = cat
+                        break
+                totals[label] = totals.get(label, 0) + size
+    except OSError:
         pass
     return totals
 
@@ -162,7 +231,10 @@ def category_sizes(home: Path) -> tuple[dict[str, int], dict[str, list[str]], li
 
 
 def collect_breakdown(root: Path | None = None) -> BreakdownData:
-    home = (root or HOME).expanduser().resolve()
+    home = (root or HOME).expanduser()
+    if not home.exists():
+        home = HOME
+    home = home.resolve()
     total, used, avail, pct, mount = df_summary(home)
     totals, paths, notes = category_sizes(home)
 

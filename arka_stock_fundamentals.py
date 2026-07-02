@@ -6,14 +6,22 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-STOCK_PROJECT = Path(
-    __import__("os").environ.get(
-        "ARKA_STOCK_PROJECT", Path.home() / "Projects/python/products/stock_analysis"
-    )
-)
+try:
+    from arka_paths import load_env_file, stock_project_dir
+
+    load_env_file()
+except ImportError:
+    stock_project_dir = lambda: Path(  # noqa: E731
+        __import__("os").environ.get(
+            "ARKA_STOCK_PROJECT", Path.home() / "Projects/python/products/stock_analysis"
+        )
+    ).expanduser()
+
+STOCK_PROJECT = stock_project_dir()
 
 FUNDAMENTAL_FIELDS = (
     "debtToEquity",
@@ -62,20 +70,19 @@ class FundamentalRow:
     flags: list[str]
 
 
-def _stock_py() -> Path:
+def _python_candidates() -> list[Path]:
+    candidates: list[Path] = []
     for rel in (".venv/bin/python3", "venv/bin/python3"):
         p = STOCK_PROJECT / rel
         if p.is_file():
-            return p
-    return Path("python3")
+            candidates.append(p)
+    candidates.append(Path(sys.executable))
+    return candidates
 
 
 def fetch_fundamentals_batch(tickers: list[str]) -> dict[str, dict]:
-    """Fetch Yahoo Finance fundamentals via stock_analysis venv."""
+    """Fetch Yahoo Finance fundamentals (stock_analysis venv or current Python)."""
     if not tickers:
-        return {}
-    py = _stock_py()
-    if not py.is_file():
         return {}
     fields_json = json.dumps(list(FUNDAMENTAL_FIELDS))
     tickers_json = json.dumps([t.upper() for t in tickers])
@@ -92,19 +99,20 @@ for t in tickers:
         out[t] = {{}}
 print(json.dumps(out))
 """
-    try:
-        proc = subprocess.run(
-            [str(py), "-c", code],
-            cwd=str(STOCK_PROJECT),
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
-        if proc.returncode == 0 and proc.stdout.strip():
-            raw = json.loads(proc.stdout.strip())
-            return {k: v for k, v in raw.items() if v}
-    except Exception:
-        pass
+    for py in _python_candidates():
+        try:
+            proc = subprocess.run(
+                [str(py), "-c", code],
+                cwd=str(STOCK_PROJECT if STOCK_PROJECT.is_dir() else Path.cwd()),
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if proc.returncode == 0 and proc.stdout.strip():
+                raw = json.loads(proc.stdout.strip())
+                return {k: v for k, v in raw.items() if v}
+        except Exception:
+            continue
     return {}
 
 

@@ -4,16 +4,24 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import subprocess
 import sys
 from pathlib import Path
 
-FISH_DIR = Path.home() / ".config" / "fish"
-STOCK_PROJECT = Path(
-    os.environ.get("ARKA_STOCK_PROJECT", Path.home() / "Projects/python/products/stock_analysis")
-)
-WORKER = FISH_DIR / "arka_stock_context_worker.py"
+try:
+    from arka_paths import arka_home, load_env_file, stock_project_dir
+
+    load_env_file()
+except ImportError:
+    arka_home = lambda: Path(__file__).resolve().parent  # noqa: E731
+    stock_project_dir = lambda: Path(  # noqa: E731
+        os.environ.get("ARKA_STOCK_PROJECT", Path.home() / "Projects/python/products/stock_analysis")
+    ).expanduser()
+
+STOCK_PROJECT = stock_project_dir()
+WORKER = arka_home() / "arka_stock_context_worker.py"
 
 
 def stock_python() -> Path:

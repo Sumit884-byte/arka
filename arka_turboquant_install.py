@@ -16,6 +16,26 @@ REPO_URL = "https://github.com/Firmamento-Technologies/TurboQuant.git"
 VENV_PIP = Path.home() / ".config/fish/venv-arka/bin/pip"
 VENV_PY = Path.home() / ".config/fish/venv-arka/bin/python3"
 
+
+def _venv_candidates() -> list[Path]:
+    home = Path.home()
+    arka_home = Path(os.environ.get("ARKA_HOME", home / "dev/arka")).expanduser()
+    return [
+        arka_home / "venv-arka/bin/pip",
+        home / "dev/arka/venv-arka/bin/pip",
+        home / ".config/fish/venv-arka/bin/pip",
+        Path(sys.executable).parent / "pip",
+    ]
+
+
+def _pip() -> Path:
+    for candidate in _venv_candidates():
+        if candidate.is_file():
+            return candidate
+    if VENV_PIP.is_file():
+        return VENV_PIP
+    return Path(shutil.which("pip3") or shutil.which("pip") or "pip")
+
 PYPI_WRONG_MSG = (
     "PyPI package 'turboquant' is a different project (KV-cache compression) that "
     "pulls PyTorch/CUDA (~2GB+). Arka needs Firmamento TurboQuant (vector search) "
@@ -67,12 +87,6 @@ def check_install() -> tuple[bool, str]:
     except Exception:
         pass
     return True, f"ok ({dist.version}){f' @ {loc}' if loc else ''}"
-
-
-def _pip() -> Path:
-    if VENV_PIP.is_file():
-        return VENV_PIP
-    return Path(shutil.which("pip3") or shutil.which("pip") or "pip")
 
 
 def _ensure_repo(path: Path) -> None:

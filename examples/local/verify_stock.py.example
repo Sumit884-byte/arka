@@ -1,0 +1,78 @@
+#!/usr/bin/env python3
+"""
+Smoke-test Arka stock skills (local dev — not committed).
+
+Setup (once):
+  mkdir -p local
+  cp examples/local/verify_stock.py.example local/verify_stock.py
+
+Usage:
+  python3 local/verify_stock.py
+  python3 local/verify_stock.py --quick   # skip slow compare
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def _py() -> str:
+    venv = ROOT / "venv-arka" / "bin" / "python"
+    return str(venv if venv.is_file() else sys.executable)
+
+
+def run(name: str, args: list[str], *, expect_ok: bool = True) -> bool:
+    cmd = [_py(), *args]
+    print(f"{'·':>3} {name}...", end=" ", flush=True)
+    proc = subprocess.run(cmd, cwd=str(ROOT), capture_output=True, text=True)
+    ok = (proc.returncode == 0) == expect_ok
+    tag = "OK" if ok else "FAIL"
+    if not ok:
+        err = (proc.stderr or proc.stdout or "").strip().splitlines()
+        hint = err[0][:100] if err else f"exit {proc.returncode}"
+        print(f"{tag} — {hint}")
+    else:
+        print(tag)
+    return ok
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Verify Arka stock skills")
+    parser.add_argument("--quick", action="store_true", help="Skip slow predictions compare")
+    args = parser.parse_args()
+
+    os.chdir(ROOT)
+    py = _py()
+    print(f"Arka root: {ROOT}")
+    print(f"Python:    {py}\n")
+
+    checks: list[tuple[str, list[str], bool]] = [
+        ("macro", [f"{ROOT}/arka_macro_events.py", "--limit", "1"], True),
+        ("emotion", [f"{ROOT}/arka_market_emotion.py", "--limit", "1"], True),
+        ("fundamentals", [f"{ROOT}/arka_stock_fundamentals.py", "RELIANCE.NS"], True),
+        ("funding", [f"{ROOT}/arka_competition_funding.py", "--funding-limit", "1"], True),
+        ("competition", [f"{ROOT}/arka_competition_funding.py", "RELIANCE.NS"], True),
+        ("bridge path", [f"{ROOT}/arka_stock_bridge.py", "path"], True),
+        ("bridge news (needs project)", [f"{ROOT}/arka_stock_bridge.py", "news"], False),
+        ("bridge context (needs project)", [f"{ROOT}/arka_stock_bridge.py", "context", "RELIANCE.NS", "--no-ml"], False),
+    ]
+    if not args.quick:
+        checks.insert(
+            5,
+            ("predict compare", [f"{ROOT}/arka_predictions.py", "compare", "3000", "--horizon", "1 month"], True),
+        )
+
+    passed = sum(1 for name, cargs, exp in checks if run(name, cargs, expect_ok=exp))
+    total = len(checks)
+    print(f"\n{passed}/{total} checks passed")
+    return 0 if passed == total else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

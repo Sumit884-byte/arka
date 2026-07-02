@@ -75,7 +75,7 @@ def synthesize_chunk(text: str) -> bytes:
             or "en-IN"
         ),
         "model": os.environ.get("SARVAM_TTS_MODEL", "bulbul:v3"),
-        "speaker": os.environ.get("SARVAM_TTS_SPEAKER", "anushka"),
+        "speaker": os.environ.get("SARVAM_TTS_SPEAKER", "shubh"),
         "speech_sample_rate": int(os.environ.get("SARVAM_TTS_SAMPLE_RATE", "24000")),
     }
 

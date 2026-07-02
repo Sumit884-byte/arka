@@ -1,0 +1,51 @@
+#!/usr/bin/env python3
+"""Verify yt-dlp + transcript/whisper pipeline (local dev — not committed)."""
+
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+
+
+def main() -> int:
+    try:
+        from arka_paths import load_env_file
+
+        load_env_file()
+    except ImportError:
+        pass
+
+    from arka_youtube import (
+        _node_js_runtime_args,
+        _ytdlp_path,
+        _yt_env,
+        fetch_transcript_with_source,
+    )
+
+    print("━━━ YouTube transcript check ━━━")
+    ytdlp = _ytdlp_path()
+    print(f"yt-dlp: {ytdlp or 'NOT FOUND'}")
+    print(f"node runtime: {'yes' if _node_js_runtime_args() else 'no (install node for better yt-dlp)'}")
+    print(f"player client: {_yt_env('ARKA_YT_PLAYER_CLIENT', 'android_vr')}")
+    print(f"whisper fallback: {_yt_env('ARKA_YT_WHISPER_FALLBACK', 'auto')}")
+    print(f"research allow no caption: {_yt_env('ARKA_YT_RESEARCH_ALLOW_NO_CAPTION', '0')}")
+    print(f"skip caption API: {_yt_env('ARKA_YT_SKIP_TRANSCRIPT_API', '0')}")
+    test_id = _yt_env("ARKA_YT_TEST_VIDEO", "Uwmp16aSgdk")
+    print(f"\nTesting transcript fetch: {test_id}")
+    text, src = fetch_transcript_with_source(test_id)
+    if text:
+        print(f"OK — source={src}, words={len(text.split())}")
+        return 0
+    print(
+        "FAILED — captions blocked; ensure GROQ_API_KEY or SARVAM_API_KEY for whisper STT",
+        file=sys.stderr,
+    )
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

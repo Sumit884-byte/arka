@@ -217,6 +217,13 @@ def cmd_delete(name: str) -> int:
     return 0
 
 
+def cmd_once(length: int, *, symbols: bool) -> int:
+    pwd = _generate_password(length, symbols=symbols)
+    print(f"__PASSWORD__={pwd}")
+    print(f"__LENGTH__={length}")
+    return 0
+
+
 def cmd_rotate(name: str, length: int, *, symbols: bool) -> int:
     return cmd_generate(name, length, symbols=symbols, force=True)
 
@@ -251,6 +258,10 @@ def main() -> int:
     p.add_argument("--length", "-l", type=int, default=DEFAULT_LENGTH)
     p.add_argument("--no-symbols", action="store_true")
 
+    p = sub.add_parser("once", help="Generate a one-time password (not stored)")
+    p.add_argument("--length", "-l", type=int, default=DEFAULT_LENGTH)
+    p.add_argument("--no-symbols", action="store_true")
+
     args = parser.parse_args()
     sym = not getattr(args, "no_symbols", False)
 
@@ -269,6 +280,8 @@ def main() -> int:
         return cmd_delete(args.name)
     if args.cmd == "rotate":
         return cmd_rotate(args.name, args.length, symbols=sym)
+    if args.cmd == "once":
+        return cmd_once(args.length, symbols=sym)
     return 1
 
 
