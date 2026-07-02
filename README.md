@@ -3,7 +3,7 @@
 A modern, AI-powered Fish shell setup with **Arka** — a voice-capable natural-language agent that routes requests to 70+ built-in skills, third-party plugins, cloud memory, deep web search, PDF RAG, and system automation.
 
 > [!TIP]
-> **Lightweight & secure**: Commands run locally. LLM calls use Gemini, Groq, or Ollama APIs — no Docker required for daily use (PrivateGPT + Qdrant only for PDF ingest).
+> **Lightweight & secure**: Commands run locally. LLM calls go through a **fallback orchestrator** (`arka_llm_fallback.py`) across Gemini, Groq, Ollama, and vLLM — no Docker required for daily use (PrivateGPT + Qdrant only for PDF ingest).
 
 ## Quick start
 
@@ -130,8 +130,10 @@ flowchart TD
 
 2. **Natural language** — `arka "what's the weather"` or `arka install torch for cpu`:
    - **Offline routing** (fast, no LLM): hundreds of regex/symbolic rules in `config.fish` map phrases to skills (`play_spotify …`, `pdf_ask …`, `agent_remember …`, etc.). You'll see `💡 [Offline routing]` and `→ Interpreted: …` when this fires.
-   - **LLM routing** (fallback): `arka_llm.py route` picks a skill or safe shell command using your configured provider chain (Gemini → Groq → Ollama). Used when offline rules don't match.
+   - **LLM routing** (fallback): when offline rules don't match, `arka_llm.py route` asks the **AI fallback orchestrator** (task=`route`) to pick a skill or safe shell command.
    - **Correction layer**: weak LLM picks are fixed (e.g. `search_web` → `web_answer` for factual questions, advisory → `agent_ask`).
+
+The **skill router** (symbolic rules + optional LLM route + correction) decides *which skill runs*. The **orchestrator** is separate: it powers every LLM completion inside skills (summarize, chat, research, PDF, predictions, …) with provider/model failover.
 
 3. **Third-party plugins** — folders under `~/.config/arka/skills/` with `skill.json` **`triggers`** are matched during routing (same NL path as built-ins). Refresh after install: `arka skills refresh`.
 
@@ -151,9 +153,52 @@ arka tell your skills   # short voice-friendly summary + active LLM model
 
 **Without Fish** (pip-only): `arka ask`, `arka route`, passwords, calc, weather, sports, and plugins use the Python router in `src/arka/router.py` — a smaller subset. Install [fish](https://fishshell.com) for the full 70+ skill table.
 
+### AI fallback orchestrator
+
+Arka’s LLM layer is **not** a single model or a simple router. `arka_llm_fallback.py` implements **`LlmFallbackEngine`** — a session-scoped orchestrator that every skill uses via `arka_llm.py`:
+
+| Concern | Behavior |
+| ------- | -------- |
+| **Provider chain** | Ordered candidates: preferred provider/model → env chain → defaults (Gemini → Groq → Ollama). Override globally or per task. |
+| **Task profiles** | `route`, `summarize`, `chat`, `research`, `agent`, `pdf`, `predictions` — each can use `ARKA_LLM_FALLBACK_<TASK>` (e.g. `ARKA_LLM_FALLBACK_SUMMARIZE`). |
+| **Failover** | On 401, 429, quota, decommissioned model, timeout, etc., marks provider/model exhausted and tries the next candidate (`ARKA_LLM_AUTO_FALLBACK=1` default). |
+| **Local servers** | Auto-start/stop Ollama or vLLM when needed (`ARKA_LLM_AUTO_START_SERVERS`, `ARKA_LLM_AUTO_STOP_SERVERS`). |
+| **Shared exhaustion** | One session cache — if Gemini 429s during YouTube summarize, route/chat skip dead models too until `reset-exhaustion`. |
+
+```mermaid
+flowchart LR
+  subgraph skills [Skills]
+    R[route task]
+    S[summarize / playlist]
+    C[chat / web_answer]
+    Y[youtube research]
+  end
+  O[LlmFallbackEngine]
+  G[Gemini]
+  Q[Groq]
+  L[Ollama / vLLM]
+  skills --> O
+  O --> G
+  O --> Q
+  O --> L
+  G -->|401/429| O
+  Q -->|fail| O
+```
+
+**Inspect the orchestrator (not the skill router):**
+
+```fish
+python3 ~/.config/fish/arka_llm.py models                    # default chain
+python3 ~/.config/fish/arka_llm.py models --task summarize # per-task chain
+python3 ~/.config/fish/arka_llm.py active-model              # last success or preferred
+python3 ~/.config/fish/arka_llm.py reset-exhaustion          # clear 429/401 exhaustion cache
+```
+
+Enable stderr when a later provider saves the call: `ARKA_LLM_FALLBACK_NOTIFY=1`. Debug attempts: `ARKA_LLM_VERBOSE=1`.
+
 ### How Arka optimizes any model with concise skills
 
-Arka does **not** ask the LLM to memorize 70 skill manuals. Skills are **local programs and shell functions** — the model’s job is only to pick the right name (or a safe shell command) and get out of the way. That keeps prompts small, latency low, and behavior consistent whether you use Gemini, Groq, Ollama, or another provider in the fallback chain.
+Arka does **not** ask the LLM to memorize 70 skill manuals. Skills are **local programs and shell functions** — the model’s job is only to pick the right name (or a safe shell command) and get out of the way. That keeps prompts small, latency low, and behavior consistent: the **orchestrator** swaps providers when one fails; the **router** decides which skill runs.
 
 **1. Most requests never touch the model**
 
@@ -162,7 +207,7 @@ Arka does **not** ask the LLM to memorize 70 skill manuals. Skills are **local p
 | Direct skill name | `arka weather` → runs `weather` | **0** |
 | Symbolic routing | Regex/rules in `config.fish` map NL → `play_spotify …`, `system_info`, `pdf_ask …` | **0** |
 | Plugin triggers | `skill.json` `triggers` matched before AI | **0** |
-| LLM route (fallback) | One short `arka_llm.py route` call | **small** |
+| LLM route (fallback) | One short `arka_llm.py route` call via orchestrator (`task=route`) | **small** |
 
 Default mode is `ARKA_ROUTE_MODE=symbolic` (offline rules first, AI only when needed).
 
@@ -174,7 +219,7 @@ On an LLM route, Arka passes:
 - **Curated routing rules** in the route prompt — high-signal patterns like “specs of my mac → `system_info`”, “factual question → `web_answer`”, “install torch → `install_uv`”.
 - **Shell aliases** for your machine (via `ARKA_ROUTE_ALIASES`) so the model respects `eza`/`batcat` etc. without re-discovering them each turn.
 
-The route task uses low temperature and a dedicated fallback chain (`ARKA_LLM_FALLBACK_ROUTE`) so a fast/cheap model can handle classification; heavy lifting runs inside the skill (Python, ffmpeg, yt-dlp, RAG, …).
+The route task uses low temperature and a dedicated chain (`ARKA_LLM_FALLBACK_ROUTE` or `ARKA_LLM_FALLBACK`) so a fast/cheap model can handle classification; heavy lifting runs inside the skill (Python, ffmpeg, yt-dlp, RAG, …). Summarize/research/chat use their own task chains through the same orchestrator.
 
 **3. Correction layer — fix bad picks without a second LLM call**
 
@@ -199,7 +244,7 @@ The model picks based on intent (watch the film vs. hear the track only). Clear,
 
 **6. Model-agnostic by design**
 
-Because skills execute locally, swapping providers does not change *what* Arka can do — only *who* picks the skill name. Any model in your chain gets the same short catalog and rules; execution stays on your machine.
+Because skills execute locally, swapping providers does not change *what* Arka can do — only which model the **orchestrator** reaches after failover. Any model in your chain gets the same short catalog and rules for routing; execution stays on your machine.
 
 ```fish
 # Preview what the router would choose (no run)
@@ -472,14 +517,21 @@ pip install --break-system-packages -r ~/.config/fish/arka_chat_requirements.txt
 Create `~/.config/fish/.env`:
 
 ```env
-# LLM (at least one)
+# LLM — fallback orchestrator (at least one cloud key or local Ollama)
 GEMINI_API_KEY=...
 GROQ_API_KEY=...
 OLLAMA_HOST=127.0.0.1:11434
 
-# Prefer faster routing when Gemini quota is low
+# Preferred first candidate (orchestrator still fails over on errors)
 AI_PREFERRED_PROVIDER=groq
 AI_PREFERRED_MODEL=llama-3.3-70b-versatile
+
+# Orchestrator chains (optional — see .env.example)
+# ARKA_LLM_AUTO_FALLBACK=1
+# ARKA_LLM_FALLBACK=gemini:gemini-2.0-flash,groq:llama-3.3-70b-versatile,ollama:llama3.2:1b
+# ARKA_LLM_FALLBACK_SUMMARIZE=   # per-task: ROUTE, CHAT, RESEARCH, AGENT, PDF, PREDICTIONS
+# ARKA_LLM_FALLBACK_NOTIFY=1     # stderr when failover succeeds
+# ARKA_LLM_VERBOSE=1               # log each provider attempt
 
 # Arka
 AGENT_NAME=arka
@@ -517,9 +569,11 @@ See `.env.example` for the full list of options.
 
 ```
 ~/.config/fish/
-├── config.fish          # Main entry: skills, routing, Arka
+├── config.fish          # Main entry: skills, skill router, Arka
 ├── .env                 # Secrets & preferences (not committed)
 ├── arka_*.py            # Python skills & engines
+├── arka_llm_fallback.py # AI fallback orchestrator (provider/model chains)
+├── arka_llm.py          # LLM CLI: complete, route, models, active-model
 ├── skills/              # Bundled third-party plugin examples
 ├── arka_chat_requirements.txt
 ├── privategpt/
@@ -709,8 +763,8 @@ agent_recall meeting
 
 | Issue                                | Fix                                                                                                    |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------ |
-| `Could not generate an answer`       | Set `AI_PREFERRED_PROVIDER=groq` or run `ollama serve`                                                 |
-| Gemini 429 / slow responses          | Use Groq as preferred provider                                                                         |
+| `Could not generate an answer` / `Unauthorized (401)` | Check keys; `python3 arka_llm.py models --task summarize`; set `AI_PREFERRED_PROVIDER=groq`; `arka_llm.py reset-exhaustion` |
+| Gemini 429 / slow responses          | Orchestrator auto-fails over if `ARKA_LLM_AUTO_FALLBACK=1`; prefer Groq via `AI_PREFERRED_PROVIDER=groq` |
 | `uv pip install am` on random text   | Fixed — use `arka`, not raw shell, for NL                                                              |
 | PDF ask fails                        | `arka pdf status`; ensure Qdrant Docker is up                                                          |
 | Deep search empty                    | `pip install ddgs trafilatura beautifulsoup4`                                                          |
