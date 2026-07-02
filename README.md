@@ -1,6 +1,6 @@
 # Fish Shell Configuration (Arka)
 
-A modern, AI-powered Fish shell setup with **Arka** — a voice-capable natural-language agent that routes requests to 70+ skills, deep web search, PDF RAG, and system automation.
+A modern, AI-powered Fish shell setup with **Arka** — a voice-capable natural-language agent that routes requests to 70+ built-in skills, third-party plugins, cloud memory, deep web search, PDF RAG, and system automation.
 
 > [!TIP]
 > **Lightweight & secure**: Commands run locally. LLM calls use Gemini, Groq, or Ollama APIs — no Docker required for daily use (PrivateGPT + Qdrant only for PDF ingest).
@@ -20,6 +20,8 @@ arka doctor
 arka ask "what is Rust?"
 ```
 
+Install [fish shell](https://fishshell.com) for the full 70+ skill router on any OS (`brew install fish`, `apt install fish`, or `scoop install fish`). The pip package ships `config.fish` — you do not need a Linux machine or a fish login shell.
+
 Already cloned on another machine — refresh from GitHub:
 
 ```bash
@@ -35,19 +37,23 @@ arka setup
 arka doctor
 ```
 
+
 | Platform | Mode |
-|----------|------|
-| **Linux + fish** | Full 70+ skills via `config.fish` (voice, system, media, …) |
-| **macOS / Windows** | Portable Python skills: chat, web answers, passwords, calc, weather |
-| **Linux without fish** | Same portable mode as macOS/Windows |
+| ---------------------- | ------------------------------------------------------------------- |
+| **All (macOS, Windows, Linux)** | Full 70+ skills via pip package + [fish shell](https://fishshell.com) (bundled `config.fish`) |
+| **Without fish** | Portable Python skills: chat, web answers, passwords, calc, weather, sports, plugins |
+| **Linux + fish as login shell** | Same 70+ skills plus voice autostart, systemd units, native desktop integration |
+
 
 Config locations (when not using `~/.config/fish`):
 
-| OS | Config | Cache |
-|----|--------|-------|
-| Linux | `~/.config/arka/` | `~/.cache/arka/` |
-| macOS | `~/Library/Application Support/arka/` | `~/Library/Caches/arka/` |
-| Windows | `%APPDATA%\arka\` | `%LOCALAPPDATA%\arka\` |
+
+| OS      | Config                                | Cache                    |
+| ------- | ------------------------------------- | ------------------------ |
+| Linux   | `~/.config/arka/`                     | `~/.cache/arka/`         |
+| macOS   | `~/Library/Application Support/arka/` | `~/Library/Caches/arka/` |
+| Windows | `%APPDATA%\arka\`                     | `%LOCALAPPDATA%\arka\`   |
+
 
 Override with `ARKA_HOME`, `ARKA_CONFIG_DIR`, or `ARKA_CACHE_DIR`.
 
@@ -65,50 +71,266 @@ arka facing hair loss
 # List skills
 arka help
 agent_route "summarize ENGLSH-2 weeks 1-3"   # preview routing, no run
+
+# Reload after editing config or .env (no manual source needed on each arka call)
+arka reload
+arka reload --listen   # also restart wake listener after Python changes
 ```
+
+
 
 ## Arka — voice & NL agent
 
-| Command | Description |
-|---------|-------------|
-| `arka <request>` | Route NL to the best skill or shell command |
-| `agent <request>` | Same router (alias) |
-| `agent_route <q>` | Preview routing without executing |
-| `arka start` / `arka stop` | Remote server + wake listener |
-| `arka listen` | Wake-word listener ("hey arka, …") |
-| `arka speak-lang hi-IN` | Voice language (Sarvam / Edge TTS) |
-| `arka usage report` | App + website screen time |
 
-Voice flow: say **"hey arka, …"** → STT → skill router → optional TTS reply (`AGENT_SPEAK=1` default).
+| Command                    | Description                                        |
+| -------------------------- | -------------------------------------------------- |
+| `arka <request>`           | Route NL to the best skill or shell command        |
+| `agent <request>`          | Same router (alias)                                |
+| `agent_route <q>`          | Preview routing without executing                  |
+| `arka reload`              | Reload `config.fish` + `.env` in the current shell |
+| `arka start` / `arka stop` | Remote server + wake listener                      |
+| `arka serve`               | Remote server only (phone / Termux → PC agent)     |
+| `arka phone-env`           | Print Termux `~/.arka/env` for phone setup         |
+| `arka whatsapp inbox`      | WhatsApp inbox → Arka (listen / status / stop)     |
+| `send_whatsapp`            | Send a WhatsApp message from the PC                |
+| `arka listen`              | Wake-word listener ("hey arka, …")                 |
+| `arka speak-lang hi-IN`    | Voice language (Sarvam / Edge TTS)                 |
+| `arka usage report`        | App + website screen time                          |
+| `arka skills list`         | Installed third-party plugins                      |
+| `supermemory status`       | Memory backend (cloud API vs local cache)          |
+
+
+Voice flow: say **"hey arka, …"** → STT → skill router → optional TTS reply (`AGENT_SPEAK=1` default). In voice mode, Arka speaks short acks while skills run and plain-language answers when done — usable without looking at the screen.
+
+### How skills get activated
+
+Every request goes through the same router whether you type `arka …`, say **"hey arka, …"**, or run `agent …`. A skill **activates** when the router picks a registered command and `_agent_dispatch` runs it.
+
+```mermaid
+flowchart TD
+  A[You: arka / agent / voice] --> B[Strip wake word + normalize STT]
+  B --> C{First word is a skill name?}
+  C -->|yes| Z[Run skill directly]
+  C -->|no| D{Plugin trigger match?}
+  D -->|yes| Z
+  D -->|no| E[Offline symbolic rules in config.fish]
+  E -->|match| F["Interpreted: skill args"]
+  E -->|no match| G[LLM route via arka_llm.py]
+  G --> H[Correction layer]
+  F --> I[_agent_dispatch]
+  H --> I
+  I --> Z
+  Z --> J[Skill output + optional TTS]
+```
+
+**Activation paths (in order):**
+
+1. **Direct skill name** — if the first token is a built-in skill, it runs immediately:
+   ```fish
+   arka weather
+   arka play_spotify bohemian rhapsody
+   demo_echo hello          # third-party plugin by name
+   ```
+
+2. **Natural language** — `arka "what's the weather"` or `arka install torch for cpu`:
+   - **Offline routing** (fast, no LLM): hundreds of regex/symbolic rules in `config.fish` map phrases to skills (`play_spotify …`, `pdf_ask …`, `agent_remember …`, etc.). You'll see `💡 [Offline routing]` and `→ Interpreted: …` when this fires.
+   - **LLM routing** (fallback): `arka_llm.py route` picks a skill or safe shell command using your configured provider chain (Gemini → Groq → Ollama). Used when offline rules don't match.
+   - **Correction layer**: weak LLM picks are fixed (e.g. `search_web` → `web_answer` for factual questions, advisory → `agent_ask`).
+
+3. **Third-party plugins** — folders under `~/.config/arka/skills/` with `skill.json` **`triggers`** are matched during routing (same NL path as built-ins). Refresh after install: `arka skills refresh`.
+
+4. **Chat / Q&A fallback** — general questions route to `web_answer` (web + session memory) or `agent_ask` (gathers system context first). Prefix with `/` to force deep search: `arka "/who won IPL 2025"`.
+
+5. **Voice** — wake listener (`arka listen`) → STT → `arka_stt_map.py` (Devanagari → Latin, skill phrase fixes) → same router as text. Multi-turn follow-ups work without re-waking until you say **"end conversation"**.
+
+**Inspect without running:**
+
+```fish
+agent_route "play bohemian rhapsody on spotify"   # kind, action, why
+agent_trace          # last routing decision
+agent_why            # explain why that skill was chosen
+arka help            # full skill list
+arka tell your skills   # short voice-friendly summary + active LLM model
+```
+
+**Without Fish** (pip-only): `arka ask`, `arka route`, passwords, calc, weather, sports, and plugins use the Python router in `src/arka/router.py` — a smaller subset. Install [fish](https://fishshell.com) for the full 70+ skill table.
+
+### How Arka optimizes any model with concise skills
+
+Arka does **not** ask the LLM to memorize 70 skill manuals. Skills are **local programs and shell functions** — the model’s job is only to pick the right name (or a safe shell command) and get out of the way. That keeps prompts small, latency low, and behavior consistent whether you use Gemini, Groq, Ollama, or another provider in the fallback chain.
+
+**1. Most requests never touch the model**
+
+| Layer | What happens | LLM tokens |
+| ----- | ------------ | ---------- |
+| Direct skill name | `arka weather` → runs `weather` | **0** |
+| Symbolic routing | Regex/rules in `config.fish` map NL → `play_spotify …`, `system_info`, `pdf_ask …` | **0** |
+| Plugin triggers | `skill.json` `triggers` matched before AI | **0** |
+| LLM route (fallback) | One short `arka_llm.py route` call | **small** |
+
+Default mode is `ARKA_ROUTE_MODE=symbolic` (offline rules first, AI only when needed).
+
+**2. When the model *is* used, skills are injected concisely at route time**
+
+On an LLM route, Arka passes:
+
+- A **compact skill catalog** — registered names only (e.g. `weather, pdf_ask, web_answer, system_info, …`), not full help text for every skill.
+- **Curated routing rules** in the route prompt — high-signal patterns like “specs of my mac → `system_info`”, “factual question → `web_answer`”, “install torch → `install_uv`”.
+- **Shell aliases** for your machine (via `ARKA_ROUTE_ALIASES`) so the model respects `eza`/`batcat` etc. without re-discovering them each turn.
+
+The route task uses low temperature and a dedicated fallback chain (`ARKA_LLM_FALLBACK_ROUTE`) so a fast/cheap model can handle classification; heavy lifting runs inside the skill (Python, ffmpeg, yt-dlp, RAG, …).
+
+**3. Correction layer — fix bad picks without a second LLM call**
+
+If the model returns `search_web` for a factual question, or `system_monitor` for “tell me my GPU”, deterministic rules in `_agent_correct_interpretation` rewrite the route before execution. You get better accuracy without paying for another completion.
+
+**4. When symbolic rules collide, the model breaks the tie**
+
+Offline rules are an ordered `else if` chain — a **single** clear match runs with zero tokens. When **two or more** patterns could apply (common with play/media), Arka detects the collision and asks the LLM to choose using the same concise skill catalog.
+
+Example: *“play a film that has bohemian rhapsody music”* matches both `play_movie` (film) and `play_song` (music). You’ll see:
+
+```text
+💡 [AI routing — ambiguous play/media request]
+→ Interpreted: play_movie bohemian rhapsody
+```
+
+The model picks based on intent (watch the film vs. hear the track only). Clear, one-sided requests still use offline routing — e.g. `play bohemian rhapsody on spotify` → `play_spotify` with no LLM call. Preview collisions with `agent_route "your phrase"`.
+
+**5. Agent loop & multi-step work**
+
+`agent_loop` / `loop` injects the same **concise skill name list once** at the start of the loop JSON protocol, plus cwd, a shallow directory listing, and truncated command history — not the entire `arka help` dump each step.
+
+**6. Model-agnostic by design**
+
+Because skills execute locally, swapping providers does not change *what* Arka can do — only *who* picks the skill name. Any model in your chain gets the same short catalog and rules; execution stays on your machine.
+
+```fish
+# Preview what the router would choose (no run)
+agent_route "summarize my downloads folder"
+agent_why                    # why that skill was picked
+
+# Force offline-only routing (zero LLM)
+set -x ARKA_ROUTE_MODE symbolic_only
+
+# AI-first routing (still concise skill list in route prompt)
+set -x ARKA_ROUTE_MODE ai
+```
+
+For humans (not the model), `arka help` is the full catalog; `arka tell your skills` is a short voice-friendly summary plus the active model label.
+
+Answers from `web_answer` / chat show the model used at the bottom (`Model: provider/name`). Set `ARKA_SHOW_MODEL=0` in `.env` to hide it.
+
+### Speech-to-text (listen)
+
+
+| Setting                                       | Description                                                                        |
+| --------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `ARKA_LISTEN_ENGINE=auto`                     | AssemblyAI streaming when key set; else Vosk (default `auto`)                      |
+| `ARKA_STT=auto`                               | Command STT chain: AssemblyAI → Sarvam → Groq → Vosk                               |
+| `ASSEMBLYAI_API_KEY`                          | Best wake + command accuracy (single streaming session)                            |
+| `SARVAM_API_KEY` + `SARVAM_STT_MODE=translit` | Good for Hindi/English mix; Devanagari transcripts normalized to Latin for routing |
+| `ARKA_SPEAK_LANG=hi-IN`                       | TTS language (independent of STT)                                                  |
+| `ARKA_LISTEN_STT_LANG`                        | Optional: force STT locale while TTS stays on `ARKA_SPEAK_LANG`                    |
+
+
+```fish
+arka listen              # background wake listener
+arka listen fg           # foreground with live STT log
+arka listen debug        # STT debug logging
+arka reload --listen     # pick up arka_wake.py changes
+```
+
+
 
 ### Chat & web answers (`arka_chat.py`)
 
 Intent routing, deep scrape RAG, location, weather, and calc (see `arka_chat.py`).
 
-| Skill | Example |
-|-------|---------|
-| `web_answer [--deep] <q>` | Auto deep search when needed; session memory |
-| `deep_web_answer <q>` | DDG → scrape pages → LLM synthesis |
-| `calc <expr>` | SymPy + explanation (`integrate sin(x) dx`) |
-| `hyperlocal_weather [q]` | Open-Meteo + IP geolocation |
-| `set_location [city\|PIN]` | Ground search queries locally |
-| `nearby_places [city]` | Offline POI map (OSM Overpass) |
-| `map_download <city>` | Cache city map to `~/.cache/fish-agent/maps/` |
-| `error_helper <text>` | Explain tracebacks / fix steps |
-| `chat_reset` | Clear chat session + location context |
-| `deep_queue add\|list\|run\|results` | Background deep-search queue |
+
+| Skill                             | Example                                       |
+| --------------------------------- | --------------------------------------------- |
+| `web_answer [--deep] <q>`         | Auto deep search when needed; session memory  |
+| `deep_web_answer <q>`             | DDG → scrape pages → LLM synthesis            |
+| `calc <expr>`                     | SymPy + explanation (`integrate sin(x) dx`)   |
+| `hyperlocal_weather [q]`          | Open-Meteo + IP geolocation                   |
+| `set_location [city|PIN]`         | Ground search queries locally                 |
+| `nearby_places [city]`            | Offline POI map (OSM Overpass)                |
+| `map_download <city>`             | Cache city map to `~/.cache/fish-agent/maps/` |
+| `error_helper <text>`             | Explain tracebacks / fix steps                |
+| `chat_reset`                      | Clear chat session + location context         |
+| `deep_queue add|list|run|results` | Background deep-search queue                  |
+
 
 Forced web search: prefix with `/` — e.g. `arka "/who won IPL 2025"`.
 
 Answers are tagged `[FROM SEARCH]` or `[FROM MEMORY]` (stripped for TTS).
 
+### Long-term memory (Supermemory + local)
+
+Arka remembers facts across sessions. With a [Supermemory](https://supermemory.ai) API key, memories sync to the cloud; if the API is unavailable, Arka falls back to a local cache automatically.
+
+
+| Command                            | Example                                          |
+| ---------------------------------- | ------------------------------------------------ |
+| `agent_remember <fact>`            | `agent_remember I prefer Hindi TTS`              |
+| `agent_recall [query]`             | `agent_recall Hindi`                             |
+| `supermemory status`               | Show backend mode (api / local)                  |
+| `supermemory remember|recall|list` | Explicit Supermemory CLI                         |
+| `semantic_memory reindex`          | Rebuild TurboQuant semantic index on local cache |
+
+
+NL: *"remember that my dog is named Max"* · *"what do you remember about Max"* · *"I prefer Hindi TTS"* (auto-detected)
+
+```env
+SUPERMEMORY_API_KEY=...           # optional — cloud memory
+ARKA_SUPERMEMORY_CONTAINER=arka   # container tag (defaults to AGENT_NAME)
+ARKA_MEMORY=auto                  # auto | supermemory | local
+ARKA_MEMORY_AUTODETECT=1          # symbolic autodetect from chat/voice (default on)
+```
+
+Recalled context is injected into `arka_ask`, research, and agent loops automatically.
+
+### Third-party skills (plugins)
+
+Install community or custom skills without editing `config.fish`. Each plugin is a folder with `skill.json` (or a standalone `*.fish` file).
+
+
+| Command                         | Example                    |
+| ------------------------------- | -------------------------- |
+| `arka skills list`              | Show installed plugins     |
+| `arka skills install <path>`    | Copy a local plugin folder |
+| `arka skills install <git-url>` | Clone from GitHub          |
+| `arka skills refresh`           | Rescan plugin directories  |
+| `demo_echo hello`               | Run bundled demo plugin    |
+
+
+Search paths: `~/.config/arka/skills/`, `$ARKA_HOME/skills/`, and `ARKA_SKILLS_PATH` (colon-separated).
+
+Minimal `skill.json`:
+
+```json
+{
+  "name": "my_skill",
+  "description": "What it does",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": ["my skill", "do the thing"],
+  "voice_ack": "Running my skill."
+}
+```
+
+Supported types: `python`, `fish`, `shell`, `command`. Plugins participate in NL routing, voice acks, and `arka help`.
+
 ### PDF RAG (`arka_pdf_rag.py` + PrivateGPT)
 
-| Skill | Example |
-|-------|---------|
-| `pdf_ingest <file.pdf>` | Ingest (auto-starts PrivateGPT + Qdrant Docker) |
-| `pdf_list` | List ingested documents |
-| `pdf_ask [--doc DOC] <q>` | Q&A or summarize one or all PDFs |
+
+| Skill                     | Example                                         |
+| ------------------------- | ----------------------------------------------- |
+| `pdf_ingest <file.pdf>`   | Ingest (auto-starts PrivateGPT + Qdrant Docker) |
+| `pdf_list`                | List ingested documents                         |
+| `pdf_ask [--doc DOC] <q>` | Q&A or summarize one or all PDFs                |
+
 
 NL examples:
 
@@ -117,29 +339,53 @@ arka "ask Profile.pdf about main skills"
 arka "summarize ENGLSH-2 weeks 1 to 3"
 ```
 
+
+
 ### Other notable skills
 
-**Media:** `play_spotify`, `play_youtube`, `play_movie`, `play_song`  
+**Media:** `play_spotify`, `play_youtube`, `play_movie`, `play_song`
+
+**Spotify (`arka_spotify.py`):** Resolves songs via Spotify Web API (optional), iTunes + DuckDuckGo, then plays through the **Spotify desktop app** — AppleScript on macOS, `playerctl` on Linux. No Premium API needed for playback.
+
+```fish
+arka "play bohemian rhapsody on spotify"
+play_spotify bohemian rhapsody
+spotify_control pause
+spotify_control status
+```
+
+| Platform | Requirement |
+| -------- | ----------- |
+| **macOS** | [Spotify.app](https://www.spotify.com/download/mac/) installed — auto-plays via `osascript` |
+| **Linux** | Spotify desktop + `playerctl` (`sudo apt install playerctl`) |
+| **Search quality** | Optional free [Spotify Developer](https://developer.spotify.com/dashboard) app → `SPOTIPY_CLIENT_ID` + `SPOTIPY_CLIENT_SECRET` in `.env` |
+
+Without API keys, search still works via iTunes + web lookup; without the desktop app, Arka opens the Spotify web player.  
 **System:** `weather`, `system_monitor`, `disk_breakdown`, `app_usage`, `screenshot`  
+**Sports:** `sports_score`, `live_scores` — IPL, cricket, NFL, NBA, EPL via ESPN (no key)  
 **Dev:** `install_uv`, `install_app`, `git_summary`, `lint_python`, `open_project`  
 **Web:** `web_essay`, `search_web`, `browse_web`  
 **Advisory:** `agent_ask` — gathers Linux context via shell, then answers  
 
-Full list: `arka help` or `skills`.
+Full list: `arka help` or say *"tell me all your skills"* (voice-friendly).
 
 ---
+
+
 
 ## Classic AI helpers
 
 Built-in wrappers for Gemini, Groq, and Ollama (used by Arka and standalone):
 
-| Command | Purpose |
-|---------|---------|
-| `ask <prompt>` | Get a Linux command for a task (copies to clipboard) |
-| `talk <prompt>` | General chat |
-| `fix` | Fix last failed command via AI |
-| `ai <prompt>` | Shortcut for local Ollama |
-| `ai-models` | List providers and models |
+
+| Command         | Purpose                                              |
+| --------------- | ---------------------------------------------------- |
+| `ask <prompt>`  | Get a Linux command for a task (copies to clipboard) |
+| `talk <prompt>` | General chat                                         |
+| `fix`           | Fix last failed command via AI                       |
+| `ai <prompt>`   | Shortcut for local Ollama                            |
+| `ai-models`     | List providers and models                            |
+
 
 ```fish
 ask "find files larger than 100MB"
@@ -150,25 +396,50 @@ fix   # after a failed command
 
 ---
 
+
+
 ## Python modules
 
-| File | Role |
-|------|------|
-| `arka_chat.py` | Deep web RAG, intent, weather, maps, calc, session |
-| `arka_pdf_rag.py` | PrivateGPT ingest / ask / list |
-| `arka_usage.py` | GNOME app + browser usage tracking |
-| `arka_disk.py` | Disk breakdown by file type |
-| `arka_wake.py` | Wake-word listener (Vosk) |
-| `arka_remote_server.py` | Phone STT/TTS → PC agent |
-| `web_answer.py` | DuckDuckGo instant-answer snippets |
-| `sarvam_speak.py` / `edge_speak.py` | TTS backends |
-| `sarvam_stt.py` | STT via Sarvam Saaras v3 (command after wake) |
 
-Cache & logs: `~/.cache/fish-agent/`
+| File                                | Role                                                   |
+| ----------------------------------- | ------------------------------------------------------ |
+| `arka_chat.py`                      | Deep web RAG, intent, weather, maps, calc, session     |
+| `arka_pdf_rag.py`                   | PrivateGPT ingest / ask / list                         |
+| `arka_agent.py`                     | Memory, trace, research, watches, handoff, fanout      |
+| `arka_supermemory.py`               | Supermemory API + local memory fallback                |
+| `arka_skills.py`                    | Third-party plugin registry (discover, install, route) |
+| `arka_voice.py`                     | Voice acks, formatting, session context                |
+| `arka_wake.py`                      | Wake-word listener (AssemblyAI / Vosk)                 |
+| `arka_stt_map.py`                   | STT normalization (Devanagari → Latin routing)         |
+| `arka_sports.py`                    | Live sports scores (ESPN public API)                   |
+| `arka_talents.py`                   | Unified ask, semantic memory, speak_research           |
+| `arka_usage.py`                     | GNOME app + browser usage tracking                     |
+| `arka_disk.py`                      | Disk breakdown by file type                            |
+| `arka_remote_server.py`             | HTTP server — phone/Termux STT/TTS → PC agent          |
+| `arka_phone.py`                     | Termux client (STT/TTS on phone, agent on PC)          |
+| `arka_whatsapp_inbox.py`            | WhatsApp inbox listener → agent replies                |
+| `termux-boot-arka.sh`               | Termux:Boot script — ping PC after phone reboot        |
+| `whatsapp/`                         | WhatsApp automation (desktop macOS + Web Selenium)     |
+| `arka_predictions.py`               | Opportunity research (antiques, stocks, strategy)      |
+| `arka_macro_events.py`              | Disasters/geopolitics → sector impact + duration       |
+| `arka_market_emotion.py`            | News sentiment + crowd buy/sell forecast               |
+| `arka_stock_fundamentals.py`        | P/E, ROE, debt, margins vs peers                       |
+| `arka_competition_funding.py`         | VC/PE deals + peer rivalry scoreboard                  |
+| `arka_stock_bridge.py`              | Bridge to `stock_analysis` project (prices, context)   |
+| `web_answer.py`                     | DuckDuckGo instant-answer snippets                     |
+| `sarvam_speak.py` / `edge_speak.py` | TTS backends                                           |
+| `sarvam_stt.py`                     | STT via Sarvam Saaras v3 (command after wake)          |
+
+
+Cache & logs: `~/.cache/fish-agent/` (or `~/.cache/arka/` on non-fish installs)
 
 ---
 
+
+
 ## Setup
+
+
 
 ### Package install (all platforms)
 
@@ -189,6 +460,8 @@ pip wheel . -w dist/
 Optional extras: `[chat]`, `[voice]`, `[pdf]`, `[all]`.
 
 ### Fish + Linux (full skills)
+
+
 
 ### Prerequisites
 
@@ -221,6 +494,21 @@ AI_PREFERRED_MODEL=llama-3.3-70b-versatile
 AGENT_NAME=arka
 AGENT_SPEAK=1
 ARKA_SPEAK_LANG=en-IN
+AGENT_WAKE_WORDS=hey arka,arka
+
+# Listen / STT (optional — improves wake accuracy)
+# ARKA_LISTEN_ENGINE=auto
+# ARKA_STT=auto
+# ASSEMBLYAI_API_KEY=
+# SARVAM_API_KEY=
+# SARVAM_STT_MODE=translit
+
+# Memory (optional cloud + local fallback)
+# SUPERMEMORY_API_KEY=
+# ARKA_MEMORY=auto
+
+# Third-party plugins (optional extra search path)
+# ARKA_SKILLS_PATH=~/my-arka-plugins
 
 # PDF RAG
 ARKA_PDF_RAG_URL=http://127.0.0.1:8080
@@ -232,23 +520,31 @@ ARKA_USAGE_TRACK=1
 ARKA_WEB_TRACK=1
 ```
 
+See `.env.example` for the full list of options.
+
 ### Layout
 
 ```
 ~/.config/fish/
-├── config.fish          # Main entry (~8000 lines: skills, routing, Arka)
+├── config.fish          # Main entry: skills, routing, Arka
 ├── .env                 # Secrets & preferences (not committed)
-├── arka_chat.py         # Chat / deep web engine
-├── arka_pdf_rag.py      # PDF RAG wrapper
+├── arka_*.py            # Python skills & engines
+├── skills/              # Bundled third-party plugin examples
 ├── arka_chat_requirements.txt
 ├── privategpt/
 │   └── settings.override.yaml
 └── functions/           # Extra fish functions (e.g. i → uv pip install)
+
+~/.config/arka/skills/   # User-installed third-party plugins (created on install)
 ```
 
 ---
 
+
+
 ## Usage examples
+
+
 
 ### Natural language
 
@@ -256,10 +552,81 @@ ARKA_WEB_TRACK=1
 arka install torch for cpu
 arka "how much disk is videos taking"
 arka "play bohemian rhapsody on spotify"
+arka "ipl score"                             # → sports_score
+arka "remember that I prefer Gemini"         # → agent_remember (Supermemory + local)
 arka "is my cpu too outdated for gaming?"    # → agent_ask
 arka "where is Tokyo"                        # → web_answer
 arka facing hair loss                        # → web_answer + session
+arka "stock macro 8"                         # → macro events → stock impact
+arka "market emotion"                        # → sentiment + crowd forecast
+arka "fundamentals for RELIANCE.NS"            # → stock fundamentals
 ```
+
+
+
+### Stock & market intelligence
+
+Market skills live under **`stock`** / **`stock_analysis`** (alias). They also feed into **`predictions --domain stocks`** and **`stock invest`** for deep research.
+
+**Setup:** optional **stock_analysis** project for live prices, ML signals, and rich context. Set in `.env`:
+
+```env
+ARKA_STOCK_PROJECT=~/Projects/python/products/stock_analysis
+```
+
+Without it, **macro**, **emotion**, **fundamentals**, **funding**, and **competition** still work (RSS + yfinance). **Context**, **prices**, **strategy**, and **dashboard** need the project.
+
+| Command | What it does |
+| -------- | ------------- |
+| `stock macro [N]` | Disasters, resources, geopolitics → beneficiaries/losers + **how long** moves typically last (default 8 headlines) |
+| `stock emotion [N]` | Net news **sentiment** + who is likely to buy/sell (retail, FIIs, traders) |
+| `stock fundamentals TICKER…` | Debt/equity, ROE, P/E, margins vs peers |
+| `stock context [TICKER…]` | Plain-text bundle (prices, news, ML signals) for debugging or LLM context |
+| `stock funding [N]` | Recent VC/PE/IPO deals + listed peer mapping |
+| `stock competition [TICKER…]` | Peer scoreboard + rivalry news |
+| `stock invest <question>` | Short-term “where to invest ₹X for N days” — deep stock research |
+| `stock predict <topic>` | Same as `predictions --domain stocks` |
+| `stock compare [AMT] [HORIZON]` | Rank options from news + data (no LLM) |
+| `stock news` / `stock prices` / `stock strategy TICKER` | Via **stock_analysis** bridge |
+| `stock dashboard` | Streamlit Stock Intelligence Hub (localhost:8501) |
+
+**Via `arka` CLI:**
+
+```fish
+arka stock macro 8
+arka stock emotion 20
+arka stock fundamentals RELIANCE.NS TCS.NS INFY.NS
+arka stock context RELIANCE.NS TCS.NS
+arka stock funding 10
+arka stock competition RELIANCE.NS TCS.NS
+arka stock invest "where to invest 3000 for 1 month"
+arka predict --domain stocks banking sector next quarter
+```
+
+**Natural language** (router picks the skill):
+
+```fish
+arka "macro events affecting oil stocks"
+arka "market sentiment today"
+arka "fundamentals for RELIANCE and TCS"
+arka "where to invest 5000 rupees for 2 weeks"
+```
+
+**Direct Python** (no fish):
+
+```bash
+python arka_macro_events.py --limit 8
+python arka_market_emotion.py --limit 20
+python arka_stock_fundamentals.py RELIANCE.NS TCS.NS
+python arka_stock_bridge.py context RELIANCE.NS --no-ml
+python arka_predictions.py run --domain stocks --deep "RELIANCE sector outlook"
+```
+
+**Help:** `stock help` lists all subcommands.
+
+**Note:** `predictions --domain stocks --deep` automatically pulls macro, emotion, fundamentals, and competition sections when relevant — you do not need to run each command separately for full research reports.
+
+
 
 ### PDF
 
@@ -268,6 +635,8 @@ pdf_ingest ~/Documents/Profile.pdf
 pdf_ask --doc "ENGLSH-2 W1-3.pdf" "summarize weeks 1 to 3"
 pdf_list
 ```
+
+
 
 ### Chat / search
 
@@ -280,9 +649,24 @@ deep_queue run && deep_queue results
 chat_reset
 ```
 
+
+
 ### Voice
 
-**Wake word (lightweight):** `arka listen` / `arka debug` — Vosk + optional Groq Whisper  
+**Wake word:** `arka listen` — AssemblyAI streaming (when keyed) or Vosk offline; Sarvam/Groq for command capture.
+
+```fish
+arka listen fg               # live STT in foreground (debug routing)
+arka listen debug
+arka reload --listen         # restart listener after code changes
+# Say: "hey arka, what's the weather"
+# Say: "hey arka, ipl score"
+# Say: "hey arka, tell me all your skills"
+AGENT_SPEAK=0 arka "timer 5m"   # text-only reply
+```
+
+Multi-turn voice: follow up without re-waking (*"and what about tomorrow?"*). Say **"end conversation"** to clear session context.
+
 **Full voice agent (HF):** Hugging Face [speech-to-speech](https://github.com/huggingface/speech-to-speech) with VAD + Whisper STT + Pocket TTS, routed to Arka skills:
 
 ```fish
@@ -304,38 +688,207 @@ ARKA_HF_BRIDGE_PORT=8787
 
 ```fish
 arka start                    # remote + wake listener
-arka listen debug             # live STT log
-# Say: "hey arka, what's the weather"
-AGENT_SPEAK=0 arka "timer 5m" # text-only reply
 ```
+
+
+
+### Plugins & memory
+
+```fish
+arka skills list
+arka skills install ./my-plugin
+supermemory status
+supermemory remember my meeting is at 3pm
+agent_recall meeting
+```
+
+---
+
+## Phone, Termux & WhatsApp control
+
+> **Active development:** [`feature/phone-whatsapp-termux`](https://github.com/Sumit884-byte/arka/tree/feature/phone-whatsapp-termux) — phone remote control, Termux client, and WhatsApp inbox are evolving; expect API and setup changes on that branch.
+
+Control Arka from your phone while the **PC runs the heavy work** (LLM, installs, file access). Three paths share the same remote server on the PC:
+
+```mermaid
+flowchart LR
+  subgraph phone [Phone]
+    B[Mobile browser UI]
+    T[Termux + Termux:API]
+    W[WhatsApp app / Web]
+  end
+  subgraph pc [PC]
+    R[arka_remote_server.py]
+    A[Arka agent / skills]
+  end
+  B -->|Web Speech API| R
+  T -->|termux-speech-to-text / TTS| R
+  W -->|inbox listener| A
+  R --> A
+  A -->|TTS / WhatsApp reply| phone
+```
+
+### Architecture
+
+| Layer | Role |
+| ----- | ---- |
+| **PC — `arka serve`** | HTTP server (`arka_remote_server.py`) on port **8765** (default). Runs `agent` on your machine; optional mobile web UI at `/`. |
+| **Phone — browser** | Open `http://PC_IP:8765/` on the same Wi‑Fi. Uses built-in speech recognition + TTS; token from `arka serve` status. |
+| **Phone — Termux** | `arka_phone.py` uses **Termux:API** for STT/TTS; forwards text to the PC server. |
+| **WhatsApp** | `arka_whatsapp_inbox.py` watches allowed senders → routes messages through Arka → replies in WhatsApp (native desktop on macOS, Selenium Web elsewhere). |
+
+### PC setup (once)
+
+```fish
+# Start remote server (prints URL + token)
+arka serve
+# or full stack: remote + wake listener
+arka start
+
+arka remote status          # URL, token, log path
+arka remote stop
+
+# Print env block for Termux (~/.arka/env on phone)
+arka phone-env
+```
+
+Add to `.env` (see `.env.example`):
+
+```env
+ARKA_REMOTE_HOST=0.0.0.0
+ARKA_REMOTE_PORT=8765
+# ARKA_REMOTE_TOKEN=...     # auto-generated on first arka serve
+```
+
+Linux autostart (optional): `arka autostart` enables `arka-remote.service` when `ARKA_REMOTE_AUTO=1`.
+
+### Termux setup (Android)
+
+**Requirements:** [Termux](https://termux.dev), [Termux:API](https://wiki.termux.com/wiki/Termux:API), [Termux:Boot](https://wiki.termux.com/wiki/Termux:Boot) (optional), same Wi‑Fi as PC.
+
+```bash
+# On phone (Termux)
+pkg update && pkg install python termux-api openssh
+mkdir -p ~/arka ~/.arka
+
+# From PC — copy client + boot script
+scp PC_USER@PC_IP:~/path/to/arka/arka_phone.py ~/arka/
+scp PC_USER@PC_IP:~/path/to/arka/termux-boot-arka.sh ~/.termux/boot/arka.sh
+chmod +x ~/.termux/boot/arka.sh
+
+# Paste output of `arka phone-env` into ~/.arka/env
+nano ~/.arka/env
+```
+
+```bash
+# Test connection
+python ~/arka/arka_phone.py health
+
+# One-shot question (speaks reply via termux-tts-speak)
+python ~/arka/arka_phone.py ask "what is the weather"
+
+# Interactive: Enter → speak → PC agent → TTS reply
+python ~/arka/arka_phone.py listen
+
+# Optional: forward allowed SMS to PC inbox (uses ARKA_WHATSAPP_FROM numbers)
+python ~/arka/arka_phone.py sms-watch
+```
+
+After reboot, `termux-boot-arka.sh` toasts whether the PC server is reachable.
+
+### Mobile browser (no Termux)
+
+1. Run `arka serve` on the PC.
+2. On phone browser: `http://PC_LAN_IP:8765/`
+3. Paste the access token shown in `arka remote status`.
+4. Tap the mic — speech stays on the phone; agent runs on the PC.
+
+### WhatsApp inbox
+
+Message Arka from WhatsApp; replies come back in the same chat. **macOS** uses native WhatsApp.app (Accessibility); **Linux** uses WhatsApp Web + Selenium.
+
+```fish
+# .env — required
+# ARKA_WHATSAPP_FROM=+919876543210          # allowed sender(s), comma-separated
+# ARKA_WHATSAPP_SELF=auto                    # watch “You” / message-yourself chat
+# ARKA_WHATSAPP_BACKEND=auto                 # auto | desktop | web
+
+send_whatsapp +919876543210 hello from Arka
+send_whatsapp Mom I'll be late
+
+arka whatsapp inbox start      # background listener
+arka whatsapp inbox fg         # foreground (debug)
+whatsapp_listen stop
+whatsapp_listen log
+
+# Natural language
+arka "send whatsapp to +919876543210: running late"
+```
+
+Logs: `~/.cache/fish-agent/whatsapp_debug.log` · `arka_whatsapp.log`
+
+Linux autostart: set `ARKA_WHATSAPP_AUTO=1` and run `arka autostart`.
+
+### CLI reference (cross-platform)
+
+```bash
+arka serve                      # start remote server
+arka whatsapp inbox start       # WhatsApp listener
+arka whatsapp inbox fg
+python arka_remote_server.py serve
+python arka_phone.py listen     # Termux
+python arka_whatsapp_inbox.py status
+```
+
+### Status & roadmap (feature branch)
+
+| Feature | Status |
+| ------- | ------ |
+| PC remote server + mobile web UI | Works — same Wi‑Fi |
+| Termux STT/TTS client | Works — needs Termux:API |
+| Termux boot ping | Works — `termux-boot-arka.sh` |
+| WhatsApp send | Works — `send_whatsapp` |
+| WhatsApp inbox → agent | Beta — macOS desktop + Web Selenium |
+| SMS → PC inbox (Termux) | Experimental — `sms-watch` |
+| HTTPS / remote over internet | Not yet — LAN only |
+
+Track and contribute on **`feature/phone-whatsapp-termux`**.
 
 ---
 
 ## Modern CLI aliases
 
-- **`ls`, `ll`, `la`, `lt`** — `eza`
-- **`cat`, `bat`** — `batcat`
-- **`z`** — `zoxide`
-- **`i`** — `uv pip install` (⚠️ only use as a command, not NL — Arka routes chat away from this)
-
-## Project shortcuts
-
-`vgen`, `gitube`, `iaf-wiki`, `gitsearch` — quick `cd` / open helpers defined in `config.fish`.
+- `ls`**,** `ll`**,** `la`**,** `lt` — `eza`
+- `cat`**,** `bat` — `batcat`
+- `z` — `zoxide`
+- `i` — `uv pip install` (⚠️ only use as a command, not NL — Arka routes chat away from this)
 
 ---
 
 ## Troubleshooting
 
-| Issue | Fix |
-|-------|-----|
-| `Could not generate an answer` | Set `AI_PREFERRED_PROVIDER=groq` or run `ollama serve` |
-| Gemini 429 / slow responses | Use Groq as preferred provider |
-| `uv pip install am` on random text | Fixed — use `arka`, not raw shell, for NL |
-| PDF ask fails | `arka pdf status`; ensure Qdrant Docker is up |
-| Deep search empty | `pip install ddgs trafilatura beautifulsoup4` |
-| Map download timeout | Retry `map_download Kolkata` later (Overpass API) |
-| Speech recognition poor | Set `ARKA_STT=sarvam` + `SARVAM_API_KEY` (Saaras v3); or `ARKA_STT=auto` + `GROQ_API_KEY`; `ARKA_VOSK_TIER=best`; `arka listen models` |
-| Listener crashes (no vosk) | `~/.config/fish/venv-arka/bin/python3 ~/.config/fish/arka_wake.py --check` then `arka debug` |
-| Wrong microphone | `pactl list sources short` → set `ARKA_MIC_DEVICE=<source name>` in `.env` |
+
+| Issue                                | Fix                                                                                                    |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| `Could not generate an answer`       | Set `AI_PREFERRED_PROVIDER=groq` or run `ollama serve`                                                 |
+| Gemini 429 / slow responses          | Use Groq as preferred provider                                                                         |
+| `uv pip install am` on random text   | Fixed — use `arka`, not raw shell, for NL                                                              |
+| PDF ask fails                        | `arka pdf status`; ensure Qdrant Docker is up                                                          |
+| Deep search empty                    | `pip install ddgs trafilatura beautifulsoup4`                                                          |
+| Map download timeout                 | Retry `map_download Kolkata` later (Overpass API)                                                      |
+| Wake word missed / wrong STT         | Set `ASSEMBLYAI_API_KEY` + `ARKA_LISTEN_ENGINE=auto`; or `SARVAM_API_KEY` + `SARVAM_STT_MODE=translit` |
+| Devanagari transcript breaks routing | Fixed via `arka_stt_map.py` — ensure latest bundle; try `ARKA_LISTEN_STT_LANG=en-IN`                   |
+| Speech recognition poor (offline)    | `ARKA_VOSK_TIER=best`; `arka listen models`                                                            |
+| Listener crashes (no vosk)           | `~/.config/fish/venv-arka/bin/python3 ~/.config/fish/arka_wake.py --check` then `arka debug`           |
+| Wrong microphone                     | `pactl list sources short` → set `ARKA_MIC_DEVICE=<source name>` in `.env` (Linux)                     |
+| Config changes not picked up         | `arka reload` or open a new shell; `arka reload --listen` for Python wake changes                      |
+| Supermemory not used                 | `supermemory status` — set `SUPERMEMORY_API_KEY`; `ARKA_MEMORY=auto`                                   |
+| Plugin not routing                   | `arka skills refresh`; check `skill.json` triggers; `agent_route "your trigger phrase"`                |
+| Phone can't reach PC                 | Same Wi‑Fi; `arka serve`; firewall allow port **8765**; use LAN IP from `arka phone-env`                 |
+| Termux STT fails                     | Install Termux:API app; grant microphone; `termux-speech-to-text` in Termux                             |
+| WhatsApp inbox silent                | Set `ARKA_WHATSAPP_FROM`; macOS: Accessibility for Cursor/Terminal; `whatsapp_listen fg` to debug        |
+| WhatsApp bot replies to itself       | Set `ARKA_WHATSAPP_BOT_PREFIX=🤖`; listener ignores outgoing/bot messages                               |
+| Remote token rejected                | Copy token from `arka remote status`; match `ARKA_REMOTE_TOKEN` on phone `~/.arka/env`                 |
+
 
 Logs: `~/.cache/fish-agent/*.log`
