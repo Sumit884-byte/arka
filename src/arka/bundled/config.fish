@@ -4938,16 +4938,98 @@ end
 function _arka_parse_media_file_from_args --description "Extract media file path from arg list (internal)"
     set -l rest $argv
     set -l joined (string join " " $rest)
-    set -l qm (string match -r "(?i)['\"]([^'\"]+\\.(?:mp3|mp4|m4a|wav|ogg|opus|webm|mkv|mov|aac|flac))['\"]" "$joined")
+    set -l ext '(?:mp3|mp4|m4a|wav|ogg|opus|webm|mkv|mov|aac|flac)'
+    set -l qm (string match -r "(?i)['\"]([^'\"]+\\.$ext)['\"]" "$joined")
     if test (count $qm) -ge 2
         echo $qm[2]
         return
     end
-    set -l abs (string match -r -a '(?i)(/[^\n"]+\.(?:mp3|mp4|m4a|wav|ogg|opus|webm|mkv|mov|aac|flac))' "$joined")
+    set -l abs (string match -r -a "(?i)(/[^\n\"]+\\.$ext)" "$joined")
     if test (count $abs) -ge 1
         echo $abs[-1]
         return
     end
+    for a in $rest
+        if string match -qr '^-' "$a"
+            continue
+        end
+        set -l p (string replace -r '^~' "$HOME" -- $a)
+        if test -f "$p"; and string match -qr '(?i)\.(mp3|mp4|m4a|wav|ogg|opus|webm|mkv|mov|aac|flac)$' "$p"
+            echo "$p"
+            return
+        end
+    end
+end
+
+function _arka_try_summarize_youtube --description "Route YouTube URL/id in summarize args to transcript or playlist digest"
+    set -l custom_q ""
+    set -l limit ""
+    set -l rest
+    set -l i 1
+    while test $i -le (count $argv)
+        switch $argv[$i]
+            case -q --question --focus
+                if test $i -lt (count $argv)
+                    set custom_q $argv[(math $i + 1)]
+                    set i (math $i + 2)
+                    continue
+                end
+            case '-q=*' '--question=*' '--focus=*'
+                set custom_q (string split -m 1 = -- $argv[$i])[2]
+                set i (math $i + 1)
+                continue
+            case --limit -n
+                if test $i -lt (count $argv)
+                    set limit $argv[(math $i + 1)]
+                    set i (math $i + 2)
+                    continue
+                end
+            case '--limit=*'
+                set limit (string split -m 1 = -- $argv[$i])[2]
+                set i (math $i + 1)
+                continue
+        end
+        set -a rest $argv[$i]
+        set i (math $i + 1)
+    end
+    set -l target ""
+    for a in $rest
+        if string match -qr '(?i)(^https?://.*(youtube\.com|youtu\.be)|^PL[\w-]+$|^[\w-]{11}$)' "$a"
+            set target "$a"
+            break
+        end
+    end
+    if test -z "$target"
+        return 1
+    end
+    set -l url "$target"
+    if string match -qr '^PL[\w-]+$' "$target"
+        set url "https://www.youtube.com/playlist?list=$target"
+    else if string match -qr '^[\w-]{11}$' "$target"
+        set url "https://www.youtube.com/watch?v=$target"
+    end
+    if string match -qr '(?i)playlist\?list=|/playlist' "$url"
+        set -l pl_args --url $url
+        if test -n "$limit"
+            set -a pl_args --limit $limit
+        end
+        if test -n "$custom_q"
+            set -a pl_args -q "$custom_q"
+        end
+        playlist_summarize $pl_args
+        return $status
+    end
+    if string match -qr '(?i)youtube\.com|youtu\.be' "$url"
+        _arka_youtube_tools_ready; or return 1
+        set -l yt_args --summarize
+        if test -n "$custom_q"
+            set -a yt_args -q "$custom_q"
+        end
+        set -a yt_args "$target"
+        youtube_transcript $yt_args
+        return $status
+    end
+    return 1
 end
 
 function _arka_parse_summary_focus --description "User summary instructions from NL args (internal)"
@@ -4982,6 +5064,9 @@ function _arka_parse_summary_focus --description "User summary instructions from
 end
 
 function _arka_summarize_media --description "Transcribe + summarize a local media file (internal)"
+    if _arka_try_summarize_youtube $argv
+        return $status
+    end
     set -l custom_q ""
     set -l rest
     set -l i 1
@@ -5015,12 +5100,15 @@ function _arka_summarize_media --description "Transcribe + summarize a local med
     if test -z "$file"; or not test -f "$file"
         echo "Usage: arka summarize [instructions] [for N words] <file>"
         echo "       arka summarize -q \"what happens to the princess?\" video.mp4"
+        echo "       arka summarize <youtube-url|video-id|PLid> [--limit N]"
         echo ""
         echo "Examples:"
         echo "  arka summarize for 100 words ~/Videos/lecture.mp4"
         echo "  arka summarize focus on the villain's plan in 150 words \"/path/with spaces/video.mp4\""
         echo "  arka summarize \"/path/video.mp4\"   # default: entire video, short & concise"
         echo "  arka summarize -q \"list the main characters and their roles\" podcast.mp3"
+        echo "  arka summarize 'https://youtube.com/watch?v=abc123'"
+        echo "  arka summarize youtube PLu71SKxNbfoDqgPchmvIsL4hTnJIrtige --limit 5"
         echo ""
         echo "Tell the agent what you want: length, focus, questions, bullet format, etc."
         return 1

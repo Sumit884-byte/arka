@@ -9,14 +9,29 @@ import os
 import re
 import sys
 import threading
+import time
+import urllib.error
+import urllib.request
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from typing import Any, Iterator
+
 from arka_llm_servers import LOCAL_PROVIDERS, LlmServerSession, is_reachable, provider_available_with_servers
 
+DEFAULT_GEMINI_MODELS = [
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-lite",
+    "gemini-1.5-flash",
+]
+
+GEMINI_LIST_SKIP_RE = re.compile(
+    r"(tts|image|embedding|aqa|vision|exp-|experimental|preview-tts|nano-banana)",
+    re.I,
+)
+
 DEFAULT_CHAIN: list[tuple[str, str]] = [
-    ("gemini", "gemini-2.0-flash"),
-    ("gemini", "gemini-2.0-flash-lite"),
-    ("gemini", "gemini-2.5-flash"),
+    *(( "gemini", mid) for mid in DEFAULT_GEMINI_MODELS),
     ("groq", "llama-3.3-70b-versatile"),
     ("groq", "llama-3.1-8b-instant"),
     ("ollama", "minimax-m2.5:cloud"),
@@ -25,14 +40,16 @@ DEFAULT_CHAIN: list[tuple[str, str]] = [
     ("ollama", "llama3.2:1b"),
 ]
 
-KNOWN_GEMINI = {
-    "gemini-2.5-flash",
-    "gemini-2.0-flash",
-    "gemini-2.0-flash-lite",
-    "gemini-1.5-flash",
-    "gemini-1.5-pro",
-    "gemini-3.5-flash",
+KNOWN_GEMINI = set(DEFAULT_GEMINI_MODELS) | {"gemini-3.5-flash", "gemini-flash-latest", "gemini-pro-latest"}
+
+GEMINI_MODEL_ALIASES = {
+    "gemini-pro": "gemini-pro-latest",
+    "gemini-flash": "gemini-flash-latest",
 }
+
+_GEMINI_LIVE_CACHE: tuple[float, list[str]] | None = None
+_GEMINI_LIVE_LOCK = threading.Lock()
+_GEMINI_LIVE_TTL = 600.0
 
 TASK_ALIASES = {
     "default": "default",
@@ -95,8 +112,13 @@ class ExhaustionStore:
             if provider == "gemini" and any(
                 x in msg for x in ("free_tier", "quota exceeded", "resource_exhausted", "429")
             ):
-                for mid in gemini_model_ids():
-                    self._exhausted.add(("gemini", mid))
+                quota_models = _gemini_models_in_error(msg)
+                if quota_models:
+                    for mid in quota_models:
+                        self._exhausted.add(("gemini", normalize_gemini_model(mid)))
+                elif "perproject" in msg or "per day" in msg or "per minute" in msg:
+                    for mid in gemini_model_ids(include_live=False):
+                        self._exhausted.add(("gemini", mid))
             if provider == "groq" and "invalid api key" in msg:
                 for mid in groq_model_ids():
                     self._exhausted.add(("groq", mid))
@@ -142,9 +164,14 @@ def is_retryable_error(msg: str) -> bool:
             "503",
             "502",
             "500",
-            "decommissioned",
-            "model_decommissioned",
+            "401",
+            "403",
+            "unauthorized",
+            "permission denied",
+            "invalid model",
             "model_not_found",
+            "model_decommissioned",
+            "decommissioned",
         )
     )
 
@@ -168,22 +195,144 @@ def parse_chain(raw: str) -> list[tuple[str, str]]:
     return out
 
 
-def gemini_model_ids() -> list[str]:
+def normalize_gemini_model(model_id: str) -> str:
+    mid = (model_id or "").strip()
+    if not mid:
+        return mid
+    aliased = GEMINI_MODEL_ALIASES.get(mid, mid)
+    if aliased in KNOWN_GEMINI or aliased.startswith("gemini-"):
+        return aliased
+    return mid
+
+
+def _gemini_models_in_error(msg: str) -> list[str]:
+    found = re.findall(r"'model':\s*'([^']+)'", msg, flags=re.I)
+    found += re.findall(r'"model":\s*"([^"]+)"', msg, flags=re.I)
+    found += re.findall(r"model:\s*(gemini[\w.-]+)", msg, flags=re.I)
+    out: list[str] = []
+    for mid in found:
+        mid = mid.strip()
+        if mid.startswith("gemini-") and mid not in out:
+            out.append(mid)
+    return out
+
+
+def _gemini_list_enabled() -> bool:
+    if env("ARKA_GEMINI_LIST") in {"0", "false", "no", "off"}:
+        return False
+    if env("ARKA_GEMINI_LIST") in {"1", "true", "yes", "on"}:
+        return bool(_ensure_google_key())
+    return bool(_ensure_google_key())
+
+
+def _rank_gemini_model(model_id: str) -> tuple[int, int, str]:
+    """Lower sorts first: flash before pro, newer versions first."""
+    mid = model_id.lower()
+    kind = 0 if "flash" in mid else (1 if "pro" in mid else 2)
+    version = 0
+    for token, score in (
+        ("3.1", 31),
+        ("3.", 30),
+        ("2.5", 25),
+        ("2.0", 20),
+        ("1.5", 15),
+    ):
+        if token in mid:
+            version = score
+            break
+    if mid.endswith("-latest"):
+        version += 1
+    return (kind, -version, mid)
+
+
+def _filter_gemini_chat_models(model_ids: list[str]) -> list[str]:
+    out: list[str] = []
+    for mid in model_ids:
+        if not mid.startswith("gemini-"):
+            continue
+        if GEMINI_LIST_SKIP_RE.search(mid):
+            continue
+        if mid not in out:
+            out.append(mid)
+    out.sort(key=_rank_gemini_model)
+    return out
+
+
+def fetch_gemini_models_live(*, force: bool = False) -> list[str]:
+    """List Gemini models that support generateContent (cached ~10 min)."""
+    global _GEMINI_LIVE_CACHE
+
+    if not _gemini_list_enabled():
+        return []
+
+    key = _ensure_google_key()
+    if not key:
+        return []
+
+    now = time.time()
+    with _GEMINI_LIVE_LOCK:
+        if not force and _GEMINI_LIVE_CACHE and now - _GEMINI_LIVE_CACHE[0] < _GEMINI_LIVE_TTL:
+            return list(_GEMINI_LIVE_CACHE[1])
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key}"
+    try:
+        req = urllib.request.Request(url, method="GET")
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode())
+    except (urllib.error.URLError, OSError, TimeoutError, json.JSONDecodeError):
+        with _GEMINI_LIVE_LOCK:
+            if _GEMINI_LIVE_CACHE:
+                return list(_GEMINI_LIVE_CACHE[1])
+        return []
+
+    models: list[str] = []
+    for item in data.get("models") or []:
+        if not isinstance(item, dict):
+            continue
+        methods = item.get("supportedGenerationMethods") or []
+        if "generateContent" not in methods:
+            continue
+        name = str(item.get("name") or "")
+        if name.startswith("models/"):
+            name = name.split("/", 1)[1]
+        if name:
+            models.append(name)
+
+    models = _filter_gemini_chat_models(models)
+    with _GEMINI_LIVE_LOCK:
+        _GEMINI_LIVE_CACHE = (now, models)
+    return list(models)
+
+
+def gemini_model_ids(*, include_live: bool = True) -> list[str]:
+    explicit = [normalize_gemini_model(m.strip()) for m in env("ARKA_GEMINI_MODELS").split(",") if m.strip()]
     raw = [
         env("ARKA_CHAT_MODEL"),
         env("AI_PREFERRED_MODEL"),
         env("ARKA_LLM_MODEL"),
-        "gemini-2.5-flash",
-        "gemini-2.0-flash",
-        "gemini-2.0-flash-lite",
     ]
+    raw.extend(explicit or DEFAULT_GEMINI_MODELS)
+    if include_live and _gemini_list_enabled():
+        raw.extend(fetch_gemini_models_live())
     out: list[str] = []
     for model in raw:
+        model = normalize_gemini_model(model)
         if not model or not model.startswith("gemini-"):
+            continue
+        if GEMINI_LIST_SKIP_RE.search(model):
             continue
         if model not in out:
             out.append(model)
-    return out or ["gemini-2.0-flash", "gemini-2.0-flash-lite"]
+    if not out:
+        return list(DEFAULT_GEMINI_MODELS)
+    preferred = {normalize_gemini_model(m) for m in raw[:3] if m}
+    head = [m for m in out if m in preferred]
+    tail = sorted([m for m in out if m not in preferred], key=_rank_gemini_model)
+    merged: list[str] = []
+    for model in head + tail:
+        if model not in merged:
+            merged.append(model)
+    return merged
 
 
 GROQ_MODEL_ALIASES = {
@@ -252,7 +401,10 @@ def build_default_chain(*, task: str = "default") -> list[tuple[str, str]]:
             ordered.append(key)
 
     if pref_provider and pref_model:
-        add(pref_provider, pref_model)
+        if pref_provider == "gemini":
+            add(pref_provider, normalize_gemini_model(pref_model))
+        else:
+            add(pref_provider, pref_model)
 
     if env("VLLM_HOST") or env("VLLM_API_URL"):
         add("vllm", env("VLLM_MODEL") or "default")
@@ -337,7 +489,7 @@ def build_model(provider: str, model_id: str, temperature: float, *, session: Ll
         from agno.models.google import Gemini
 
         _ensure_google_key()
-        return Gemini(id=model_id, temperature=temperature)
+        return Gemini(id=normalize_gemini_model(model_id), temperature=temperature)
 
     if provider == "groq":
         from agno.models.groq import Groq
@@ -399,7 +551,28 @@ def _looks_like_error(text: str) -> bool:
         except json.JSONDecodeError:
             pass
     low = stripped.lower()
-    return "could not generate" in low or "resource_exhausted" in low
+    if any(
+        x in low
+        for x in (
+            "could not generate",
+            "resource_exhausted",
+            "unauthorized",
+            "permission denied",
+            "invalid api key",
+            "quota exceeded",
+            "rate limit",
+            "model_not_found",
+            "not found for api",
+            "not found (status code",
+            "status code: 404",
+            "status code: 401",
+            "status code: 403",
+        )
+    ):
+        return True
+    if re.search(r"\b401\b", stripped) or re.search(r"\b403\b", stripped):
+        return True
+    return False
 
 
 @contextmanager
@@ -496,7 +669,11 @@ class LlmFallbackEngine:
                                 model_id=model_id,
                                 attempts=attempts,
                             )
-                        last_error = f"{label}: empty or error-shaped response"
+                        err_text = (text or "empty response")[:300]
+                        last_error = f"{label}: {err_text}"
+                        self.store.mark(provider, model_id, RuntimeError(err_text))
+                        if verbose:
+                            print(f"arka_llm: fail {label}: {err_text}", file=sys.stderr)
                     except Exception as exc:
                         last_error = f"{label}: {exc}"
                         self.store.mark(provider, model_id, exc)

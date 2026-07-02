@@ -163,7 +163,8 @@ Arka’s LLM layer is **not** a single model or a simple router. `arka_llm_fallb
 | **Task profiles** | `route`, `summarize`, `chat`, `research`, `agent`, `pdf`, `predictions` — each can use `ARKA_LLM_FALLBACK_<TASK>` (e.g. `ARKA_LLM_FALLBACK_SUMMARIZE`). |
 | **Failover** | On 401, 429, quota, decommissioned model, timeout, etc., marks provider/model exhausted and tries the next candidate (`ARKA_LLM_AUTO_FALLBACK=1` default). |
 | **Local servers** | Auto-start/stop Ollama or vLLM when needed (`ARKA_LLM_AUTO_START_SERVERS`, `ARKA_LLM_AUTO_STOP_SERVERS`). |
-| **Shared exhaustion** | One session cache — if Gemini 429s during YouTube summarize, route/chat skip dead models too until `reset-exhaustion`. |
+| **Gemini model list** | With `GEMINI_API_KEY`, fetches live `generateContent` models via ListModels (`ARKA_GEMINI_LIST=1`, default). Merges with `ARKA_GEMINI_MODELS`; per-model 429 only exhausts that model, then tries the next Gemini before Groq/Ollama. |
+| **Shared exhaustion** | One session cache — exhausted models are skipped across skills until `reset-exhaustion`. |
 
 ```mermaid
 flowchart LR
@@ -190,6 +191,7 @@ flowchart LR
 ```fish
 python3 ~/.config/fish/arka_llm.py models                    # default chain
 python3 ~/.config/fish/arka_llm.py models --task summarize # per-task chain
+python3 ~/.config/fish/arka_llm.py models --gemini-live      # live Gemini ListModels API
 python3 ~/.config/fish/arka_llm.py active-model              # last success or preferred
 python3 ~/.config/fish/arka_llm.py reset-exhaustion          # clear 429/401 exhaustion cache
 ```

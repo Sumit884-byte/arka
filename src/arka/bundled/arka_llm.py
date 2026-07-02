@@ -8,6 +8,8 @@ import sys
 
 from arka_llm_fallback import (
     env,
+    fetch_gemini_models_live,
+    gemini_model_ids,
     llm_complete as _fallback_complete,
     llm_last_error,
     model_label,
@@ -188,6 +190,14 @@ def cmd_complete(args: argparse.Namespace) -> int:
 
 
 def cmd_models(args: argparse.Namespace) -> int:
+    if args.gemini_live:
+        live = fetch_gemini_models_live(force=args.refresh)
+        if not live:
+            print("No live Gemini models (check GEMINI_API_KEY / ARKA_GEMINI_LIST).", file=sys.stderr)
+            return 1
+        for model_id in live:
+            print(f"gemini\t{model_id}\tlive")
+        return 0
     for provider, model_id in ordered_model_candidates(task=args.task or None):
         ok = provider_available(provider)
         mark = "ok" if ok else "skip"
@@ -229,6 +239,12 @@ def main() -> int:
 
     p_models = sub.add_parser("models", help="List provider/model fallback chain")
     p_models.add_argument("--task", help="Task profile for chain")
+    p_models.add_argument(
+        "--gemini-live",
+        action="store_true",
+        help="List Gemini generateContent models from API (ListModels)",
+    )
+    p_models.add_argument("--refresh", action="store_true", help="Bypass Gemini list cache")
     p_models.set_defaults(func=cmd_models)
 
     p_active = sub.add_parser("active-model", help="Show last-used or preferred LLM model")

@@ -811,6 +811,12 @@ def cmd_download(argv: list[str]) -> int:
 
 
 def summarize_transcript(text: str, question: str) -> str:
+    try:
+        from arka_media import _load_fish_env
+
+        _load_fish_env()
+    except ImportError:
+        pass
     from arka_llm import llm_complete
 
     system = (
@@ -822,6 +828,12 @@ def summarize_transcript(text: str, question: str) -> str:
 
 
 def main() -> int:
+    try:
+        from arka_media import _load_fish_env
+
+        _load_fish_env()
+    except ImportError:
+        pass
     if len(sys.argv) >= 2 and sys.argv[1] in {"download", "fetch"}:
         return cmd_download(sys.argv[2:])
 
