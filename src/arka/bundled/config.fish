@@ -5288,6 +5288,7 @@ function playlist_summarize --description "Summarize a YouTube playlist URL or l
         echo "Usage: playlist_summarize --url <playlist-url> [--limit N] [-q question]"
         echo "       playlist_summarize --folder <downloaded-playlist-dir>"
         echo "Example: playlist_summarize --url 'https://youtube.com/playlist?list=...'"
+        echo "Example: arka youtube playlist_summarize PLu71SKxNbfoDqgPchmvIsL4hTnJIrtige --limit 5"
         echo "Example: arka summarize youtube PLu71SKxNbfoDqgPchmvIsL4hTnJIrtige --limit 5"
         echo "Captions first; asks before download + local transcribe when missing"
         echo "Example: playlist_summarize --folder ~/Videos/YoutubeDownloads/MySeries"
@@ -10750,8 +10751,11 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                 case youtube yt
                     if test (count $argv) -lt 3
                         echo "Usage: $name youtube research <query> [--limit N] [--focus Q]"
+                        echo "       $name youtube playlist_summarize <playlist-url|PLid> [--limit N]"
+                        echo "       $name youtube transcript <url> [--summarize]"
+                        echo "       $name youtube download <url>"
                         echo "Example: $name youtube research react"
-                        echo "Example: $name youtube research \"analyze 5 videos on python\""
+                        echo "Example: $name youtube playlist_summarize PLu71SKxNbfoDqgPchmvIsL4hTnJIrtige --limit 5"
                         return 1
                     end
                     switch $argv[2]
@@ -10762,6 +10766,36 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                                 echo "Usage: $name youtube research <query> [--limit N]"
                                 return 1
                             end
+                        case playlist_summarize playlist summarize digest
+                            if test (count $argv) -lt 4
+                                echo "Usage: $name youtube playlist_summarize <playlist-url|PLid> [--limit N] [-q question]"
+                                echo "       $name youtube playlist_summarize --url <playlist-url> [--limit N]"
+                                echo "       $name youtube playlist_summarize --folder <downloaded-playlist-dir>"
+                                echo "Example: $name youtube playlist_summarize 'https://youtube.com/playlist?list=PLxxx' --limit 5"
+                                return 1
+                            end
+                            set -l raw_argv $argv[3..-1]
+                            if contains -- --url $raw_argv; or contains -- --folder $raw_argv
+                                _arka_youtube_tools_ready; or return 1
+                                playlist_summarize $raw_argv
+                                return $status
+                            end
+                            set -l first $raw_argv[1]
+                            set first (string replace -r -i '^(?:this|the)$' '' "$first" | string trim)
+                            set -l url "$first"
+                            if string match -qr '^PL[\w-]+$' "$first"
+                                set url "https://www.youtube.com/playlist?list=$first"
+                            else if not string match -qr '^https?://' "$first"
+                                echo "Usage: $name youtube playlist_summarize <playlist-url|PLid> [--limit N]"
+                                return 1
+                            end
+                            set -l pl_args --url $url
+                            for a in $raw_argv[2..-1]
+                                set -a pl_args $a
+                            end
+                            _arka_youtube_tools_ready; or return 1
+                            playlist_summarize $pl_args
+                            return $status
                         case transcript captions
                             if test (count $argv) -ge 4
                                 youtube_transcript $argv[3..-1]
@@ -10784,7 +10818,7 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                             end
                         case '*'
                             echo "Unknown: $name youtube $argv[2]"
-                            echo "Usage: $name youtube research|transcript|download|bulk ..."
+                            echo "Usage: $name youtube research|playlist_summarize|transcript|download|bulk ..."
                             return 1
                     end
                     return $status
