@@ -544,9 +544,13 @@ def _index_document_turboquant(path: Path, text: str | None = None) -> tuple[boo
 
 
 def _list_turboquant_documents() -> list[dict]:
-    from arka_turboquant_rag import list_indexed_documents
+    try:
+        from arka_turboquant_rag import list_indexed_documents
 
-    return list_indexed_documents()
+        return list_indexed_documents()
+    except ImportError as exc:
+        print(str(exc), file=sys.stderr)
+        return []
 
 
 def _resolve_turboquant_document(ref: str | None) -> tuple[str | None, str | None, str | None]:
@@ -905,7 +909,7 @@ def _llm_synthesize(question: str, context: str, doc_name: str | None = None) ->
 
     from arka_llm import llm_complete
 
-    return llm_complete(system, user)
+    return llm_complete(system, user, task="pdf")
 
 
 def _tools_unsupported_error(data: object) -> bool:
@@ -978,6 +982,10 @@ def _parse_doc_and_question(text: str) -> tuple[str | None, str]:
         if rest:
             question = f"{question} {rest}".strip()
         if doc and question:
+            if not re.search(rf"\.{_FILE_SUFFIX}$", doc, re.I):
+                resolved_name, _ = _try_resolve_doc(doc)
+                if not resolved_name:
+                    continue
             return doc, question
 
     m = re.match(rf"^(?P<doc>.+?)\s+(?P<q>{_SUMMARY_VERBS})\s*$", q, re.I)
@@ -1003,9 +1011,7 @@ def cmd_parse_ask(text: str) -> int:
         if artifact and not err:
             print(f"{artifact}\t{file_name}\t{question}")
             return 0
-        print(f"\t{doc_ref}\t{question}")
-        return 0
-    print(f"\t\t{question}")
+    print(f"\t\t{question or text.strip()}")
     return 0
 
 

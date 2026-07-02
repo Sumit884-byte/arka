@@ -19,18 +19,26 @@ def progress_enabled() -> bool:
 
 
 class ProgressBar:
-    WIDTH = 28
+    WIDTH = 24
 
-    def __init__(self, label: str, total: int = 100):
-        self.label = label
+    def __init__(self, label: str, total: int = 100, *, unit: str = "done"):
+        self.phase = label
+        self.item_label = ""
         self.total = max(int(total), 1)
         self.current = 0
+        self.unit = unit
         self.enabled = progress_enabled()
         self._last_draw = 0.0
 
+    def clear(self) -> None:
+        if not self.enabled:
+            return
+        sys.stderr.write("\r\033[2K")
+        sys.stderr.flush()
+
     def set(self, current: int, total: int | None = None, label: str | None = None) -> None:
         if label is not None:
-            self.label = label
+            self.item_label = label
         if total is not None:
             self.total = max(int(total), 1)
         self.current = max(0, min(int(current), self.total))
@@ -42,13 +50,15 @@ class ProgressBar:
     def fraction(self, frac: float, label: str | None = None) -> None:
         self.set(int(round(max(0.0, min(1.0, frac)) * self.total)), label=label)
 
-    def done(self, label: str = "Done") -> None:
+    def done(self, label: str | None = None) -> None:
         if not self.enabled:
             return
-        self.label = label
+        if label:
+            self.phase = label
         self.current = self.total
         self._render(force=True)
-        sys.stderr.write("\n")
+        self.clear()
+        sys.stderr.write(f"  ✓ {self.phase} ({self.total}/{self.total})\n")
         sys.stderr.flush()
 
     def _render(self, force: bool = False) -> None:
@@ -61,8 +71,24 @@ class ProgressBar:
         pct = int(self.current * 100 / self.total)
         filled = int(self.WIDTH * pct / 100)
         bar = "█" * filled + "░" * (self.WIDTH - filled)
-        sys.stderr.write(f"\r  {self.label} [{bar}] {pct:3d}%   ")
+        count = f"{self.current}/{self.total} {self.unit}"
+        tail = self.item_label[:34] if self.item_label else ""
+        head = f"{self.phase} " if self.phase else ""
+        sys.stderr.write(f"\r\033[2K  {head}[{bar}] {count} · {pct:3d}%  {tail}")
         sys.stderr.flush()
+
+
+def progress_clear() -> None:
+    """Erase the active progress line before normal stderr output."""
+    if progress_enabled():
+        sys.stderr.write("\r\033[2K")
+        sys.stderr.flush()
+
+
+def progress_note(msg: str) -> None:
+    """Print a status line without leaving progress-bar residue."""
+    progress_clear()
+    print(msg, file=sys.stderr)
 
 
 def run_spinner(label: str, fn, *args, **kwargs):

@@ -60,7 +60,9 @@ end
 # 5. Dependency Management: 'install_skill_deps' bootstraps the system on first run.
 
 # brightnessctl set 100%
-zoxide init fish | source
+if type -q zoxide
+    zoxide init fish | source
+end
 
 # --- Arka install root (package bundle or legacy $_ARKA_ROOT) ---
 function _arka_root --description "Arka scripts directory (bundled in pip package)"
@@ -102,6 +104,241 @@ if test -f "$_ARKA_CFG/.env"
             set -gx $kv[1] $val
         end
     end
+end
+
+function _arka_platform_init --description "Load cached platform profile (detect once on first run)"
+    set -l pf "$_ARKA_CFG/platform.env"
+    if not test -f "$pf"
+        set -l vpy $_ARKA_ROOT/venv-arka/bin/python3
+        set -l py python3
+        test -x $vpy; and set py $vpy
+        if test -f "$_ARKA_ROOT/arka_platform.py"
+            $py "$_ARKA_ROOT/arka_platform.py" ensure 2>/dev/null
+        end
+    end
+    if test -f "$pf"
+        for line in (cat "$pf" | grep -v '^#' | grep -v '^\s*$')
+            set -l kv (string split -m 1 "=" $line)
+            if test (count $kv) -eq 2
+                set -gx $kv[1] $kv[2]
+            end
+        end
+    end
+    if set -q ARKA_PLATFORM; and test -n "$ARKA_PLATFORM"
+        set -gx _ARKA_PLATFORM $ARKA_PLATFORM
+    else if not set -q _ARKA_PLATFORM
+        set -l uname (uname -s)
+        if test "$uname" = Darwin
+            set -gx _ARKA_PLATFORM macos
+        else if test "$uname" = Linux
+            set -gx _ARKA_PLATFORM linux
+        else
+            set -gx _ARKA_PLATFORM unknown
+        end
+    end
+end
+
+_arka_platform_init
+
+function _arka_is_macos --description "True on macOS (cached from first-run detect)"
+    test "$_ARKA_PLATFORM" = macos
+end
+
+function _arka_is_linux --description "True on Linux (cached from first-run detect)"
+    test "$_ARKA_PLATFORM" = linux
+end
+
+function _arka_is_windows --description "True on Windows (cached from first-run detect)"
+    test "$_ARKA_PLATFORM" = windows
+end
+
+function _arka_agent_platform_label --description "Platform label for LLM agent prompts (internal)"
+    if _arka_is_macos
+        echo "macOS (Darwin)"
+    else if _arka_is_linux
+        echo "Linux"
+    else if _arka_is_windows
+        echo "Windows"
+    else
+        echo (uname -s 2>/dev/null)
+    end
+end
+
+function _arka_agent_platform_hint --description "Platform-specific shell guidance for LLM prompts (internal)"
+    if _arka_is_macos
+        echo "Host: macOS. Prefer: sw_vers, sysctl, vm_stat, df -h, system_profiler, ipconfig getifaddr, ps aux, open, brew. Avoid: lscpu, free, lspci, lsb_release, apt, /proc, systemctl."
+    else if _arka_is_linux
+        echo "Host: Linux. Prefer: lscpu, free -h, df -h, lspci, uname, /proc/cpuinfo, apt/dnf/pacman, ss, systemctl, journalctl."
+    else if _arka_is_windows
+        echo "Host: Windows. Prefer: PowerShell/Get-ComputerInfo where available; many fish skills are Linux/macOS oriented."
+    else
+        echo "Host: unknown. Use portable commands: uname, df, ps, python3."
+    end
+end
+
+function _arka_open --description "Open URL or file with the system default handler (cross-platform)"
+    set -l target $argv[1]
+    test -z "$target"; and return 1
+    if _arka_is_macos
+        open "$target" >/dev/null 2>&1 &
+        disown 2>/dev/null
+        return 0
+    end
+    if command -v xdg-open >/dev/null
+        xdg-open "$target" 2>/dev/null &
+        disown 2>/dev/null
+        return 0
+    end
+    return 1
+end
+
+function _arka_copy_to_clipboard --description "Copy text to system clipboard (macOS/Linux)"
+    set -l text "$argv[1]"
+    test -z "$text"; and return 1
+    if set -q ARKA_CLIPBOARD_COPY; and test -n "$ARKA_CLIPBOARD_COPY"
+        if test "$ARKA_CLIPBOARD_COPY" = xclip
+            printf '%s' "$text" | xclip -selection clipboard 2>/dev/null
+            return $status
+        end
+        printf '%s' "$text" | $ARKA_CLIPBOARD_COPY
+        return $status
+    end
+    if _arka_is_macos; and command -v pbcopy >/dev/null
+        printf '%s' "$text" | pbcopy
+        return 0
+    end
+    if command -v wl-copy >/dev/null
+        printf '%s' "$text" | wl-copy
+        return 0
+    end
+    if command -v xclip >/dev/null
+        printf '%s' "$text" | xclip -selection clipboard 2>/dev/null
+        return 0
+    end
+    return 1
+end
+
+function _arka_generate_password_once --description "Generate one-time password via Python secrets (internal)"
+    set -l length 16
+    if test (count $argv) -ge 1; and string match -qr '^[0-9]+$' -- $argv[1]
+        set length $argv[1]
+    end
+    set -l py (_arka_python)
+    set -l out ($py $_ARKA_ROOT/arka_password_vault.py once --length $length 2>&1)
+    if test $status -ne 0
+        echo $out >&2
+        return 1
+    end
+    set -l password ""
+    set -l out_length $length
+    for line in $out
+        if string match -qr '^__PASSWORD__=' -- $line
+            set password (string replace '__PASSWORD__=' '' $line)
+        else if string match -qr '^__LENGTH__=' -- $line
+            set out_length (string replace '__LENGTH__=' '' $line)
+        end
+    end
+    if test -z "$password"
+        echo (set_color red)"Password generation failed."(set_color normal) >&2
+        return 1
+    end
+    echo (set_color --bold blue)"━━━ Password Generator ━━━"(set_color normal)
+    echo (set_color --bold green)"  $password"(set_color normal)
+    echo (set_color brblack)"  Length: $out_length characters (one-time, not saved)"(set_color normal)
+    if _arka_copy_to_clipboard "$password"
+        echo (set_color brblack)"  ✓ Copied to clipboard"(set_color normal)
+    end
+    echo ""
+    echo "Save with a name: generate_password save <name> [length]"
+    echo "Store your own:  generate_password set <name> <password>"
+end
+
+function _arka_config_mtime --description "Modification time of config.fish (internal)"
+    set -l cfg "$_ARKA_ROOT/config.fish"
+    test -f "$cfg"; or return 1
+    if _arka_is_macos
+        stat -f %m "$cfg" 2>/dev/null
+    else
+        stat -c %Y "$cfg" 2>/dev/null
+    end
+end
+
+function _arka_env_mtime --description "Modification time of .env (internal)"
+    set -l env "$_ARKA_CFG/.env"
+    test -f "$env"; or return 1
+    if _arka_is_macos
+        stat -f %m "$env" 2>/dev/null
+    else
+        stat -c %Y "$env" 2>/dev/null
+    end
+end
+
+function _arka_reload_stamp --description "Combined stamp for config + env (internal)"
+    set -l cfg (_arka_config_mtime); or set cfg 0
+    set -l env (_arka_env_mtime); or set env 0
+    echo "$cfg:$env"
+end
+
+function _arka_reload_config --description "Reload config.fish in the current shell (internal)"
+    set -l cfg "$_ARKA_ROOT/config.fish"
+    if not test -f "$cfg"
+        echo (set_color red)"Missing $cfg"(set_color normal) >&2
+        return 1
+    end
+    source "$cfg"
+    set -g _ARKA_RELOAD_STAMP (_arka_reload_stamp)
+    return 0
+end
+
+function _arka_maybe_reload --description "Auto-reload when config.fish or .env changed (internal)"
+    set -l stamp (_arka_reload_stamp)
+    if not set -q _ARKA_RELOAD_STAMP
+        set -g _ARKA_RELOAD_STAMP $stamp
+        return 0
+    end
+    if test "$stamp" = "$_ARKA_RELOAD_STAMP"
+        return 0
+    end
+    set -g _ARKA_RELOAD_STAMP $stamp
+    echo (set_color cyan)"↻ Arka updated — reloading…"(set_color normal) >&2
+    source "$_ARKA_ROOT/config.fish"
+    set -g _ARKA_RELOAD_STAMP (_arka_reload_stamp)
+end
+
+function _arka_reload_command --description "arka reload — refresh shell + optional listener (internal)"
+    set -l restart_listen 0
+    set -l sync_dev 0
+    for flag in $argv
+        switch $flag
+            case listen -l listener mic
+                set restart_listen 1
+            case dev sync sync-bundle bundle
+                set sync_dev 1
+            case all
+                set restart_listen 1
+                set sync_dev 1
+        end
+    end
+
+    if test $sync_dev -eq 1; and test -f "$_ARKA_ROOT/scripts/sync_bundled.py"
+        echo (set_color cyan)"→ sync bundled"(set_color normal)
+        python3 "$_ARKA_ROOT/scripts/sync_bundled.py"
+    end
+
+    _arka_reload_config
+    echo (set_color green)"✔ Arka reloaded in this shell."(set_color normal)
+
+    if test $restart_listen -eq 1
+        if functions -q _agent_listen_stop
+            _agent_listen_stop 2>/dev/null
+            sleep 0.3
+            _agent_listen_start
+            echo (set_color green)"✔ Wake listener restarted (latest Python + config)."(set_color normal)
+        end
+    else
+        echo "Tip: arka reload --listen  picks up arka_wake.py and other Python changes too."
+    end
+    return 0
 end
 
 
@@ -153,9 +390,6 @@ if status is-interactive
         echo "up          -> System Updates"
         echo "pro         -> Product Folder"
         echo "spyder      -> Launch Spyder"
-        echo "vgen        -> Video Idea Generator"
-        echo "gitube      -> GiTube"
-        echo "gitsearch   -> GitSearch"
         echo "ai-models   -> List AI providers and limits"
         echo "ai-status   -> Show current AI provider and model"
         echo "ai-pref     -> Set preferred AI provider/model"
@@ -163,7 +397,7 @@ if status is-interactive
         echo "mkalias     -> Create and persist a new alias"
         echo ""
         echo "--- AI TOOLS ---"
-        echo "ask <q>     -> Get a Linux command from AI"
+        echo "ask <q>     -> Get a shell command from AI (macOS/Linux)"
         echo "talk <q>    -> Chat with AI"
         echo "ctx ask <q> -> Ask AI with directory context"
         echo "agent <request> -> NL command/skill router"
@@ -173,6 +407,8 @@ if status is-interactive
         echo "arka phone-env -> print Termux config (one-time setup)"
         echo "arka serve     -> remote server only (phone STT/TTS, PC agent)"
         echo "arka listen    -> wake listener only"
+        echo "arka reload    -> pick up config changes (auto on next arka/agent command)"
+        echo "arka reload --listen -> also restart wake listener after Python edits"
         echo "arka debug     -> wake listener with STT debug (or: arka listen debug)"
         echo "arka voice     -> HF speech-to-speech agent (mic → Arka skills → speaker)"
         echo "arka speak-lang -> choose voice language (hi-IN, ta-IN, en-IN, ...)"
@@ -202,6 +438,7 @@ if status is-interactive
         echo "stop_music      -> Stop/pause song (mpv + MPRIS players)"
         echo "weather         -> Current weather"
         echo "timer <time>    -> Countdown timer"
+        echo "remind <when>   -> Reminder later (idle/shutdown aware)"
         echo "screenshot      -> Take a screenshot"
         echo "system_info     -> System overview"
         echo "search_web <q>  -> Google search"
@@ -319,78 +556,35 @@ function ask --description "Query AI APIs with cross-provider fallback"
         set model_req "$AI_PREFERRED_MODEL"
     end
 
-    set -l models \
-        "gemini|gemini-2.0-flash" \
-        "gemini|gemini-1.5-flash" \
-        "groq|llama-3.3-70b-versatile" \
-        "groq|llama3-8b-8192" \
-        "ollama|llama3.2:1b"
-
-    if test -n "$provider_req" -a -n "$model_req"
-        set models "$provider_req|$model_req"
-    else if test -n "$provider_req"
-        set -l filtered
-        for entry in $models
-            if string match -q "$provider_req|*" $entry
-                set -a filtered $entry
-            end
-        end
-        set models $filtered
-    end
-
     set -l aliases_list (alias | string join "\n")
-    set -l system_prompt "You are a Linux terminal expert. Respond ONLY with the requested command. No markdown, no backticks.
+    set -l plat (_arka_agent_platform_label)
+    set -l plat_hint (_arka_agent_platform_hint)
+    set -l system_prompt "You are a cross-platform shell expert on $plat (fish shell). Respond ONLY with the requested command. No markdown, no backticks.
+$plat_hint
 Available Shell Aliases:
 $aliases_list
 Use symbolic reasoning to match and use the most appropriate shell alias if one exists for the requested task.
 CRITICAL NOTE ON ALIASES:
 - `ls` is aliased to `eza`. `eza` does NOT support standard `ls` sorting flags like `-t`, `-ltr`, or `-lt`. To sort by newest/recency, use `eza --sort newest` (or `eza -snew`). To sort by oldest, use `eza --sort oldest` (or `eza -sold`). Alternatively, bypass the alias by running standard `ls` via `command ls -lt` or `command ls -ltr`.
 - `cat` is aliased to `batcat`."
-    set -l escaped_system (printf '%s' "$system_prompt" | _json_escape)
 
-    for entry in $models
-        set -l provider (string split -f 1 "|" $entry)
-        set -l model (string split -f 2 "|" $entry)
-        set -l escaped_prompt (printf '%s' "$prompt" | _json_escape)
-        
-        if test "$provider" = "gemini"
-            if test -z "$GEMINI_API_KEY"; continue; end
-            set -l response (curl -s "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$GEMINI_API_KEY" \
-                -H 'Content-Type: application/json' -X POST \
-                -d "{\"contents\": [{\"parts\":[{\"text\": \"$escaped_prompt\"}]}], \"system_instruction\": {\"parts\": [{\"text\": \"$escaped_system\"}]}}")
-            set -l result (echo $response | jq -r '.candidates[0].content.parts[0].text // empty' | string trim)
-            if test -n "$result"
-                echo $result
-                echo $result | xclip -selection clipboard
-                return 0
-            end
+    if test -n "$provider_req" -a -n "$model_req"
+        set -lx ARKA_LLM_FALLBACK "$provider_req:$model_req"
+    else if test -n "$provider_req"
+        set -lx ARKA_LLM_FALLBACK "$provider_req:gemini-2.0-flash,$provider_req:llama-3.3-70b-versatile"
+    end
 
-        else if test "$provider" = "groq"
-            if test -z "$GROQ_API_KEY"; continue; end
-            set -l response (curl -s "https://api.groq.com/openai/v1/chat/completions" \
-                -H "Authorization: Bearer $GROQ_API_KEY" -H 'Content-Type: application/json' -X POST \
-                -d "{\"model\": \"$model\", \"messages\": [{\"role\": \"system\", \"content\": \"$escaped_system\"}, {\"role\": \"user\", \"content\": \"$escaped_prompt\"}]}")
-            set -l result (echo $response | jq -r '.choices[0].message.content // empty' | string trim)
-            if test -n "$result"
-                echo $result
-                echo $result | xclip -selection clipboard
-                return 0
-            end
-            
-        else if test "$provider" = "ollama"
-            set -l endpoint "http://127.0.0.1:11434/api/chat"
-            if test -n "$OLLAMA_HOST"; set endpoint "http://$OLLAMA_HOST/api/chat"; end
-            set -l auth_header
-            if test -n "$OLLAMA_API_KEY"; set auth_header -H "Authorization: Bearer $OLLAMA_API_KEY"; end
-            set -l response (curl -s $endpoint $auth_header -H 'Content-Type: application/json' -X POST \
-                -d "{\"model\": \"$model\", \"messages\": [{\"role\": \"system\", \"content\": \"$escaped_system\"}, {\"role\": \"user\", \"content\": \"$escaped_prompt\"}], \"stream\": false}")
-            set -l result (echo $response | jq -r '.message.content // empty' | string trim)
-            if test -n "$result"
-                echo $result
-                echo $result | xclip -selection clipboard
-                return 0
-            end
+    set -l result (_agent_llm_complete "$system_prompt" "$prompt" 0.1 chat)
+    if test -n "$result"
+        echo $result
+        if type -q pbcopy
+            echo $result | pbcopy
+        else if type -q wl-copy
+            echo $result | wl-copy
+        else if type -q xclip
+            echo $result | xclip -selection clipboard
         end
+        return 0
     end
     # --- Offline Fallback Logic ---
     set -l clean_prompt (string lower "$prompt")
@@ -410,13 +604,25 @@ CRITICAL NOTE ON ALIASES:
     else if string match -qr '(disk|free.*space)' "$clean_prompt"
         set fallback_cmd "df -h"
     else if string match -qr '(?i)\b(mem|ram)\b' "$clean_prompt"
-        set fallback_cmd "free -h"
+        if _arka_is_macos
+            set fallback_cmd "vm_stat; sysctl hw.memsize"
+        else
+            set fallback_cmd "free -h"
+        end
     else if string match -qr '(?i)\b(listening|open\s+port|ss\s+-tlnp)\b|\bport\s+(scan|check|in\s+use)\b' "$clean_prompt"
-        set fallback_cmd "ss -tlnp"
+        if _arka_is_macos
+            set fallback_cmd "lsof -iTCP -sTCP:LISTEN -P -n | head -20"
+        else
+            set fallback_cmd "ss -tlnp"
+        end
     else if string match -qr '(process|ps.*aux)' "$clean_prompt"
         set fallback_cmd "ps aux | grep name"
     else if string match -qr '(ip.*addr|my.*ip)' "$clean_prompt"
-        set fallback_cmd "hostname -I"
+        if _arka_is_macos
+            set fallback_cmd "ipconfig getifaddr en0"
+        else
+            set fallback_cmd "hostname -I"
+        end
     else if string match -qr '(copy.*folder|cp.*dir)' "$clean_prompt"
         set fallback_cmd "cp -r source_dir/ dest_dir/"
     else if string match -qr '(permission|chmod|execute)' "$clean_prompt"
@@ -615,24 +821,102 @@ function _arka_speak_voice --description "Set or list Arka neural voice (interna
     speak_aloud "Hello, this is how I sound now."
 end
 
-function _arka_usage_autostart_ensure --description "Install XDG autostart for usage tracker on login (internal)"
+function _arka_usage_autostart_ensure --description "Install autostart for usage tracker on login (internal)"
     if set -q ARKA_USAGE_TRACK
         test "$ARKA_USAGE_TRACK" = 0 -o "$ARKA_USAGE_TRACK" = false; and return 0
     end
+    set -l py (_arka_python)
+    set -l script $_ARKA_ROOT/arka_usage.py
+    if _arka_is_macos
+        set -l label com.arka.usage
+        set -l plist ~/Library/LaunchAgents/$label.plist
+        mkdir -p ~/Library/LaunchAgents
+        printf '%s\n' \
+            '<?xml version="1.0" encoding="UTF-8"?>' \
+            '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
+            '<plist version="1.0">' \
+            '<dict>' \
+            '  <key>Label</key><string>'$label'</string>' \
+            '  <key>ProgramArguments</key>' \
+            '  <array>' \
+            '    <string>'$py'</string>' \
+            '    <string>'$script'</string>' \
+            '    <string>track</string>' \
+            '  </array>' \
+            '  <key>RunAtLoad</key><true/>' \
+            '  <key>KeepAlive</key><true/>' \
+            '  <key>StandardOutPath</key><string>'$HOME'/.cache/fish-agent/arka_usage.log</string>' \
+            '  <key>StandardErrorPath</key><string>'$HOME'/.cache/fish-agent/arka_usage.log</string>' \
+            '</dict>' \
+            '</plist>' \
+            > $plist
+        launchctl bootout gui/(id -u) $plist 2>/dev/null
+        launchctl bootstrap gui/(id -u) $plist 2>/dev/null; or launchctl load $plist 2>/dev/null
+        return 0
+    end
+    if not _arka_is_linux
+        return 0
+    end
     set -l dir ~/.config/autostart
     set -l desktop $dir/arka-usage.desktop
-    set -l script $_ARKA_ROOT/arka_usage.py
     mkdir -p $dir
     printf '%s\n' \
         '[Desktop Entry]' \
         'Type=Application' \
         'Name=Arka usage tracker' \
         'Comment=App and website time tracking for Arka' \
-        "Exec=/usr/bin/python3 $script start" \
+        "Exec=$py $script start" \
         'Hidden=false' \
         'NoDisplay=true' \
         'X-GNOME-Autostart-enabled=true' \
         'X-GNOME-Autostart-Phase=Applications' \
+        > $desktop
+end
+
+function _arka_remind_autostart_ensure --description "Install autostart for reminder daemon on login (internal)"
+    set -l py (_arka_python)
+    set -l script $_ARKA_ROOT/arka_remind.py
+    if _arka_is_macos
+        set -l label com.arka.remind
+        set -l plist ~/Library/LaunchAgents/$label.plist
+        mkdir -p ~/Library/LaunchAgents
+        printf '%s\n' \
+            '<?xml version="1.0" encoding="UTF-8"?>' \
+            '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
+            '<plist version="1.0">' \
+            '<dict>' \
+            '  <key>Label</key><string>'$label'</string>' \
+            '  <key>ProgramArguments</key>' \
+            '  <array>' \
+            '    <string>'$py'</string>' \
+            '    <string>'$script'</string>' \
+            '    <string>start</string>' \
+            '  </array>' \
+            '  <key>RunAtLoad</key><true/>' \
+            '  <key>StandardOutPath</key><string>'$HOME'/.cache/fish-agent/arka_remind.log</string>' \
+            '  <key>StandardErrorPath</key><string>'$HOME'/.cache/fish-agent/arka_remind.log</string>' \
+            '</dict>' \
+            '</plist>' \
+            > $plist
+        launchctl bootout gui/(id -u) $plist 2>/dev/null
+        launchctl bootstrap gui/(id -u) $plist 2>/dev/null; or launchctl load $plist 2>/dev/null
+        return 0
+    end
+    if not _arka_is_linux
+        return 0
+    end
+    set -l dir ~/.config/autostart
+    set -l desktop $dir/arka-remind.desktop
+    mkdir -p $dir
+    printf '%s\n' \
+        '[Desktop Entry]' \
+        'Type=Application' \
+        'Name=Arka reminders' \
+        'Comment=Background reminder daemon for Arka' \
+        "Exec=$py $script start" \
+        'Hidden=false' \
+        'NoDisplay=true' \
+        'X-GNOME-Autostart-enabled=true' \
         > $desktop
 end
 
@@ -652,7 +936,13 @@ function _arka_usage_status --description "App/website usage tracker status (int
         end
     end
     echo (set_color yellow)"Usage tracker: stopped"(set_color normal)
-    echo "Starts on login when ARKA_USAGE_TRACK=1, or: arka usage start"
+    if _arka_is_macos
+        echo "Starts on login when ARKA_USAGE_TRACK=1, or: arka usage start"
+    else if _arka_is_linux
+        echo "Starts on login when ARKA_USAGE_TRACK=1, or: arka usage start"
+    else
+        echo "Start manually: arka usage start"
+    end
     return 1
 end
 
@@ -773,22 +1063,25 @@ function _arka_autostart_install --description "Enable Arka on PC boot via syste
     end
 
     if test $enable_usage -eq 1
-        printf '%s\n' \
-            '[Unit]' \
-            'Description=Arka app and website usage tracker' \
-            'After=graphical-session.target' \
-            'PartOf=graphical-session.target' \
-            '' \
-            '[Service]' \
-            "EnvironmentFile=-$fish_dir/.env" \
-            "ExecStart=/usr/bin/python3 $fish_dir/arka_usage.py track" \
-            'Restart=on-failure' \
-            'RestartSec=30' \
-            '' \
-            '[Install]' \
-            'WantedBy=graphical-session.target' \
-            > $unit_dir/arka-usage.service
-        systemctl --user enable --now arka-usage.service
+        set -l py (_arka_python)
+        if _arka_is_linux
+            printf '%s\n' \
+                '[Unit]' \
+                'Description=Arka app and website usage tracker' \
+                'After=graphical-session.target' \
+                'PartOf=graphical-session.target' \
+                '' \
+                '[Service]' \
+                "EnvironmentFile=-$fish_dir/.env" \
+                "ExecStart=$py $fish_dir/arka_usage.py track" \
+                'Restart=on-failure' \
+                'RestartSec=30' \
+                '' \
+                '[Install]' \
+                'WantedBy=graphical-session.target' \
+                > $unit_dir/arka-usage.service
+            systemctl --user enable --now arka-usage.service
+        end
         _arka_usage_autostart_ensure
     end
 
@@ -945,7 +1238,8 @@ function arka_remote_status --description "Show Arka remote server URL and token
     _agent_remote_status
 end
 
-function speak_aloud --description "Speak text aloud (Sarvam → neural edge → Parler → system)"
+function speak_aloud --description "Speak text aloud (Sarvam → neural edge → Parler → macOS say → system)"
+    set -l py (_arka_python)
     set -l text ""
     if test (count $argv) -gt 0
         set text (string join " " $argv)
@@ -986,7 +1280,7 @@ function speak_aloud --description "Speak text aloud (Sarvam → neural edge →
     end
 
     if test $try_sarvam -eq 1; and test -n "$SARVAM_API_KEY"
-        python3 $_ARKA_ROOT/sarvam_speak.py "$text"
+        $py $_ARKA_ROOT/sarvam_speak.py "$text"
         if test $status -eq 0
             return 0
         end
@@ -995,7 +1289,7 @@ function speak_aloud --description "Speak text aloud (Sarvam → neural edge →
     end
 
     if test $try_edge -eq 1
-        python3 $_ARKA_ROOT/edge_speak.py speak "$text"
+        $py $_ARKA_ROOT/edge_speak.py speak "$text"
         if test $status -eq 0
             return 0
         end
@@ -1004,11 +1298,32 @@ function speak_aloud --description "Speak text aloud (Sarvam → neural edge →
     end
 
     if test $try_parler -eq 1
-        python3 $_ARKA_ROOT/indic_tts.py speak "$text"
+        $py $_ARKA_ROOT/indic_tts.py speak "$text"
         if test $status -eq 0
             return 0
         end
         echo (set_color yellow)"Indic Parler-TTS failed — falling back to system voice"(set_color normal) >&2
+    end
+
+    if _arka_is_macos; and command -v say >/dev/null
+        # Built-in macOS speech (always available; no mpv/edge-tts required)
+        set -l voice ""
+        if set -q ARKA_SPEAK_VOICE; and test -n "$ARKA_SPEAK_VOICE"
+            set voice $ARKA_SPEAK_VOICE
+        else if set -q ARKA_SPEAK_LANG
+            switch $ARKA_SPEAK_LANG
+                case hi hi-IN
+                    set voice Veena
+                case bn bn-IN
+                    set voice Rishi
+            end
+        end
+        if test -n "$voice"
+            say -v "$voice" -r 190 "$text"
+        else
+            say -r 190 "$text"
+        end
+        return $status
     end
 
     if command -v spd-say >/dev/null
@@ -1067,12 +1382,82 @@ function __agent_classify --description "Classify shell command safety"
     return 0
 end
 
+function _arka_security_enabled --description "True when symbolic security checks are on (internal)"
+    test "$ARKA_SECURITY" = 0; and return 1
+    return 0
+end
+
+function _arka_verify_web_query --description "Block prompt-injection in web/search queries (internal)"
+    if not _arka_security_enabled
+        return 0
+    end
+    if test "$ARKA_SECURITY_WEB" = 0
+        return 0
+    end
+    set -l q "$argv[1]"
+    test -z "$q"; and return 0
+    set -l py (_arka_python)
+    set -l err ($py $_ARKA_ROOT/arka_security.py verify-query (string escape --style=script -- $q) 2>&1)
+    if test $status -ne 0
+        echo (set_color red)"🛡 $err"(set_color normal) >&2
+        return 1
+    end
+    return 0
+end
+
+function _arka_confirm_risky_action --description "Confirm install/delete/send/download before execution (internal)"
+    argparse 'y/yes' -- $argv
+    or return 1
+    if not _arka_security_enabled
+        return 0
+    end
+    if test "$ARKA_SECURITY_ACTIONS" = 0
+        return 0
+    end
+    set -l cmd (string trim -- "$argv[1]")
+    test -z "$cmd"; and return 0
+    set -l py (_arka_python)
+    set -l line ($py $_ARKA_ROOT/arka_security.py check-action (string escape --style=script -- $cmd) 2>/dev/null | string trim)
+    test -z "$line"; and return 0
+    set -l parts (string split \t "$line")
+    set -l sec_level (string upper "$parts[1]")
+    switch $sec_level
+        case BLOCK
+            echo (set_color red)"🛡 Blocked: $parts[3]"(set_color normal) >&2
+            return 1
+        case CONFIRM
+            if set -q _flag_y
+                echo (set_color yellow)"⚠ Auto-approved ($parts[2]): $cmd"(set_color normal) >&2
+                return 0
+            end
+            echo (set_color yellow)"🛡 $parts[3]"(set_color normal) >&2
+            echo (set_color brblack)"  Action: $cmd"(set_color normal) >&2
+            read -P (set_color --bold cyan)"Proceed? [y/N]: "(set_color normal) -l confirm
+            if string match -qi 'y*' "$confirm"
+                return 0
+            end
+            return 1
+        case OK
+            return 0
+    end
+    return 0
+end
+
 function _agent_exec_shell_cmd --description "Execute shell only; prompt if __agent_classify says dangerous"
     argparse 'y/yes' -- $argv
     or return
     set -l cmd (string trim -- "$argv[1]")
     if test -z "$cmd"
         return 1
+    end
+    if set -q _flag_y
+        if not _arka_confirm_risky_action -y "$cmd"
+            return 1
+        end
+    else
+        if not _arka_confirm_risky_action "$cmd"
+            return 1
+        end
     end
     if not __agent_classify "$cmd"
         if set -q _flag_y
@@ -1130,22 +1515,85 @@ function _cmd_chain --description "Run first shell line whose binary exists and 
     return 1
 end
 
+function _arka_match_third_party_skill --description "Match NL text to third-party plugin invocation (internal)"
+    set -l py (_arka_python)
+    $py $_ARKA_ROOT/arka_skills.py match "$argv[1]" 2>/dev/null
+end
+
+function _arka_is_builtin_skill --description "True if built-in fish skill name (internal)"
+    contains -- "$argv[1]" (_agent_all_skills)
+end
+
+function _arka_third_party_skill_names --description "Names of installed third-party plugins (internal)"
+    set -l py (_arka_python)
+    $py $_ARKA_ROOT/arka_skills.py list-names 2>/dev/null
+end
+
+function _arka_is_third_party_skill --description "True if installed third-party plugin (internal)"
+    set -l word $argv[1]
+    set -l names (_arka_third_party_skill_names)
+    contains -- "$word" $names
+end
+
+function _arka_load_third_party_skills --description "Source fish-based plugin skills (internal)"
+    set -l py (_arka_python)
+    for f in ($py $_ARKA_ROOT/arka_skills.py fish-sources 2>/dev/null)
+        if test -f "$f"
+            source "$f"
+        end
+    end
+end
+
+function _arka_run_third_party_skills --description "Run third-party plugin via arka_skills.py (internal)"
+    set -l name $argv[1]
+    set -e argv[1]
+    set -l py (_arka_python)
+    $py $_ARKA_ROOT/arka_skills.py run "$name" $argv
+end
+
 function _agent_is_skill --description "True if word is a registered agent skill"
     set -l word $argv[1]
     contains -- "$word" (_agent_available_skills)
 end
 
+function _agent_strip_quotes --description "Strip wrapping single/double quotes (internal)"
+    set -l t "$argv[1]"
+    set t (string trim -c "'" -- "$t")
+    set t (string trim -c '"' -- "$t")
+    echo $t
+end
+
 function _agent_dispatch_one --description "Run one skill by name or shell via _agent_exec_shell_cmd"
     set -l cmd_trim (string trim -- "$argv[1]")
     test -z "$cmd_trim"; and return 1
-    set -l first (string split -f 1 " " -- "$cmd_trim")
-    if _agent_is_skill "$first"
+    if not _arka_confirm_risky_action $argv[2..] "$cmd_trim"
+        return 1
+    end
+    set -l tokens (string split " " -- "$cmd_trim")
+    set -l cleaned
+    for t in $tokens
+        set -a cleaned (_agent_strip_quotes "$t")
+    end
+    set tokens $cleaned
+    set -l first $tokens[1]
+    if _arka_is_builtin_skill "$first"
         if test "$first" = pdf_ask
             echo (set_color brblack)"▶ "(set_color --bold cyan)"PDF ask"(set_color brblack)" — "(set_color normal)"$cmd_trim"
         else
             echo (set_color cyan)"▶ Running skill: $cmd_trim"(set_color normal)
         end
-        eval $cmd_trim
+        set -e tokens[1]
+        if test (count $tokens) -gt 0
+            $first $tokens
+        else
+            $first
+        end
+        return $status
+    end
+    if _arka_is_third_party_skill "$first"
+        echo (set_color cyan)"▶ Third-party skill: $cmd_trim"(set_color normal)
+        set -e tokens[1]
+        _arka_run_third_party_skills $first $tokens
         return $status
     end
     echo (set_color cyan)"▶ Running: $cmd_trim"(set_color normal)
@@ -1183,9 +1631,9 @@ function _agent_all_skills --description "Canonical registered agent skill names
         pdf_ask pdf_ingest pdf_ingest_dir pdf_list doc_ask doc_ingest doc_list port_scan speedtest clipboard todo translate \
         generate_password ip_info open_project create_folder list_folders show_folder \
         store_password pass \
-        open_file list_files search_files browse_web activate_venv create_venv fix_venv \
+        open_file list_files search_files find_files_by_size browse_web activate_venv create_venv fix_venv \
         write_script run_script ollama_run lint_python cheat qr_code shorten_url \
-        crypto_price pomodoro system_monitor excuse bored open_app create_skill \
+        crypto_price pomodoro sports_score live_scores system_monitor excuse bored open_app create_skill \
         calculate_bmi send_whatsapp whatsapp_listen search_stores download_file extract_and_run \
         create_desktop_app fix_graphics_driver install_app install_apt install_flatpak \
         install_snap install_package install_uv stock_analysis stock \
@@ -1196,7 +1644,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         agent_resume agent_research agent_nudge agent_watch agent_routine agent_fanout \
         agent_code agent_handoff agent_browser transcript_ask media_ask \
         meeting_agent study_agent inbox_agent compare_agent \
-        arka_ask semantic_memory speak_research voice_session handoff_notify predictions stock \
+        arka_ask semantic_memory supermemory speak_research voice_session handoff_notify remind predictions stock \
         rag_setup rag_status voice_agent wake_control \
         agent_ask web_answer deep_web_answer web_essay calc chat_reset set_location \
         nearby_places map_download error_helper deep_queue app_usage internet_enhance aie \
@@ -1205,6 +1653,7 @@ end
 
 function _agent_available_skills --description "Registered agent skill names (internal)"
     _agent_all_skills
+    _arka_third_party_skill_names
 end
 
 function _ollama_api_base --description "Ollama host for client API calls (127.0.0.1, not 0.0.0.0 bind)"
@@ -1249,30 +1698,90 @@ function _arka_python --description "Python interpreter for Arka agents/LLM (int
     end
 end
 
+function _arka_llm_model_label --description "Last-used or preferred LLM provider/model (internal)"
+    if set -q ARKA_SHOW_MODEL; and test "$ARKA_SHOW_MODEL" = 0 -o "$ARKA_SHOW_MODEL" = false
+        return 1
+    end
+    set -l py (_arka_python)
+    set -l model (string trim -- ($py $_ARKA_ROOT/arka_llm.py active-model 2>/dev/null))
+    test -n "$model"; and echo "$model"
+end
+
+function _agent_is_skills_help_request --description "True if user wants Arka skill list (internal)"
+    set -l clean (string lower (string trim -- "$argv[1]"))
+    if string match -qr '(?i)^(skills|help|\?|list skills|show skills|agent skills|what can you do|what do you do)\s*$' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)(tell\s+(?:me\s+)?(?:about\s+)?(?:all\s+)?(?:your\s+)?skills?|tell\s+your\s+skills?|(list|show)\s+(?:me\s+)?(?:all\s+)?(?:your\s+)?skills?|what\s+(?:are\s+)?(?:all\s+)?your\s+skills?)' "$clean"
+        return 0
+    end
+    return 1
+end
+
+function _arka_skills_help_show --description "Print voice-friendly skills summary + LLM model"
+    set -l py (_arka_python)
+    set -l help (string trim -- ($py $_ARKA_ROOT/arka_talents.py voice-help 2>/dev/null))
+    test -z "$help"; and set help "Run arka help for the full skill list."
+    set -l model (_arka_llm_model_label 2>/dev/null)
+    printf '%s%s%s\n' (set_color --bold green) "━━━ Arka Skills ━━━" (set_color normal)
+    echo ""
+    echo "  $help"
+    if test -n "$model"
+        echo ""
+        set_color brblack
+        echo "  Model for answers: $model"
+        set_color normal
+    end
+    echo ""
+    set_color brblack
+    echo "  Full list: arka help"
+    set_color normal
+end
+
 function _agent_clean_llm_output --description "Strip markdown fences from LLM text (internal)"
     set -l text (string trim -- "$argv[1]")
     test -z "$text"; and return
     string replace -r '^```[a-zA-Z0-9]*\n*' '' "$text" | string replace -r '\n*```$' ''
 end
 
-function _agent_llm_complete --description "LLM system+user prompt via Agno; prints response text (internal)"
+function _agent_llm_complete --description "LLM system+user prompt via modular auto-fallback (internal)"
     set -l system_text $argv[1]
     set -l user_text $argv[2]
     set -l temperature 0.2
+    set -l task default
     if test (count $argv) -ge 3
         set temperature $argv[3]
+    end
+    if test (count $argv) -ge 4
+        set task $argv[4]
     end
     if test -z "$system_text" -o -z "$user_text"
         return 1
     end
 
     set -l py (_arka_python)
-    set -l out ($py $_ARKA_ROOT/arka_llm.py complete --system "$system_text" --user "$user_text" --temperature $temperature 2>/dev/null)
+    set -l out ($py $_ARKA_ROOT/arka_llm.py complete --system "$system_text" --user "$user_text" --temperature $temperature --task $task 2>/dev/null)
     if test -n "$out"
         _agent_clean_llm_output "$out"
         return 0
     end
     return 1
+end
+
+function _arka_route_mode --description "Routing strategy: symbolic|ai|symbolic_only|ai_only (internal)"
+    set -l mode (string lower (string trim -- "$ARKA_ROUTE_MODE"))
+    switch $mode
+        case ai llm ai-first ai_first
+            echo ai
+        case symbolic_only offline_only offline-only offline only
+            echo symbolic_only
+        case ai_only llm_only ai-only llm-only
+            echo ai_only
+        case hybrid auto symbolic offline '' default
+            echo symbolic
+        case '*'
+            echo symbolic
+    end
 end
 
 function _agent_llm_route --description "Interpret NL command to skill/shell via Agno (internal)"
@@ -1310,6 +1819,15 @@ function _agent_loop_execute --description "Run one loop command; prints output,
     set -l first (string split -f 1 " " -- "$cmd")
 
     if _agent_is_skill "$first"
+        if set -q _flag_y
+            if not _arka_confirm_risky_action -y "$cmd"
+                echo "[skipped: security confirm declined]"
+                return 2
+            end
+        else if not _arka_confirm_risky_action "$cmd"
+            echo "[skipped: security confirm declined]"
+            return 2
+        end
         set -l out (eval $cmd 2>&1)
         set -l st $status
         printf '%s' (_agent_loop_truncate "$out")
@@ -1371,7 +1889,7 @@ function skills --description "Show what commands the agent can auto-run"
     echo (set_color cyan)"────────────────────────────────────────────────"(set_color normal)
     echo (set_color green)"  File ops     "(set_color normal)"ls, eza, find, tree, cat, head, tail, wc, stat, file, touch, mkdir, cp"
     echo (set_color green)"  Search       "(set_color normal)"grep, rg, fd, ag, fzf"
-    echo (set_color green)"  System info  "(set_color normal)"pwd, whoami, date, uname, hostname, df, du, free, uptime, lsb_release"
+    echo (set_color green)"  System info  "(set_color normal)"system_info, uname, df, uptime; Linux: lscpu/free; macOS: sysctl/sw_vers/vm_stat"
     echo (set_color green)"  Text tools   "(set_color normal)"sort, uniq, cut, tr, awk, sed (no -i), jq, echo, printf"
     echo (set_color green)"  Git (read)   "(set_color normal)"git status, git log, git diff, git branch, git show, git remote"
     echo (set_color green)"  Git (write)  "(set_color normal)"git add, git commit, git push, git pull, git checkout, git switch"
@@ -1428,7 +1946,7 @@ function skills --description "Show what commands the agent can auto-run"
             case playlist_summarize
                 echo (set_color green)"  playlist_summarize"(set_color normal)" --url URL | --folder DIR — digest a playlist"
             case youtube_research yt_research
-                echo (set_color green)"  youtube_research "(set_color normal)"<query> [--limit N] [--focus Q] [--index] — search YT + transcript digest"
+                echo (set_color green)"  youtube_research "(set_color normal)"<query> [--limit N] [--focus Q] [--index] — default 2 videos; partial results on errors"
             case codebase_ingest
                 echo (set_color green)"  codebase_ingest  "(set_color normal)"<project-dir> [-n name] — index repo for doc_ask Q&A"
             case agent_remember agent_recall agent_memory
@@ -1453,12 +1971,16 @@ function skills --description "Show what commands the agent can auto-run"
                 echo (set_color green)"  arka_ask         "(set_color normal)"[--deep] [--youtube] [--speak] <q> — unified brain"
             case semantic_memory
                 echo (set_color green)"  semantic_memory  "(set_color normal)"remember|recall|reindex — TurboQuant memory"
+            case supermemory
+                echo (set_color green)"  supermemory      "(set_color normal)"remember|recall|list|status — cloud + local fallback"
             case speak_research
                 echo (set_color green)"  speak_research   "(set_color normal)"<query> — YouTube research + TTS digest"
             case voice_session
                 echo (set_color green)"  voice_session    "(set_color normal)"clear|status — multi-turn voice context"
             case handoff_notify
                 echo (set_color green)"  handoff_notify   "(set_color normal)"list|run — phone handoff alerts"
+            case remind
+                echo (set_color green)"  remind           "(set_color normal)"in 30m msg | at 5pm msg | list | cancel ID"
             case predictions
                 echo (set_color green)"  predictions      "(set_color normal)"[--domain antiques|stocks|strategy] [--deep] <topic>"
             case stock stock_analysis
@@ -1469,6 +1991,8 @@ function skills --description "Show what commands the agent can auto-run"
                 echo (set_color green)"  summarize_url  "(set_color normal)"<url> — summarize a web page"
             case daily_brief
                 echo (set_color green)"  daily_brief    "(set_color normal)"Weather + top news headlines"
+            case sports_score live_scores
+                echo (set_color green)"  sports_score   "(set_color normal)"[ipl|nfl|nba|epl|cricket|…] — live match scores (ESPN)"
             case wifi_info
                 echo (set_color green)"  wifi_info      "(set_color normal)"Current Wi-Fi network + signal"
             case generate_image
@@ -1524,7 +2048,10 @@ function agent_plan --description "AI agent that plans and executes multi-step t
 
     # --- System prompt ---
     set -l aliases_list (alias | string join "\n")
-    set -l system_text "You are a shell command planner for Linux (fish shell). Given a goal and directory context, return ONLY a valid JSON array of steps. Each step is an object with \"cmd\" (the shell command) and \"why\" (a brief reason). Rules: 1) Return ONLY the raw JSON array, no markdown fences, no backticks, no explanation text. 2) Use standard Linux commands. 3) One shell command per step. 4) Be minimal — fewest steps needed. 5) Commands run in fish shell, so use fish syntax (e.g. \"and\" instead of \"&&\" or use aliases). 6) Do NOT use sudo unless absolutely necessary.
+    set -l plat (_arka_agent_platform_label)
+    set -l plat_hint (_arka_agent_platform_hint)
+    set -l system_text "You are a shell command planner on $plat (fish shell). Given a goal and directory context, return ONLY a valid JSON array of steps. Each step is an object with \"cmd\" (the shell command) and \"why\" (a brief reason). Rules: 1) Return ONLY the raw JSON array, no markdown fences, no backticks, no explanation text. 2) Use commands appropriate for the host OS. 3) One shell command per step. 4) Be minimal — fewest steps needed. 5) Commands run in fish shell, so use fish syntax (e.g. \"and\" instead of \"&&\" or use aliases). 6) Do NOT use sudo unless absolutely necessary.
+$plat_hint
 Available Shell Aliases:
 $aliases_list
 Use symbolic reasoning to prefer using the appropriate shell alias if one is available and fits the plan.
@@ -1541,43 +2068,8 @@ $tree_out
 FILE LISTING:
 $files_out"
 
-    # JSON-safe escaping via python helper
-    set -l escaped_system (printf '%s' "$system_text" | _json_escape)
-    set -l escaped_user (printf '%s' "$user_text" | _json_escape)
-
-    # --- Call AI (provider cascade) ---
-    set -l plan_json ""
-
-    # Gemini (preferred — supports structured JSON output)
-    if test -n "$GEMINI_API_KEY" -a -z "$plan_json"
-        set -l resp (curl -s "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$GEMINI_API_KEY" \
-            -H 'Content-Type: application/json' -X POST \
-            -d "{\"contents\":[{\"parts\":[{\"text\":\"$escaped_user\"}]}],\"system_instruction\":{\"parts\":[{\"text\":\"$escaped_system\"}]},\"generationConfig\":{\"responseMimeType\":\"application/json\"}}")
-        set plan_json (echo $resp | jq -r '.candidates[0].content.parts[0].text // empty' | string trim)
-    end
-
-    # Groq fallback
-    if test -n "$GROQ_API_KEY" -a -z "$plan_json"
-        set -l resp (curl -s "https://api.groq.com/openai/v1/chat/completions" \
-            -H "Authorization: Bearer $GROQ_API_KEY" -H 'Content-Type: application/json' -X POST \
-            -d "{\"model\":\"llama-3.3-70b-versatile\",\"messages\":[{\"role\":\"system\",\"content\":\"$escaped_system\"},{\"role\":\"user\",\"content\":\"$escaped_user\"}],\"response_format\":{\"type\":\"json_object\"}}")
-        set plan_json (echo $resp | jq -r '.choices[0].message.content // empty' | string trim)
-    end
-
-    # Ollama fallback
-    if test -z "$plan_json"
-        set -l endpoint "http://127.0.0.1:11434/api/chat"
-        if test -n "$OLLAMA_HOST"
-            set endpoint "http://$OLLAMA_HOST/api/chat"
-        end
-        set -l auth_header
-        if test -n "$OLLAMA_API_KEY"
-            set auth_header -H "Authorization: Bearer $OLLAMA_API_KEY"
-        end
-        set -l resp (curl -s $endpoint $auth_header -H 'Content-Type: application/json' -X POST \
-            -d "{\"model\":\"llama3.2:1b\",\"messages\":[{\"role\":\"system\",\"content\":\"$escaped_system\"},{\"role\":\"user\",\"content\":\"$escaped_user\"}],\"stream\":false,\"format\":\"json\"}")
-        set plan_json (echo $resp | jq -r '.message.content // empty' | string trim)
-    end
+    # --- Call AI (modular auto-fallback via arka_llm) ---
+    set -l plan_json (_agent_llm_complete "$system_text" "$user_text" 0.1 agent)
 
     if test -z "$plan_json"
         echo (set_color red)"Failed to get plan. Check API keys / connection."(set_color normal)
@@ -1769,7 +2261,9 @@ function agent_loop --description "AI feedback loop: run command → read output
     set -l skills_list (_agent_available_skills | string join ", ")
     set -l mem_ctx (_arka_agent memory-context "$goal" 2>/dev/null)
 
-    set -l system_text "You are a Linux shell agent in a run-fix loop (fish shell).
+    set -l plat (_arka_agent_platform_label)
+    set -l plat_hint (_arka_agent_platform_hint)
+    set -l system_text "You are a cross-platform shell agent on $plat in a run-fix loop (fish shell).
 Each turn return ONLY valid JSON (no markdown fences):
 {\"status\":\"continue\"|\"done\",\"cmd\":\"one shell command or skill invocation\",\"why\":\"brief reason\"}
 
@@ -1777,9 +2271,11 @@ Rules:
 - One command per turn. Use status \"done\" when the goal is fully achieved (cmd may be empty).
 - Learn from HISTORY: if a command failed, diagnose output and try a corrected command.
 - Prefer safe read-only checks before destructive changes.
-- Commands run in fish; use fish syntax or standard Unix tools.
+- Commands run in fish; use fish syntax and OS-appropriate tools.
+- $plat_hint
 - Registered skills you may call by name: $skills_list
-- Intel/GPU driver warning pasted from Unreal/apps: first command MUST be fix_graphics_driver (no args).
+- Local machine specs (my pc/mac specs) -> system_info skill (not lscpu/free on macOS).
+- Intel/GPU driver warning pasted from Unreal/apps (Linux): first command MUST be fix_graphics_driver (no args).
 - Do NOT use sudo unless necessary."
     if test -n "$mem_ctx"
         set system_text "$system_text
@@ -1951,24 +2447,6 @@ function talk --description "Chat with AI providers with clean formatting"
         set model_req "$AI_PREFERRED_MODEL"
     end
 
-    set -l models \
-        "gemini|gemini-2.0-flash" \
-        "gemini|gemini-1.5-flash" \
-        "groq|llama-3.3-70b-versatile" \
-        "ollama|llama3.2:1b"
-
-    if test -n "$provider_req" -a -n "$model_req"
-        set models "$provider_req|$model_req"
-    else if test -n "$provider_req"
-        set -l filtered
-        for entry in $models
-            if string match -q "$provider_req|*" $entry
-                set -a filtered $entry
-            end
-        end
-        set models $filtered
-    end
-
     set -l aliases_list (alias | string join "\n")
     set -l system_prompt "You are a helpful AI collaborator. Use clean formatting. No emojis.
 Available Shell Aliases:
@@ -1977,40 +2455,21 @@ If the user asks about commands or actions that map to these aliases, use symbol
 CRITICAL NOTE ON ALIASES:
 - `ls` is aliased to `eza`. `eza` does NOT support standard `ls` sorting flags like `-t`, `-ltr`, or `-lt`. To sort by newest/recency, use `eza --sort newest` (or `eza -snew`). To sort by oldest, use `eza --sort oldest` (or `eza -sold`). Alternatively, bypass the alias by running standard `ls` via `command ls -lt` or `command ls -ltr`.
 - `cat` is aliased to `batcat`."
-    set -l escaped_system (printf '%s' "$system_prompt" | _json_escape)
 
-    for entry in $models
-        set -l provider (string split -f 1 "|" $entry)
-        set -l model (string split -f 2 "|" $entry)
-        set -l escaped_prompt (printf '%s' "$prompt" | _json_escape)
-        
-        if test "$provider" = "gemini"
-            if test -z "$GEMINI_API_KEY"; continue; end
-            set -l response (curl -s "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$GEMINI_API_KEY" \
-                -H 'Content-Type: application/json' -X POST \
-                -d "{\"contents\": [{\"parts\":[{\"text\": \"$escaped_prompt\"}]}], \"system_instruction\": {\"parts\": [{\"text\": \"$escaped_system\"}]}}")
-            set -l result (echo $response | jq -r '.candidates[0].content.parts[0].text // empty')
-            if test -n "$result"; echo "--- $model ---"; printf "%b\n" "$result"; return 0; end
+    if test -n "$provider_req" -a -n "$model_req"
+        set -lx ARKA_LLM_FALLBACK "$provider_req:$model_req"
+    else if test -n "$provider_req"
+        set -lx ARKA_LLM_FALLBACK "$provider_req:gemini-2.0-flash,$provider_req:llama-3.3-70b-versatile"
+    end
 
-        else if test "$provider" = "groq"
-            if test -z "$GROQ_API_KEY"; continue; end
-            set -l response (curl -s "https://api.groq.com/openai/v1/chat/completions" \
-                -H "Authorization: Bearer $GROQ_API_KEY" -H 'Content-Type: application/json' -X POST \
-                -d "{\"model\": \"$model\", \"messages\": [{\"role\": \"system\", \"content\": \"$escaped_system\"}, {\"role\": \"user\", \"content\": \"$escaped_prompt\"}]}")
-            set -l result (echo $response | jq -r '.choices[0].message.content // empty')
-            if test -n "$result"; echo "--- $model ---"; printf "%b\n" "$result"; return 0; end
-            
-        else if test "$provider" = "ollama"
-            set -l base (_ollama_api_base)
-            set -l endpoint "http://$base/api/chat"
-            set model (_ollama_chat_model $model)
-            set -l auth_header
-            if test -n "$OLLAMA_API_KEY"; set auth_header -H "Authorization: Bearer $OLLAMA_API_KEY"; end
-            set -l response (curl -s --connect-timeout 2 --max-time 120 $endpoint $auth_header -H 'Content-Type: application/json' -X POST \
-                -d "{\"model\": \"$model\", \"messages\": [{\"role\": \"system\", \"content\": \"$escaped_system\"}, {\"role\": \"user\", \"content\": \"$escaped_prompt\"}], \"stream\": false}")
-            set -l result (echo $response | jq -r '.message.content // empty')
-            if test -n "$result"; echo "--- $model ---"; printf "%b\n" "$result"; return 0; end
+    set -l result (_agent_llm_complete "$system_prompt" "$prompt" 0.2 chat)
+    if test -n "$result"
+        set -l model (_arka_llm_model_label 2>/dev/null)
+        if test -n "$model"
+            echo "--- $model ---"
         end
+        printf "%b\n" "$result"
+        return 0
     end
     echo (set_color yellow)"⚠ No AI provider responded. Set GEMINI_API_KEY, GROQ_API_KEY, or run ollama serve."(set_color normal)
     return 1
@@ -2018,7 +2477,9 @@ end
 fish_add_path ~/.npm-global/bin
 
 # OpenClaw Completion
-source "/home/s/.openclaw/completions/openclaw.fish"
+if test -f "/home/s/.openclaw/completions/openclaw.fish"
+    source "/home/s/.openclaw/completions/openclaw.fish"
+end
 
 # opencode
 fish_add_path /home/s/.opencode/bin
@@ -2028,15 +2489,13 @@ alias ls='eza' # Modern ls with colors
 alias ll='eza -l' # Detailed listing
 alias la='eza -la' # Detailed with hidden files
 alias lt='eza --tree --level 2' # Tree view
-alias cat='batcat' # Syntax-highlighted cat
+if type -q batcat
+    alias cat='batcat' # Syntax-highlighted cat
+end
 # fzf + ripgrep integration
 export FZF_DEFAULT_COMMAND='rg --files'
 export FZF_DEFAULT_OPTS='--height 40% --border --reverse'
 alias o='gnome-text-editor'
-alias vgen='xdg-open https://video-idea-generator-six.vercel.app/'
-alias gitube='xdg-open https://gitube.vercel.app/'
-alias iaf-wiki='xdg-open https://iaf-wiki-dcmi.vercel.app/'
-alias gitsearch='xdg-open https://gitsearch12.netlify.app/'
 
 function ai-models --description "List available AI models, providers, and limits"
     echo (set_color --bold blue)"AI Provider & Model Reference"(set_color normal)
@@ -2046,7 +2505,7 @@ function ai-models --description "List available AI models, providers, and limit
     printf "%-10s | %-25s | %-30s\n" "Gemini" "gemini-2.0-flash" "15 RPM, 1M TPM, 1500 RPD"
     printf "%-10s | %-25s | %-30s\n" "Gemini" "gemini-1.5-flash" "15 RPM, 1M TPM, 1500 RPD"
     printf "%-10s | %-25s | %-30s\n" "Groq" "llama-3.3-70b-versatile" "30 RPM, 6k TPM"
-    printf "%-10s | %-25s | %-30s\n" "Groq" "llama3-8b-8192" "30 RPM, 30k TPM"
+    printf "%-10s | %-25s | %-30s\n" "Groq" "llama-3.1-8b-instant" "fast, 128K context"
     printf "%-10s | %-25s | %-30s\n" "Ollama" "llama3.2:1b" "Unlimited (Local Hardware)"
     echo (set_color cyan)"--------------------------------------------------------------------------------"(set_color normal)
     echo "RPM = Requests Per Minute | TPM = Tokens Per Minute | RPD = Requests Per Day"
@@ -2153,7 +2612,7 @@ function ai-pref --description "Set preferred AI provider and model"
         echo "    gemini-1.5-flash"
         echo "  groq:"
         echo "    llama-3.3-70b-versatile"
-        echo "    llama3-8b-8192"
+        echo "    llama-3.1-8b-instant"
         echo "  ollama:"
         echo "    llama3.2:1b"
         echo "    llama3.2:3b"
@@ -2161,7 +2620,7 @@ function ai-pref --description "Set preferred AI provider and model"
         echo ""
         echo (set_color cyan)"Examples:"(set_color normal)
         echo "  ai-pref groq                    # Use Groq with default model"
-        echo "  ai-pref groq llama3-8b-8192    # Use Groq with specific model"
+        echo "  ai-pref groq llama-3.1-8b-instant    # Use Groq with specific model"
         echo "  ai-pref gemini gemini-2.0-flash"
         echo "  ai-pref ollama llama3.2:1b"
         echo "  ai-pref clear                  # Clear preference, use auto-fallback"
@@ -2477,6 +2936,77 @@ function search_files --description "Search for files by name pattern under a di
     end
 end
 
+function find_files_by_size --description "Find files smaller or larger than a size threshold"
+    set -l text (string join " " $argv)
+    if test -z "$text"
+        echo "Usage: find_files_by_size find files less than 100mb [in ~/path]"
+        echo "Example: find files larger than 1gb in ~/Downloads"
+        return 1
+    end
+
+    set -l clean (string lower "$text")
+
+    set -l sign "-"
+    if string match -qr '(?i)(more|greater|larger|over|above|bigger)(\s+than)?|\bover\s+\d' "$clean"
+        set sign "+"
+    end
+
+    set -l sm (string match -r '(?i)(\d+(?:\.\d+)?)\s*(kb|mb|gb|bytes?|b|k|m|g)\b' "$text")
+    if test (count $sm) -lt 2
+        echo (set_color red)"Could not parse size from: $text"(set_color normal)
+        echo "Example: find files less than 100mb"
+        return 1
+    end
+
+    set -l num (math -s0 $sm[2])
+    set -l raw_unit (string lower "$sm[3]")
+    set -l unit M
+    switch $raw_unit
+        case b byte bytes
+            set unit c
+        case k kb
+            set unit k
+        case m mb ''
+            set unit M
+        case g gb
+            set unit G
+    end
+
+    set -l root "."
+    set -l in_m (string match -r '(?i)\s+in\s+(.+)$' "$text")
+    if test (count $in_m) -ge 2
+        set root (_resolve_folder_path (string trim -- $in_m[2]))
+    end
+
+    if not test -d "$root"
+        printf '%s\n' (set_color red)"Not a directory: $root"(set_color normal)
+        return 1
+    end
+
+    set -l size_spec "$sign$num$unit"
+    set -l resolved (realpath "$root" 2>/dev/null; or echo "$root")
+    set -l op "smaller than"
+    if test "$sign" = "+"
+        set op "larger than"
+    end
+
+    printf "Files %s %s%s under %s\n" "$op" "$num" (string upper "$raw_unit") "$resolved"
+
+    set -l results (find "$root" -type f -size $size_spec 2>/dev/null)
+    if test (count $results) -eq 0
+        printf '%s\n' (set_color yellow)"  No files found."(set_color normal)
+        return 1
+    end
+
+    for f in $results[1..100]
+        set -l sz (du -h "$f" 2>/dev/null | cut -f1)
+        printf '  %s  (%s)\n' "$f" "$sz"
+    end
+    if test (count $results) -gt 100
+        printf '%s\n' (set_color brblack)"  ... and "(count $results)" total (showing first 100)"(set_color normal)
+    end
+end
+
 function open_file --description "Open a file with the default application"
     if test (count $argv) -lt 1
         echo "Usage: open_file <file> [file2 ...]"
@@ -2488,7 +3018,7 @@ function open_file --description "Open a file with the default application"
             echo (set_color red)"✗ Not a file: $path"(set_color normal)
             continue
         end
-        xdg-open "$path" 2>/dev/null &
+        _arka_open "$path" 2>/dev/null &
         disown 2>/dev/null
         echo (set_color green)"✓ Opened: $path"(set_color normal)
     end
@@ -2560,6 +3090,86 @@ function _play_normalize_media_query --description "Strip play/movie/song filler
     set q (string replace -r -i '\s+(?:please|now|for me)$' '' "$q")
     set q (string replace -r -i '^(?:movie|film|video|videos?|song|songs?|music|track|tracks?|audio)\s+' '' "$q")
     echo (string trim -- "$q")
+end
+
+function _agent_play_media_candidates --description "Play skills offline rules could match (internal)"
+    set -l cmd "$argv[1]"
+    set -l clean (string lower "$cmd")
+    set -l cands
+
+    if string match -qr '(?i)(play.*spotify|spotify)' "$clean"
+        set -a cands play_spotify
+    end
+    if string match -qr '(?i)(play\s+.*youtube|play\s+(?:a\s+|an\s+)?(?:video|episode|anime)|watch\s+(?:a\s+|an\s+)?|watch\s+.*youtube)' "$clean"
+        and not string match -qr '(?i)(summarize|summary|transcript|research|digest|caption|download|transcribe|playlist)' "$clean"
+        set -a cands play_youtube
+    end
+    if string match -qr '(?i)(play.*song|random.*song|local.*music)' "$clean"
+        set -a cands play_song
+    end
+    if string match -qr '(?i)(play.*movie|play.*film|play\s+(?:local\s+)?media|rplay|play\s+.+\s+(movie|film|video))' "$clean"
+        set -a cands play_movie
+    end
+    if string match -qr '(?i)^play\s+.+\s+(from|by)\s+' "$clean"
+        contains -- play_song $cands; or set -a cands play_song
+    end
+    if string match -qr '(?i)^play\s+\S' "$clean"
+        if string match -qr '(?i)\b(song|music|track|audio)\b' "$clean"
+            contains -- play_song $cands; or set -a cands play_song
+        end
+        if string match -qr '(?i)\bspotify\b' "$clean"
+            contains -- play_spotify $cands; or set -a cands play_spotify
+        end
+        if string match -qr '(?i)\b(movie|film|video)\b' "$clean"
+            contains -- play_movie $cands; or set -a cands play_movie
+        end
+    end
+
+    set -l uniq
+    for c in $cands
+        contains -- $c $uniq; or set -a uniq $c
+    end
+    printf '%s\n' $uniq
+end
+
+function _agent_play_route_ambiguous --description "True when multiple play/media routes collide (internal)"
+    set -l uniq (_agent_play_media_candidates "$argv[1]")
+    test (count $uniq) -gt 1
+end
+
+function _agent_route_play_ambiguous --description "Resolve conflicting play routes via LLM or offline tie-break (internal)"
+    set -l cmd "$argv[1]"
+    set -l skills "$argv[2]"
+    if test "$(_arka_route_mode)" != symbolic_only
+        set -l llm (_agent_llm_route "$cmd" "$skills")
+        if test -n "$llm"
+            echo "$llm"
+            return 0
+        end
+    end
+    set -l clean (string lower "$cmd")
+    set -l q (_play_normalize_media_query "$cmd")
+    if string match -qr '(?i)spotify' "$clean"
+        printf 'play_spotify %s\n' "$q"
+        return 0
+    end
+    if string match -qr '(?i)youtube|\bepisode\b' "$clean"
+        printf 'play_youtube %s\n' "$q"
+        return 0
+    end
+    if string match -qr '(?i)\b(film|movie|video)\b' "$clean"; and not string match -qr '(?i)\b(song|music|track)\b' "$clean"
+        printf 'play_movie %s\n' "$q"
+        return 0
+    end
+    if string match -qr '(?i)\b(song|music|track|audio)\b' "$clean"; and not string match -qr '(?i)\b(film|movie|video)\b' "$clean"
+        printf 'play_song %s\n' "$q"
+        return 0
+    end
+    if string match -qr '(?i)\b(film|movie)\b' "$clean"
+        printf 'play_movie %s\n' "$q"
+        return 0
+    end
+    printf 'play_song %s\n' "$q"
 end
 
 function _play_search_terms --description "Search terms from play query; prefers artist after from/by (internal)"
@@ -3037,7 +3647,14 @@ function _spotify_normalize_query --description "Strip NL filler and fix common 
     echo (string trim "$q")
 end
 
-function _spotify_desktop_cmd --description "Detect Spotify desktop: native, flatpak, or snap"
+function _spotify_desktop_cmd --description "Detect Spotify desktop: native, flatpak, snap, or macOS app"
+    if _arka_is_macos
+        if test -d "/Applications/Spotify.app"
+            echo macos
+            return 0
+        end
+        return 1
+    end
     if command -v spotify &>/dev/null
         echo native
         return 0
@@ -3063,12 +3680,17 @@ function _spotify_start_desktop --description "Launch Spotify desktop if not run
         return 1
     end
 
-    if pgrep -x spotify &>/dev/null; or pgrep -f '[s]potify' &>/dev/null
+    if _arka_is_macos
+        pgrep -x Spotify &>/dev/null; or pgrep -if 'Spotify.app' &>/dev/null
+        and return 0
+    else if pgrep -x spotify &>/dev/null; or pgrep -f '[s]potify' &>/dev/null
         return 0
     end
 
     echo (set_color brblack)"  Launching Spotify..."(set_color normal)
     switch $kind
+        case macos
+            open -a Spotify >/dev/null 2>&1
         case native
             spotify &
             disown
@@ -3237,6 +3859,13 @@ function _spotify_desktop_play --description "Play a track in Spotify desktop vi
     end
 
     if not command -v playerctl &>/dev/null
+        if _arka_is_macos
+            _spotify_start_desktop
+            echo (set_color brblack)"  Opening in Spotify..."(set_color normal)
+            _arka_open "spotify:track:$track_id"
+            echo (set_color green)"✓ Opened in Spotify — press Play if needed."(set_color normal)
+            return 0
+        end
         echo (set_color yellow)"⚠ playerctl required for desktop playback."(set_color normal)
         echo (set_color brblack)"  Install: sudo apt install playerctl"(set_color normal)
         return 1
@@ -3245,7 +3874,7 @@ function _spotify_desktop_play --description "Play a track in Spotify desktop vi
     _spotify_start_desktop
 
     echo (set_color brblack)"  Opening in Spotify..."(set_color normal)
-    xdg-open "spotify:track:$track_id" 2>/dev/null
+    _arka_open "spotify:track:$track_id"
 
     set -l played 0
     set -l attempt 0
@@ -3280,12 +3909,20 @@ function _spotify_desktop_search_play --description "Open track search in Spotif
         return 1
     end
     if not command -v playerctl &>/dev/null
+        if _arka_is_macos
+            _spotify_start_desktop
+            set -l encoded (python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$query")
+            echo (set_color brblack)"  Opening search in Spotify app..."(set_color normal)
+            _arka_open "spotify:search:$encoded"
+            echo (set_color green)"✓ Opened search in Spotify — press Play on the first result."(set_color normal)
+            return 0
+        end
         return 1
     end
     _spotify_start_desktop
     set -l encoded (python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$query")
     echo (set_color brblack)"  Opening search in Spotify app..."(set_color normal)
-    xdg-open "spotify:search:$encoded" 2>/dev/null
+    _arka_open "spotify:search:$encoded"
     sleep 2
     playerctl --player=spotify play 2>/dev/null
     if test (playerctl --player=spotify status 2>/dev/null) = Playing
@@ -3352,10 +3989,8 @@ function _spotify_play_track --description "Play resolved track: desktop → xdg
     return $status
 end
 
-function _spotify_launch_url --description "Open a URL in the default browser via xdg-open (snap Brave profile)"
-    set -l url $argv[1]
-    xdg-open "$url" 2>/dev/null &
-    disown 2>/dev/null
+function _spotify_launch_url --description "Open a Spotify/web URL in default browser or app (cross-platform)"
+    _arka_open $argv[1]
 end
 
 function _spotify_find_browser_window --description "Return xdotool window id for an open Spotify web tab"
@@ -3450,7 +4085,7 @@ function _spotify_web_play --description "xdg-open Spotify in default browser, t
         return 1
     end
 
-    echo (set_color brblack)"  Opening in default browser (xdg-open)..."(set_color normal)
+    echo (set_color brblack)"  Opening in default browser..."(set_color normal)
     _spotify_launch_url "$url"
 
     if _spotify_browser_start_play 12
@@ -3462,55 +4097,14 @@ function _spotify_web_play --description "xdg-open Spotify in default browser, t
     return 1
 end
 
-function play_spotify --description "Play on Spotify (desktop app preferred; else Brave/CDP DOM — not Spotipy; API playback needs Premium)"
-    set -l query (_spotify_normalize_query $argv)
-
-    if test -z "$query"
-        if command -v playerctl &>/dev/null; and playerctl --player=spotify status &>/dev/null
-            playerctl --player=spotify play-pause 2>/dev/null
-            set -l st (playerctl --player=spotify status 2>/dev/null)
-            echo (set_color --bold green)"▶ Spotify: $st"(set_color normal)
-        else if _spotify_desktop_cmd &>/dev/null
-            _spotify_start_desktop
-            echo (set_color --bold green)"▶ Spotify: Launching player"(set_color normal)
-        else
-            xdg-open "https://open.spotify.com" 2>/dev/null
-            echo (set_color --bold green)"▶ Spotify Web: Opening player"(set_color normal)
-        end
-        return 0
+function play_spotify --description "Play on Spotify (AppleScript macOS, playerctl Linux, Web API search)"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        $py $_ARKA_ROOT/arka_spotify.py control toggle
+        return $status
     end
-
-    echo (set_color --bold blue)"━━━ Spotify Playback ━━━"(set_color normal)
-    if not _spotify_desktop_cmd &>/dev/null
-        echo (set_color brblack)"  Web: xdg-open → default Brave profile (Spotipy needs Premium)."(set_color normal)
-    end
-
-    # Desktop: resolve track ID then spotify: URI
-    if _spotify_desktop_cmd &>/dev/null
-        echo (set_color brblack)"  Resolving song: '$query'..."(set_color normal)
-        set -l track_id (_spotify_resolve_track_id "$query")
-        if test -n "$track_id"
-            echo (set_color green)"✓ Resolved track ID: $track_id"(set_color normal)
-            _spotify_desktop_play $track_id
-            echo (set_color --bold green)"▶ Spotify: Playing track"(set_color normal)
-            return 0
-        end
-        echo (set_color cyan)"▶ Playing first search result in Spotify app: $query"(set_color normal)
-        if _spotify_desktop_search_play "$query"
-            echo (set_color --bold green)"▶ Spotify: Playing first match"(set_color normal)
-            return 0
-        end
-        echo (set_color yellow)"⚠ Auto-play failed — open Spotify and search: $query"(set_color normal)
-        return 1
-    end
-
-    # Brave/web: xdg-open default profile first; DOM only if that fails
-    if _spotify_play_search $query
-        echo (set_color --bold green)"▶ Spotify: Playing"(set_color normal)
-    else
-        echo (set_color yellow)"⚠ Auto-play failed — click Play in Brave or: spotify_control play"(set_color normal)
-        echo (set_color brblack)"  Optional DOM fallback: spotify_brave_debug + install_skill_deps"(set_color normal)
-    end
+    $py $_ARKA_ROOT/arka_spotify.py play (string join " " $argv)
+    return $status
 end
 
 function _spotify_play_search --description "Play search: desktop → web track → web search → DOM"
@@ -3626,13 +4220,11 @@ function _spotify_dom_control --description "Control Spotify web player via Play
     python3 "$script" $argv
 end
 
-function spotify_control --description "Control Spotify playback (play/pause/next/prev/status/dom)"
+function spotify_control --description "Control Spotify playback (AppleScript macOS, playerctl Linux)"
+    set -l py (_arka_python)
     set -l action $argv[1]
-    if test -z "$action"
-        set action "status"
-    end
+    test -z "$action"; and set action status
 
-    # dom [track_id|url] — dump page HTML for debugging selectors
     if test "$action" = dom
         set -l target $argv[2]
         if test -z "$target"
@@ -3645,79 +4237,13 @@ function spotify_control --description "Control Spotify playback (play/pause/nex
         return $status
     end
 
-    # play <song query> — same path as play_spotify (one DOM session when on web)
     if test "$action" = play; and test (count $argv) -ge 2
         play_spotify $argv[2..-1]
         return $status
     end
 
-    set -l player ""
-    set -l used_mpris 0
-    if command -v playerctl &>/dev/null
-        set player (_spotify_mpris_player 2>/dev/null)
-        if test -z "$player"
-            set player spotify
-        end
-    end
-
-    switch $action
-        case play
-            if test -n "$player"
-                playerctl --player=$player play 2>/dev/null
-                sleep 0.5
-                if test (playerctl --player=$player status 2>/dev/null) = Playing
-                    set used_mpris 1
-                    echo (set_color --bold green)"▶ Play (MPRIS)"(set_color normal)
-                end
-            end
-            if test $used_mpris -eq 0
-                echo (set_color brblack)"  MPRIS play failed — trying DOM..."(set_color normal)
-                _spotify_dom_control play
-            end
-        case pause stop
-            if test -n "$player"
-                playerctl --player=$player pause 2>/dev/null
-                echo (set_color --bold yellow)"⏸ Paused (MPRIS)"(set_color normal)
-            else
-                _spotify_dom_control pause
-            end
-        case next skip
-            if test -n "$player"; and playerctl --player=$player next 2>/dev/null
-                sleep 0.5
-                set -l title (playerctl --player=$player metadata title 2>/dev/null)
-                echo (set_color --bold cyan)"⏭ Next: $title"(set_color normal)
-            else
-                _spotify_dom_control next
-            end
-        case prev previous back
-            if test -n "$player"; and playerctl --player=$player previous 2>/dev/null
-                sleep 0.5
-                set -l title (playerctl --player=$player metadata title 2>/dev/null)
-                echo (set_color --bold cyan)"⏮ Previous: $title"(set_color normal)
-            else
-                _spotify_dom_control prev
-            end
-        case status info
-            if not command -v playerctl &>/dev/null
-                echo (set_color red)"✗ playerctl not found for status."(set_color normal)
-                return 1
-            end
-            set -l st (playerctl --player=$player status 2>/dev/null)
-            set -l title (playerctl --player=$player metadata title 2>/dev/null)
-            set -l artist (playerctl --player=$player metadata artist 2>/dev/null)
-            set -l album (playerctl --player=$player metadata album 2>/dev/null)
-            echo (set_color --bold blue)"━━━ Spotify Status ━━━"(set_color normal)
-            echo (set_color cyan)"  Status: "(set_color normal)"$st"
-            echo (set_color cyan)"  Track:  "(set_color normal)"$title"
-            echo (set_color cyan)"  Artist: "(set_color normal)"$artist"
-            echo (set_color cyan)"  Album:  "(set_color normal)"$album"
-            echo (set_color brblack)"  DOM dump: spotify_control dom"(set_color normal)
-        case '*'
-            echo "Usage: spotify_control [play|pause|next|prev|status|dom] [song or track_id or url]"
-            echo "  spotify_control play <song>   # play_spotify (desktop or Brave DOM; not Spotipy)"
-            echo "  spotify_control dom           # save $_ARKA_ROOT/spotify-dom.html"
-            echo "  Spotipy/Web API playback requires Spotify Premium; free accounts use this stack."
-    end
+    $py $_ARKA_ROOT/arka_spotify.py control $action
+    return $status
 end
 
 function weather --description "Get current weather or N-day forecast (Open-Meteo)"
@@ -3750,6 +4276,15 @@ function timer --description "Countdown timer (e.g. timer 60 or timer 5m)"
     end
 
     echo (set_color --bold cyan)"⏱ Timer: $seconds seconds"(set_color normal)
+    if _agent_voice_enabled
+        set -l mins (math "floor($seconds / 60)")
+        set -l secs (math "$seconds % 60")
+        if test $mins -gt 0
+            speak_aloud "Timer set for $mins minutes." 2>/dev/null &
+        else
+            speak_aloud "Timer set for $secs seconds." 2>/dev/null &
+        end
+    end
     for i in (seq $seconds -1 1)
         set -l mins (math "floor($i / 60)")
         set -l secs (math "$i % 60")
@@ -3758,6 +4293,9 @@ function timer --description "Countdown timer (e.g. timer 60 or timer 5m)"
     end
     printf "\r"
     echo (set_color --bold green)"⏰ Time's up!                "(set_color normal)
+    if _agent_voice_enabled
+        speak_aloud "Time's up." 2>/dev/null
+    end
     # Bell sound
     printf '\a'
 end
@@ -3843,15 +4381,148 @@ function screenshot --description "Take a screenshot and save to Pictures"
     end
 end
 
-function system_info --description "Show a quick system overview"
+function _arka_bytes_hr --description "Format byte count as human-readable (internal)"
+    set -l b $argv[1]
+    if test $b -ge 1099511627776
+        printf "%.1fTiB" (math "$b / 1099511627776")
+    else if test $b -ge 1073741824
+        printf "%.1fGiB" (math "$b / 1073741824")
+    else if test $b -ge 1048576
+        printf "%.1fMiB" (math "$b / 1048576")
+    else if test $b -ge 1024
+        printf "%.1fKiB" (math "$b / 1024")
+    else
+        echo "$b B"
+    end
+end
+
+function _arka_sys_os --description "OS name/version (macOS/Linux, internal)"
+    if _arka_is_macos
+        echo (sw_vers -productName) (sw_vers -productVersion)
+    else
+        lsb_release -ds 2>/dev/null; or grep PRETTY_NAME /etc/os-release 2>/dev/null | cut -d= -f2 | tr -d '"'
+    end
+end
+
+function _arka_sys_cpu --description "CPU model string (macOS/Linux, internal)"
+    if _arka_is_macos
+        sysctl -n machdep.cpu.brand_string 2>/dev/null
+    else
+        grep 'model name' /proc/cpuinfo 2>/dev/null | head -1 | cut -d: -f2 | string trim
+    end
+end
+
+function _arka_vm_pages --description "Parse vm_stat page count by label (macOS, internal)"
+    set -l label $argv[1]
+    for line in (vm_stat 2>/dev/null)
+        if string match -q "*$label:*" -- "$line"
+            string replace -r '.*:\s+' '' "$line" | string replace -r '\.$' ''
+            return
+        end
+    end
+end
+
+function _arka_sys_ram --description "RAM used/total human-readable (macOS/Linux, internal)"
+    if _arka_is_macos
+        set -l page_size (sysctl -n hw.pagesize 2>/dev/null)
+        set -l total (sysctl -n hw.memsize 2>/dev/null)
+        set -l active (_arka_vm_pages "Pages active")
+        set -l wired (_arka_vm_pages "Pages wired down")
+        set -l compressed (_arka_vm_pages "Pages occupied by compressor")
+        set -l used_bytes (math "($active + $wired + $compressed) * $page_size")
+        echo (_arka_bytes_hr $used_bytes)"/"(_arka_bytes_hr $total)
+    else
+        free -h 2>/dev/null | awk '/Mem:/ {print $3 "/" $2}'
+    end
+end
+
+function _arka_sys_ip --description "Primary local IP (macOS/Linux, internal)"
+    if _arka_is_macos
+        for iface in en0 en1 en2
+            set -l ip (ipconfig getifaddr $iface 2>/dev/null)
+            if test -n "$ip"
+                echo $ip
+                return
+            end
+        end
+    else
+        hostname -I 2>/dev/null | awk '{print $1}'
+    end
+end
+
+function _arka_sys_gpu --description "GPU / graphics card summary (macOS/Linux, internal)"
+    if _arka_is_macos
+        set -l sp (system_profiler SPDisplaysDataType 2>/dev/null)
+        set -l gpu_m (string match -r 'Chipset Model:\s+(.+?)\s+Type:' "$sp")
+        set -l cores_m (string match -r 'Total Number of Cores:\s+(\d+)' "$sp")
+        set -l metal_m (string match -r 'Metal Support:\s+(.+?)\s+Displays:' "$sp")
+        set -l gpu ""
+        set -l cores ""
+        set -l metal ""
+        if test (count $gpu_m) -ge 2
+            set gpu (string trim -- $gpu_m[2])
+        end
+        if test (count $cores_m) -ge 2
+            set cores $cores_m[2]
+        end
+        if test (count $metal_m) -ge 2
+            set metal (string trim -- $metal_m[2])
+        end
+        if test -n "$gpu"
+            if test -n "$cores"
+                echo "$gpu ($cores cores, $metal)"
+            else
+                echo "$gpu"
+            end
+        end
+    else
+        if command -v nvidia-smi >/dev/null
+            set -l nv (nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1 | string trim)
+            if test -n "$nv"
+                echo $nv
+                return
+            end
+        end
+        lspci 2>/dev/null | string match -r 'VGA|3D|Display' | head -1 | string replace -r '.*: ' ''
+    end
+end
+
+function system_info --description "Show a quick system overview (optional: gpu cpu ram disk os ip kernel)"
+    if test (count $argv) -ge 1
+        set -l comp (string lower "$argv[1]")
+        switch $comp
+            case gpu graphics
+                echo (set_color cyan)"  GPU:    "(set_color normal)(_arka_sys_gpu)
+                return 0
+            case cpu processor
+                echo (set_color cyan)"  CPU:    "(set_color normal)(_arka_sys_cpu)
+                return 0
+            case ram memory
+                echo (set_color cyan)"  RAM:    "(set_color normal)(_arka_sys_ram)
+                return 0
+            case disk storage
+                echo (set_color cyan)"  Disk:   "(set_color normal)(df -h / | awk 'NR==2 {print $3 "/" $2 " (" $5 " used)"}')
+                return 0
+            case os
+                echo (set_color cyan)"  OS:     "(set_color normal)(_arka_sys_os)
+                return 0
+            case ip
+                echo (set_color cyan)"  IP:     "(set_color normal)(_arka_sys_ip)
+                return 0
+            case kernel
+                echo (set_color cyan)"  Kernel: "(set_color normal)(uname -r)
+                return 0
+        end
+    end
     echo (set_color --bold blue)"━━━ System Info ━━━"(set_color normal)
-    echo (set_color cyan)"  OS:     "(set_color normal)(lsb_release -ds 2>/dev/null; or grep PRETTY_NAME /etc/os-release 2>/dev/null | cut -d= -f2 | tr -d '"')
+    echo (set_color cyan)"  OS:     "(set_color normal)(_arka_sys_os)
     echo (set_color cyan)"  Kernel: "(set_color normal)(uname -r)
     echo (set_color cyan)"  Uptime: "(set_color normal)(uptime -p 2>/dev/null; or uptime)
-    echo (set_color cyan)"  CPU:    "(set_color normal)(grep 'model name' /proc/cpuinfo 2>/dev/null | head -1 | cut -d: -f2 | string trim)
-    echo (set_color cyan)"  RAM:    "(set_color normal)(free -h | awk '/Mem:/ {print $3 "/" $2}')
+    echo (set_color cyan)"  CPU:    "(set_color normal)(_arka_sys_cpu)
+    echo (set_color cyan)"  GPU:    "(set_color normal)(_arka_sys_gpu)
+    echo (set_color cyan)"  RAM:    "(set_color normal)(_arka_sys_ram)
     echo (set_color cyan)"  Disk:   "(set_color normal)(df -h / | awk 'NR==2 {print $3 "/" $2 " (" $5 " used)"}')
-    echo (set_color cyan)"  IP:     "(set_color normal)(hostname -I 2>/dev/null | awk '{print $1}')
+    echo (set_color cyan)"  IP:     "(set_color normal)(_arka_sys_ip)
 end
 
 function search_web --description "Open a web search in the browser"
@@ -3860,7 +4531,7 @@ function search_web --description "Open a web search in the browser"
         echo "Usage: search_web <query>"
         return 1
     end
-    xdg-open "https://www.google.com/search?q=$query" 2>/dev/null
+    _arka_open "https://www.google.com/search?q=$query" 2>/dev/null
     echo (set_color --bold green)"🔍 Searching: $argv"(set_color normal)
 end
 
@@ -3884,6 +4555,7 @@ function _agent_parse_usage_period --description "Parse today/week from usage qu
 end
 
 function app_usage --description "Show which apps you used and for how long"
+    set -l py (_arka_python)
     set -l period today
     if test (count $argv) -ge 1
         switch $argv[1]
@@ -3894,16 +4566,16 @@ function app_usage --description "Show which apps you used and for how long"
             case yesterday
                 set period yesterday
             case start
-                python3 $_ARKA_ROOT/arka_usage.py start
+                $py $_ARKA_ROOT/arka_usage.py start
                 return $status
             case stop
-                python3 $_ARKA_ROOT/arka_usage.py stop
+                $py $_ARKA_ROOT/arka_usage.py stop
                 return $status
             case '*'
                 set period $argv[1]
         end
     end
-    set -l out (python3 $_ARKA_ROOT/arka_usage.py report $period 2>&1)
+    set -l out ($py $_ARKA_ROOT/arka_usage.py report $period 2>&1)
     if test $status -ne 0
         echo (set_color red)"$out"(set_color normal)
         return 1
@@ -3916,11 +4588,13 @@ function _agent_usage_start --description "Start app + website usage tracker (in
     if set -q ARKA_USAGE_TRACK
         test "$ARKA_USAGE_TRACK" = 0 -o "$ARKA_USAGE_TRACK" = false; and return 0
     end
-    python3 $_ARKA_ROOT/arka_usage.py start 2>/dev/null
+    set -l py (_arka_python)
+    $py $_ARKA_ROOT/arka_usage.py start 2>/dev/null
 end
 
 function _agent_usage_stop --description "Stop app usage tracker (internal)"
-    python3 $_ARKA_ROOT/arka_usage.py stop 2>/dev/null
+    set -l py (_arka_python)
+    $py $_ARKA_ROOT/arka_usage.py stop 2>/dev/null
 end
 
 function open_urls --description "Open one or more URLs in the browser"
@@ -3935,7 +4609,7 @@ function open_urls --description "Open one or more URLs in the browser"
         if not string match -qr '^https?://' -- "$url"
             set url "https://$url"
         end
-        xdg-open "$url" 2>/dev/null
+        _arka_open "$url" 2>/dev/null
         set opened (math $opened + 1)
         echo (set_color --bold green)"  ▶ Opened: $url"(set_color normal)
         # Small delay so the browser doesn't choke on rapid opens
@@ -3993,6 +4667,22 @@ function _parse_whatsapp_nl --description "Parse natural-language WhatsApp send 
     echo $msg
 end
 
+function _arka_whatsapp_dir --description "Bundled WhatsApp automation directory (internal)"
+    if test -n "$ARKA_WHATSAPP_DIR"; and test -d "$ARKA_WHATSAPP_DIR"
+        echo "$ARKA_WHATSAPP_DIR"
+        return
+    end
+    if test -d "$_ARKA_ROOT/whatsapp"
+        echo "$_ARKA_ROOT/whatsapp"
+        return
+    end
+    if test -d "$HOME/Projects/python/products/automation"
+        echo "$HOME/Projects/python/products/automation"
+        return
+    end
+    echo "$_ARKA_ROOT/whatsapp"
+end
+
 function _send_whatsapp_browser --description "Send via WhatsApp Web with fuzzy contact search (internal)"
     set -l target $argv[1]
     set -l message $argv[2]
@@ -4000,9 +4690,9 @@ function _send_whatsapp_browser --description "Send via WhatsApp Web with fuzzy 
     browse_web "Go to https://web.whatsapp.com/ and wait until the page is fully loaded. Click the chat search or 'Search name or number' field. Type '$target' (partial name is OK). Wait 2 seconds for results. Click the best matching contact from the list (fuzzy match). Click the message input. Type this message exactly: $message. Press Enter to send."
 end
 
-function send_whatsapp --description "Send WhatsApp via pywhatkit (whatsapp_automation.py)"
-    set -l wa_py /home/s/Projects/python/products/automation/whatsapp_automation.py
+function send_whatsapp --description "Send WhatsApp via bundled automation or browser fallback"
     set -l py (_arka_python)
+    set -l script $_ARKA_ROOT/arka_whatsapp_inbox.py
 
     if test (count $argv) -eq 1; and string match -qr '(?i)whatsapp|message.*to' -- "$argv[1]"
         set -l parsed (_parse_whatsapp_nl "$argv[1]")
@@ -4013,51 +4703,21 @@ function send_whatsapp --description "Send WhatsApp via pywhatkit (whatsapp_auto
         set argv $parsed[1] $parsed[2]
     end
 
-    if test (count $argv) -lt 1
-        echo "Usage: send_whatsapp <name_or_number> <message>"
-        echo "       send_whatsapp schedule <number> <message> <HH:MM> [YYYY-MM-DD]"
-        echo "       send_whatsapp contacts"
-        echo "Example: send_whatsapp 9073153267 hi"
-        echo "Example: send_whatsapp Mom Hello!"
-        echo "Contacts file: $wa_py/../whatsapp_contacts.json"
-        return 1
-    end
-
-    if test "$argv[1]" = contacts
-        $py $wa_py contacts
-        return $status
-    end
-
     if test (count $argv) -lt 2
         echo "Usage: send_whatsapp <name_or_number> <message>"
+        echo "Example: send_whatsapp +919876543210 hi"
+        echo "Example: send_whatsapp Mom Hello!"
+        echo "Inbox listener: arka whatsapp inbox  |  whatsapp_listen status"
         return 1
     end
 
     set -l target (string trim -c "'\"" $argv[1])
     set -l message (string join " " $argv[2..-1])
-
-    if test "$target" = schedule
-        $py $wa_py schedule $argv[2..-1]
-        return $status
-    end
-
-  # Fuzzy resolve saved contact name -> phone
-    set -l resolved ($py $wa_py resolve "$target" 2>/dev/null | string trim)
-    if test -n "$resolved"
-        echo (set_color green)"✓ Matched contact → $resolved"(set_color normal)
-        set target $resolved
-    end
-
-    set -l digits_only (string replace -r '\D' '' -- "$target")
-    if test (string length $digits_only) -ge 7
-        $py $wa_py send "$target" "$message"
-        return $status
-    end
-
-    _send_whatsapp_browser "$target" "$message"
+    $py "$script" send "$target" "$message"
+    return $status
 end
 
-function whatsapp_listen --description "Watch WhatsApp inbox → Arka (Selenium listen + pywhatkit send)"
+function whatsapp_listen --description "Watch WhatsApp inbox → Arka (native desktop on macOS, Web elsewhere)"
     set -l script $_ARKA_ROOT/arka_whatsapp_inbox.py
     set -l py (_arka_python)
     if not test -f "$script"
@@ -4098,7 +4758,7 @@ function whatsapp_listen --description "Watch WhatsApp inbox → Arka (Selenium 
         end
     end
     mkdir -p ~/.cache/fish-agent
-    set -l from +919073153257
+    set -l from "(set ARKA_WHATSAPP_FROM in .env)"
     if set -q ARKA_WHATSAPP_FROM
         set from $ARKA_WHATSAPP_FROM
     end
@@ -4110,16 +4770,42 @@ function whatsapp_listen --description "Watch WhatsApp inbox → Arka (Selenium 
     $py "$script" status
 end
 
-# --- Automation Project Wrappers (connected to /home/s/Projects/python/products/automation) ---
+# --- Automation / AIE (bundled scripts + optional ARKA_AIE_DIR override) ---
+
+function _arka_aie_dir --description "Directory containing AIE Python scripts (internal)"
+    if test -n "$ARKA_AIE_DIR"; and test -d "$ARKA_AIE_DIR"
+        echo "$ARKA_AIE_DIR"
+        return
+    end
+    if test -d "$_ARKA_ROOT/aie"
+        echo "$_ARKA_ROOT/aie"
+        return
+    end
+    if test -d "$HOME/Projects/python/products/automation"
+        echo "$HOME/Projects/python/products/automation"
+        return
+    end
+    echo "$_ARKA_ROOT/aie"
+end
+
+function _arka_aie_run --description "Run an AIE script by filename (internal)"
+    set -l script (_arka_aie_dir)/$argv[1]
+    set -l py (_arka_python)
+    if not test -f "$script"
+        echo (set_color red)"AIE script not found: $script"(set_color normal)
+        return 1
+    end
+    $py "$script" $argv[2..-1]
+end
 
 function auto_click --description "Monitor cursor shape changes and auto-click when cursor changes (e.g. loading spinner)"
     echo (set_color cyan)"▶ Starting auto-click monitor (Ctrl+C to stop)..."(set_color normal)
-    python3 /home/s/Projects/python/products/automation/auto_click.py
+    _arka_aie_run auto_click.py
 end
 
-function auto_copy --description "Auto-copy text selections to clipboard on paste (X11)"
+function auto_copy --description "Auto-copy text selections to clipboard on paste (Linux X11/Wayland)"
     echo (set_color cyan)"▶ Starting auto-copy selection monitor (Ctrl+C to stop)..."(set_color normal)
-    python3 /home/s/Projects/python/products/automation/auto_copy_selection.py
+    _arka_aie_run auto_copy_selection.py
 end
 
 function decrypt_pdf --description "Decrypt password-protected PDF files"
@@ -4132,17 +4818,17 @@ end
 
 function classify_files --description "Auto-classify files in Downloads by extension (images, docs, code, etc.)"
     echo (set_color cyan)"▶ Starting file classifier (Ctrl+C to stop)..."(set_color normal)
-    python3 /home/s/Projects/python/products/automation/classifier.py
+    _arka_aie_run classifier.py
 end
 
-function cleanup_downloads --description "Clean up .zip, .deb, .tar.gz files from Downloads"
+function cleanup_downloads --description "Clean up installer/archive clutter from Downloads"
     echo (set_color cyan)"▶ Cleaning up installer files from Downloads..."(set_color normal)
-    python3 /home/s/Projects/python/products/automation/delete_useless.py
+    _arka_aie_run delete_useless.py
 end
 
 function watch_zip --description "Watch a folder for new .zip files and auto-extract them"
     echo (set_color cyan)"▶ Starting zip watcher (Ctrl+C to stop)..."(set_color normal)
-    python3 /home/s/Projects/python/products/automation/zip_open.py
+    _arka_aie_run zip_open.py
 end
 
 function internet_enhance --description "Artificial Internet Enhancements (AIE): automate desktop/internet helpers"
@@ -4153,22 +4839,27 @@ function internet_enhance --description "Artificial Internet Enhancements (AIE):
     end
     switch $argv[1]
         case help -h --help
-            echo "Usage: internet_enhance [status|start|stop|cleanup|list] [target]"
+            echo "Usage: internet_enhance [status|start|stop|stop-all|cleanup|list] [target]"
             echo "Alias: aie"
             echo ""
             echo "  status              Show running enhancers (default)"
-            echo "  start [all|name]    Start background helpers (click, copy, zip, classify)"
-            echo "  stop [all|name]     Stop background helpers"
+            echo "  start [all|name]    Start background helpers (zip, classify on all platforms)"
+            echo "  stop [all|name]     Stop background helpers (default: all)"
+            echo "  stop-all            Stop every running AIE enhancer"
             echo "  cleanup             Remove installer junk from Downloads"
             echo "  list                List enhancer ids"
             echo ""
             echo "Examples:"
             echo "  internet_enhance start all"
-            echo "  aie start click"
-            echo "  aie stop zip"
+            echo "  aie start zip classify"
+            echo "  aie stop all"
+            echo "  aie stop-all"
             return 0
         case status start stop cleanup list
             $py $_ARKA_ROOT/arka_aie.py $argv
+            return $status
+        case stop-all stop_all
+            $py $_ARKA_ROOT/arka_aie.py stop-all
             return $status
         case '*'
             echo (set_color red)"Unknown subcommand: $argv[1]"(set_color normal)
@@ -4201,11 +4892,15 @@ function youtube_bulk --description "Bulk download YouTube playlists/channels (y
             echo "  --channel                 Channel URL or @handle"
             echo "  --audio                   MP3 instead of video"
             echo "  --quality 1080|720|480"
-            echo "  --limit N                 Newest N videos (channels)"
+            echo "  --limit N                 First N items (or use --start/--end/--range)"
+            echo "  --start N                 First playlist index (1-based, inclusive)"
+            echo "  --end N                   Last playlist index (1-based, inclusive)"
+            echo "  --range A-B               Playlist slice, e.g. 6-9"
             echo "  --wait                    Block until finished"
             echo ""
             echo "Examples:"
             echo "  youtube_bulk download 'https://youtube.com/playlist?list=PLxxx' --wait"
+            echo "  youtube_bulk download PLxxx --range 6-9 --wait"
             echo "  yt_bulk download @mkbhd --channel --limit 5 --audio"
             echo "  youtube_bulk open"
             return 0
@@ -4441,6 +5136,7 @@ function youtube_transcript --description "Fetch or summarize a YouTube video tr
         echo "Usage: youtube_transcript <url|video-id> [--summarize] [-q question]"
         echo "Example: youtube_transcript 'https://youtube.com/watch?v=abc123'"
         echo "Example: youtube_transcript abc123 --summarize"
+        echo "No captions? Prompts to download audio + transcribe (or --yes-transcribe)"
         return 1
     end
     set -l py (_arka_python)
@@ -4504,6 +5200,8 @@ function playlist_summarize --description "Summarize a YouTube playlist URL or l
         echo "Usage: playlist_summarize --url <playlist-url> [--limit N] [-q question]"
         echo "       playlist_summarize --folder <downloaded-playlist-dir>"
         echo "Example: playlist_summarize --url 'https://youtube.com/playlist?list=...'"
+        echo "Example: arka summarize youtube PLu71SKxNbfoDqgPchmvIsL4hTnJIrtige --limit 5"
+        echo "Captions first; asks before download + local transcribe when missing"
         echo "Example: playlist_summarize --folder ~/Videos/YoutubeDownloads/MySeries"
         return 1
     end
@@ -4511,10 +5209,33 @@ function playlist_summarize --description "Summarize a YouTube playlist URL or l
     $py $_ARKA_ROOT/arka_batch_summarize.py playlist $argv
 end
 
+function _arka_youtube_tools_ready --description "Ensure yt-dlp is available for YouTube skills (internal)"
+    if command -v yt-dlp >/dev/null
+        return 0
+    end
+    set -l py (_arka_python)
+    set -l pip (dirname $py)/pip
+    test -x $pip; or set pip (dirname $py)/pip3
+    if test -x $pip
+        echo (set_color yellow)"Installing yt-dlp into Arka venv…"(set_color normal)
+        $pip install -q yt-dlp
+        command -v yt-dlp >/dev/null; and return 0
+        test -x (dirname $py)/yt-dlp; and return 0
+    end
+    if _arka_is_macos; and command -v brew >/dev/null
+        echo (set_color yellow)"yt-dlp not found — install with: brew install yt-dlp"(set_color normal)
+    else
+        echo (set_color yellow)"yt-dlp not found — install with: pip install yt-dlp"(set_color normal)
+    end
+    return 1
+end
+
 function youtube_research --description "Search YouTube, summarize all result transcripts into one research brief"
     if test (count $argv) -eq 0
         echo "Usage: youtube_research <search query> [--limit N] [--focus question] [--index] [--show-items]"
-        echo "Example: youtube_research \"how to fix hair loss\" --limit 8"
+        echo "Default: 2 videos (override with --limit N or 'analyze N videos on …')"
+        echo "Example: youtube_research \"how to fix hair loss\" --limit 5"
+        echo "Example: youtube_research \"analyze 3 videos on python asyncio\""
         echo "Example: youtube_research \"python asyncio tutorial\" --focus \"best practices for beginners\""
         echo "Example: youtube_research \"IPL 2025 highlights\" --index --ask \"who scored most runs\""
         echo ""
@@ -4527,8 +5248,8 @@ function youtube_research --description "Search YouTube, summarize all result tr
         $py $_ARKA_ROOT/arka_youtube_research.py list
         return $status
     end
-    if test "$argv[1]" = check verify test
-        $py $_ARKA_ROOT/arka_youtube_research.py check
+    if contains -- check verify test -- "$argv[1]"
+        _arka_local_test $_ARKA_ROOT/local/tests/test_youtube_pipeline.py
         return $status
     end
     if test "$argv[1]" = ask
@@ -4539,6 +5260,7 @@ function youtube_research --description "Search YouTube, summarize all result tr
         $py $_ARKA_ROOT/arka_youtube_research.py ask $argv[2] $argv[3..-1]
         return $status
     end
+    _arka_youtube_tools_ready; or return 1
     $py $_ARKA_ROOT/arka_youtube_research.py search $argv
 end
 
@@ -4566,7 +5288,156 @@ function daily_brief --description "Morning brief: local weather + top news head
     web_answer "Give 5 brief top news headlines for today in bullet points, India and world mix"
 end
 
+function _arka_wifi_iface --description "Wi-Fi device name (macOS, internal)"
+    set -l want 0
+    for line in (networksetup -listallhardwareports 2>/dev/null)
+        if string match -q "Hardware Port: Wi-Fi" -- "$line"
+            set want 1
+            continue
+        end
+        if test $want -eq 1
+            set -l dev (string match -r 'Device:\s+(\S+)' "$line")
+            if test (count $dev) -ge 2
+                echo $dev[2]
+                return
+            end
+        end
+    end
+    echo en0
+end
+
+function _arka_macos_wifi_profiler --description "Wi-Fi details from system_profiler JSON (macOS, internal)"
+    set -l iface $argv[1]
+    set -l py (_arka_python)
+    $py -c '
+import json, subprocess, sys
+iface = sys.argv[1]
+proc = subprocess.run(
+    ["system_profiler", "SPAirPortDataType", "-json"],
+    capture_output=True, text=True, timeout=30,
+)
+if proc.returncode != 0 or not proc.stdout.strip():
+    sys.exit(1)
+data = json.loads(proc.stdout)
+sec_labels = {
+    "spairport_security_mode_wpa2_personal": "WPA2 Personal",
+    "spairport_security_mode_wpa3_personal": "WPA3 Personal",
+    "spairport_security_mode_wpa2_enterprise": "WPA2 Enterprise",
+    "spairport_security_mode_wpa_personal": "WPA Personal",
+    "spairport_security_mode_wep": "WEP",
+    "spairport_security_mode_none": "Open",
+}
+for item in data.get("SPAirPortDataType", []):
+    for wi in item.get("spairport_airport_interfaces", []):
+        if wi.get("_name") != iface:
+            continue
+        cur = wi.get("spairport_current_network_information")
+        if not isinstance(cur, dict) or not cur.get("_name"):
+            sys.exit(1)
+        ssid = cur.get("_name", "")
+        sig = cur.get("spairport_signal_noise", "")
+        rssi = noise = ""
+        if sig:
+            parts = sig.replace(" dBm", "").split(" / ")
+            if len(parts) == 2:
+                rssi, noise = parts
+        channel = cur.get("spairport_network_channel", "")
+        sec = sec_labels.get(
+            cur.get("spairport_security_mode", ""),
+            str(cur.get("spairport_security_mode", "")).replace("spairport_security_mode_", "").replace("_", " ").title(),
+        )
+        print("\t".join([ssid, rssi, noise, channel, sec]))
+        sys.exit(0)
+sys.exit(1)
+' $iface 2>/dev/null
+end
+
+function _arka_macos_wifi_info --description "Current Wi-Fi on macOS (internal)"
+    set -l iface (_arka_wifi_iface)
+    set -l airport /System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport
+    set -l ssid ""
+    set -l rssi ""
+    set -l noise ""
+    set -l channel ""
+    set -l security ""
+
+    if test -x $airport
+        for line in (string split \n ($airport -I 2>/dev/null))
+            if string match -qr '^\s*SSID:\s+' "$line"
+                set ssid (string replace -r '^\s*SSID:\s+' '' "$line" | string trim)
+            else if string match -qr '^\s*agrCtlRSSI:\s+' "$line"
+                set rssi (string replace -r '^\s*agrCtlRSSI:\s+' '' "$line" | string trim)
+            else if string match -qr '^\s*agrCtlNoise:\s+' "$line"
+                set noise (string replace -r '^\s*agrCtlNoise:\s+' '' "$line" | string trim)
+            else if string match -qr '^\s*channel:\s+' "$line"
+                set channel (string replace -r '^\s*channel:\s+' '' "$line" | string trim)
+            else if string match -qr '^\s*link auth:\s+' "$line"
+                set security (string replace -r '^\s*link auth:\s+' '' "$line" | string trim)
+            end
+        end
+    end
+
+    if test -z "$ssid"
+        set -l netline (networksetup -getairportnetwork $iface 2>/dev/null | string trim)
+        if string match -qr '^Current Wi-Fi Network:\s+' "$netline"
+            set ssid (string replace -r '^Current Wi-Fi Network:\s+' '' "$netline" | string trim)
+        end
+    end
+
+    if test -z "$ssid"; or test -z "$rssi"
+        set -l prow (_arka_macos_wifi_profiler $iface)
+        if test (count $prow) -ge 1; and test -n "$prow[1]"
+            set -l parts (string split \t "$prow[1]")
+            if test -z "$ssid"; and test (count $parts) -ge 1
+                set ssid $parts[1]
+            end
+            if test -z "$rssi"; and test (count $parts) -ge 2; and test -n "$parts[2]"
+                set rssi $parts[2]
+            end
+            if test -z "$noise"; and test (count $parts) -ge 3; and test -n "$parts[3]"
+                set noise $parts[3]
+            end
+            if test -z "$channel"; and test (count $parts) -ge 4; and test -n "$parts[4]"
+                set channel $parts[4]
+            end
+            if test -z "$security"; and test (count $parts) -ge 5; and test -n "$parts[5]"
+                set security $parts[5]
+            end
+        end
+    end
+
+    if test -z "$ssid"
+        echo "Not connected to Wi-Fi (interface $iface)"
+        return 1
+    end
+
+    echo (set_color --bold blue)"━━━ Wi-Fi ━━━"(set_color normal)
+    echo "  Interface: $iface"
+    echo "  Network:   $ssid"
+    if test -n "$rssi"
+        echo "  Signal:    $rssi dBm"
+    end
+    if test -n "$noise"
+        echo "  Noise:     $noise dBm"
+    end
+    if test -n "$channel"
+        echo "  Channel:   $channel"
+    end
+    if test -n "$security"
+        echo "  Security:  $security"
+    end
+    set -l ip (ipconfig getifaddr $iface 2>/dev/null)
+    if test -n "$ip"
+        echo "  IP:        $ip"
+    end
+    return 0
+end
+
 function wifi_info --description "Show current Wi-Fi network and signal strength"
+    if _arka_is_macos
+        _arka_macos_wifi_info
+        return $status
+    end
     if command -v nmcli >/dev/null
         set -l line (nmcli -t -f ACTIVE,SSID,SIGNAL,SECURITY dev wifi | string match -r '^yes:.*' | head -1)
         if test -n "$line"
@@ -4586,7 +5457,7 @@ function wifi_info --description "Show current Wi-Fi network and signal strength
         cat /proc/net/wireless
         return 0
     end
-    echo (set_color red)"nmcli not found; install NetworkManager tools"(set_color normal)
+    echo (set_color red)"Wi-Fi info unavailable (install NetworkManager/nmcli on Linux)"(set_color normal)
     return 1
 end
 
@@ -4678,9 +5549,17 @@ end
 function disk_breakdown --description "Show disk space used by videos, pictures, documents, etc."
     set -l target $HOME
     if test (count $argv) -ge 1
-        set target $argv[1]
+        set -l first $argv[1]
+        if contains -- $first usage breakdown
+            if test (count $argv) -ge 2
+                set target $argv[2]
+            end
+        else
+            set target $first
+        end
     end
-    set -l out (python3 $_ARKA_ROOT/arka_disk.py breakdown "$target" 2>&1)
+    set -l py (_arka_python)
+    set -l out ($py $_ARKA_ROOT/arka_disk.py breakdown "$target" 2>&1)
     if test $status -ne 0
         echo (set_color red)"$out"(set_color normal)
         return 1
@@ -4933,6 +5812,13 @@ function _arka_print_answer_block --description "Green header + styled answer (i
     printf '%s%s%s\n' (set_color --bold green) "━━━ $title ━━━" (set_color normal)
     echo ""
     _arka_print_answer "$answer"
+    set -l model (_arka_llm_model_label 2>/dev/null)
+    if test -n "$model"
+        echo ""
+        set_color brblack
+        echo "  Model: $model"
+        set_color normal
+    end
 end
 
 function pdf_ask --description "Ask or summarize ingested documents; optional --doc to pick one file"
@@ -5187,19 +6073,8 @@ function generate_password --description "Generate secure passwords; store/retri
     set -l vault $_ARKA_ROOT/arka_password_vault.py
 
     if test (count $argv) -eq 0
-        set -l length 16
-        set -l password (tr -dc 'A-Za-z0-9!@#$%^&*()_+-=' < /dev/urandom | head -c $length)
-        echo (set_color --bold blue)"━━━ Password Generator ━━━"(set_color normal)
-        echo (set_color --bold green)"  $password"(set_color normal)
-        echo (set_color brblack)"  Length: $length characters (one-time, not saved)"(set_color normal)
-        if command -v xclip &>/dev/null
-            printf '%s' "$password" | xclip -selection clipboard
-            echo (set_color brblack)"  ✓ Copied to clipboard"(set_color normal)
-        end
-        echo ""
-        echo "Save with a name: generate_password save <name> [length]"
-        echo "Store your own:  generate_password set <name> <password>"
-        return 0
+        _arka_generate_password_once 16
+        return $status
     end
 
     switch $argv[1]
@@ -5223,10 +6098,10 @@ function generate_password --description "Generate secure passwords; store/retri
                 set -l pwd (string join " " $argv[3..-1])
             end
             set -l out ($py $vault set $name --password "$pwd" 2>&1)
-            set -l status $status
-            if test $status -ne 0
+            set -l exit_st $status
+            if test $exit_st -ne 0
                 echo $out
-                return $status
+                return $exit_st
             end
             echo (set_color --bold blue)"━━━ Password stored ━━━"(set_color normal)
             echo (set_color cyan)"  Name:  "(set_color normal)"$name"
@@ -5244,10 +6119,10 @@ function generate_password --description "Generate secure passwords; store/retri
                 set length $argv[3]
             end
             set -l out ($py $vault generate $name --length $length 2>&1)
-            set -l status $status
-            if test $status -ne 0
+            set -l exit_st $status
+            if test $exit_st -ne 0
                 echo $out
-                return $status
+                return $exit_st
             end
             set -l pwd ""
             for line in $out
@@ -5259,8 +6134,7 @@ function generate_password --description "Generate secure passwords; store/retri
             echo (set_color cyan)"  Name:   "(set_color normal)"$name"
             echo (set_color --bold green)"  Secret: $pwd"(set_color normal)
             echo (set_color brblack)"  Vault:  ~/.cache/fish-agent/passwords.vault.json (encrypted)"(set_color normal)
-            if command -v xclip &>/dev/null
-                printf '%s' "$pwd" | xclip -selection clipboard
+            if _arka_copy_to_clipboard "$pwd"
                 echo (set_color brblack)"  ✓ Copied to clipboard"(set_color normal)
             end
         case get show retrieve
@@ -5288,8 +6162,7 @@ function generate_password --description "Generate secure passwords; store/retri
             if test -n "$updated"
                 echo (set_color brblack)"  Updated: $updated"(set_color normal)
             end
-            if command -v xclip &>/dev/null; and test -n "$pwd"
-                printf '%s' "$pwd" | xclip -selection clipboard
+            if test -n "$pwd"; and _arka_copy_to_clipboard "$pwd"
                 echo (set_color brblack)"  ✓ Copied to clipboard"(set_color normal)
             end
         case list ls
@@ -5322,8 +6195,7 @@ function generate_password --description "Generate secure passwords; store/retri
             end
             if test -n "$pwd"
                 echo (set_color --bold green)"  New password: $pwd"(set_color normal)
-                if command -v xclip &>/dev/null
-                    printf '%s' "$pwd" | xclip -selection clipboard
+                if _arka_copy_to_clipboard "$pwd"
                     echo (set_color brblack)"  ✓ Copied to clipboard"(set_color normal)
                 end
             end
@@ -5337,13 +6209,7 @@ function generate_password --description "Generate secure passwords; store/retri
             echo "       generate_password rotate <name> [length]  — new password, same name"
         case '*'
             if string match -qr '^[0-9]+$' -- $argv[1]
-                set -l length $argv[1]
-                set -l password (tr -dc 'A-Za-z0-9!@#$%^&*()_+-=' < /dev/urandom | head -c $length)
-                echo (set_color --bold green)"  $password"(set_color normal)
-                if command -v xclip &>/dev/null
-                    printf '%s' "$password" | xclip -selection clipboard
-                    echo (set_color brblack)"  ✓ Copied to clipboard"(set_color normal)
-                end
+                _arka_generate_password_once $argv[1]
             else
                 echo "Unknown subcommand: $argv[1]  (try: save, set, get, list, delete, rotate)"
                 return 1
@@ -5387,16 +6253,36 @@ function ip_info --description "Show public IP and geolocation"
     end
 end
 
+function _arka_stock_project_dir --description "stock_analysis project root (internal)"
+    if set -q ARKA_STOCK_PROJECT; and test -d "$ARKA_STOCK_PROJECT"
+        echo $ARKA_STOCK_PROJECT
+        return
+    end
+    set -l default ~/Projects/python/products/stock_analysis
+    echo $default
+end
+
 function stock_analysis --description "Stock market intelligence (stock_analysis project)"
     set -l bridge $_ARKA_ROOT/arka_stock_bridge.py
     set -l py (_arka_python)
+    set -l stock_dir (_arka_stock_project_dir)
     if test (count $argv) -eq 0
-        cd /home/s/Projects/python/products/stock_analysis
+        if test -d "$stock_dir"
+            cd "$stock_dir"
+        else
+            echo (set_color yellow)"stock_analysis project not found:"(set_color normal) "$stock_dir"
+            echo "Set ARKA_STOCK_PROJECT in .env or clone the project there."
+        end
         return
     end
     switch $argv[1]
         case cd
-            cd /home/s/Projects/python/products/stock_analysis
+            if test -d "$stock_dir"
+                cd "$stock_dir"
+            else
+                echo (set_color red)"✗ Not found:"(set_color normal) "$stock_dir"
+                return 1
+            end
         case news prices policy strategy volatility dashboard context path
             $py $bridge $argv[1] $argv[2..-1]
         case analyze
@@ -5636,6 +6522,23 @@ try:
 except Exception as e:
     print('  \033[91m✗ Error fetching crypto prices: ' + str(e) + '\033[0m')
 " "$coins"
+end
+
+function sports_score --description "Live sports scores — IPL, cricket, NFL, NBA, soccer, F1, …"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        $py $_ARKA_ROOT/arka_sports.py live
+        return $status
+    end
+    if test "$argv[1]" = leagues -o "$argv[1]" = list
+        $py $_ARKA_ROOT/arka_sports.py leagues
+        return $status
+    end
+    $py $_ARKA_ROOT/arka_sports.py live (string join " " $argv)
+end
+
+function live_scores --description "Alias for sports_score"
+    sports_score $argv
 end
 
 function pomodoro --description "A simple Pomodoro timer with progress bar"
@@ -5932,6 +6835,10 @@ function open_app --description "Search and open the closest matching desktop ap
 end
 
 function install_skill_deps --description "Install all system dependencies for agent skills"
+    if not _arka_is_linux
+        _arka_install_python_deps
+        return $status
+    end
     echo (set_color --bold blue)"━━━ Installing Skill Dependencies ━━━"(set_color normal)
     echo (set_color cyan)"This will install: curl, jq, xclip, git, playerctl, mpv, gnome-screenshot, scrot, speedtest-cli, iproute2, net-tools, imagemagick, lsb-release, bat, eza, qrencode, libnotify-bin"(set_color normal)
     
@@ -5948,6 +6855,35 @@ function install_skill_deps --description "Install all system dependencies for a
     mkdir -p $_ARKA_ROOT
     touch $_ARKA_ROOT/.skills_setup_done
     echo (set_color --bold green)"✓ Dependencies installed successfully."(set_color normal)
+end
+
+function _arka_install_python_deps --description "Install Python packages for Arka on macOS/non-Linux (internal)"
+    set -l py (_arka_python)
+    set -l pip (dirname $py)/pip
+    if not test -x $pip
+        set pip (dirname $py)/pip3
+    end
+    echo (set_color --bold blue)"━━━ Installing Arka Python Dependencies ━━━"(set_color normal)
+    if test -f $_ARKA_ROOT/arka_chat_requirements.txt
+        echo (set_color cyan)"Chat / web / LLM deps…"(set_color normal)
+        $pip install -r $_ARKA_ROOT/arka_chat_requirements.txt
+    end
+    if test -f $_ARKA_ROOT/arka_turboquant_requirements.txt
+        echo (set_color cyan)"RAG numeric deps (numpy, scipy)…"(set_color normal)
+        $pip install -r $_ARKA_ROOT/arka_turboquant_requirements.txt
+    end
+    echo (set_color cyan)"Neural TTS (edge-tts)…"(set_color normal)
+    $pip install -q edge-tts
+    echo (set_color cyan)"YouTube tools (yt-dlp)…"(set_color normal)
+    $pip install -q yt-dlp
+    echo (set_color cyan)"AssemblyAI STT (arka listen)…"(set_color normal)
+    $pip install -q 'assemblyai>=0.64.0'
+    echo (set_color cyan)"TurboQuant vector search…"(set_color normal)
+    rag_setup
+    mkdir -p $_ARKA_ROOT
+    touch $_ARKA_ROOT/.skills_setup_done
+    echo (set_color --bold green)"✓ Python dependencies installed."(set_color normal)
+    echo (set_color brblack)"Optional: pip install playwright && playwright install chromium  (browse_web)"(set_color normal)
 end
 
 function browse_web --description "Automate web browser with natural language"
@@ -6127,26 +7063,8 @@ Include a --description on the function.
 Add colors and a nice banner or icons for output so it feels premium and looks amazing in the terminal.
 Respond with ONLY the raw Fish shell function code. No markdown, no backticks, no explanations."
 
-    set -l escaped_system (printf '%s' "$system_prompt" | _json_escape)
-    set -l escaped_user (printf 'Create Fish function for skill "%s" described as: %s' "$skill_name" "$skill_desc" | _json_escape)
-    set -l code ""
-
-    if test -n "$GEMINI_API_KEY"
-        set -l json_payload "{\"contents\":[{\"parts\":[{\"text\":\"$escaped_user\"}]}],\"system_instruction\":{\"parts\":[{\"text\":\"$escaped_system\"}]}}"
-        set -l resp (curl -s "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$GEMINI_API_KEY" \
-            -H 'Content-Type: application/json' \
-            -X POST -d "$json_payload")
-        set code (echo $resp | jq -r '.candidates[0].content.parts[0].text // empty' | string trim | string replace -r '^```fish\s*' '' | string replace -r '^```\s*' '' | string replace -r '\s*```$' '')
-    end
-
-    if test -z "$code" -a -n "$GROQ_API_KEY"
-        echo (set_color yellow)"⚠️ Gemini API rate-limited or failed. Falling back to Groq..."(set_color normal)
-        set -l resp (curl -s "https://api.groq.com/openai/v1/chat/completions" \
-            -H "Authorization: Bearer $GROQ_API_KEY" \
-            -H 'Content-Type: application/json' \
-            -X POST -d "{\"model\":\"llama-3.3-70b-versatile\",\"messages\":[{\"role\":\"system\",\"content\":\"$escaped_system\"},{\"role\":\"user\",\"content\":\"$escaped_user\"}]}")
-        set code (echo $resp | jq -r '.choices[0].message.content // empty' | string trim | string replace -r '^```fish\s*' '' | string replace -r '^```\s*' '' | string replace -r '\s*```$' '')
-    end
+    set -l user_prompt "Create Fish function for skill \"$skill_name\" described as: $skill_desc"
+    set -l code (_agent_clean_llm_output (_agent_llm_complete "$system_prompt" "$user_prompt" 0.2 agent))
 
     if test -z "$code"
         echo (set_color red)"✗ Failed to generate skill code. Check API keys and connection."(set_color normal)
@@ -6332,12 +7250,17 @@ function _agent_parse_install_uv --description "NL install -> install_uv command
 end
 
 function _agent_system_context --description "Brief hardware/OS summary for advisory AI answers (internal)"
-    set -l cpu (grep -m1 'model name' /proc/cpuinfo 2>/dev/null | cut -d: -f2 | string trim)
-    set -l cores (grep -c '^processor' /proc/cpuinfo 2>/dev/null)
-    set -l ram (free -h 2>/dev/null | awk '/Mem:/ {print $2 " total, " $3 " used"}')
+    set -l cpu (_arka_sys_cpu)
+    set -l cores ""
+    if _arka_is_macos
+        set cores (sysctl -n hw.ncpu 2>/dev/null)
+    else
+        set cores (grep -c '^processor' /proc/cpuinfo 2>/dev/null)
+    end
+    set -l ram (_arka_sys_ram)
     set -l disk (df -h / 2>/dev/null | awk 'NR==2 {print $2 " total, " $3 " used (" $5 ")"}')
-    set -l os (lsb_release -ds 2>/dev/null; or grep PRETTY_NAME /etc/os-release 2>/dev/null | cut -d= -f2 | tr -d '"')
-    set -l gpu (lspci 2>/dev/null | string match -r 'VGA|3D|Display' | head -1 | string replace -r '.*: ' '')
+    set -l os (_arka_sys_os)
+    set -l gpu (_arka_sys_gpu)
     printf '%s\n' "OS: $os" "CPU: $cpu ($cores cores)" "RAM: $ram" "Disk (/): $disk" "GPU: $gpu"
 end
 
@@ -6370,6 +7293,18 @@ function _agent_parse_media_path --description "Extract media file path from NL 
     if test (count $m2) -ge 2
         echo $m2[2]
     end
+end
+
+function _agent_is_file_size_find --description "True if NL is find-files-by-size (internal)"
+    set -l clean (string lower "$argv[1]")
+    if not string match -qr '(?i)(find|search|list|show)\s+.*\bfiles?\b' "$clean"
+        return 1
+    end
+    string match -qr '(?i)(less|more|greater|larger|smaller|lesser|under|over|above|below|bigger)(\s+than)?|\d+\s*(kb|mb|gb)\b' "$clean"
+end
+
+function _agent_route_file_size_find --description "Map NL to find_files_by_size (internal)"
+    echo "find_files_by_size $argv[1]"
 end
 
 function _agent_route_media --description "Map media transcribe NL to media_transcript command (internal)"
@@ -6441,12 +7376,68 @@ function _agent_is_folder_summarize_request --description "True if user wants fo
 end
 
 function _agent_is_youtube_research_request --description "True if user wants YouTube search + transcript research (internal)"
-    string match -qr '(?i)(research|search|summarize|summary|digest).*(on\s+)?youtube|youtube.*(research|search|summarize)|summarize.*youtube.*(videos?|results?|about)|yt\s+research' "$argv[1]"
+    set -l cmd $argv[1]
+    string match -qr '(?i)(research|search|summarize|summary|digest).*(on\s+)?youtube|youtube.*(research|search|summarize)|summarize.*youtube.*(videos?|results?|about)|yt\s+research' "$cmd"
+    or string match -qr '(?i)(analyze|analyse|study|review)\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(youtube\s+)?videos?' "$cmd"
+    or string match -qr '(?i)\b(\d+|one|two|three|four|five)\s+(youtube\s+)?videos?\s+(on|about|for|of)\b' "$cmd"
+end
+
+function _agent_youtube_limit_digit --description "Convert limit token to number for --limit (internal)"
+    set -l tok (string lower (string trim -- "$argv[1]"))
+    switch $tok
+        case one a an; echo 1
+        case two; echo 2
+        case three; echo 3
+        case four; echo 4
+        case five; echo 5
+        case six; echo 6
+        case seven; echo 7
+        case eight; echo 8
+        case nine; echo 9
+        case ten; echo 10
+        case eleven; echo 11
+        case twelve; echo 12
+        case '*'
+            if string match -qr '^[0-9]+$' -- $tok
+                echo $tok
+            end
+    end
+end
+
+function _agent_parse_youtube_research_limit --description "Extract video count from YouTube research NL (internal)"
+    set -l cmd $argv[1]
+    set -l m (string match -r '(?i)(?:analyze|analyse|research|summarize|study|review)\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+videos?' "$cmd")
+    if test (count $m) -ge 2
+        _agent_youtube_limit_digit $m[2]
+        return
+    end
+    set -l m2 (string match -r '(?i)\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+videos?\s+(?:on|about|for|of)\b' "$cmd")
+    if test (count $m2) -ge 2
+        _agent_youtube_limit_digit $m2[2]
+    end
+end
+
+function _agent_build_youtube_research_cmd --description "Build youtube_research skill invocation (internal)"
+    set -l cmd $argv[1]
+    set -l yq (_agent_parse_youtube_research_query "$cmd")
+    set -l ylimit (_agent_parse_youtube_research_limit "$cmd")
+    if test -z "$yq"
+        echo "youtube_research"
+        return
+    end
+    if test -n "$ylimit"
+        echo "youtube_research $yq --limit $ylimit --index"
+    else
+        echo "youtube_research $yq --index"
+    end
 end
 
 function _agent_parse_youtube_research_query --description "Extract search query from YouTube research NL (internal)"
     set -l cmd (string trim -- "$argv[1]")
     set -l q $cmd
+    set q (string replace -r -i '^.*?\b(?:analyze|analyse|study|review|research|summarize)\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+(?:youtube\s+)?videos?\s+(?:on|about|for|of)?\s*' '' "$q")
+    set q (string replace -r -i '^.*?\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:youtube\s+)?videos?\s+(?:on|about|for|of)\s+' '' "$q")
+    set q (string replace -r -i '^.*?\b(?:do\s+(?:a\s+|an\s+)?)?youtube\s+research\s+(?:about\s+|on\s+|for\s+)?' '' "$q")
     set q (string replace -r -i '^.*\byoutube\s+research\s+(?:about\s+|on\s+|for\s+)?' '' "$q")
     set q (string replace -r -i '^.*\bresearch\s+(?:on\s+)?youtube\s+(?:about\s+|on\s+|for\s+)?' '' "$q")
     set q (string replace -r -i '^.*\bsearch\s+youtube\s+(?:for\s+|about\s+)?' '' "$q")
@@ -6516,7 +7507,7 @@ function _agent_is_pdf_question --description "True if user wants to query inges
     set -l parsed ($py $_ARKA_ROOT/arka_pdf_rag.py parse-ask "$argv[1]" 2>/dev/null)
     if test $status -eq 0 -a -n "$parsed"
         set -l parts (string split \t "$parsed")
-        if test (count $parts) -ge 3 -a -n "$parts[2]" -a -n "$parts[3]"
+        if test (count $parts) -ge 3 -a -n "$parts[1]" -a -n "$parts[3]"
             return 0
         end
     end
@@ -6620,7 +7611,108 @@ function _agent_normalize_knowledge_q --description "Strip tell/explain prefixes
     echo (string trim -- "$q")
 end
 
+function _agent_is_places_question --description "True if user asks about tourist places / attractions in a city (internal)"
+    set -l clean (string lower "$argv[1]")
+    if string match -qr '(?i)\b(top\s+\d+|best|famous|must[\s-]visit|tourist|popular|iconic)\b.*\b(in|at|near|around)\b' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)\b(places|attractions|sightseeing|landmarks|things\s+to\s+do)\b.*\b(in|at|near|around|to\s+visit)\b' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)^(top\s+\d+\s+)?places\s+(in|to\s+visit\s+in)\s+' "$clean"
+        return 0
+    end
+    return 1
+end
+
+function _agent_parse_hardware_component --description "gpu|cpu|ram|disk|os|ip|kernel|all from NL (internal)"
+    set -l clean (string lower (string trim -- "$argv[1]"))
+    if string match -qr '(?i)\b(gpu|graphics(\s+card)?|video\s+card|display\s+card)\b' "$clean"
+        echo gpu
+    else if string match -qr '(?i)\b(cpu|processor|chip(set)?)\b' "$clean"
+        echo cpu
+    else if string match -qr '(?i)\b(ram|memory)\b' "$clean"
+        echo ram
+    else if string match -qr '(?i)\b(disk|storage|hard\s+drive|ssd)\b' "$clean"
+        echo disk
+    else if string match -qr '(?i)\b(ip\s+address|\bip\b)\b' "$clean"
+        echo ip
+    else if string match -qr '(?i)\b(kernel|os|operating\s+system)\b' "$clean"
+        echo os
+    else
+        echo all
+    end
+end
+
+function _agent_is_hardware_fact_question --description "True for pinpoint my gpu/cpu/ram questions (internal)"
+    set -l clean (string lower (string trim -- "$argv[1]"))
+    test -z "$clean"; and return 1
+    if string match -qr '(?i)(good\s+enough|worth\s+(it|upgrading)|should\s+i|can\s+i\s+run|will\s+it\s+run|recommend|compare|versus|\bvs\.?\b|bottleneck|outdated|too\s+old|too\s+slow|malware|infected|hacked|compromised)' "$clean"
+        return 1
+    end
+    if string match -qr '(?i)(tell\s+(me\s+)?(what\s+(is\s+)?)?(my|the)\s+(gpu|graphics|cpu|processor|ram|memory|disk|storage|ip|kernel|os)|^(what|which)\s+(gpu|graphics|cpu|processor|ram|memory|disk|storage|ip|kernel|os)\b|(my|this)\s+(gpu|graphics(\s+card)?|cpu|processor|ram|memory|disk|storage|ip)\s*$|how\s+much\s+(ram|memory|disk|storage)\b|what\s+(gpu|graphics|cpu|processor|ram|memory)\s+(do\s+i\s+have|is\s+(this|in|installed)))' "$clean"
+        return 0
+    end
+    return 1
+end
+
+function _agent_is_system_info_question --description "True if user wants local machine specs (not opinion/advice)"
+    if _agent_is_hardware_fact_question "$argv[1]"
+        return 0
+    end
+    set -l clean (string lower (string trim -- "$argv[1]"))
+    test -z "$clean"; and return 1
+    if string match -qr '(?i)(good\s+enough|worth\s+(it|upgrading)|should\s+i|can\s+i\s+run|will\s+it\s+run|recommend|compare|versus|\bvs\.?\b|bottleneck|outdated|too\s+old|too\s+slow|malware|infected|hacked|compromised)' "$clean"
+        return 1
+    end
+    if string match -qr '(?i)(system\s*info|system\s*information|\bos\s+info\b)' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)(specs?|specifications|hardware)\s+(of|for|on)\s+(my|this|the)\s+(pc|mac|macbook|imac|machine|computer|laptop|system)' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)^(show|get|list|give)\s+(me\s+)?(the\s+)?(specs?|specifications|hardware)\s+(of|for)\s+(my|this)' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)(tell\s+(me\s+)?about|describe|show\s+(me\s+)?|what\s+(are|is))\s+(my\s+|this\s+)?(mac|macbook|imac|machine|computer|laptop|pc|system|hardware|specs?)' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)(my|this)\s+(mac|macbook|imac|machine|computer|laptop|pc|system)\s+(specs?|specifications|info|details|hardware|configuration)' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)^about\s+my\s+(mac|macbook|machine|computer|laptop|pc|system)\s*$' "$clean"
+        return 0
+    end
+    return 1
+end
+
+function _agent_run_skill_line --description "Run one skill string like 'system_info gpu' (internal)"
+    set -l line (string trim -- "$argv[1]")
+    test -z "$line"; and return 1
+    set -l tokens (string split " " -- "$line")
+    set -l fn $tokens[1]
+    set -e tokens[1]
+    if test (count $tokens) -gt 0
+        $fn $tokens
+    else
+        $fn
+    end
+    return $status
+end
+
+function _agent_route_system_info --description "Route to system_info or system_info <component> (internal)"
+    set -l cmd "$argv[1]"
+    if _agent_is_hardware_fact_question "$cmd"
+        echo "system_info "(_agent_parse_hardware_component "$cmd")
+    else
+        echo "system_info"
+    end
+end
+
 function _agent_is_knowledge_question --description "True if user wants a factual answer, not a browser search"
+    if _agent_is_system_info_question "$argv[1]"
+        return 1
+    end
     if _agent_is_usage_question "$argv[1]"
         return 1
     end
@@ -6631,8 +7723,8 @@ function _agent_is_knowledge_question --description "True if user wants a factua
     if string match -qr '(?i)(google|search\s+(the\s+)?web|search\s+online|look\s+up\s+online|open\s+.*search|\bsearch\s+for\b|\bfind\s+on\s+google\b)' "$clean"
         return 1
     end
-    # Personal / system questions belong in agent_ask, not web_answer
-    if string match -qr '(?i)\b(my|should\s+i|can\s+i|do\s+i|am\s+i|this\s+(pc|computer|system|machine|cpu|gpu|laptop)|my\s+(cpu|gpu|ram|disk|pc|computer|system|driver|terminal|shell))\b' "$clean"
+    # Personal / system questions belong in agent_ask or system_info, not web_answer
+    if string match -qr '(?i)\b(my|should\s+i|can\s+i|do\s+i|am\s+i|this\s+(pc|computer|system|machine|mac|macbook|laptop)|my\s+(cpu|gpu|ram|disk|pc|computer|system|driver|terminal|shell|mac|macbook|machine|laptop))\b' "$clean"
         return 1
     end
     if string match -qr '(?i)(outdated|too\s+old|too\s+slow|good\s+enough|worth\s+upgrad|bottleneck|malware|infected|hacked|compromised|specs?\s+for\s+my)' "$clean"
@@ -6646,6 +7738,9 @@ function _agent_is_knowledge_question --description "True if user wants a factua
 end
 
 function _agent_is_advisory_question --description "True if user wants an opinion/answer, not a metrics dump"
+    if _agent_is_system_info_question "$argv[1]"
+        return 1
+    end
     if _agent_is_knowledge_question "$argv[1]"
         return 1
     end
@@ -6687,6 +7782,9 @@ end
 function _agent_is_general_chat --description "True if plain conversational input, not shell/skill"
     set -l clean (string lower (string trim -- "$argv[1]"))
     test -z "$clean"; and return 1
+    if _agent_is_system_info_question "$argv[1]"
+        return 1
+    end
     set -l exts (_agent_doc_ext_pattern)
     if string match -qr "(?i)\\.(?:$exts)\\b" "$clean"
         return 1
@@ -6706,7 +7804,7 @@ function _agent_is_general_chat --description "True if plain conversational inpu
     if _agent_is_youtube_download_request "$argv[1]"
         return 1
     end
-    if string match -qr '(?i)^(install|play|open|run|create|download|search|list|show|fix|set|take|timer|weather|pdf|ingest|screenshot|spotify|whatsapp|send|loop|agent_|generate_image|generate_video|generate_password|predictions|stock|translate|cheat|excuse|bored)\b' "$clean"
+    if string match -qr '(?i)^(install|play|open|run|create|download|search|list|show|fix|set|take|timer|remind|weather|pdf|ingest|screenshot|spotify|whatsapp|send|loop|agent_|generate_image|generate_video|generate_password|predictions|stock|translate|cheat|excuse|bored)\b' "$clean"
         return 1
     end
     if string match -qr '(?i)^(generate|create|make)\s+(?:a |an |the |me )?(?:new )?(password|passcode)\b' "$clean"
@@ -6754,10 +7852,36 @@ end
 
 function _agent_route_general_chat --description "Pick web_answer vs agent_ask for conversational input (internal)"
     set -l cmd "$argv[1]"
-    if string match -qr '(?i)\b(my|this pc|my pc|my computer|my cpu|my gpu|my system|my laptop|my terminal|my shell|malware|infected|hacked|compromised)\b' "$cmd"
+    if _agent_is_system_info_question "$cmd"
+        echo (_agent_route_system_info "$cmd")
+    else if string match -qr '(?i)\b(my|this pc|my pc|my computer|my cpu|my gpu|my system|my laptop|my mac|my macbook|my machine|this mac|my terminal|my shell|malware|infected|hacked|compromised)\b' "$cmd"
         echo "agent_ask $cmd"
     else
         echo "web_answer $cmd"
+    end
+end
+
+function _agent_is_whatsapp_inbox_request --description "True if user wants WhatsApp inbox listener"
+    string match -qr '(?i)(whatsapp\s+inbox|inbox\s+whatsapp|whatsapp\s+listen|listen\s+whatsapp)' "$argv[1]"
+end
+
+function _agent_route_whatsapp_inbox --description "Map NL to whatsapp_listen command"
+    set -l cmd "$argv[1]"
+    if not _agent_is_whatsapp_inbox_request "$cmd"
+        return 1
+    end
+    if string match -qr '(?i)\bstop\b' "$cmd"
+        echo "whatsapp_listen stop"
+    else if string match -qr '(?i)\b(status|state)\b' "$cmd"
+        echo "whatsapp_listen status"
+    else if string match -qr '(?i)\b(fg|foreground)\b' "$cmd"
+        echo "whatsapp_listen fg"
+    else if string match -qr '(?i)\bdebug\b' "$cmd"
+        echo "whatsapp_listen debug"
+    else if string match -qr '(?i)\blog\b' "$cmd"
+        echo "whatsapp_listen log"
+    else
+        echo "whatsapp_listen"
     end
 end
 
@@ -6772,6 +7896,8 @@ function _agent_route_aie --description "Map AIE natural language to internet_en
     end
     if string match -qr '(?i)\bstart\b' "$cmd"
         echo "internet_enhance start all"
+    else if string match -qr '(?i)\b(stop\s+all|stop-all|stop\s+everything|kill\s+all|turn\s+off\s+all)\b' "$cmd"
+        echo "internet_enhance stop-all"
     else if string match -qr '(?i)\bstop\b' "$cmd"
         echo "internet_enhance stop all"
     else if string match -qr '(?i)\bcleanup\b' "$cmd"
@@ -6782,7 +7908,15 @@ function _agent_route_aie --description "Map AIE natural language to internet_en
 end
 
 function _agent_is_youtube_bulk_request --description "True if user wants YouTube bulk downloader"
-    string match -qr '(?i)(youtube\s+bulk|yt\s+bulk|bulk\s+download(?:er)?|download\s+(?:a\s+|the\s+|all\s+)?(?:youtube\s+)?(?:playlist|channel)|download\s+all\s+(?:videos\s+)?from\s+(?:channel|playlist|youtube)|youtube\s+bulk\s+downloader|\byt_bulk\b|\byoutube_bulk\b)' "$argv[1]"
+    set -l cmd "$argv[1]"
+    if string match -qr '(?i)(youtube\s+bulk|yt\s+bulk|bulk\s+download(?:er)?|download\s+(?:a\s+|the\s+|all\s+)?(?:youtube\s+)?(?:playlist|channel)|download\s+all\s+(?:videos\s+)?from\s+(?:channel|playlist|youtube)|youtube\s+bulk\s+downloader|\byt_bulk\b|\byoutube_bulk\b)' "$cmd"
+        return 0
+    end
+    if string match -qr '(?i)(download|save|fetch|grab)\b' "$cmd"
+        and string match -qr '(?i)(youtube\.com/playlist|playlist\?list=|/playlist\?list=|watch\?[^\s]*list=)' "$cmd"
+        return 0
+    end
+    return 1
 end
 
 function _agent_route_youtube_bulk --description "Map NL to youtube_bulk command (internal)"
@@ -6932,7 +8066,7 @@ function _agent_ask_gather_exec --description "Run AI-chosen gather cmd (read-on
         echo "[skipped: not read-only]"
         return 2
     end
-    if string match -qr '(?i)^(lscpu|grep|free|df |du |lsblk|lspci|uname|cat |head |tail |wc |uptime|lsb_release|command |eza |batcat |rg |fd |nvidia-smi|glxinfo|vulkaninfo|ls |find |stat |file |which |type |ps |ss |netstat|lsof |journalctl|systemctl |last |w |who |dpkg -l|snap list|flatpak list|clamscan|freshclam|rkhunter|chkrootkit|crontab -l|python3.*arka_usage\.py|app_usage)' "$low"
+    if string match -qr '(?i)^(lscpu|grep|free|df |du |lsblk|lspci|uname|cat |head |tail |wc |uptime|lsb_release|sysctl|sw_vers|vm_stat|system_profiler|lsappinfo|ioreg|command |eza |batcat |rg |fd |nvidia-smi|glxinfo|vulkaninfo|ls |find |stat |file |which |type |ps |ss |netstat|lsof |journalctl|systemctl |last |w |who |dpkg -l|snap list|flatpak list|clamscan|freshclam|rkhunter|chkrootkit|crontab -l|python3.*arka_usage\.py|app_usage)' "$low"
         eval $cmd 2>&1
         return $status
     end
@@ -6957,16 +8091,18 @@ function _agent_ask_gather_context --description "AI chooses read-only shell com
     set -l iter 0
     set -l gathered 0
 
-    set -l system_text "You gather Linux system facts to answer an advisory question.
+    set -l system_text "You gather system facts to answer an advisory question.
 Each turn return ONLY JSON (no markdown fences):
 {\"status\":\"continue\"|\"done\",\"cmd\":\"one read-only shell command or empty\",\"why\":\"brief reason\"}
 
 Rules:
-- Pick commands relevant to the QUESTION (CPU age -> lscpu, /proc/cpuinfo; disk space -> df; GPU -> lspci; malware/security -> ps aux, ss -tulpn, journalctl -p err -n 30, systemctl list-units --failed, last -10, ls ~/.config/autostart, command -v clamscan; app/screen time -> python3 $_ARKA_ROOT/arka_usage.py report today).
-- READ-ONLY only: lscpu, free -h, df -h, lspci, lsblk, uname -a, cat /etc/os-release, grep from /proc, ps, ss, journalctl, systemctl status/list, last, crontab -l, etc.
-- NO sudo, rm, mv, chmod, install, apt, pip, or any write/destructive action.
+- Pick commands relevant to the QUESTION and the host OS.
+- Linux: lscpu, /proc/cpuinfo, free -h, df -h, lspci, lsblk, uname -a, /etc/os-release, ps, ss, journalctl, systemctl status/list, last, crontab -l.
+- macOS: sw_vers, sysctl, vm_stat, df -h, system_profiler SPDisplaysDataType, uname -a, ps aux, lsof.
+- READ-ONLY only. NO sudo, rm, mv, chmod, install, apt, pip, or any write/destructive action.
 - One command per turn. Use status \"done\" with empty cmd when you have enough facts (usually after 2-5 commands).
-- Commands run in fish shell on Ubuntu Linux."
+- Commands run in fish shell.
+- (_arka_agent_platform_hint)"
 
     printf '%s%s%s\n' (set_color brblack) "  AI choosing context commands..." (set_color normal) >&2
 
@@ -7051,6 +8187,23 @@ $out_store
     if test $gathered -eq 0
         if _agent_is_knowledge_question "$question"
             printf '%s%s%s\n' (set_color brblack) "  General knowledge — no system probes needed." (set_color normal) >&2
+        else if _arka_is_macos
+            printf '%s%s%s\n' (set_color brblack) "  Using default macOS system probes..." (set_color normal) >&2
+            for cmd in \
+                    "sw_vers" \
+                    "sysctl -n machdep.cpu.brand_string hw.memsize hw.ncpu" \
+                    "vm_stat" \
+                    "df -h /" \
+                    "system_profiler SPDisplaysDataType 2>/dev/null | head -20"
+                printf '%s%s%s\n' (set_color cyan) "  ▶ $cmd" (set_color normal) >&2
+                set -l out (_agent_ask_gather_exec "$cmd")
+                set history_text "$history_text
+--- default ---
+cmd: $cmd
+output:
+$out
+"
+            end
         else
             printf '%s%s%s\n' (set_color brblack) "  Using default system probes..." (set_color normal) >&2
             for cmd in \
@@ -7112,7 +8265,8 @@ function _arka_chat_ask --description "Run arka_chat.py ask; prints answer (inte
     set -l py_args ask
     test -n "$_flag_d"; and set -a py_args --deep
     test -n "$_flag_n"; and set -a py_args --no-session
-    set -a py_args (string join " " $argv)
+    set -l question (_agent_with_voice_context (string join " " $argv))
+    set -a py_args "$question"
     set -l py (_arka_python)
     $py $_ARKA_ROOT/arka_chat.py $py_args 2>/dev/null
 end
@@ -7123,6 +8277,9 @@ function deep_web_answer --description "Deep web search + scrape RAG answer"
         return 1
     end
     set -l question (string join " " $argv)
+    if not _arka_verify_web_query "$question"
+        return 1
+    end
     printf '%s%s%s\n' (set_color cyan) "🔎 Deep search: $question" (set_color normal) >&2
     set -l answer (_arka_chat_ask --deep $argv)
     if test -z "$answer"
@@ -7221,6 +8378,16 @@ end
 function _arka_agent --description "Run arka_agent.py subcommand (internal)"
     set -l py (_arka_python)
     $py $_ARKA_ROOT/arka_agent.py $argv
+end
+
+function _arka_memory_detect_fact --description "Symbolic autodetect of memorable facts (internal)"
+    set -l py (_arka_python)
+    $py $_ARKA_ROOT/arka_memory_detect.py extract --quiet (string join " " $argv) 2>/dev/null
+end
+
+function _arka_memory_probe --description "Set _arka_last_mem_fact if NL asserts a personal fact (internal)"
+    set -g _arka_last_mem_fact (_arka_memory_detect_fact $argv[1])
+    test -n "$_arka_last_mem_fact"
 end
 
 function agent_remember --description "Store a long-term memory for Arka"
@@ -7595,6 +8762,48 @@ function semantic_memory --description "Remember with TurboQuant semantic indexi
     end
 end
 
+function supermemory --description "Supermemory cloud memory with local fallback"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        $py $_ARKA_ROOT/arka_supermemory.py status
+        echo ""
+        echo "Usage: supermemory remember|recall|list|status|forget [text|query|id]"
+        return 0
+    end
+    switch $argv[1]
+        case remember mem add save store
+            if test (count $argv) -lt 2
+                echo "Usage: supermemory remember <fact>"
+                return 1
+            end
+            $py $_ARKA_ROOT/arka_supermemory.py remember (string join " " $argv[2..-1])
+        case recall search find query
+            if test (count $argv) -lt 2
+                $py $_ARKA_ROOT/arka_supermemory.py recall
+            else
+                $py $_ARKA_ROOT/arka_supermemory.py recall (string join " " $argv[2..-1])
+            end
+        case list ls
+            $py $_ARKA_ROOT/arka_supermemory.py list
+        case status mode backend
+            $py $_ARKA_ROOT/arka_supermemory.py status
+        case forget delete remove
+            if test (count $argv) -lt 2
+                echo "Usage: supermemory forget <id or text fragment>"
+                return 1
+            end
+            $py $_ARKA_ROOT/arka_supermemory.py forget $argv[2]
+        case context ctx
+            if test (count $argv) -lt 2
+                echo "Usage: supermemory context <goal>"
+                return 1
+            end
+            $py $_ARKA_ROOT/arka_supermemory.py context (string join " " $argv[2..-1])
+        case '*'
+            $py $_ARKA_ROOT/arka_supermemory.py $argv
+    end
+end
+
 function speak_research --description "YouTube research digest spoken aloud (Hindi/English TTS)"
     if test (count $argv) -eq 0
         echo "Usage: speak_research [--limit N] [--no-speak] <search query>"
@@ -7648,6 +8857,38 @@ function handoff_notify --description "Handoff notifications for phone (list/rea
             _arka_talents handoff-run-notify
         case '*'
             echo "Usage: handoff_notify list|read [id]|run"
+    end
+end
+
+function remind --description "Schedule a reminder (fires at time; again when you're back if idle/off)"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        $py $_ARKA_ROOT/arka_remind.py status
+        return $status
+    end
+    switch $argv[1]
+        case help -h --help
+            echo "Usage: remind <when> <message>"
+            echo "       remind add [--in 30m | --at TIME] <message>"
+            echo "       remind list | status | cancel <id> | start | stop"
+            echo ""
+            echo "Examples:"
+            echo "  remind in 30m stretch"
+            echo "  remind at 5pm call mom"
+            echo "  remind tomorrow 9am standup"
+            echo "  remind list"
+            echo ""
+            echo "Behavior:"
+            echo "  • Fires at the scheduled time if the PC is on"
+            echo "  • If you were idle (away), also fires when you start using the PC"
+            echo "  • If the PC was off/shut down, fires when you return after boot"
+            return 0
+        case list ls status start stop cancel check add
+            $py $_ARKA_ROOT/arka_remind.py $argv
+            return $status
+        case '*'
+            $py $_ARKA_ROOT/arka_remind.py add $argv
+            return $status
     end
 end
 
@@ -7722,7 +8963,14 @@ function web_answer --description "Answer factual questions via web lookup + AI 
         echo "Usage: web_answer [--deep] <question>"
         return 1
     end
-    set -l question (string join " " $args)
+    set -l question (_agent_with_voice_context (string join " " $args))
+    if _agent_is_skills_help_request "$question"
+        _arka_skills_help_show
+        return 0
+    end
+    if not _arka_verify_web_query "$question"
+        return 1
+    end
     printf '%s%s%s\n' (set_color cyan) "🔎 $question" (set_color normal) >&2
 
     set -l intent (python3 $_ARKA_ROOT/arka_chat.py intent "$question" 2>/dev/null)
@@ -7737,11 +8985,11 @@ function web_answer --description "Answer factual questions via web lookup + AI 
             return $status
         end
         if test "$action" = WEATHER; and test "$force_deep" != true
-            hyperlocal_weather $args
+            hyperlocal_weather (_agent_with_voice_context (string join " " $args))
             return $status
         end
         if test "$force_deep" = true
-            deep_web_answer $args
+            deep_web_answer (_agent_with_voice_context (string join " " $args))
             return $status
         end
         set -l answer (_arka_chat_ask $args)
@@ -7846,13 +9094,19 @@ function agent_ask --description "Answer advisory questions: AI gathers context 
         echo "Example: agent_ask is my cpu too outdated for gaming?"
         return 1
     end
-    set -l question (string join " " $argv)
+    set -l question (_agent_with_voice_context (string join " " $argv))
+    if _agent_is_system_info_question "$question"
+        set -l route (_agent_route_system_info "$question")
+        _agent_run_skill_line "$route"
+        return $status
+    end
     printf '%s%s%s\n' (set_color cyan) "💬 $question" (set_color normal) >&2
 
     set -l facts (_agent_ask_gather_context "$question" 6)
     echo ""
 
-    set -l system_text "You are a helpful Linux advisor. Answer the question using ONLY the gathered command output below. Be direct and practical. If specs are borderline, say so. For security/malware questions: explain what the evidence shows, what is inconclusive without dedicated scanners, and suggest safe next steps (e.g. clamav scan) without claiming certainty."
+    set -l plat (_arka_agent_platform_label)
+    set -l system_text "You are a helpful system advisor on $plat. Answer the question using ONLY the gathered command output below. Be direct and practical. If specs are borderline, say so. For security/malware questions: explain what the evidence shows, what is inconclusive without dedicated scanners, and suggest safe next steps appropriate for the OS (e.g. clamav on Linux, built-in security tools on macOS) without claiming certainty."
     set -l user_text "Gathered facts (from commands the assistant chose to run):
 $facts
 
@@ -7888,7 +9142,9 @@ function _agent_skill_matches_request --description "True if skill fits the user
             string match -qr '(?i)(system\s*monitor|system\s*status|show\s+(me\s+)?(system\s+)?(monitor|resources)|check\s+(cpu|ram|memory|disk|battery)|\b(cpu|ram|memory)\s+(usage|load|percent)|how\s+much\s+(cpu|ram|memory)\s+(left|free|used)|\buptime\b|\bbattery\b|\bload\s+average)' "$cmd"
             and not _agent_is_advisory_question "$cmd"
         case system_info
-            string match -qr '(?i)(system\s*info|\bos\s+info\b|\buname\b)' "$cmd"
+            _agent_is_system_info_question "$cmd"
+            or _agent_is_hardware_fact_question "$cmd"
+            or string match -qr '(?i)(system\s*info|\bos\s+info\b|\buname\b)' "$cmd"
         case disk_usage
             string match -qr '(?i)(disk\s*usage|disk\s*space|\bdf\b|storage\s+usage)' "$cmd"
         case disk_breakdown
@@ -7931,6 +9187,8 @@ function _agent_skill_matches_request --description "True if skill fits the user
             string match -qr '(?i)(browse|scrape|website|web\s*page|click|login|automate)' "$cmd"
         case write_script run_script lint_python
             string match -qr '(?i)(script|python|lint|code)' "$cmd"
+        case whatsapp_listen
+            string match -qr '(?i)(whatsapp\s+inbox|inbox\s+whatsapp|whatsapp\s+listen|listen\s+whatsapp)' "$cmd"
         case send_whatsapp
             string match -qr '(?i)whatsapp' "$cmd"
         case monitor_x
@@ -7960,6 +9218,8 @@ function _agent_skill_matches_request --description "True if skill fits the user
             and not string match -qr '(?i)(decrypt|protected|pdf)' "$cmd"
         case predictions
             string match -qr '(?i)(predict|prediction|forecast|opportunit|outlook).*(antique|stock|market|strategy|invest|collectible|portfolio)|^(predict|forecast)\s+|(where\s+(to|should\s+i)\s+invest|how\s+(to|can\s+i)\s+invest|make\s+(?:a\s+)?profit)' "$cmd"
+        case remind
+            string match -qr '(?i)\bremind(?:\s+me)?\b' "$cmd"
         case stock stock_analysis
             string match -qr '(?i)^(stock|market)\s+(news|prices|policy|strategy|volatility|dashboard|context|invest)\b|^(analyze|check)\s+(?:stock\s+)?[A-Z][A-Z0-9.-]{1,12}\b|(where\s+(to|should\s+i)\s+invest|how\s+(to|can\s+i)\s+invest|invest\s+\d|make\s+(?:a\s+)?profit)' "$cmd"
         case '*'
@@ -7977,6 +9237,20 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
     if string match -qr '(?i)^speak\s+' "$clean"
         set cmd (string replace -r -i '^speak\s+' '' "$cmd")
         set clean (string lower "$cmd")
+    end
+
+    set -l route_mode (_arka_route_mode)
+    if test "$route_mode" = ai -o "$route_mode" = ai_only
+        set -l skills (_agent_available_skills)
+        set -l llm (_agent_llm_route "$cmd" "$skills")
+        if test -n "$llm"
+            echo "llm|$llm|AI routing (LLM)"
+            return
+        end
+        if test "$route_mode" = ai_only
+            echo "none||No AI route (ARKA_ROUTE_MODE=ai_only)"
+            return
+        end
     end
 
     switch $clean
@@ -8149,6 +9423,10 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         echo "skill|disk_breakdown|Disk space by videos, pictures, documents, etc."
         return
     end
+    if _agent_is_places_question "$cmd"
+        echo "skill|web_answer $cmd|Places / travel answer via web + AI"
+        return
+    end
     if _agent_is_pdf_ingest_request "$cmd"
         set -l pdf (_agent_parse_pdf_path "$cmd")
         if test -n "$pdf"
@@ -8216,12 +9494,8 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         return
     end
     if _agent_is_youtube_research_request "$cmd"
-        set -l yq (_agent_parse_youtube_research_query "$cmd")
-        if test -n "$yq"
-            echo "skill|youtube_research '$yq' --index|YouTube search + transcript research digest"
-        else
-            echo "skill|youtube_research|YouTube research (needs search query)"
-        end
+        set -l ytr (_agent_build_youtube_research_cmd "$cmd")
+        echo "skill|$ytr|YouTube search + transcript research digest"
         return
     end
     if set -l ytb_route (_agent_route_youtube_bulk "$cmd")
@@ -8250,6 +9524,16 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         else
             echo "skill|summarize_url|Summarize web page (needs URL)"
         end
+        return
+    end
+    if string match -qr '(?i)(live\s+(sports?\s+)?scores?|sports?\s+scores?|ipl\s+(live|score)|cricket\s+(live|score)|nfl\s+scores?|nba\s+scores?|match\s+score)' "$clean"
+        echo "skill|sports_score $cmd|Live sports scores"
+        return
+    end
+    set -l py (_arka_python)
+    set -l tp ($py $_ARKA_ROOT/arka_skills.py match "$cmd" 2>/dev/null)
+    if test -n "$tp"
+        echo "skill|$tp|Third-party plugin"
         return
     end
     if string match -qr '(?i)(daily brief|morning brief|news brief|today.s brief)' "$clean"
@@ -8282,8 +9566,55 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         echo "skill|$chat_route|Chat engine ($chat_route)"
         return
     end
+    if _agent_is_file_size_find "$cmd"
+        echo "skill|find_files_by_size $cmd|Find files by size threshold"
+        return
+    end
+    if string match -qr '(find.*file|search.*file|look.*for.*file|locate.*file)' "$clean"
+        set -l file_pat (string replace -r -i '^.*(?:find|search|look for|locate)\s+(?:file\s+)?' '' "$cmd")
+        set -l file_pat (string replace -r -i '\s+(?:in|under|from)\s+.+$' '' "$file_pat")
+        set file_pat (string trim -- "$file_pat")
+        if test -n "$file_pat"
+            echo "skill|search_files $file_pat|Find files by name pattern"
+        else
+            echo "skill|search_files|Find files by name pattern"
+        end
+        return
+    end
     if set -l aie_route (_agent_route_aie "$cmd")
         echo "skill|$aie_route|Artificial Internet Enhancements"
+        return
+    end
+    if set -l wa_route (_agent_route_whatsapp_inbox "$cmd")
+        echo "skill|$wa_route|WhatsApp inbox listener"
+        return
+    end
+    if _agent_is_skills_help_request "$cmd"
+        echo "skill|arka help|Arka skills + active LLM model"
+        return
+    end
+    if string match -qr '(?i)^(remember|memorize|store|don\'t forget|dont forget|keep in mind)\s+' "$clean"
+        set -l mem (_arka_memory_detect_fact "$cmd")
+        test -z "$mem"; and set mem (string replace -r -i '^(?:remember|memorize|store|don\'t forget|dont forget|keep in mind)\s+(?:that\s+)?' '' "$cmd")
+        echo "skill|agent_remember $mem|Long-term memory"
+        return
+    end
+    if string match -qr '(?i)^(recall|what do you remember)' "$clean"
+        set -l rq (string replace -r -i '^(?:recall|what do you remember about)\s*' '' "$cmd")
+        echo "skill|agent_recall $rq|Recall memories"
+        return
+    end
+    if _arka_memory_probe "$cmd"
+        echo "skill|agent_remember $_arka_last_mem_fact|Symbolic memory autodetect"
+        return
+    end
+    if _agent_is_system_info_question "$cmd"
+        if _agent_is_hardware_fact_question "$cmd"
+            set -l comp (_agent_parse_hardware_component "$cmd")
+            echo "skill|system_info $comp|Local hardware fact ($comp)"
+        else
+            echo "skill|system_info|Local OS/CPU/GPU/RAM/disk overview"
+        end
         return
     end
     if _agent_is_advisory_question "$cmd"
@@ -8299,7 +9630,13 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         echo "skill|system_monitor|Live resource monitor"
         return
     end
-    echo "llm|interpret|No offline rule; use LLM or add a skill"
+    if test "$route_mode" = symbolic_only
+        echo "none||No symbolic match (ARKA_ROUTE_MODE=symbolic_only)"
+    else if test "$route_mode" = ai
+        echo "none||No route after AI + symbolic passes"
+    else
+        echo "llm|interpret|No offline rule; use LLM or add a skill"
+    end
 end
 
 function _agent_correct_interpretation --description "Fix bad LLM skill picks using rules (internal)"
@@ -8313,8 +9650,26 @@ function _agent_correct_interpretation --description "Fix bad LLM skill picks us
     end
 
     if string match -qr '(?i)^system_monitor\b' "$interpreted"
+        if _agent_is_system_info_question "$cmd"
+            echo (_agent_route_system_info "$cmd")
+            return
+        end
         if _agent_is_advisory_question "$cmd"
             echo "agent_ask $cmd"
+            return
+        end
+    end
+
+    if string match -qr '(?i)^agent_ask\b' "$interpreted"
+        if _agent_is_system_info_question "$cmd"
+            echo (_agent_route_system_info "$cmd")
+            return
+        end
+    end
+
+    if string match -qr '(?i)^web_answer\b' "$interpreted"
+        if _agent_is_system_info_question "$cmd"
+            echo (_agent_route_system_info "$cmd")
             return
         end
     end
@@ -8376,6 +9731,11 @@ function _agent_correct_interpretation --description "Fix bad LLM skill picks us
 
     if _agent_is_pdf_question "$cmd"
         echo (_agent_pdf_ask_cmd "$cmd")
+        return
+    end
+
+    if _agent_is_system_info_question "$cmd"
+        echo (_agent_route_system_info "$cmd")
         return
     end
 
@@ -8826,6 +10186,7 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
     end
 
     function $name --description "Named agent ($name → agent; $name listen = wake word)"
+        _arka_maybe_reload
         if test (count $argv) -ge 1
             switch $argv[1]
                 case speak-lang lang
@@ -8889,6 +10250,30 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                     _agent_remote_status
                     return $status
                 case listen start
+                    if test (count $argv) -ge 2
+                        switch $argv[2]
+                            case stop off
+                                _agent_listen_stop
+                                return $status
+                            case status
+                                _agent_listen_status
+                                return $status
+                            case fg foreground
+                                _agent_listen_start fg
+                                return $status
+                            case debug
+                                _agent_listen_start debug
+                                return $status
+                            case mics devices
+                                set -l wake_py (_arka_wake_python)
+                                $wake_py $_ARKA_ROOT/arka_wake.py --list-mics
+                                return $status
+                            case mic-test test-mic
+                                set -l wake_py (_arka_wake_python)
+                                $wake_py $_ARKA_ROOT/arka_wake.py --mic-test
+                                return $status
+                        end
+                    end
                     _agent_listen_start $argv[2..-1]
                     return $status
                 case debug
@@ -8912,14 +10297,15 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                     tail -f ~/.cache/fish-agent/arka_listen.log
                     return $status
                 case usage screen-time apps
+                    set -l py (_arka_python)
                     if test (count $argv) -ge 2
                         switch $argv[2]
                             case start
-                                python3 $_ARKA_ROOT/arka_usage.py start
+                                $py $_ARKA_ROOT/arka_usage.py start
                             case stop
-                                python3 $_ARKA_ROOT/arka_usage.py stop
+                                $py $_ARKA_ROOT/arka_usage.py stop
                             case gnome
-                                python3 $_ARKA_ROOT/arka_usage.py gnome
+                                $py $_ARKA_ROOT/arka_usage.py gnome
                             case '*'
                                 app_usage $argv[2..-1]
                         end
@@ -8928,11 +10314,11 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                     end
                     return $status
                 case disk storage space
-                    if test (count $argv) -ge 2; and test "$argv[2]" = breakdown
-                        disk_breakdown $argv[3..-1]
-                    else
-                        disk_breakdown $argv[2..-1]
+                    set -l rest $argv[2..-1]
+                    if test (count $rest) -ge 1; and contains -- $rest[1] usage breakdown
+                        set rest $rest[2..-1]
                     end
+                    disk_breakdown $rest
                     return $status
                 case ask question
                     if test (count $argv) -ge 2
@@ -8991,7 +10377,8 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                             case inbox
                                 inbox_agent $argv[3..-1]
                             case research youtube yt
-                                youtube_research $argv[3..-1] --index
+                                set -l ycmd (_agent_build_youtube_research_cmd (string join " " $argv[3..-1]))
+                                _agent_dispatch_one "$ycmd"
                             case compare
                                 compare_agent $argv[3..-1]
                             case ask
@@ -9000,6 +10387,8 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                                 speak_research $argv[3..-1]
                             case memory semantic
                                 semantic_memory $argv[3..-1]
+                            case supermemory sm cloud-memory
+                                supermemory $argv[3..-1]
                             case voice session
                                 voice_session $argv[3..-1]
                             case handoff-notify notify
@@ -9084,6 +10473,22 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                         internet_enhance status
                     end
                     return $status
+                case whatsapp wa
+                    if test (count $argv) -ge 3; and test "$argv[2]" = inbox
+                        whatsapp_listen $argv[3..-1]
+                    else if test (count $argv) -ge 2
+                        whatsapp_listen $argv[2..-1]
+                    else
+                        whatsapp_listen status
+                    end
+                    return $status
+                case remind
+                    if test (count $argv) -ge 2
+                        remind $argv[2..-1]
+                    else
+                        remind status
+                    end
+                    return $status
                 case yt-bulk ytbulk youtube-bulk youtube_bulk yt_bulk
                     if test (count $argv) -ge 2
                         youtube_bulk $argv[2..-1]
@@ -9096,10 +10501,34 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                         switch $argv[2]
                             case folder dir directory
                                 folder_summarize $argv[3..-1]
+                            case youtube yt research
+                                set -l ycmd (_agent_build_youtube_research_cmd (string join " " $argv[3..-1]))
+                                _agent_dispatch_one "$ycmd"
+                            case youtube yt
+                                set -l raw_argv $argv[3..-1]
+                                set -l text (string join " " $raw_argv | string trim)
+                                if test -z "$text"
+                                    echo "Usage: $name summarize youtube <video-id|PLid> [--limit N]"
+                                    echo "Example: $name summarize youtube PLu71SKxNbfoDqgPchmvIsL4hTnJIrtige"
+                                    return 1
+                                end
+                                set -l first $raw_argv[1]
+                                set first (string replace -r -i '^(?:this|the)$' '' "$first" | string trim)
+                                set -l url "$first"
+                                if not string match -qr '^https?://' "$first"
+                                    if string match -qr '^PL[\w-]+$' "$first"
+                                        set url "https://www.youtube.com/playlist?list=$first"
+                                    else if string match -qr '^[\w-]{11}$' "$first"
+                                        set url "https://www.youtube.com/watch?v=$first"
+                                    end
+                                end
+                                set -l pl_args --url $url
+                                for a in $raw_argv[2..-1]
+                                    set -a pl_args $a
+                                end
+                                playlist_summarize $pl_args
                             case playlist
                                 playlist_summarize $argv[3..-1]
-                            case youtube yt research
-                                youtube_research $argv[3..-1]
                             case '*'
                                 _arka_summarize_media $argv[2..-1]
                         end
@@ -9111,12 +10540,105 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                     return $status
                 case research
                     if test (count $argv) -ge 3; and contains -- $argv[2] youtube yt
-                        youtube_research $argv[3..-1] --index
+                        set -l ycmd (_agent_build_youtube_research_cmd (string join " " $argv[3..-1]))
+                        _agent_dispatch_one "$ycmd"
                     else if test (count $argv) -ge 2
                         agent_research $argv[2..-1]
                     else
                         echo "Usage: $name research youtube <query> [--limit N] [--focus Q]"
                         echo "       $name research <question>   — unified doc/web/media research"
+                        echo "       $name youtube research <query>   — same (default 2 videos)"
+                    end
+                    return $status
+                case download dl
+                    if test (count $argv) -lt 2
+                        echo "Usage: $name download <url-or-playlist-id> [--range A-B] [--start N] [--end N]"
+                        echo "Example: $name download PLu71SKxNbfoDqgPchmvIsL4hTnJIrtige"
+                        echo "Example: $name download PLxxx --range 6-9"
+                        echo "Example: $name download 'https://youtube.com/playlist?list=PLxxx'"
+                        return 1
+                    end
+                    set -l args $argv[2..-1]
+                    set -l url_args
+                    set -l dl_flags
+                    set -l i 1
+                    while test $i -le (count $args)
+                        switch $args[$i]
+                            case --audio --wait --channel
+                                set -a dl_flags $args[$i]
+                            case --start --end --range --limit --quality
+                                if test $i -lt (count $args)
+                                    set -a dl_flags $args[$i] $args[(math $i + 1)]
+                                    set i (math $i + 1)
+                                end
+                            case '*'
+                                set -a url_args $args[$i]
+                        end
+                        set i (math $i + 1)
+                    end
+                    set -l text (string join " " $url_args | string trim)
+                    if test -z "$text"
+                        echo "Usage: $name download <url-or-playlist-id> [--range A-B]"
+                        return 1
+                    end
+                    set text (string replace -r -i '^(?:this|the)\s+' '' "$text" | string trim)
+                    set -l url "$text"
+                    if not string match -qr '^https?://' "$text"
+                        if string match -qr '^PL[\w-]+$' "$text"
+                            set url "https://www.youtube.com/playlist?list=$text"
+                        else if string match -qr '^[\w-]{11}$' "$text"
+                            set url "https://www.youtube.com/watch?v=$text"
+                        end
+                    end
+                    if string match -qr '(?i)playlist\?list=|/playlist' "$url"
+                        youtube_bulk download $url --wait $dl_flags
+                    else if string match -qr '(?i)youtube\.com|youtu\.be' "$url"
+                        youtube_download $url $dl_flags
+                    else if string match -qr '^https?://' "$url"
+                        download_file $url
+                    else
+                        download_file $url
+                    end
+                    return $status
+                case youtube yt
+                    if test (count $argv) -lt 3
+                        echo "Usage: $name youtube research <query> [--limit N] [--focus Q]"
+                        echo "Example: $name youtube research react"
+                        echo "Example: $name youtube research \"analyze 5 videos on python\""
+                        return 1
+                    end
+                    switch $argv[2]
+                        case research yt-research search
+                            if test (count $argv) -ge 4
+                                youtube_research $argv[3..-1] --index
+                            else
+                                echo "Usage: $name youtube research <query> [--limit N]"
+                                return 1
+                            end
+                        case transcript captions
+                            if test (count $argv) -ge 4
+                                youtube_transcript $argv[3..-1]
+                            else
+                                echo "Usage: $name youtube transcript <url>"
+                                return 1
+                            end
+                        case download dl
+                            if test (count $argv) -ge 4
+                                youtube_download $argv[3..-1]
+                            else
+                                echo "Usage: $name youtube download <url>"
+                                return 1
+                            end
+                        case bulk
+                            if test (count $argv) -ge 4
+                                youtube_bulk $argv[3..-1]
+                            else
+                                youtube_bulk status
+                            end
+                        case '*'
+                            echo "Unknown: $name youtube $argv[2]"
+                            echo "Usage: $name youtube research|transcript|download|bulk ..."
+                            return 1
                     end
                     return $status
                 case queue deep-queue
@@ -9143,6 +10665,43 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                         set flags --install
                     end
                     $py -m arka refetch $flags
+                    _arka_reload_config
+                    return $status
+                case skills plugins extensions
+                    set -l py (_arka_python)
+                    if test (count $argv) -lt 2
+                        $py $_ARKA_ROOT/arka_skills.py list
+                        return $status
+                    end
+                    switch $argv[2]
+                        case list ls
+                            $py $_ARKA_ROOT/arka_skills.py list
+                        case install add
+                            if test (count $argv) -lt 3
+                                echo "Usage: $name skills install <git-url|path>"
+                                return 1
+                            end
+                            $py $_ARKA_ROOT/arka_skills.py install $argv[3..-1]
+                            _arka_load_third_party_skills
+                        case refresh reload rescan
+                            $py $_ARKA_ROOT/arka_skills.py refresh
+                            _arka_load_third_party_skills
+                        case info show
+                            if test (count $argv) -lt 3
+                                echo "Usage: $name skills info <skill-name>"
+                                return 1
+                            end
+                            $py $_ARKA_ROOT/arka_skills.py info $argv[3]
+                        case '*'
+                            echo "Usage: $name skills list|install <path|git-url>|refresh|info <name>"
+                            return 1
+                    end
+                    return $status
+                case supermemory sm memory-cloud
+                    supermemory $argv[2..-1]
+                    return $status
+                case reload refresh relink
+                    _arka_reload_command $argv[2..-1]
                     return $status
                 case stop down
                     if test (count $argv) -gt 1
@@ -9157,7 +10716,15 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                 case tell explain describe
                     if test (count $argv) -ge 2
                         set -l q (string join " " $argv[2..-1])
+                        set q (string replace -r -i '^me\s+about\s+' '' "$q")
+                        set q (string replace -r -i '^me\s+' '' "$q")
                         set q (string replace -r -i '^about\s+' '' "$q")
+                        set -l full (string trim -- "tell me $q")
+                        if _agent_is_system_info_question "$full"
+                            set -l route (_agent_route_system_info "$full")
+                            _agent_run_skill_line "$route"
+                            return $status
+                        end
                         web_answer (_agent_normalize_knowledge_q "tell me about $q")
                         return $status
                     end
@@ -9190,7 +10757,7 @@ function _arka_speak_ask --description "Answer a question via agent and read the
         return 1
     end
     set -l q (string join " " $argv)
-    set -l out (agent $q 2>&1)
+    set -l out (agent $q)
     set -l st $status
     printf '%s\n' "$out"
     if test -n "$out"
@@ -9201,6 +10768,33 @@ end
 
 function _agent_strip_color --description "Remove ANSI color codes for TTS (internal)"
     printf '%s' "$argv[1]" | sed 's/\x1b\[[0-9;]*m//g'
+end
+
+function _agent_voice_enabled --description "True when running from arka listen / voice (internal)"
+    if set -q ARKA_VOICE; and test "$ARKA_VOICE" = 1
+        return 0
+    end
+    if set -q AGENT_VOICE; and test "$AGENT_VOICE" = 1
+        return 0
+    end
+    return 1
+end
+
+function _agent_with_voice_context --description "Prepend multi-turn voice context for LLM skills (internal)"
+    set -l question (string join " " $argv)
+    if _agent_voice_enabled; and set -q ARKA_VOICE_CONTEXT; and test -n "$ARKA_VOICE_CONTEXT"
+        printf '%s\n\nCurrent question: %s' "$ARKA_VOICE_CONTEXT" "$question"
+        return 0
+    end
+    echo "$question"
+end
+
+function _agent_voice_speak --description "Speak text when voice mode is on (internal)"
+    if not _agent_voice_enabled
+        return 0
+    end
+    test -z "$argv[1]"; and return 0
+    speak_aloud "$argv[1]" 2>/dev/null
 end
 
 function _agent_speak_enabled --description "True if voice replies are enabled (internal)"
@@ -9214,7 +10808,7 @@ function _agent_extract_speech_text --description "Pull speakable answer body fr
     set -l raw (_agent_strip_color "$argv[1]")
     test -z "$raw"; and return
 
-    # Prefer content inside answer blocks
+    # Prefer content inside answer blocks (may share a line with 🔎 / routing text)
     if string match -q '*━━━ Answer ━━━*' "$raw"
         set raw (string replace -r '.*━━━ Answer ━━━\s*' '' "$raw" | string split '━━━')[1]
     else if string match -q '*━━━ PDF answer ━━━*' "$raw"
@@ -9223,20 +10817,35 @@ function _agent_extract_speech_text --description "Pull speakable answer body fr
         set raw (string replace -r '.*━━━ 📄 [^━]+ ━━━\s*' '' "$raw" | string split '━━━')[1]
     end
 
+    # Drop routing / progress noise lines
+    set -l cleaned
+    for line in (string split \n -- "$raw")
+        set -l t (string trim -- "$line")
+        test -z "$t"; and continue
+        if string match -qr '^(💡|→|▶|🔎)' "$t"
+            continue
+        end
+        if string match -qr '(?i)^(offline routing|running skill|interpreted:)' "$t"
+            continue
+        end
+        set -a cleaned $line
+    end
+    set raw (string join \n $cleaned)
+
     set -l spoken
     for line in (string split \n -- "$raw")
         set -l t (string trim -- "$line")
         test -z "$t"; and continue
-        if string match -qr '^(💡|→|▶|🔎|\[FROM )' "$t"
-            continue
-        end
+        set t (string replace -r '^\[(FROM SEARCH|FROM MEMORY)\]\s*' '' "$t")
+        set t (string replace -r '^🔎\s*' '' "$t")
+        set t (string trim -- "$t")
+        test -z "$t"; and continue
         if string match -qr '(?i)^(offline routing|running skill|interpreted:)' "$t"
             continue
         end
         if string match -q '*━━━*' "$t"
             continue
         end
-        set t (string replace -r '^\[(FROM SEARCH|FROM MEMORY)\]\s*' '' "$t")
         set t (string replace -a -r '\*\*([^*]+)\*\*' '$1' "$t")
         set t (string replace -r '^\d+\.\s+' '' "$t")
         set t (string replace -r ':\s*-\s+' ', ' "$t")
@@ -9262,13 +10871,19 @@ function _agent_speak_reply --description "Speak agent output aloud (internal)"
     set -l raw "$argv[1]"
     test -z "$raw"; and return 0
 
-    set -l text (_agent_extract_speech_text "$raw")
+    set -l py (_arka_python)
+    set -l text ($py $_ARKA_ROOT/arka_talents.py voice-format "$raw" 2>/dev/null)
+    test -z "$text"; and set text (_agent_extract_speech_text "$raw")
     test -z "$text"; and return 0
 
-    speak_aloud "$text" 2>/dev/null
+    if not speak_aloud "$text"
+        echo (set_color yellow)"⚠ Could not speak aloud — run: arka tts-setup"(set_color normal) >&2
+        return 1
+    end
 end
 
 function agent_hear --description "Run agent on speech transcript; speaks the reply"
+    set -gx ARKA_VOICE 1
     set -l text (_agent_stt_quick_map (string join " " $argv))
     if test -z "$text"
         set -l call (_agent_call_name)
@@ -9292,24 +10907,44 @@ function agent_hear --description "Run agent on speech transcript; speaks the re
     end
 
     set -l py (_arka_python)
-    set -l enriched ($py $_ARKA_ROOT/arka_talents.py voice-enrich "$stripped")
-    if test "$enriched" = __VOICE_SESSION_CLEAR__
-        _arka_talents voice-clear
-        speak_aloud "Conversation cleared." 2>/dev/null
-        return 0
-    end
-    if test "$enriched" = __VOICE_SESSION_STATUS__
-        _arka_talents voice-status
-        return 0
+    set -l action ($py $_ARKA_ROOT/arka_talents.py voice-field action "$stripped" 2>/dev/null)
+    test -z "$action"; and set action run
+
+    switch $action
+        case clear
+            _arka_talents voice-clear
+            speak_aloud "Conversation cleared." 2>/dev/null
+            return 0
+        case status
+            set -l voice_st ($py $_ARKA_ROOT/arka_talents.py voice-status 2>/dev/null)
+            printf '%s\n' "$voice_st"
+            speak_aloud "$voice_st" 2>/dev/null
+            return 0
+        case help
+            set -l help ($py $_ARKA_ROOT/arka_talents.py voice-help 2>/dev/null)
+            printf '%s\n' "$help"
+            speak_aloud "$help" 2>/dev/null
+            return 0
     end
 
-    set -l cmd "$stripped"
-    if test -n "$enriched"; and test "$enriched" != "$stripped"
-        set cmd "$enriched"
+    set -l route_text ($py $_ARKA_ROOT/arka_talents.py voice-field route_text "$stripped" 2>/dev/null)
+    test -z "$route_text"; and set route_text "$stripped"
+    set -l llm_ctx ($py $_ARKA_ROOT/arka_talents.py voice-field llm_context "$stripped" 2>/dev/null)
+    set -l ack ($py $_ARKA_ROOT/arka_talents.py voice-field ack "$stripped" 2>/dev/null)
+
+    if test -n "$llm_ctx"
+        set -gx ARKA_VOICE_CONTEXT "$llm_ctx"
+    else
+        set -e ARKA_VOICE_CONTEXT 2>/dev/null
     end
 
-    set -l out (agent $cmd 2>&1)
+    if test -n "$ack"
+        speak_aloud "$ack" 2>/dev/null &
+    end
+
+    set -l out (agent $route_text 2>&1)
     set -l st $status
+    set -e ARKA_VOICE_CONTEXT 2>/dev/null
     printf '%s\n' "$out"
     $py $_ARKA_ROOT/arka_talents.py voice-record --user "$stripped" --assistant "$out" 2>/dev/null
     if test $st -eq 0
@@ -9357,6 +10992,21 @@ function _agent_try_listen_control --description "Handle listen/debug/stop voice
     return 1
 end
 
+function _arka_local_test --description "Run a local dev test script (internal)"
+    set -l script $argv[1]
+    if test -z "$script"
+        echo "Usage: _arka_local_test <script.py> [args…]"
+        return 1
+    end
+    if not test -f "$script"
+        echo (set_color red)"Local test not found:"(set_color normal) " $script"
+        echo "Copy from examples/local/ into local/ (gitignored)."
+        return 1
+    end
+    set -l py (_arka_python)
+    $py $script $argv[2..-1]
+end
+
 function _arka_test_audio --description "Test Arka STT accuracy from an audio/video file (internal)"
     if test (count $argv) -lt 1
         set -l call (_agent_call_name)
@@ -9364,8 +11014,17 @@ function _arka_test_audio --description "Test Arka STT accuracy from an audio/vi
         echo "Example: $call test-audio ~/Videos/voice-test.mp4 --expected \"play an music\" --full"
         return 1
     end
-    set -l wake_py (_arka_wake_python)
-    $wake_py $_ARKA_ROOT/arka_wake.py --file $argv
+    _arka_local_test $_ARKA_ROOT/local/tests/test_wake_media.py $argv
+end
+
+function _agent_pid_alive --description "True if pid is a running process (internal)"
+    set -l pid (string trim -- $argv[1])
+    test -z "$pid"; and return 1
+    if _arka_is_macos
+        ps -p $pid >/dev/null 2>&1
+        return $status
+    end
+    kill -0 $pid 2>/dev/null
 end
 
 function _agent_listen_start --description "Start continuous wake-word listener (internal)"
@@ -9394,7 +11053,7 @@ function _agent_listen_start --description "Start continuous wake-word listener 
     if test $foreground -eq 0
         if test -f "$pidfile"
             set -l pid (cat "$pidfile" 2>/dev/null)
-            if test -n "$pid"; and kill -0 "$pid" 2>/dev/null
+            if test -n "$pid"; and _agent_pid_alive "$pid"
                 if test $debug -eq 1
                     echo (set_color cyan)"Restarting $call listener with debug …"(set_color normal)
                     kill "$pid" 2>/dev/null
@@ -9411,9 +11070,13 @@ function _agent_listen_start --description "Start continuous wake-word listener 
     set -l wake_py (_arka_wake_python)
     mkdir -p ~/.cache/fish-agent
     set -l stt_hint "Vosk"
-    if set -q SARVAM_API_KEY; and test -n "$SARVAM_API_KEY"
+    if set -q ASSEMBLYAI_API_KEY; and test -n "$ASSEMBLYAI_API_KEY"
+        if not set -q ARKA_STT; or contains -- (string lower "$ARKA_STT") auto assemblyai aai
+            set stt_hint "AssemblyAI → Sarvam → Vosk"
+        end
+    else if set -q SARVAM_API_KEY; and test -n "$SARVAM_API_KEY"
         if not set -q ARKA_STT; or contains -- (string lower "$ARKA_STT") auto sarvam
-            set stt_hint "Sarvam Saaras + Vosk wake"
+            set stt_hint "Sarvam → Vosk"
         end
     else if set -q GROQ_API_KEY; and test -n "$GROQ_API_KEY"
         if not set -q ARKA_STT; or contains -- (string lower "$ARKA_STT") auto groq
@@ -9440,7 +11103,12 @@ function _agent_listen_start --description "Start continuous wake-word listener 
     end
 
     if test $foreground -eq 1
-        echo (set_color green)"Debug listen — live STT in this terminal (Ctrl+C to stop)"(set_color normal)
+        if _arka_is_macos
+            echo (set_color green)"Debug listen — live STT in this terminal"(set_color normal)
+            echo (set_color brblack)"  Stop: hold Control and press C (not Command+C), or run 'arka listen stop' in another tab"(set_color normal)
+        else
+            echo (set_color green)"Debug listen — live STT in this terminal (Ctrl+C to stop)"(set_color normal)
+        end
         echo (set_color brblack)"  hear [wake~] partial   hear [wake=] final   hear [cmd=] command"(set_color normal)
         $wake_py "$script" $py_args
         return $status
@@ -9454,7 +11122,7 @@ function _agent_listen_start --description "Start continuous wake-word listener 
     disown
     sleep 1
 
-    if test -f "$pidfile"; and kill -0 (cat "$pidfile") 2>/dev/null
+    if test -f "$pidfile"; and _agent_pid_alive (string trim (cat "$pidfile"))
         set -l lang en-IN
         if set -q ARKA_SPEAK_LANG
             set lang $ARKA_SPEAK_LANG
@@ -9482,7 +11150,7 @@ function _agent_listen_stop --description "Stop wake-word listener (internal)"
         return 0
     end
     set -l pid (cat "$pidfile" 2>/dev/null)
-    if test -z "$pid"; or not kill -0 "$pid" 2>/dev/null
+    if test -z "$pid"; or not _agent_pid_alive "$pid"
         rm -f "$pidfile"
         echo (set_color yellow)"$call listener is not running"(set_color normal)
         return 0
@@ -9498,8 +11166,8 @@ function _agent_listen_status --description "Wake listener status (internal)"
     set -l pidfile ~/.cache/fish-agent/arka_listen.pid
     set -l logfile ~/.cache/fish-agent/arka_listen.log
     if test -f "$pidfile"
-        set -l pid (cat "$pidfile" 2>/dev/null)
-        if test -n "$pid"; and kill -0 "$pid" 2>/dev/null
+        set -l pid (string trim (cat "$pidfile" 2>/dev/null))
+        if test -n "$pid"; and _agent_pid_alive "$pid"
             set -l lang en-IN
             if set -q ARKA_SPEAK_LANG
                 set lang $ARKA_SPEAK_LANG
@@ -9535,6 +11203,7 @@ function arka_speak_lang --description "Set or list Arka voice language (alias f
 end
 
 function agent --description "Run commands safely: executes safe commands automatically, prompts for dangerous ones"
+    _arka_maybe_reload
     set -l cmd (_agent_strip_wake (string trim -- (string join " " -- $argv)))
 
     if test (count $argv) -gt 0; and test -z "$cmd"
@@ -9550,8 +11219,26 @@ function agent --description "Run commands safely: executes safe commands automa
         set clean_cmd (string lower "$cmd")
     end
 
+    if _agent_is_skills_help_request "$clean_cmd"
+        _arka_skills_help_show
+        if _agent_voice_enabled
+            set -l py (_arka_python)
+            set -l speak_text ($py $_ARKA_ROOT/arka_talents.py voice-help 2>/dev/null)
+            test -n "$speak_text"; and _agent_speak_reply "$speak_text"
+        end
+        return 0
+    end
+
     if test (count $argv) -eq 0
         or string match -qr '(?i)^(skills|help|\?|list skills|show skills|agent skills)\s*$' "$clean_cmd"
+
+        if _agent_voice_enabled
+            set -l py (_arka_python)
+            set -l help ($py $_ARKA_ROOT/arka_talents.py voice-help 2>/dev/null)
+            printf '%s\n' "$help"
+            _agent_speak_reply "$help"
+            return 0
+        end
         
         set -l call (_agent_call_name)
         echo (set_color --bold blue)"━━━ Antigravity Agent Custom Skills ━━━"(set_color normal)
@@ -9578,6 +11265,7 @@ function agent --description "Run commands safely: executes safe commands automa
         echo "  show_folder [path]     - Show files and folders inside a directory"
         echo "  list_files [path] [n]  - List files (optional search depth)"
         echo "  search_files <pat> [dir] - Find files by name pattern"
+        echo "  find_files_by_size <NL>   - Find files by size (e.g. less than 100mb)"
         echo "  open_file <file>       - Open file(s) with default app"
         echo ""
         
@@ -9588,6 +11276,7 @@ function agent --description "Run commands safely: executes safe commands automa
         echo "  shorten_url <url>      - Shorten a URL via TinyURL and copy to clipboard"
         echo "  pomodoro [f] [b]       - Timer with visual progress bar, alerts, notifications"
         echo "  timer <duration>       - Countdown timer (e.g. 5m, 30s, 1h)"
+        echo "  remind <when> <msg>    - Reminder (idle/shutdown aware; list|cancel|status)"
         echo "  todo [action] [task]   - Quick terminal Todo list manager"
         echo "  clipboard [text]       - Read from or write to the system clipboard"
         echo "  translate <lang> <txt> - Translate text to target language via LLM"
@@ -9616,7 +11305,7 @@ function agent --description "Run commands safely: executes safe commands automa
         
         echo (set_color --bold yellow)"💻 System & Diagnostics:"(set_color normal)
         echo "  system_monitor         - Beautiful real-time resource usage card (CPU, RAM, Disk)"
-        echo "  system_info            - Fast diagnostic overview of OS, kernel, memory, IP"
+        echo "  system_info            - Fast diagnostic overview of OS, kernel, CPU, GPU, memory, disk, IP"
         echo "  ip_info                - Show public IP address and geolocation info"
         echo "  speedtest              - Perform a quick terminal internet speed test"
         echo "  port_scan              - Check what local network ports are currently in use"
@@ -9630,6 +11319,8 @@ function agent --description "Run commands safely: executes safe commands automa
         echo "  git_summary            - Beautiful git repository overview (status, branches, commits)"
         echo "  open_project [query]   - Search and launch VS Code on a local project repo"
         echo "  crypto_price [coins]   - Get real-time crypto prices (BTC, ETH, etc.) beautifully"
+        echo "  sports_score [league]  - Live scores: IPL, cricket, NFL, NBA, EPL, F1, …"
+        echo "  live_scores            - Alias for sports_score"
         echo "  lint_python <file>     - Lint Python code automatically using ruff or flake8"
         echo "  browse_web <task>      - Automate browser navigation and action using AI"
         echo "  generate_image <prompt> - Generate images using Gemini API (gemini-2.5-flash-image)"
@@ -9638,6 +11329,13 @@ function agent --description "Run commands safely: executes safe commands automa
         echo "  bored                  - Suggest a quick developer break task or exercise"
         echo "  create_skill <name> <desc> - Dynamically generate a new skill using AI"
         echo "  fix_venv [venv]        - Recreate a virtual environment by deleting and re-creating it"
+        echo ""
+        
+        echo (set_color --bold yellow)"🔌 Third-party plugins:"(set_color normal)
+        echo "  arka skills list       - Installed plugins from ~/.config/arka/skills/"
+        echo "  arka skills install <path|git-url> - Add a plugin (skill.json + run.py or *.fish)"
+        echo "  arka skills refresh    - Rescan plugin folders"
+        echo "  NL: demo echo hello    - Routes via plugin triggers (voice + text)"
         echo ""
         
         echo (set_color --bold yellow)"🤖 Automation (~/Projects/python/products/automation):"(set_color normal)
@@ -9674,7 +11372,11 @@ function agent --description "Run commands safely: executes safe commands automa
         echo (set_color cyan)"  arka aie|yt-bulk|queue|brief|wifi|agent — same via subcommands"(set_color normal)
         echo ""
         echo (set_color --bold yellow)"🤖 Agentic (memory, research, automation):"(set_color normal)
-        echo "  agent_remember <fact>     - Long-term memory"
+        echo "  agent_remember <fact>     - Long-term memory (Supermemory API + local cache)"
+        echo "  agent_recall [query]      - Recall memories (cloud search or local)"
+        echo "  supermemory status        - Show memory backend (api vs local)"
+        echo "  supermemory remember|recall - Explicit Supermemory commands"
+        echo "  semantic_memory           - TurboQuant semantic index on local memories"
         echo "  agent_research [--deep]   - Unified TurboQuant + web + media research"
         echo "  agent_trace / agent_why   - Explain last routing decision"
         echo "  agent_resume list         - Resume interrupted agent_loop"
@@ -9685,7 +11387,7 @@ function agent --description "Run commands safely: executes safe commands automa
         echo "  rag_setup / rag_status    - TurboQuant RAG backend"
         echo "  predictions [--domain antiques|stocks|strategy] [--deep] <topic> - Opportunity analysis talent"
         echo "  stock news|prices|analyze TICKER|dashboard - stock_analysis project bridge"
-        echo "  arka_ask / speak_research / semantic_memory - Unified brain & memory talents"
+        echo "  arka_ask / speak_research / semantic_memory / supermemory - Unified brain & memory"
         echo ""
         return 0
     end
@@ -9705,6 +11407,11 @@ function agent --description "Run commands safely: executes safe commands automa
         return $status
     end
 
+    if _arka_is_third_party_skill "$first_word"
+        _arka_run_third_party_skills $first_word $argv[2..-1]
+        return $status
+    end
+
     if _agent_try_listen_control "$cmd"
         return $status
     end
@@ -9720,7 +11427,18 @@ function agent --description "Run commands safely: executes safe commands automa
         set args (string join " " -- $words[2..-1])
     end
 
-    # 1. Try Local Offline Translation Match first
+    set -l route_mode (_arka_route_mode)
+
+    if test "$route_mode" = ai -o "$route_mode" = ai_only
+        set interpreted (_agent_llm_route "$cmd" "$available_skills")
+        if test -n "$interpreted"
+            set route_source llm
+            echo (set_color yellow)"💡 [AI routing]"(set_color normal)
+        end
+    end
+
+    if test -z "$interpreted"; and test "$route_mode" != ai_only
+    # 1. Try Local Offline / symbolic translation match
     if string match -qr '(?i)^(?:agent\s+)?loop\s+' "$clean_cmd"
         set -l loop_goal (string replace -r -i '^(?:agent\s+)?loop\s+' '' "$cmd" | string trim)
         if _agent_matches_graphics_driver "$loop_goal"
@@ -9731,6 +11449,17 @@ function agent --description "Run commands safely: executes safe commands automa
             agent_loop $loop_goal
             return $status
         end
+    else if _agent_play_route_ambiguous "$clean_cmd"
+        set interpreted (_agent_route_play_ambiguous "$cmd" "$available_skills")
+        if test -n "$interpreted"
+            if test "$(_arka_route_mode)" = symbolic_only
+                set route_source offline
+                echo (set_color yellow)"💡 [Offline routing — play/media tie-break]"(set_color normal)
+            else
+                set route_source llm
+                echo (set_color yellow)"💡 [AI routing — ambiguous play/media request]"(set_color normal)
+            end
+        end
     else if string match -qr '(play.*spotify|spotify)' "$clean_cmd"
         set -l song_query (string replace -r -i '^play\s+(?:song\s+)?(?:on\s+)?spotify(?:\s+of)?\s*' '' "$cmd")
         set song_query (string replace -r -i '^play\s+(?:song\s+)?' '' "$song_query")
@@ -9739,6 +11468,22 @@ function agent --description "Run commands safely: executes safe commands automa
         set song_query (string replace -r -i '^of\s+' '' "$song_query")
         set song_query (_spotify_normalize_query $song_query)
         set interpreted "play_spotify $song_query"
+    else if string match -qr '(?i)(whatsapp\s+inbox|inbox\s+whatsapp|whatsapp\s+listen|listen\s+whatsapp)' "$clean_cmd"
+        if string match -qr '(?i)\bstop\b' "$clean_cmd"
+            set interpreted "whatsapp_listen stop"
+        else if string match -qr '(?i)\b(status|state)\b' "$clean_cmd"
+            set interpreted "whatsapp_listen status"
+        else if string match -qr '(?i)\b(fg|foreground|debug|log)\b' "$clean_cmd"
+            set -l mode fg
+            if string match -qr '(?i)\bdebug\b' "$clean_cmd"
+                set mode debug
+            else if string match -qr '(?i)\blog\b' "$clean_cmd"
+                set mode log
+            end
+            set interpreted "whatsapp_listen $mode"
+        else
+            set interpreted "whatsapp_listen"
+        end
     else if string match -qr '(whatsapp|message.*whatsapp)' "$clean_cmd"
         set -l wa_parts (_parse_whatsapp_nl "$cmd")
         if test (count $wa_parts) -ge 2; and test -n "$wa_parts[1]"
@@ -9755,12 +11500,8 @@ function agent --description "Run commands safely: executes safe commands automa
     else if string match -qr '(?i)^(stop|pause|kill)\s+(?:the\s+|this\s+|that\s+|playing\s+)?(?:song|songs|music|audio|playback|player|spotify|it)\b' "$clean_cmd"
         set interpreted "stop_music"
     else if _agent_is_youtube_research_request "$clean_cmd"
-        set -l yq (_agent_parse_youtube_research_query "$cmd")
-        if test -n "$yq"
-            set interpreted "youtube_research '$yq' --index"
-        else
-            set interpreted "youtube_research"
-        end
+        set interpreted (_agent_build_youtube_research_cmd "$cmd")
+        set route_source offline
     else if string match -qr '(?i)(play\s+.*youtube|play\s+(?:a\s+|an\s+)?(?:video|episode|anime)|watch\s+(?:a\s+|an\s+)?|watch\s+.*youtube)' "$clean_cmd"
         and not string match -qr '(?i)(summarize|summary|transcript|research|digest|caption|download|transcribe|playlist)' "$clean_cmd"
         set -l youtube_query (string replace -r -i '^play\s+(?:a\s+|an\s+)?(?:video\s+|episode\s+|anime\s+)?(?:on\s+)?youtube(?:\s+of)?\s*' '' "$cmd")
@@ -9831,6 +11572,8 @@ function agent --description "Run commands safely: executes safe commands automa
     else if string match -qr '(?i)what\s+(?:is\s+)?in\s+(~|/|\./)' "$clean_cmd"
         set -l folder_path (string replace -r -i '^.*what\s+(?:is\s+)?in\s+' '' "$cmd" | string trim)
         set interpreted "show_folder $folder_path"
+    else if _agent_is_file_size_find "$cmd"
+        set interpreted (_agent_route_file_size_find "$cmd")
     else if string match -qr '(find.*file|search.*file|look.*for.*file|locate.*file)' "$clean_cmd"
         set -l file_pat (string replace -r -i '^.*(?:find|search|look for|locate)\s+(?:file\s+)?' '' "$cmd")
         set -l file_pat (string replace -r -i '\s+(?:in|under|from)\s+.+$' '' "$file_pat")
@@ -9942,8 +11685,26 @@ function agent --description "Run commands safely: executes safe commands automa
         set interpreted "daily_brief"
     else if string match -qr '(?i)(wifi|wi-fi|wireless).*(info|network|signal|ssid)|what wifi|am i on wifi' "$clean_cmd"
         set interpreted "wifi_info"
+    else if string match -qr '(?i)(live\s+(sports?\s+)?scores?|sports?\s+scores?|match\s+scores?|game\s+scores?|ipl\s+(live|score|scores)|nfl\s+scores?|nba\s+scores?|cricket\s+(live|score|scores)|soccer\s+scores?|football\s+scores?|who\s+is\s+winning|today\s*s?\s+(ipl|match|game)s?\s+score|what\s+(is|are)\s+(the\s+)?(live\s+)?(ipl|nfl|nba|cricket|soccer|football|sports?)\s+score)' "$clean_cmd"
+        set -l sq (string replace -r -i '^(?:show|get|tell me|what is|what are|give me)\s+' '' "$cmd")
+        set interpreted "sports_score $sq"
+        set route_source offline
+    else if set -l tp_match (_arka_match_third_party_skill "$cmd")
+        if test -n "$tp_match"
+            set interpreted $tp_match
+            set route_source offline
+        end
     else if string match -qr '(weather|forecast|temp|rain|rainy|sunny|cloudy|snow|snowing|storm|hurricane|umbrella|will it rain|is it going to rain|is it raining)' "$clean_cmd"
-        set interpreted "weather $args"
+        set interpreted "weather $cmd"
+        set route_source offline
+    else if string match -qr '(?i)\bremind(?:\s+me)?\b' "$clean_cmd"
+        set -l rem_text (string replace -r -i '^(?:please\s+)?remind(?:\s+me)?\s+' '' "$cmd" | string trim)
+        if test -z "$rem_text"
+            set interpreted "remind status"
+        else
+            set interpreted "remind $rem_text"
+        end
+        set route_source offline
     else if string match -qr '(timer|countdown)' "$clean_cmd"
         set interpreted "timer $args"
     else if string match -qr '(?i)wallpaper|desktop\s+background|set\s+(?:this|it)\s+as\s+wallpaper|background\s+image' "$clean_cmd"
@@ -9991,6 +11752,9 @@ function agent --description "Run commands safely: executes safe commands automa
     else if _agent_is_storage_breakdown_question "$cmd"
         set interpreted "disk_breakdown"
         set route_source offline
+    else if _agent_is_places_question "$cmd"
+        set interpreted "web_answer $cmd"
+        set route_source offline
     else if _agent_is_pdf_ingest_request "$cmd"
         set -l pdf (_agent_parse_pdf_path "$cmd")
         if test -n "$pdf"
@@ -10018,12 +11782,17 @@ function agent --description "Run commands safely: executes safe commands automa
         set route_source offline
     else if set -l aie_route (_agent_route_aie "$cmd")
         set interpreted $aie_route
+    else if set -l wa_route (_agent_route_whatsapp_inbox "$cmd")
+        set interpreted $wa_route
         set route_source offline
     else if set -l ytb_route (_agent_route_youtube_bulk "$cmd")
         set interpreted $ytb_route
         set route_source offline
     else if set -l ytd_route (_agent_route_youtube_download "$cmd")
         set interpreted $ytd_route
+        set route_source offline
+    else if _agent_is_system_info_question "$cmd"
+        set interpreted (_agent_route_system_info "$cmd")
         set route_source offline
     else if _agent_is_general_chat "$cmd"
         set interpreted (_agent_route_general_chat "$cmd")
@@ -10143,24 +11912,25 @@ function agent --description "Run commands safely: executes safe commands automa
         set interpreted "create_desktop_app unreal"
     else if string match -qr '(?i)unreal.*(desktop|launcher|shortcut|app\s*menu)' "$clean_cmd"
         set interpreted "create_desktop_app unreal"
-    else if string match -qr '(?i)^(remember|memorize|store)\s+(that\s+)?' "$clean_cmd"
-        set -l mem (string replace -r -i '^(?:remember|memorize|store)\s+(?:that\s+)?' '' "$cmd")
+    else if string match -qr '(?i)^(remember|memorize|store|don\'t forget|dont forget|keep in mind)\s+(that\s+)?' "$clean_cmd"
+        set -l mem (_arka_memory_detect_fact "$cmd")
+        test -z "$mem"; and set mem (string replace -r -i '^(?:remember|memorize|store|don\'t forget|dont forget|keep in mind)\s+(?:that\s+)?' '' "$cmd")
         set interpreted "agent_remember $mem"
     else if string match -qr '(?i)^(recall|what do you remember)' "$clean_cmd"
         set -l rq (string replace -r -i '^(?:recall|what do you remember about)\s*' '' "$cmd")
         set interpreted "agent_recall $rq"
+    else if _arka_memory_probe "$cmd"
+        set interpreted "agent_remember $_arka_last_mem_fact"
     else if _agent_is_youtube_research_request "$clean_cmd"
-        set -l yq (_agent_parse_youtube_research_query "$cmd")
         if string match -qr '(?i)\b(speak|tell me|read aloud|say)\b' "$clean_cmd"
+            set -l yq (_agent_parse_youtube_research_query "$cmd")
             if test -n "$yq"
                 set interpreted "speak_research $yq"
             else
                 set interpreted "speak_research"
             end
-        else if test -n "$yq"
-            set interpreted "youtube_research '$yq' --index"
         else
-            set interpreted "youtube_research"
+            set interpreted (_agent_build_youtube_research_cmd "$cmd")
         end
     else if string match -qr '(?i)^(arka ask|unified ask|ask arka)\s+' "$clean_cmd"
         set -l aq (string replace -r -i '^(?:arka ask|unified ask|ask arka)\s+' '' "$cmd")
@@ -10252,15 +12022,18 @@ function agent --description "Run commands safely: executes safe commands automa
             set interpreted "open_app $target_app"
         end
     end
+    end
 
-    if test -n "$interpreted"
+    if test -n "$interpreted"; and test "$route_source" = none
         set route_source offline
         echo (set_color yellow)"💡 [Offline routing]"(set_color normal)
-    else
-        # 2. LLM routing via Agno (same fallback chain as answers)
+    end
+
+    if test -z "$interpreted"; and test "$route_mode" = symbolic
         set interpreted (_agent_llm_route "$cmd" "$available_skills")
         if test -n "$interpreted"
             set route_source llm
+            echo (set_color yellow)"💡 [AI routing]"(set_color normal)
         end
     end
 
@@ -11002,6 +12775,8 @@ fish_add_path --path --append "/home/s/.local/share/nvm/v22.22.2/bin"
 # end NemoClaw PATH setup
 
 # --- First Run Setup ---
+set -g _ARKA_RELOAD_STAMP (_arka_reload_stamp)
+_arka_load_third_party_skills 2>/dev/null
 _agent_register_call_name
 if status is-interactive
     if set -q ARKA_USAGE_TRACK; and test "$ARKA_USAGE_TRACK" = 1 -o "$ARKA_USAGE_TRACK" = true
@@ -11010,6 +12785,9 @@ if status is-interactive
     if set -q ARKA_AGENT_NUDGE; and test "$ARKA_AGENT_NUDGE" = 1 -o "$ARKA_AGENT_NUDGE" = true
         agent_nudge --quiet 2>/dev/null
     end
+    _arka_remind_autostart_ensure 2>/dev/null
+    set -l _arka_remind_py (_arka_python)
+    $_arka_remind_py $_ARKA_ROOT/arka_remind.py check --quiet 2>/dev/null
     if set -q ARKA_AUTO_START; and test "$ARKA_AUTO_START" = 1 -o "$ARKA_AUTO_START" = true
         _arka_start_all --quiet 2>/dev/null
     else if test "$AGENT_WAKE_AUTO" = 1 -o "$AGENT_WAKE_AUTO" = true
@@ -11019,7 +12797,11 @@ if status is-interactive
     end
 end
 if not test -f $_ARKA_ROOT/.skills_setup_done
-    install_skill_deps
+    if _arka_is_linux
+        install_skill_deps
+    else
+        _arka_install_python_deps
+    end
 end
 
 

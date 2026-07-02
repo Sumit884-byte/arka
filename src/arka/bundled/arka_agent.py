@@ -47,9 +47,17 @@ def save_json(path: Path, data: object) -> None:
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
-def _llm(system: str, user: str, temperature: float = 0.2) -> str:
+def _llm(system: str, user: str, temperature: float = 0.2, *, task: str = "agent") -> str:
+    try:
+        from arka_llm import llm_complete
+
+        out = llm_complete(system, user, temperature, task=task).strip()
+        if out:
+            return re.sub(r"^```[a-zA-Z0-9]*\n*|\n*```$", "", out)
+    except ImportError:
+        pass
     proc = subprocess.run(
-        [_py(), str(FISH_DIR / "arka_llm.py"), "complete", "--system", system, "--user", user, "--temperature", str(temperature)],
+        [_py(), str(FISH_DIR / "arka_llm.py"), "complete", "--system", system, "--user", user, "--temperature", str(temperature), "--task", task],
         capture_output=True,
         text=True,
         timeout=120,
@@ -63,15 +71,53 @@ def _llm(system: str, user: str, temperature: float = 0.2) -> str:
 # ── Memory ────────────────────────────────────────────────────────────────────
 
 def memory_remember(text: str, *, tags: list[str] | None = None) -> None:
+    try:
+        from arka_supermemory import remember_print
+
+        remember_print(text, tags=tags)
+        return
+    except ImportError:
+        pass
+    except Exception as exc:
+        if (os.environ.get("ARKA_MEMORY") or "auto").strip().lower() in ("supermemory", "cloud", "api"):
+            print(f"Supermemory error: {exc}", file=sys.stderr)
+            raise
+
+    if memory_remember_silent(text, tags=tags, source="cli"):
+        items = load_json(MEMORY_FILE, [])
+        if isinstance(items, list) and items:
+            print(f"Remembered ({items[-1].get('id', '?')}): {text[:120]}")
+        else:
+            print(f"Remembered: {text[:120]}")
+
+
+def memory_remember_silent(text: str, *, tags: list[str] | None = None, source: str = "auto") -> bool:
+    """Store a memory without printing. Returns True if stored."""
+    text = text.strip()
+    if not text:
+        return False
+    try:
+        from arka_supermemory import remember
+
+        remember(text, tags=tags)
+        return True
+    except ImportError:
+        pass
+    except Exception as exc:
+        if (os.environ.get("ARKA_MEMORY") or "auto").strip().lower() in ("supermemory", "cloud", "api"):
+            print(f"Supermemory error: {exc}", file=sys.stderr)
+            raise
+
     items = load_json(MEMORY_FILE, [])
     if not isinstance(items, list):
         items = []
     entry = {
         "id": hashlib.sha256(f"{text}{time.time()}".encode()).hexdigest()[:12],
-        "text": text.strip(),
+        "text": text,
         "tags": tags or [],
         "ts": time.time(),
         "when": datetime.now().isoformat(timespec="seconds"),
+        "source": source,
     }
     items.append(entry)
     save_json(MEMORY_FILE, items[-200:])
@@ -82,7 +128,17 @@ def memory_remember(text: str, *, tags: list[str] | None = None) -> None:
         mod.memory_reindex()
     except Exception:
         pass
-    print(f"Remembered ({entry['id']}): {text[:120]}")
+    return True
+
+
+def memory_auto_detect(text: str, *, quiet: bool = True) -> list[str]:
+    """Symbolically detect and store memorable facts from natural language."""
+    try:
+        from arka_memory_detect import auto_remember
+
+        return auto_remember(text, quiet=quiet)
+    except ImportError:
+        return []
 
 
 def memory_list(limit: int = 20) -> None:
@@ -99,6 +155,18 @@ def memory_list(limit: int = 20) -> None:
 
 
 def memory_recall(query: str, *, limit: int = 5) -> None:
+    try:
+        from arka_supermemory import recall
+
+        recall(query, limit=limit)
+        return
+    except ImportError:
+        pass
+    except Exception as exc:
+        if (os.environ.get("ARKA_MEMORY") or "auto").strip().lower() in ("supermemory", "cloud", "api"):
+            print(f"Supermemory error: {exc}", file=sys.stderr)
+            raise
+
     items = load_json(MEMORY_FILE, [])
     if not isinstance(items, list) or not items:
         print("No memories.")
@@ -127,6 +195,14 @@ def memory_recall(query: str, *, limit: int = 5) -> None:
 
 
 def memory_forget(ref: str) -> None:
+    try:
+        from arka_supermemory import forget
+
+        forget(ref)
+        return
+    except ImportError:
+        pass
+
     items = load_json(MEMORY_FILE, [])
     if not isinstance(items, list):
         print("Nothing to forget.")
@@ -142,12 +218,11 @@ def memory_forget(ref: str) -> None:
 
 def memory_context_for(goal: str, *, limit: int = 3) -> str:
     try:
-        import importlib
+        from arka_supermemory import context_for
 
-        mod = importlib.import_module("arka_talents")
-        ctx = mod.memory_semantic_context(goal, limit_chars=3500)
-        if ctx.strip():
-            return ctx
+        return context_for(goal, limit_chars=3500)
+    except ImportError:
+        pass
     except Exception:
         pass
     items = load_json(MEMORY_FILE, [])
@@ -501,11 +576,20 @@ def routine_list() -> None:
         print(f"[{en}] {r.get('id', '?')}  {r.get('schedule', '')} → {r.get('action', '')}")
 
 
+def _systemctl(*args: str) -> None:
+    if not shutil.which("systemctl"):
+        return
+    subprocess.run(["systemctl", *args], check=False)
+
+
 def routine_install() -> None:
     """Generate systemd user timer units for daily/hourly routines."""
     routines = load_json(ROUTINE_FILE, [])
     if not isinstance(routines, list):
         print("No routines to install.")
+        return
+    if not shutil.which("systemctl"):
+        print("systemctl not found — routines saved but timers not installed (Linux systemd only).")
         return
     unit_dir = Path.home() / ".config/systemd/user"
     unit_dir.mkdir(parents=True, exist_ok=True)
@@ -536,8 +620,8 @@ def routine_install() -> None:
             f"[Install]\nWantedBy=timers.target\n",
             encoding="utf-8",
         )
-        subprocess.run(["systemctl", "--user", "daemon-reload"], check=False)
-        subprocess.run(["systemctl", "--user", "enable", "--now", f"arka-routine-{rid}.timer"], check=False)
+        _systemctl("--user", "daemon-reload")
+        _systemctl("--user", "enable", "--now", f"arka-routine-{rid}.timer")
         print(f"Installed arka-routine-{rid}.timer ({on_calendar})")
 
 
@@ -545,7 +629,7 @@ def routine_remove(rid: str) -> None:
     routines = load_json(ROUTINE_FILE, [])
     if isinstance(routines, list):
         save_json(ROUTINE_FILE, [r for r in routines if r.get("id") != rid])
-    subprocess.run(["systemctl", "--user", "disable", "--now", f"arka-routine-{rid}.timer"], check=False)
+    _systemctl("--user", "disable", "--now", f"arka-routine-{rid}.timer")
     for p in (Path.home() / ".config/systemd/user").glob(f"arka-routine-{rid}.*"):
         p.unlink(missing_ok=True)
     print(f"Removed routine {rid}.")
@@ -872,6 +956,13 @@ def main() -> int:
     p = sub.add_parser("memory-context")
     p.add_argument("goal")
 
+    p = sub.add_parser("memory-detect")
+    p.add_argument("text")
+
+    p = sub.add_parser("memory-auto")
+    p.add_argument("text")
+    p.add_argument("--verbose", action="store_true")
+
     p = sub.add_parser("trace-log")
     p.add_argument("--input", required=True)
     p.add_argument("--interpreted", required=True)
@@ -975,6 +1066,23 @@ def main() -> int:
     elif args.cmd == "memory-context":
         ctx = memory_context_for(args.goal)
         print(ctx)
+        return 0
+    elif args.cmd == "memory-detect":
+        try:
+            from arka_memory_detect import extract_fact
+
+            fact = extract_fact(args.text)
+            if fact:
+                print(fact)
+        except ImportError:
+            pass
+        return 0
+    elif args.cmd == "memory-auto":
+        stored = memory_auto_detect(args.text, quiet=not args.verbose)
+        if args.verbose:
+            for fact in stored:
+                print(f"Auto-remembered: {fact}")
+        return 0
     elif args.cmd == "trace-log":
         trace_log(input_text=args.input, interpreted=args.interpreted, source=args.source, why=args.why)
     elif args.cmd == "trace-last":

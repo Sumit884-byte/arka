@@ -7,6 +7,69 @@ import os
 import re
 import sys
 
+DEVANAGARI_RE = re.compile(r"[\u0900-\u097F]")
+
+# Hinglish STT often writes spoken English in Devanagari when lang=hi-IN.
+# Map wake + common command words to Latin so routing/wake detection works.
+DEVANAGARI_PHRASES: list[tuple[str, str]] = [
+    (r"हे\s+अरका", "hey arka"),
+    (r"है\s+अरका", "hey arka"),
+    (r"हाय\s+अरका", "hey arka"),
+    (r"ओके\s+अरका", "ok arka"),
+    (r"अरका\s+टेल\s+मी", "arka tell me"),
+    (r"अरका\s+बताओ", "arka tell me"),
+    (r"टेल\s+मी\s+ऑल", "tell me all"),
+    (r"टेल\s+मी\s+आल", "tell me all"),
+]
+
+DEVANAGARI_WORDS: dict[str, str] = {
+    "अरका": "arka",
+    "आर्का": "arka",
+    "अर्का": "arka",
+    "हे": "hey",
+    "हाय": "hey",
+    "ओके": "ok",
+    "टेल": "tell",
+    "मी": "me",
+    "ऑल": "all",
+    "आल": "all",
+    "योर": "your",
+    "यूर": "your",
+    "स्किल्स": "skills",
+    "स्किल": "skills",
+    "स्किल्स्": "skills",
+    "वेदर": "weather",
+    "मौसम": "weather",
+    "प्ले": "play",
+    "गाना": "song",
+    "संगीत": "music",
+    "खोल": "open",
+    "बंद": "stop",
+    "स्कोर": "score",
+    "स्कोर्स": "scores",
+    "मैच": "match",
+    "खेल": "sports",
+    "आईपीएल": "ipl",
+    "आइपीएल": "ipl",
+
+
+def has_devanagari(text: str) -> bool:
+    return bool(DEVANAGARI_RE.search(text or ""))
+
+
+def normalize_indic_script(text: str) -> str:
+    """Devanagari Hinglish → Latin for wake word + skill routing."""
+    if not has_devanagari(text):
+        return text
+    t = text
+    for pattern, repl in DEVANAGARI_PHRASES:
+        t = re.sub(pattern, repl, t, flags=re.IGNORECASE)
+    for dev, lat in sorted(DEVANAGARI_WORDS.items(), key=lambda kv: -len(kv[0])):
+        t = t.replace(dev, lat)
+    # Drop stray Devanagari punctuation / leftovers
+    t = DEVANAGARI_RE.sub(" ", t)
+    return " ".join(t.split()).strip()
+
 
 def _agent_name() -> str:
     return (os.environ.get("AGENT_NAME") or "arka").strip().lower() or "arka"
@@ -29,7 +92,12 @@ def quick_map_rules(agent_name: str | None = None) -> list[tuple[str, str]]:
         (rf"(?i)^he\s+rk\b", f"hey {name}"),
         (rf"(?i)^hey\s+rk\b", f"hey {name}"),
         (rf"(?i)^he\s+{wake}\b", f"hey {name}"),
-        (rf"(?i)^hey\s+{wake}\b", f"hey {name}"),
+        (rf"(?i)^hi\s+{wake}\b", f"hey {name}"),
+        (rf"(?i)^hay\s+{wake}\b", f"hey {name}"),
+        (rf"(?i)^hey\s+irka\b", f"hey {name}"),
+        (rf"(?i)^hey\s+erka\b", f"hey {name}"),
+        (rf"(?i)^hey\s+ir\b", f"hey {name}"),
+        (rf"(?i)^he\s+irka\b", f"hey {name}"),
         (rf"(?i)^he\s+arca\b", f"hey {name}"),
         (rf"(?i)^hey\s+arca\b", f"hey {name}"),
         (rf"(?i)^he\s+archer\b", f"hey {name}"),
@@ -81,6 +149,10 @@ def strip_wake(text: str, agent_name: str | None = None) -> str:
         "he rk ",
         "hey arca ",
         "he arca ",
+        "hey arka ",
+        "he arka ",
+        "hi arka ",
+        "hay arka ",
     ]
     for _ in range(5):
         before = t
@@ -103,7 +175,8 @@ def looks_like_direct_command(text: str) -> bool:
             r"play\s+\S|open\s+\S|weather\b|timer\b|screenshot\b|listen\b|debug\b|status\b|"
             r"stop\s+(?:the\s+|this\s+|playing\s+)?(?:song|songs|music|audio|playback|spotify|it)\b|"
             r"pause\s+(?:the\s+)?(?:song|songs|music|audio|playback)\b|"
-            r"stop\s+listen|start\s+listen|resume\b)",
+            r"stop\s+listen|start\s+listen|resume\b|"
+            r"sports?\s+score|ipl\s+score|cricket\s+score|live\s+score)",
             t,
         )
     )
@@ -126,12 +199,25 @@ def classify_phrase(text: str, agent_name: str | None = None) -> tuple[str, str]
         return "wake_only", norm
     if looks_like_direct_command(norm):
         return "direct", norm
+    if re.search(
+        r"(?i)\b("
+        r"tell\s+(?:me\s+)?(?:about\s+)?(?:all\s+)?(?:your\s+)?skills?|"
+        r"tell\s+your\s+skills?|"
+        r"(?:all|list|show)\s+(?:me\s+)?(?:all\s+)?(?:your\s+)?skills?|"
+        r"what\s+(?:are\s+)?(?:all\s+)?your\s+skills?"
+        r")\b",
+        norm,
+    ):
+        return "wake_cmd" if has_wake else "direct", norm
     return "none", norm
 
 
 def normalize_stt(text: str, agent_name: str | None = None) -> str:
     text = " ".join((text or "").split()).strip(" \t\n\r.,!?;:")
-    if not text or not _enabled():
+    if not text:
+        return text
+    text = normalize_indic_script(text)
+    if not _enabled():
         return text
     for pattern, repl in quick_map_rules(agent_name):
         text = re.sub(pattern, repl, text)

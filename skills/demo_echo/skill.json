@@ -1,0 +1,14 @@
+{
+  "name": "demo_echo",
+  "description": "Demo third-party skill — echoes your message",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "demo echo",
+    "echo back",
+    "test plugin"
+  ],
+  "voice_ack": "Running the demo plugin."
+}

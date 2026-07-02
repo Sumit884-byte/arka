@@ -126,6 +126,13 @@ def session_append(role: str, content: str) -> None:
     msgs = load_session()
     msgs.append({"role": role, "content": content})
     save_session(msgs)
+    if role == "user" and content.strip():
+        try:
+            from arka_agent import memory_auto_detect
+
+            memory_auto_detect(content, quiet=True)
+        except ImportError:
+            pass
 
 
 def extract_pin(text: str) -> str | None:
@@ -197,6 +204,55 @@ def parse_forecast_days(text: str, default: int = 0) -> int:
     if re.search(r"\bforecast\b|\bnext\s+few\s+days\b", low) and default <= 0:
         return 3
     return default
+
+
+WEATHER_DETAIL_RE = re.compile(
+    r"(?i)\b("
+    r"in\s+detail|detailed|full\s+detail|more\s+detail|"
+    r"hourly|hour[\s-]by[\s-]hour|each\s+hour|every\s+hour|"
+    r"breakdown|explain\s+everything|full\s+forecast"
+    r")\b",
+)
+
+
+def parse_weather_detail_mode(text: str) -> bool:
+    """True when user wants hourly / full day breakdown."""
+    return bool(WEATHER_DETAIL_RE.search(text))
+
+
+def _weather_overall_kind(code: int | float | None, label: str) -> str:
+    low = label.lower()
+    c = int(code) if code is not None else -1
+    if c in {95, 96, 99} or "thunder" in low:
+        return "Stormy"
+    if c in {71, 73, 75, 77, 85, 86} or "snow" in low:
+        return "Snowy"
+    if c in {51, 53, 55, 61, 63, 65, 66, 67, 80, 81, 82} or "rain" in low or "drizzle" in low:
+        return "Rainy"
+    if c in {45, 48} or "fog" in low:
+        return "Foggy"
+    if c == 3 or "overcast" in low:
+        return "Cloudy"
+    if c == 2 or "partly" in low:
+        return "Partly cloudy"
+    if c in {0, 1} or "clear" in low:
+        return "Sunny"
+    return label.split(" with ")[0].split(" and ")[0] or "Mixed"
+
+
+def _weather_intensity(pop: float, mm: float, label: str) -> str:
+    low = label.lower()
+    if "heavy" in low or "violent" in low:
+        return "strong"
+    if "thunder" in low and (pop >= 50 or mm >= 5):
+        return "strong"
+    if pop >= 70 or mm >= 10:
+        return "strong"
+    if pop >= 40 or mm >= 2:
+        return "moderate"
+    if pop >= 15 or mm >= 0.3 or "drizzle" in low or "light rain" in low:
+        return "light"
+    return "light" if pop > 0 or mm > 0 else ""
 
 
 def geocode_place(name: str) -> tuple[float, float, str] | None:
@@ -299,7 +355,72 @@ def _fmt_temp(val: object) -> str:
         return str(val)
 
 
-def fetch_day_detail(lat: float, lon: float, label: str, *, day_offset: int = 0) -> str:
+def fetch_day_brief(lat: float, lon: float, label: str, *, day_offset: int = 0) -> str:
+    """Short single-day outlook: overall condition, intensity, temps, rain — no hourly."""
+    day_offset = max(0, min(1, int(day_offset)))
+    need_days = day_offset + 1
+    params = urllib.parse.urlencode({
+        "latitude": lat,
+        "longitude": lon,
+        "current_weather": "true",
+        "daily": (
+            "weathercode,temperature_2m_max,temperature_2m_min,precipitation_sum,"
+            "precipitation_probability_max"
+        ),
+        "timezone": "auto",
+        "forecast_days": need_days,
+    })
+    try:
+        data = _open_meteo_get(f"https://api.open-meteo.com/v1/forecast?{params}")
+    except Exception as exc:
+        return f"Weather forecast failed: {exc}"
+
+    place = _clean_location_label(label)
+    cw = data.get("current_weather") or {}
+    daily = data.get("daily") or {}
+    dates = daily.get("time") or []
+    if len(dates) <= day_offset:
+        return f"No forecast for that day in {place}."
+
+    day_date = dates[day_offset]
+    try:
+        from datetime import date as date_cls
+        nice_date = date_cls.fromisoformat(day_date).strftime("%a %d %b")
+    except ValueError:
+        nice_date = day_date
+
+    hi = (daily.get("temperature_2m_max") or [None])[day_offset]
+    lo = (daily.get("temperature_2m_min") or [None])[day_offset]
+    day_code = (daily.get("weathercode") or [None])[day_offset]
+    day_pop = float((daily.get("precipitation_probability_max") or [0])[day_offset] or 0)
+    day_mm = float((daily.get("precipitation_sum") or [0])[day_offset] or 0)
+    day_label = wmo_label(day_code)
+    kind = _weather_overall_kind(day_code, day_label)
+    intensity = _weather_intensity(day_pop, day_mm, day_label)
+
+    title = "Tomorrow" if day_offset else "Today"
+    lines = [f"{title} — {nice_date} — {place}"]
+
+    overall = f"Overall: {kind}"
+    if intensity:
+        overall += f" ({intensity})"
+    overall += f" {_weather_emoji(day_code)} · {_fmt_temp(lo)}–{_fmt_temp(hi)}"
+    if day_pop > 0:
+        overall += f" · Rain {day_pop:.0f}%"
+    if day_mm > 0:
+        overall += f" · ~{day_mm:.1f} mm"
+    lines.append(overall)
+
+    if day_offset == 0 and cw:
+        now_code = cw.get("weathercode")
+        lines.append(
+            f"Now: {_fmt_temp(cw.get('temperature'))} {_weather_emoji(now_code)} {wmo_label(now_code)}"
+        )
+
+    return "\n".join(lines)
+
+
+def fetch_day_detail(lat: float, lon: float, label: str, *, day_offset: int = 0, hourly_all: bool = False) -> str:
     """Rich single-day outlook (today=0, tomorrow=1): summary + hourly timeline."""
     day_offset = max(0, min(1, int(day_offset)))
     need_days = day_offset + 1
@@ -422,26 +543,30 @@ def fetch_day_detail(lat: float, lon: float, label: str, *, day_offset: int = 0)
 
     if day_hours:
         lines.append("")
-        lines.append("Hourly" if day_offset else "Next hours")
-        slots: list[tuple[str, float, int, float]] = []
-        for item in day_hours:
-            if day_offset == 0:
-                now_prefix = (cw.get("time") or "")[:13]
-                if now_prefix and item[0][:13] < now_prefix:
+        if hourly_all:
+            lines.append("Hour-by-hour")
+            slots = day_hours
+        else:
+            lines.append("Hourly" if day_offset else "Next hours")
+            slots: list[tuple[str, float, int, float]] = []
+            for item in day_hours:
+                if day_offset == 0:
+                    now_prefix = (cw.get("time") or "")[:13]
+                    if now_prefix and item[0][:13] < now_prefix:
+                        continue
+                if not slots:
+                    slots.append(item)
                     continue
-            if not slots:
-                slots.append(item)
-                continue
-            h = int(item[0][11:13])
-            prev_h = int(slots[-1][0][11:13])
-            if h - prev_h >= 3:
-                slots.append(item)
-            if len(slots) >= 8:
-                break
-        if day_offset == 1 and len(slots) < 4:
-            slots = day_hours[::3][:8]
-        if len(slots) == 1 and len(day_hours) > 1:
-            slots = day_hours[:: max(1, len(day_hours) // 8)][:8]
+                h = int(item[0][11:13])
+                prev_h = int(slots[-1][0][11:13])
+                if h - prev_h >= 3:
+                    slots.append(item)
+                if len(slots) >= 8:
+                    break
+            if day_offset == 1 and len(slots) < 4:
+                slots = day_hours[::3][:8]
+            if len(slots) == 1 and len(day_hours) > 1:
+                slots = day_hours[:: max(1, len(day_hours) // 8)][:8]
         for t, temp, code, pop in slots:
             hh = t[11:16]
             pop_s = f"  rain {float(pop):.0f}%" if pop and float(pop) > 0 else ""
@@ -513,6 +638,7 @@ def fetch_weather_forecast(days: int = 7, *, city: str | None = None) -> str:
 def extract_weather_location(question: str) -> str:
     """Best-effort city name from a weather question."""
     q = question.strip()
+    q = WEATHER_DETAIL_RE.sub("", q)
     q = re.sub(
         r"(?i)^(?:what(?:'s|\s+is)?|how(?:'s|\s+is)?|tell me)\s+(?:the\s+)?(?:weather|forecast)\s+(?:in|at|for)\s+",
         "",
@@ -529,24 +655,29 @@ def extract_weather_location(question: str) -> str:
     return q
 
 
-def fetch_weather(question: str = "", *, days: int = 0) -> str:
+def fetch_weather(question: str = "", *, days: int = 0, detail: bool | None = None) -> str:
     city = extract_weather_location(question) if question else ""
     target = parse_forecast_target(question)
     forecast_days = days or parse_forecast_days(question)
+    want_detail = parse_weather_detail_mode(question) if detail is None else detail
 
     if target == "tomorrow" or (days == 1 and TOMORROW_RE.search(question)):
         resolved = resolve_weather_coords(city or None)
         if not resolved:
             return "Could not determine location for weather. Try: set_location Kolkata"
         lat, lon, label = resolved
-        return fetch_day_detail(lat, lon, label, day_offset=1)
+        if want_detail:
+            return fetch_day_detail(lat, lon, label, day_offset=1, hourly_all=True)
+        return fetch_day_brief(lat, lon, label, day_offset=1)
 
     if forecast_days == 1 or target == "today":
         resolved = resolve_weather_coords(city or None)
         if not resolved:
             return "Could not determine location for weather."
         lat, lon, label = resolved
-        return fetch_day_detail(lat, lon, label, day_offset=0)
+        if want_detail:
+            return fetch_day_detail(lat, lon, label, day_offset=0, hourly_all=True)
+        return fetch_day_brief(lat, lon, label, day_offset=0)
 
     if forecast_days > 0:
         return fetch_weather_forecast(forecast_days, city=city or None)
@@ -900,7 +1031,7 @@ def get_intent(prompt: str) -> tuple[str, str]:
     if len(prompt.split()) >= 3:
         return "ANSWER", prompt
 
-    decision = llm_complete(DECISION_PROMPT, prompt, temperature=0.0)
+    decision = llm_complete(DECISION_PROMPT, prompt, temperature=0.0, task="chat")
     if decision:
         for line in decision.splitlines():
             line = line.strip()
@@ -1205,7 +1336,7 @@ def cleanup_response(raw: str, entity: str = "") -> str:
         "Clean up this answer for terminal/TTS: remove disclaimers, repetition, markdown clutter. "
         f"Keep [FROM SEARCH] or [FROM MEMORY] prefix if present. Topic: {entity or 'general'}."
     )
-    cleaned = llm_complete(system, raw, temperature=0.0)
+    cleaned = llm_complete(system, raw, temperature=0.0, task="chat")
     return cleaned or raw.strip()
 
 
@@ -1264,6 +1395,21 @@ def answer_question(
 ) -> tuple[str, str]:
     """Returns (provenance, answer_text). provenance: search|memory|calc|weather|error"""
     question = normalize_question(" ".join(question.split()))
+    try:
+        from arka_security import sanitize_web_context, verify_web_query
+    except ImportError:
+        verify_web_query = None  # type: ignore[assignment,misc]
+        sanitize_web_context = None  # type: ignore[assignment,misc]
+
+    if verify_web_query is not None:
+        gate = verify_web_query(question)
+        if gate.status == "block":
+            msg = f"[BLOCKED] {gate.reason}"
+            if use_session:
+                session_append("user", question)
+                session_append("assistant", msg)
+            return "blocked", msg
+
     action, data = get_intent(question)
     list_n = detect_list_request(question)
     prior_items: list[str] = []
@@ -1281,7 +1427,7 @@ def answer_question(
             "likely cause, and 2-3 concrete fix steps. Start with [FROM MEMORY]."
         )
         user = f"Error report:\n{data}\n\nExplain and suggest fixes."
-        answer = llm_complete(system, user)
+        answer = llm_complete(system, user, task="chat")
         if use_session:
             session_append("user", question)
             session_append("assistant", answer)
@@ -1291,7 +1437,7 @@ def answer_question(
         result = math_from_question(data)
         system = ASSISTANT_SYSTEM + "\nExplain the math result clearly. Start with [FROM MEMORY]."
         user = f"Question: {question}\nSymPy result: {result}"
-        answer = llm_complete(system, user)
+        answer = llm_complete(system, user, task="chat")
         if not answer:
             answer = f"[FROM MEMORY] Result: {result}"
         if use_session:
@@ -1303,7 +1449,7 @@ def answer_question(
         wx = fetch_weather(question)
         system = ASSISTANT_SYSTEM + "\nSummarize weather data conversationally. Start with [FROM MEMORY]."
         user = f"Weather data:\n{wx}\n\nUser asked: {question}"
-        answer = llm_complete(system, user)
+        answer = llm_complete(system, user, task="chat")
         if not answer:
             answer = f"[FROM MEMORY]\n{wx}"
         if use_session:
@@ -1335,6 +1481,17 @@ def answer_question(
         if not web_context:
             web_context = snippet
 
+    if sanitize_web_context is not None:
+        if web_context:
+            web_context, _san_warnings = sanitize_web_context(web_context)
+            if _san_warnings:
+                print(
+                    f"Sanitized {len(_san_warnings)} suspicious line(s) from web results.",
+                    file=sys.stderr,
+                )
+        if snippet:
+            snippet, _ = sanitize_web_context(snippet)
+
     if web_context:
         system = ASSISTANT_SYSTEM
         length_hint = (list_extra or "\nGive a direct answer using the search results.") + memory_hint
@@ -1345,7 +1502,7 @@ def answer_question(
             f"{length_hint}\n"
             "Start with [FROM SEARCH]. Do not copy tables or navigation text."
         )
-        answer = llm_complete(system, user)
+        answer = llm_complete(system, user, task="chat")
         prov = "search"
     else:
         system = ASSISTANT_SYSTEM
@@ -1354,7 +1511,7 @@ def answer_question(
             user += f"Web snippet:\n{snippet}\n\n"
         length_hint = (list_extra or "\nAnswer clearly and completely.") + memory_hint
         user += f"Question: {question}\n{length_hint}\nStart with [FROM MEMORY] unless snippet was decisive."
-        answer = llm_complete(system, user)
+        answer = llm_complete(system, user, task="chat")
         prov = "memory"
 
     if _looks_like_raw_scrape(answer or ""):
@@ -1365,6 +1522,7 @@ def answer_question(
                 ASSISTANT_SYSTEM,
                 f"{context_block}\n\nQuestion: {question}\n\nSources:\n{retry_ctx}\n\n{retry_hint}",
                 temperature=0.0,
+                task="chat",
             )
 
     if not answer and snippet:
@@ -1373,6 +1531,7 @@ def answer_question(
             ASSISTANT_SYSTEM,
             f"{context_block}\n\nQuestion: {question}\n\nWeb snippet:\n{snippet}\n\n{retry_hint}",
             temperature=0.0,
+            task="chat",
         )
     if not answer and web_context:
         retry_hint = (list_extra or "Extract the answer. Start with [FROM SEARCH].") + memory_hint
@@ -1380,6 +1539,7 @@ def answer_question(
             ASSISTANT_SYSTEM,
             f"{context_block}\n\nQuestion: {question}\n\nExtract the answer from:\n{web_context[:2500]}\n\n{retry_hint}",
             temperature=0.0,
+            task="chat",
         )
     if not answer:
         answer = "Could not generate an answer (check GEMINI_API_KEY, GROQ_API_KEY, or ollama serve)."
@@ -1467,6 +1627,7 @@ def main() -> int:
     p_wx.add_argument("query", nargs="*", default=[])
     p_wx.add_argument("-d", "--days", type=int, default=0, help="Forecast length 1–16 days")
     p_wx.add_argument("-l", "--location", default="", help="City or place name")
+    p_wx.add_argument("--detail", action="store_true", help="Hour-by-hour breakdown for today/tomorrow")
 
     p_map = sub.add_parser("map", help="Offline city map")
     p_map_sub = p_map.add_subparsers(dest="map_cmd", required=True)
@@ -1538,7 +1699,8 @@ def main() -> int:
         if args.location:
             query = f"{query} {args.location}".strip() if query else args.location
         days = args.days or parse_forecast_days(query)
-        print(fetch_weather(query, days=days))
+        detail = True if args.detail else None
+        print(fetch_weather(query, days=days, detail=detail))
         return 0
 
     if args.cmd == "map":

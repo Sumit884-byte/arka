@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import platform
 import re
 import shutil
 import signal
@@ -28,18 +29,103 @@ INTERVAL = int(os.environ.get("ARKA_USAGE_INTERVAL", "20"))
 IDLE_SEC = int(os.environ.get("ARKA_USAGE_IDLE_SEC", "120"))
 WEB_TRACK = os.environ.get("ARKA_WEB_TRACK", "1").lower() not in ("0", "false", "no")
 BROWSER_RE = re.compile(
-    r"(?i)firefox|brave|chrome|chromium|vivaldi|edge|opera|navigator|zen"
+    r"(?i)firefox|brave|chrome|chromium|vivaldi|edge|opera|navigator|zen|safari"
 )
-CHROMIUM_HISTORY = (
+CHROMIUM_HISTORY_LINUX = (
     Path.home() / ".config" / "google-chrome" / "Default" / "History",
     Path.home() / ".config" / "BraveSoftware" / "Brave-Browser" / "Default" / "History",
     Path.home() / ".config" / "chromium" / "Default" / "History",
     Path.home() / ".config" / "microsoft-edge" / "Default" / "History",
     Path.home() / ".config" / "vivaldi" / "Default" / "History",
 )
+CHROMIUM_HISTORY_MACOS = (
+    Path.home() / "Library/Application Support/Google/Chrome/Default/History",
+    Path.home() / "Library/Application Support/BraveSoftware/Brave-Browser/Default/History",
+    Path.home() / "Library/Application Support/Chromium/Default/History",
+    Path.home() / "Library/Application Support/Microsoft Edge/Default/History",
+    Path.home() / "Library/Application Support/Vivaldi/Default/History",
+)
 RANGE_RE = re.compile(
     r" - (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})[–-](\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})"
 )
+
+
+def host_platform() -> str:
+    """macos | linux | windows | … — prefers cached arka_platform profile."""
+    try:
+        from arka_platform import cached_platform
+
+        plat = cached_platform()
+        if plat:
+            return plat
+    except ImportError:
+        pass
+    sysname = platform.system()
+    if sysname == "Darwin":
+        return "macos"
+    if sysname.startswith("Linux"):
+        return "linux"
+    if sysname == "Windows":
+        return "windows"
+    return sysname.lower()
+
+
+def chromium_history_paths() -> tuple[Path, ...]:
+    if host_platform() == "macos":
+        return CHROMIUM_HISTORY_MACOS
+    return CHROMIUM_HISTORY_LINUX
+
+
+def macos_active_app() -> str:
+    """Frontmost app via lsappinfo (no Accessibility permission needed)."""
+    try:
+        front = subprocess.run(
+            ["lsappinfo", "front"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        if front.returncode != 0:
+            return "Unknown"
+        asn = front.stdout.strip().split()[0] if front.stdout.strip() else ""
+        if not asn:
+            return "Unknown"
+        info = subprocess.run(
+            ["lsappinfo", "info", "-only", "name", asn],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        if info.returncode != 0:
+            return "Unknown"
+        m = re.search(r'"LSDisplayName"="([^"]+)"', info.stdout)
+        if m:
+            return normalize_app(m.group(1))
+        m2 = re.search(r'name="([^"]+)"', info.stdout, re.I)
+        if m2:
+            return normalize_app(m2.group(1))
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    return "Unknown"
+
+
+def macos_idle_seconds() -> float | None:
+    """Seconds since last keyboard/mouse input (IOHIDSystem)."""
+    try:
+        proc = subprocess.run(
+            ["ioreg", "-c", "IOHIDSystem", "-d", "4"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+        if proc.returncode != 0:
+            return None
+        m = re.search(r'"HIDIdleTime"\s*=\s*(\d+)', proc.stdout)
+        if m:
+            return int(m.group(1)) / 1_000_000_000.0
+    except (FileNotFoundError, subprocess.TimeoutExpired, ValueError):
+        pass
+    return None
 
 
 def gnome_history_enabled() -> bool:
@@ -252,7 +338,7 @@ def _query_sqlite_copy(db_path: Path, sql: str) -> str | None:
 
 def chromium_last_url() -> str | None:
     sql = "SELECT url FROM urls ORDER BY last_visit_time DESC LIMIT 1"
-    for path in CHROMIUM_HISTORY:
+    for path in chromium_history_paths():
         url = _query_sqlite_copy(path, sql)
         if url:
             return url
@@ -380,6 +466,8 @@ def normalize_app(name: str) -> str:
 
 
 def user_idle_seconds() -> float | None:
+    if host_platform() == "macos":
+        return macos_idle_seconds()
     for cmd in (
         ["gdbus", "call", "--session", "--dest", "org.gnome.Mutter.IdleMonitor",
          "--object-path", "/org/gnome/Mutter/IdleMonitor/Core",
@@ -403,6 +491,9 @@ def user_idle_seconds() -> float | None:
 
 
 def active_app() -> str:
+    if host_platform() == "macos":
+        return macos_active_app()
+
     # GNOME Wayland / Shell
     js = (
         "(() => {"
@@ -533,7 +624,7 @@ def report(period: str = "today", top: int = 15) -> str:
         lines.append(f"{label}: " + ", ".join(summary_parts) + ".")
         lines.append("")
 
-    if gnome_secs > 0 or gnome_history_enabled():
+    if gnome_secs > 0 or (host_platform() == "linux" and gnome_history_enabled()):
         lines.append(f"{label}'s screen time (GNOME):")
         if since == today == date.today():
             completed, extra, total = gnome_today_total_seconds()
@@ -568,7 +659,11 @@ def report(period: str = "today", top: int = 15) -> str:
             lines.append(f"  {app} — {fmt_duration(secs)} ({pct:.0f}%)")
     elif gnome_secs == 0:
         lines.append("")
-        lines.append("Per-app: tracker runs automatically on login (needs time to collect).")
+        plat = host_platform()
+        if plat == "macos":
+            lines.append("Per-app: tracker runs in background — allow a few minutes to collect.")
+        else:
+            lines.append("Per-app: tracker runs automatically on login (needs time to collect).")
 
     if WEB_TRACK:
         sites = merge_website_days(since, today)
@@ -594,10 +689,22 @@ def report(period: str = "today", top: int = 15) -> str:
             lines.append("Websites: browsing in Brave/Chrome/Firefox is tracked automatically.")
 
     if not lines:
+        plat = host_platform()
+        if plat == "macos":
+            return (
+                "No screen time data yet.\n"
+                "App and website tracking start with: arka usage start\n"
+                "(runs in background; allow a few minutes to collect data)"
+            )
+        if plat == "linux":
+            return (
+                "No screen time data yet.\n"
+                "GNOME records session time when Screen Time history is enabled.\n"
+                "App and website tracking start automatically on login."
+            )
         return (
             "No screen time data yet.\n"
-            "GNOME records session time when Screen Time history is enabled.\n"
-            "App and website tracking start automatically on login."
+            "Start tracking with: arka usage start"
         )
 
     return "\n".join(lines)

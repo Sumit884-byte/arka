@@ -121,6 +121,14 @@ def _load_env() -> None:
 
 
 def _llm(system: str, user: str, temperature: float = 0.25) -> str:
+    try:
+        from arka_llm import llm_complete
+
+        out = llm_complete(system, user, temperature, task="predictions").strip()
+        if out:
+            return re.sub(r"^```[a-zA-Z0-9]*\n*|\n*```$", "", out)
+    except ImportError:
+        pass
     proc = subprocess.run(
         [
             _py(),
@@ -132,6 +140,8 @@ def _llm(system: str, user: str, temperature: float = 0.25) -> str:
             user,
             "--temperature",
             str(temperature),
+            "--task",
+            "predictions",
         ],
         capture_output=True,
         text=True,

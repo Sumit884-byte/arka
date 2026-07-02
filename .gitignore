@@ -28,7 +28,9 @@ Thumbs.db
 # Runtime cache (user machine, not repo)
 .cache/
 
-# Test / coverage
+# Test / coverage (local dev harnesses — not committed)
+/local/
+test.py
 .pytest_cache/
 .coverage
 htmlcov/

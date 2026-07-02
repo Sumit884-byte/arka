@@ -1,12 +1,21 @@
-"""Delegate to full Fish-based Arka when available (Linux/mac)."""
+"""Delegate to bundled config.fish on any platform where fish is installed."""
 
 from __future__ import annotations
 
 import os
+import re
 import shlex
 import subprocess
+from dataclasses import dataclass
 
 from arka.paths import arka_home, bundled_dir, config_dir, fish_config
+
+
+@dataclass
+class FishRoute:
+    kind: str
+    action: str
+    why: str = ""
 
 
 def _fish_env() -> dict[str, str]:
@@ -72,3 +81,43 @@ def _agent_call_name() -> str:
     import os
 
     return os.environ.get("AGENT_NAME", "arka").strip() or "arka"
+
+
+def fish_route_preview(text: str) -> FishRoute | None:
+    """Run agent_route via bundled config.fish (70+ skills). Returns None if fish/config missing."""
+    cmd = text.strip()
+    if not cmd:
+        return None
+
+    cfg = fish_config()
+    fish = _find_fish()
+    if cfg is None or not fish:
+        return None
+
+    cfg_q = shlex.quote(str(cfg))
+    cmd_q = shlex.quote(cmd)
+    inner = f"source {cfg_q}; agent_route {cmd_q}"
+    try:
+        proc = subprocess.run(
+            [fish, "-c", inner],
+            capture_output=True,
+            text=True,
+            timeout=90,
+            env=_fish_env(),
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+
+    kind = action = why = ""
+    for line in proc.stdout.splitlines():
+        line = re.sub(r"\x1b\[[0-9;]*m", "", line.strip())
+        if line.startswith("Kind:"):
+            kind = line.split(":", 1)[1].strip().lower()
+        elif line.startswith("Action:"):
+            action = line.split(":", 1)[1].strip()
+        elif line.startswith("Why:"):
+            why = line.split(":", 1)[1].strip()
+
+    if not action:
+        return None
+    return FishRoute(kind=kind or "skill", action=action, why=why)

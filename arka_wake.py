@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import signal
 import subprocess
 import sys
@@ -24,10 +25,50 @@ from arka_compute import ffmpeg_thread_args
 
 SAMPLE_RATE = 16000
 CHUNK = 8000
-WAKE = os.environ.get("AGENT_NAME", "arka").strip().lower() or "arka"
 PID_FILE = Path.home() / ".cache" / "fish-agent" / "arka_listen.pid"
 LOG_PREFIX = "[arka]"
 VENV_PY = Path.home() / ".config" / "fish" / "venv-arka" / "bin" / "python3"
+
+
+def _load_dotenv() -> None:
+    """Load ~/.env / ARKA_HOME/.env so listen works outside a sourced fish session."""
+    candidates: list[Path] = []
+    for key in ("ARKA_CONFIG_DIR", "ARKA_HOME"):
+        raw = (os.environ.get(key) or "").strip()
+        if raw:
+            candidates.append(Path(raw).expanduser() / ".env")
+    candidates.extend(
+        [
+            Path.home() / "dev" / "arka" / ".env",
+            Path.home() / ".config" / "arka" / ".env",
+            Path.home() / ".config" / "fish" / ".env",
+        ]
+    )
+    seen: set[str] = set()
+    for path in candidates:
+        key = str(path.resolve()) if path.exists() else str(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        if not path.is_file():
+            continue
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            name, _, val = line.partition("=")
+            name = name.strip()
+            if not name or name in os.environ:
+                continue
+            val = val.strip().strip('"').strip("'")
+            val = re.sub(r"\s+#.*$", "", val).strip()
+            if val:
+                os.environ[name] = val
+        break
+
+
+_load_dotenv()
+WAKE = os.environ.get("AGENT_NAME", "arka").strip().lower() or "arka"
 
 MODEL_CATALOG: dict[str, tuple[str, str]] = {
     "small-us": (
@@ -81,13 +122,35 @@ def _speak_lang() -> str:
 
 def _stt_backend() -> str:
     mode = (os.environ.get("ARKA_STT") or "auto").strip().lower()
-    if mode in ("groq", "vosk", "sarvam"):
-        return mode
+    if mode in ("groq", "vosk", "sarvam", "assemblyai", "aai"):
+        return "assemblyai" if mode in ("assemblyai", "aai") else mode
+    if os.environ.get("ASSEMBLYAI_API_KEY", "").strip():
+        return "assemblyai"
     if os.environ.get("SARVAM_API_KEY", "").strip():
         return "sarvam"
     if os.environ.get("GROQ_API_KEY", "").strip():
         return "groq"
     return "vosk"
+
+
+def _use_assemblyai_commands() -> bool:
+    return _stt_backend() == "assemblyai" and bool(os.environ.get("ASSEMBLYAI_API_KEY", "").strip())
+
+
+def _stt_chain_label() -> str:
+    """Human-readable command STT priority for logs."""
+    backend = _stt_backend()
+    if backend == "assemblyai":
+        parts = ["AssemblyAI"]
+        if os.environ.get("SARVAM_API_KEY", "").strip():
+            parts.append("Sarvam")
+        parts.append("Vosk")
+        return " → ".join(parts)
+    if backend == "sarvam":
+        return "Sarvam → Vosk"
+    if backend == "groq":
+        return "Groq → Vosk"
+    return "Vosk"
 
 
 def resolve_model_preset() -> str:
@@ -156,7 +219,12 @@ def ensure_venv_deps() -> Path:
     if not py.exists():
         log("Creating venv for wake listener …")
         subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True)
-    subprocess.run([str(py), "-m", "pip", "install", "-q", "vosk"], check=True)
+    packages = ["vosk", "numpy"]
+    if sys.platform == "darwin":
+        packages.extend(["sounddevice", "pyaudio"])
+    if os.environ.get("ASSEMBLYAI_API_KEY", "").strip() and _listen_engine() == "assemblyai":
+        packages.append("assemblyai>=0.64.0")
+    subprocess.run([str(py), "-m", "pip", "install", "-q", *packages], check=True)
     return py
 
 
@@ -165,8 +233,24 @@ def mic_device() -> str | None:
     return dev or None
 
 
+def _mic_stream_sounddevice():
+    """Deprecated: use arka_mac_mic on Darwin."""
+    from arka_mac_mic import mic_stream as _mac_stream
+
+    yield from _mac_stream()
+
+
 def mic_stream():
-    """Yield 16 kHz mono PCM chunks from parec or arecord."""
+    """Yield 16 kHz mono PCM chunks from parec, arecord, or portable backends."""
+    if sys.platform == "darwin":
+        try:
+            from arka_mac_mic import mic_stream as _mac_stream
+
+            yield from _mac_stream()
+            return
+        except Exception as exc:
+            log(f"macOS mic module failed ({exc}), trying fallbacks …")
+
     dev = mic_device()
     parec = ["parec", "--format=s16le", f"--rate={SAMPLE_RATE}", "--channels=1"]
     if dev:
@@ -196,9 +280,19 @@ def mic_stream():
             proc.terminate()
             proc.wait(timeout=2)
         return
+
+    try:
+        yield from _mic_stream_sounddevice()
+        return
+    except ImportError:
+        pass
+    except Exception as exc:
+        if sys.platform == "darwin":
+            raise RuntimeError(f"Microphone failed (sounddevice): {exc}") from exc
+
     raise RuntimeError(
-        "No microphone capture tool found. Install pulseaudio-utils (parec) or alsa-utils (arecord). "
-        "Set ARKA_MIC_DEVICE to your mic name from: pactl list sources short"
+        "No microphone capture tool found. Linux: install pulseaudio-utils (parec) or alsa-utils (arecord). "
+        "macOS: pip install sounddevice in venv-arka. Set ARKA_MIC_DEVICE to device index or name."
     )
 
 
@@ -268,6 +362,11 @@ def wake_aliases() -> list[str]:
             "he rk",
             "hey rk",
             "he arka",
+            "hi arka",
+            "hay arka",
+            "hey irka",
+            "hey erka",
+            "hey arka",
         }
     )
     return sorted(aliases, key=len, reverse=True)
@@ -408,6 +507,19 @@ def groq_transcribe(pcm: bytes) -> str:
         return ""
 
 
+def assemblyai_transcribe(pcm: bytes) -> str:
+    if len(pcm) < SAMPLE_RATE // 2:
+        return ""
+    try:
+        from arka_assemblyai_stt import transcribe_pcm
+
+        text = transcribe_pcm(pcm, sample_rate=SAMPLE_RATE, log=log)
+        return text
+    except Exception as exc:
+        log(f"AssemblyAI STT failed ({exc}); falling back to Vosk")
+        return ""
+
+
 def vosk_transcribe_pcm(model_path: Path, pcm: bytes) -> str:
     from vosk import KaldiRecognizer, Model
 
@@ -421,9 +533,28 @@ def vosk_transcribe_pcm(model_path: Path, pcm: bytes) -> str:
     return json.loads(rec.FinalResult()).get("text", "").strip()
 
 
-def transcribe_command(model_path: Path, pcm: bytes, vosk_hint: str = "") -> str:
+def transcribe_command(
+    model_path: Path,
+    pcm: bytes,
+    vosk_hint: str = "",
+    *,
+    aai_session=None,
+) -> str:
     backend = _stt_backend()
-    if backend == "sarvam":
+    if backend == "assemblyai":
+        if aai_session is not None:
+            text = aai_session.finish()
+            if text.strip():
+                return text.strip()
+        text = assemblyai_transcribe(pcm)
+        if text.strip():
+            return text.strip()
+        log("AssemblyAI unavailable — trying Sarvam")
+        text = sarvam_transcribe(pcm)
+        if text.strip():
+            return text.strip()
+        log("Sarvam unavailable — using local Vosk")
+    elif backend == "sarvam":
         text = sarvam_transcribe(pcm)
         if text:
             return text
@@ -434,6 +565,21 @@ def transcribe_command(model_path: Path, pcm: bytes, vosk_hint: str = "") -> str
     if vosk_hint.strip():
         return vosk_hint.strip()
     return vosk_transcribe_pcm(model_path, pcm)
+
+
+def _start_aai_command_session():
+    if not _use_assemblyai_commands():
+        return None
+    try:
+        from arka_assemblyai_stt import RealtimeCommandSession
+
+        session = RealtimeCommandSession(log=log)
+        if session.start(sample_rate=SAMPLE_RATE):
+            return session
+        log("AssemblyAI stream unavailable — will try Sarvam or local Vosk")
+    except Exception as exc:
+        log(f"AssemblyAI stream setup failed ({exc}); will try Sarvam or local Vosk")
+    return None
 
 
 def normalize_stt_transcript(text: str) -> str:
@@ -450,20 +596,43 @@ def normalize_stt_transcript(text: str) -> str:
         return text.strip()
 
 
+def _fish_config() -> Path | None:
+    for candidate in (
+        Path(__file__).resolve().parent / "config.fish",
+        Path.home() / ".config" / "fish" / "config.fish",
+    ):
+        if candidate.is_file():
+            return candidate
+    return None
+
+
 def run_agent(transcript: str) -> None:
     transcript = normalize_stt_transcript(transcript.strip())
     if not transcript:
         return
     log(f"Running: {transcript}")
     env = os.environ.copy()
-    fish_cmd = f"agent_hear {shlex.quote(transcript)}"
-    subprocess.Popen(
-        ["fish", "-ic", fish_cmd],
-        env=env,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-    )
+    fish = shutil.which("fish")
+    cfg = _fish_config()
+    if fish and cfg:
+        env.setdefault("FISH_DIR", str(cfg.parent))
+        inner = f"source {shlex.quote(str(cfg))}; agent_hear {shlex.quote(transcript)}"
+        subprocess.Popen(
+            [fish, "-c", inner],
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        return
+
+    root = Path(__file__).resolve().parent
+    py = str(VENV_PY if VENV_PY.is_file() else sys.executable)
+    env.setdefault("ARKA_HOME", str(root))
+    cmd = [py, str(root / "arka_talents.py"), "ask", transcript]
+    if os.environ.get("AGENT_SPEAK", "1").strip().lower() not in ("0", "false", "no"):
+        cmd.append("--speak")
+    subprocess.Popen(cmd, env=env, start_new_session=True)
 
 
 def _try_run_transcript(text: str, *, last_phrase: list[str], last_at: list[float], tick: float) -> bool:
@@ -495,23 +664,29 @@ def listen_loop(model_path: Path, stream=None, *, realtime: bool = True) -> list
     wake_rec = KaldiRecognizer(model, SAMPLE_RATE)
     wake_rec.SetWords(False)
 
-    stt = _stt_backend()
     preset = resolve_model_preset()
     if stream is None:
         stream = mic_stream()
+        stop_hint = (
+            "Control+C to stop, or 'arka listen stop' in another tab"
+            if sys.platform == "darwin"
+            else "Ctrl+C to stop"
+        )
         log(
             f"Listening for '{WAKE}' … model={model_path.name} preset={preset} "
-            f"command_stt={stt} lang={_speak_lang()} (Ctrl+C to stop)"
+            f"command_stt={_stt_chain_label()} lang={_speak_lang()} ({stop_hint})"
         )
+        log(f"Say: hey {WAKE} … then your command (pause briefly after the wake phrase)")
     else:
         log(
             f"Replaying audio for '{WAKE}' … model={model_path.name} preset={preset} "
-            f"command_stt={stt} lang={_speak_lang()}"
+            f"command_stt={_stt_chain_label()} lang={_speak_lang()}"
         )
 
     command_mode = False
     command_rec = None
     command_pcm = bytearray()
+    command_aai = None
     command_deadline = 0.0
     wake_cooldown_until = 0.0
     command_seconds = float(os.environ.get("ARKA_COMMAND_SECONDS", "10"))
@@ -531,6 +706,8 @@ def listen_loop(model_path: Path, stream=None, *, realtime: bool = True) -> list
         if command_mode:
             assert command_rec is not None
             command_pcm.extend(data)
+            if command_aai is not None:
+                command_aai.feed(data)
             vosk_hint = ""
             if command_rec.AcceptWaveform(data):
                 vosk_hint = json.loads(command_rec.Result()).get("text", "")
@@ -542,7 +719,9 @@ def listen_loop(model_path: Path, stream=None, *, realtime: bool = True) -> list
                     debug_hear("cmd", partial, partial=True)
                 continue
 
-            text = transcribe_command(model_path, bytes(command_pcm), vosk_hint)
+            text = transcribe_command(
+                model_path, bytes(command_pcm), vosk_hint, aai_session=command_aai
+            )
             debug_hear("cmd", text or vosk_hint)
             final_text = text or vosk_hint
             if final_text:
@@ -555,6 +734,7 @@ def listen_loop(model_path: Path, stream=None, *, realtime: bool = True) -> list
             command_mode = False
             command_rec = None
             command_pcm = bytearray()
+            command_aai = None
             wake_cooldown_until = tick + 1.0
             if realtime:
                 log(f"Listening for '{WAKE}' …")
@@ -577,6 +757,7 @@ def listen_loop(model_path: Path, stream=None, *, realtime: bool = True) -> list
                 command_mode = True
                 command_rec = KaldiRecognizer(model, SAMPLE_RATE)
                 command_pcm = bytearray()
+                command_aai = _start_aai_command_session()
                 command_deadline = tick + command_seconds
                 wake_rec = KaldiRecognizer(model, SAMPLE_RATE)
         else:
@@ -592,13 +773,16 @@ def listen_loop(model_path: Path, stream=None, *, realtime: bool = True) -> list
                 command_mode = True
                 command_rec = KaldiRecognizer(model, SAMPLE_RATE)
                 command_pcm = bytearray()
+                command_aai = _start_aai_command_session()
                 command_deadline = tick + command_seconds
                 wake_rec = KaldiRecognizer(model, SAMPLE_RATE)
 
     if command_mode and command_pcm:
         assert command_rec is not None
         vosk_hint = json.loads(command_rec.FinalResult()).get("text", "")
-        text = transcribe_command(model_path, bytes(command_pcm), vosk_hint)
+        text = transcribe_command(
+            model_path, bytes(command_pcm), vosk_hint, aai_session=command_aai
+        )
         final_text = text or vosk_hint
         if final_text:
             entry = {"wake": wake_text, "command": final_text.strip()}
@@ -608,6 +792,161 @@ def listen_loop(model_path: Path, stream=None, *, realtime: bool = True) -> list
                 run_agent(final_text)
 
     return results
+
+
+def _listen_engine() -> str:
+    """auto | assemblyai | vosk — which engine drives wake+command detection."""
+    mode = (os.environ.get("ARKA_LISTEN_ENGINE") or "auto").strip().lower()
+    if mode in ("assemblyai", "aai"):
+        return "assemblyai"
+    if mode == "vosk":
+        return "vosk"
+    # auto: use AssemblyAI streaming for the whole pipeline when a key is present
+    if _stt_backend() == "assemblyai" and os.environ.get("ASSEMBLYAI_API_KEY", "").strip():
+        return "assemblyai"
+    return "vosk"
+
+
+def listen_loop_streaming() -> bool:
+    """Continuous AssemblyAI streaming listener: accurate wake + command in one pass.
+
+    Returns True if the session ran (caller is done), False if AssemblyAI could
+    not start at all and the caller should fall back to the Vosk listen loop.
+    """
+    try:
+        from assemblyai.streaming.v3 import (
+            StreamingClient,
+            StreamingClientOptions,
+            StreamingEvents,
+            StreamingParameters,
+            TurnEvent,
+        )
+    except ImportError as exc:
+        log(f"AssemblyAI SDK missing ({exc}); using local Vosk")
+        return False
+
+    import queue as _queue
+    import threading
+
+    try:
+        from arka_assemblyai_stt import (
+            _keyterms,
+            _realtime_speech_model,
+            api_key,
+            streaming_host,
+        )
+    except ImportError as exc:
+        log(f"AssemblyAI helper missing ({exc}); using local Vosk")
+        return False
+
+    key = api_key()
+    if not key:
+        return False
+
+    turn_q: "_queue.Queue[str]" = _queue.Queue()
+    state: dict[str, object] = {"error": None}
+
+    def on_turn(_client, event: "TurnEvent") -> None:
+        text = (event.transcript or "").strip()
+        if not text:
+            return
+        if event.end_of_turn:
+            turn_q.put(text)
+        else:
+            debug_hear("wake", text, partial=True)
+
+    def on_error(_client, event) -> None:
+        state["error"] = str(getattr(event, "error", event) or "AssemblyAI stream error")
+        turn_q.put("")  # unblock the consumer
+
+    client = StreamingClient(
+        StreamingClientOptions(api_key=key, api_host=streaming_host())
+    )
+    client.on(StreamingEvents.Turn, on_turn)
+    client.on(StreamingEvents.Error, on_error)
+
+    params = StreamingParameters(
+        sample_rate=SAMPLE_RATE,
+        speech_model=_realtime_speech_model(),
+    )
+    terms = _keyterms()
+    if terms:
+        params.keyterms_prompt = terms
+
+    try:
+        client.connect(params)
+    except Exception as exc:
+        log(f"AssemblyAI streaming connect failed ({exc}); using local Vosk")
+        return False
+
+    # connect() dispatches auth/HTTP rejections via on_error instead of raising.
+    time.sleep(0.3)
+    if state["error"]:
+        log(f"AssemblyAI streaming rejected ({state['error']}); using local Vosk")
+        try:
+            client.disconnect(terminate=False)
+        except Exception:
+            pass
+        return False
+
+    stop_hint = (
+        "Control+C to stop, or 'arka listen stop' in another tab"
+        if sys.platform == "darwin"
+        else "Ctrl+C to stop"
+    )
+    log(
+        f"Listening for '{WAKE}' … engine=AssemblyAI streaming "
+        f"model={_realtime_speech_model()} lang={_speak_lang()} ({stop_hint})"
+    )
+    log(f"Say: hey {WAKE} … then your command in one breath")
+
+    feeder_stop = threading.Event()
+
+    def feed_mic() -> None:
+        try:
+            for chunk in mic_stream():
+                if feeder_stop.is_set():
+                    break
+                client.stream(chunk)
+        except Exception as exc:
+            state["error"] = f"mic: {exc}"
+            turn_q.put("")
+
+    feeder = threading.Thread(target=feed_mic, daemon=True)
+    feeder.start()
+
+    last_run_phrase = ""
+    last_run_at = 0.0
+    try:
+        while True:
+            transcript = turn_q.get()
+            if state["error"]:
+                log(f"AssemblyAI streaming error ({state['error']}); falling back to local Vosk")
+                return False
+            if not transcript:
+                continue
+            debug_hear("wake", transcript)
+            transcript = normalize_stt_transcript(transcript)
+            kind, phrase = classify_transcript(transcript)
+            if kind in ("none", "wake_only"):
+                continue
+            if kind == "direct" and _wake_required():
+                continue
+            tick = time.time()
+            if phrase == last_run_phrase and tick - last_run_at < 3.0:
+                continue
+            label = "Wake+command" if kind == "wake_cmd" else "Direct command"
+            log(f"{label}: {phrase!r}")
+            run_agent(phrase)
+            last_run_phrase = phrase
+            last_run_at = tick
+    finally:
+        feeder_stop.set()
+        try:
+            client.disconnect(terminate=True)
+        except Exception:
+            pass
+    return True
 
 
 def normalize_words(text: str) -> list[str]:
@@ -627,9 +966,17 @@ def word_accuracy(expected: str, actual: str) -> float:
 
 
 def fish_agent_route(transcript: str) -> str:
+    cfg = _fish_config()
+    if not cfg:
+        return ""
+    fish = shutil.which("fish")
+    if not fish:
+        return ""
+    cfg_q = shlex.quote(str(cfg))
+    cmd_q = shlex.quote(transcript)
     try:
         proc = subprocess.run(
-            ["fish", "-c", f"source ~/.config/fish/config.fish; agent_route {shlex.quote(transcript)}"],
+            [fish, "-c", f"source {cfg_q}; agent_route {cmd_q}"],
             capture_output=True,
             text=True,
             timeout=30,
@@ -644,14 +991,20 @@ def fish_agent_route(transcript: str) -> str:
 
 
 def fish_strip_wake(transcript: str) -> str:
+    cfg = _fish_config()
+    fish = shutil.which("fish")
+    if not cfg or not fish:
+        return transcript.strip()
+    cfg_q = shlex.quote(str(cfg))
+    cmd_q = shlex.quote(transcript)
     try:
         proc = subprocess.run(
             [
-                "fish",
+                fish,
                 "-c",
                 (
-                    f"source ~/.config/fish/config.fish; "
-                    f"set -l t (_agent_stt_quick_map {shlex.quote(transcript)}); "
+                    f"source {cfg_q}; "
+                    f"set -l t (_agent_stt_quick_map {cmd_q}); "
                     f"_agent_strip_wake \"$t\""
                 ),
             ],
@@ -667,7 +1020,16 @@ def fish_strip_wake(transcript: str) -> str:
 def transcribe_full_file(model_path: Path, pcm: bytes) -> dict[str, str]:
     out: dict[str, str] = {}
     backend = _stt_backend()
-    if backend == "sarvam" and os.environ.get("SARVAM_API_KEY", "").strip():
+    if backend == "assemblyai" and os.environ.get("ASSEMBLYAI_API_KEY", "").strip():
+        try:
+            from arka_assemblyai_stt import transcribe_pcm
+
+            out["assemblyai"] = transcribe_pcm(pcm, sample_rate=SAMPLE_RATE, log=log)
+        except Exception as exc:
+            out["assemblyai"] = f"(error: {exc})"
+        if not (out.get("assemblyai") or "").strip() and os.environ.get("SARVAM_API_KEY", "").strip():
+            out["sarvam"] = sarvam_transcribe(pcm)
+    elif backend == "sarvam" and os.environ.get("SARVAM_API_KEY", "").strip():
         out["sarvam"] = sarvam_transcribe(pcm)
     elif backend == "groq" and os.environ.get("GROQ_API_KEY", "").strip():
         out["groq"] = groq_transcribe(pcm)
@@ -676,94 +1038,6 @@ def transcribe_full_file(model_path: Path, pcm: bytes) -> dict[str, str]:
     except Exception as exc:
         out["vosk"] = f"(error: {exc})"
     return out
-
-
-def test_media_file(
-    media_path: Path,
-    *,
-    expected: str = "",
-    run_agent_cmd: bool = False,
-    full: bool = False,
-    no_wake: bool = False,
-) -> int:
-    set_debug(True)
-    media_path = media_path.expanduser().resolve()
-    pcm = load_media_pcm(media_path)
-    duration = len(pcm) / (SAMPLE_RATE * 2)
-    model_path = ensure_model()
-    stt = _stt_backend()
-
-    print(f"file={media_path}")
-    print(f"duration={duration:.2f}s pcm_bytes={len(pcm)} stt={stt}")
-    print(f"wake_words={', '.join(wake_aliases()[:6])}…")
-    print("")
-
-    if full or no_wake:
-        texts = transcribe_full_file(model_path, pcm)
-        print("=== Full-file transcription ===")
-        for backend, text in texts.items():
-            if text.startswith("(error"):
-                print(f"{backend}: {text}")
-                continue
-            print(f"{backend}: {text!r}")
-            if expected:
-                print(f"  accuracy vs expected: {word_accuracy(expected, text)}%")
-            stripped = fish_strip_wake(text) or text
-            route = fish_agent_route(stripped)
-            if route:
-                print(f"  route: {route}")
-        print("")
-
-    if no_wake:
-        best = ""
-        for text in transcribe_full_file(model_path, pcm).values():
-            if text and not text.startswith("(error"):
-                best = text
-        if best and run_agent_cmd:
-            run_agent(best)
-        return 0 if best else 1
-
-    detections = listen_loop(model_path, pcm_stream(pcm), realtime=False)
-    print(f"=== Wake+command detections: {len(detections)} ===")
-    if not detections:
-        print("No wake word detected in this clip.")
-        if not full:
-            texts = transcribe_full_file(model_path, pcm)
-            print("")
-            print("Full-file fallback (no wake gate):")
-            for backend, text in texts.items():
-                print(f"  {backend}: {text!r}")
-                if expected:
-                    print(f"    accuracy: {word_accuracy(expected, text)}%")
-        return 1
-
-    ok = 0
-    for i, hit in enumerate(detections, 1):
-        wake = hit.get("wake", "")
-        command = hit.get("command", "")
-        full_phrase = f"{wake} {command}".strip()
-        stripped = fish_strip_wake(full_phrase) or fish_strip_wake(command) or command
-        route = fish_agent_route(stripped or full_phrase)
-
-        print(f"[{i}] wake={wake!r}")
-        print(f"    command={command!r}")
-        print(f"    stripped={stripped!r}")
-        if route:
-            print(f"    route={route}")
-        if expected:
-            acc_cmd = word_accuracy(expected, command)
-            acc_strip = word_accuracy(expected, stripped)
-            print(f"    accuracy(command)={acc_cmd}%  accuracy(stripped)={acc_strip}%")
-            if acc_strip >= 70.0 or acc_cmd >= 70.0:
-                ok += 1
-
-        if run_agent_cmd and command:
-            run_agent(command)
-
-    if expected:
-        print("")
-        print(f"Summary: {ok}/{len(detections)} detection(s) ≥70% word match vs {expected!r}")
-    return 0 if detections else 1
 
 
 def write_pid() -> None:
@@ -781,7 +1055,8 @@ def print_model_info() -> None:
     print(f"preset={preset}")
     print(f"model_dir={resolve_model_dir()}")
     print(f"download={url}")
-    print(f"command_stt={_stt_backend()}")
+    print(f"listen_engine={_listen_engine()}")
+    print(f"command_stt={_stt_chain_label()}")
     print(f"lang={_speak_lang()}")
     print("available_presets:", ", ".join(MODEL_CATALOG))
 
@@ -804,41 +1079,20 @@ def main() -> int:
         print_model_info()
         return 0
 
-    if len(sys.argv) > 1 and sys.argv[1] == "--file":
+    if len(sys.argv) > 1 and sys.argv[1] == "--list-mics":
+        from arka_mac_mic import list_input_devices, permission_hint
+
+        for d in list_input_devices():
+            print(f"[{d['index']}] {d['name']}")
+        if sys.platform == "darwin":
+            print(f"\n{permission_hint()}")
+        return 0
+
+    if len(sys.argv) > 1 and sys.argv[1] == "--mic-test":
         reexec_in_venv()
-        args = sys.argv[2:]
-        if not args or args[0].startswith("-"):
-            print("Usage: arka_wake.py --file <audio|video> [--expected phrase] [--full] [--no-wake] [--run]")
-            return 1
-        media = Path(args[0])
-        expected = ""
-        run_agent_cmd = False
-        full = False
-        no_wake = False
-        i = 1
-        while i < len(args):
-            if args[i] == "--expected" and i + 1 < len(args):
-                expected = args[i + 1]
-                i += 2
-            elif args[i] == "--run":
-                run_agent_cmd = True
-                i += 1
-            elif args[i] == "--full":
-                full = True
-                i += 1
-            elif args[i] == "--no-wake":
-                no_wake = True
-                i += 1
-            else:
-                print(f"Unknown option: {args[i]}")
-                return 1
-        return test_media_file(
-            media,
-            expected=expected,
-            run_agent_cmd=run_agent_cmd,
-            full=full,
-            no_wake=no_wake,
-        )
+        from arka_mac_mic import mic_selftest
+
+        return mic_selftest()
 
     if "--debug" in sys.argv:
         set_debug(True)
@@ -856,6 +1110,10 @@ def main() -> int:
     signal.signal(signal.SIGINT, _stop)
 
     try:
+        if _listen_engine() == "assemblyai":
+            if listen_loop_streaming():
+                return 0
+            log("Falling back to local Vosk wake detection")
         model_path = ensure_model()
         listen_loop(model_path)
     finally:

@@ -113,4 +113,8 @@ def ensure_layout() -> Path:
     if not env.is_file() and example.is_file():
         shutil.copy2(example, env)
 
+    from arka.platform_info import ensure_platform_cache
+
+    ensure_platform_cache()
+
     return arka_home()

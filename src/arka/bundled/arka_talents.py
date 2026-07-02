@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import time
@@ -28,13 +29,30 @@ from arka_agent import (
     save_json,
 )
 
+from arka_voice import (
+    voice_ack,
+    voice_format,
+    voice_help,
+    voice_prepare,
+    voice_progress,
+    voice_session_clear as _voice_clear,
+    voice_session_enrich,
+    voice_session_record as _voice_record,
+    voice_session_status as _voice_status,
+)
+
 NOTIFY_FILE = CACHE / "handoff_notifications.json"
-VOICE_SESSION_FILE = CACHE / "voice_session.json"
 MEMORY_INDEX_SLUG = "agent-memory"
-MAX_VOICE_TURNS = int(os.environ.get("ARKA_VOICE_SESSION_TURNS", "8"))
 
 
 def _load_fish_env() -> None:
+    try:
+        import arka_paths
+
+        arka_paths.load_env_file()
+        return
+    except ImportError:
+        pass
     env_path = FISH_DIR / ".env"
     if not env_path.is_file():
         return
@@ -85,6 +103,12 @@ def memory_reindex() -> bool:
 
 
 def memory_semantic_context(query: str, *, limit_chars: int = 3500) -> str:
+    try:
+        from arka_supermemory import context_for
+
+        return context_for(query, limit_chars=limit_chars)
+    except ImportError:
+        pass
     try:
         from arka_turboquant_rag import _media_store, use_turboquant
     except ImportError:
@@ -246,7 +270,6 @@ def _speak(text: str) -> None:
 
 def speak_research(query: str, *, limit: int = 5, speak: bool = True) -> int:
     _load_fish_env()
-    os.environ.setdefault("ARKA_YT_SKIP_TRANSCRIPT_API", "1")
     os.environ.setdefault("ARKA_YT_WHISPER_FALLBACK", "auto")
 
     py = _py()
@@ -282,111 +305,24 @@ def speak_research(query: str, *, limit: int = 5, speak: bool = True) -> int:
     return 0
 
 
-# ── Voice session ─────────────────────────────────────────────────────────────
-
-def voice_session_load() -> dict:
-    data = load_json(VOICE_SESSION_FILE, {})
-    return data if isinstance(data, dict) else {}
-
-
-def voice_session_save(data: dict) -> None:
-    save_json(VOICE_SESSION_FILE, data)
-
+# ── Voice session (see arka_voice.py) ─────────────────────────────────────────
 
 def voice_session_clear() -> None:
-    if VOICE_SESSION_FILE.is_file():
-        VOICE_SESSION_FILE.unlink(missing_ok=True)
-    print("Voice session cleared.")
-
-
-def voice_session_active() -> bool:
-    data = voice_session_load()
-    turns = data.get("turns") or []
-    return bool(turns)
-
-
-def _is_follow_up(text: str) -> bool:
-    low = text.lower().strip()
-    return bool(
-        re.match(
-            r"^(and |also |what about |how about |tell me more|follow up|continue|"
-            r"explain that|why|who|when|where|can you|save that|remember that)",
-            low,
-        )
-    )
-
-
-def voice_session_enrich(user_text: str) -> str:
-    low = user_text.lower().strip()
-    if low in {"end conversation", "end session", "new conversation", "clear session", "stop talking"}:
-        return "__VOICE_SESSION_CLEAR__"
-    if low in {"session status", "conversation status"}:
-        return "__VOICE_SESSION_STATUS__"
-
-    data = voice_session_load()
-    turns: list[dict] = data.get("turns") or []
-    active = data.get("active", False) or bool(turns)
-
-    if not active and not _is_follow_up(user_text):
-        data = {"active": True, "started": time.time(), "turns": []}
-        turns = data["turns"]
-
-    history = ""
-    for turn in turns[-MAX_VOICE_TURNS:]:
-        history += f"User: {turn.get('user', '')}\nAssistant: {turn.get('assistant', '')}\n"
-
-    if history:
-        return (
-            f"[Voice session — use prior context]\n{history}\n"
-            f"User now: {user_text}\n\n"
-            f"Respond to the latest message; keep continuity."
-        )
-    return user_text
+    print(_voice_clear())
 
 
 def voice_session_record(user_text: str, assistant_text: str) -> None:
-    data = voice_session_load()
-    if not data.get("active"):
-        data = {"active": True, "started": time.time(), "turns": []}
-    turns: list[dict] = data.setdefault("turns", [])
-    clean = assistant_text.strip()
-    if "━━━ Answer ━━━" in clean:
-        clean = clean.split("━━━ Answer ━━━", 1)[1].strip()
-    clean = re.sub(r"\x1b\[[0-9;]*m", "", clean)
-    clean = " ".join(clean.split())[:2000]
-    turns.append({
-        "user": user_text.strip(),
-        "assistant": clean,
-        "ts": time.time(),
-    })
-    data["turns"] = turns[-MAX_VOICE_TURNS:]
-    data["updated"] = datetime.now().isoformat(timespec="seconds")
-    voice_session_save(data)
+    _voice_record(user_text, assistant_text)
 
 
 def voice_session_status() -> None:
-    data = voice_session_load()
-    turns = data.get("turns") or []
-    if not turns:
-        print("Voice session: inactive (no turns stored).")
-        return
-    print(f"Voice session: active, {len(turns)} turn(s), started {data.get('started', '?')}")
-    for i, t in enumerate(turns[-3:], 1):
-        print(f"  {i}. User: {(t.get('user') or '')[:60]}")
-        print(f"     Arka: {(t.get('assistant') or '')[:80]}...")
+    print(_voice_status())
 
 
 # ── Handoff notify ────────────────────────────────────────────────────────────
 
 def _speak_text_from_result(result: str) -> str:
-    text = re.sub(r"\x1b\[[0-9;]*m", "", result or "")
-    if "━━━ Answer ━━━" in text:
-        text = text.split("━━━ Answer ━━━", 1)[1]
-    text = " ".join(text.split())
-    max_len = int(os.environ.get("AGENT_SPEAK_MAX", "450"))
-    if len(text) > max_len:
-        text = text[: max_len - 3].rstrip() + "..."
-    return text
+    return voice_format(result)
 
 
 def handoff_notify_item(item: dict) -> None:
@@ -410,11 +346,12 @@ def handoff_notify_item(item: dict) -> None:
 
     title = "Arka handoff done" if item.get("status") == "done" else "Arka handoff failed"
     body = speak_text[:200] if speak_text else item.get("text", "")[:200]
-    subprocess.run(
-        ["notify-send", "-a", "Arka", title, body],
-        capture_output=True,
-        timeout=5,
-    )
+    if shutil.which("notify-send"):
+        subprocess.run(
+            ["notify-send", "-a", "Arka", title, body],
+            capture_output=True,
+            timeout=5,
+        )
 
 
 def handoff_notifications_list(*, unread_only: bool = False) -> list[dict]:
@@ -484,6 +421,24 @@ def main() -> int:
     p = sub.add_parser("voice-enrich")
     p.add_argument("text")
 
+    p = sub.add_parser("voice-prepare")
+    p.add_argument("text")
+
+    p = sub.add_parser("voice-field")
+    p.add_argument("field", choices=["action", "route_text", "llm_context", "ack"])
+    p.add_argument("text")
+
+    p = sub.add_parser("voice-format")
+    p.add_argument("text")
+
+    p = sub.add_parser("voice-ack")
+    p.add_argument("text")
+
+    p = sub.add_parser("voice-progress")
+    p.add_argument("--skill", required=True)
+
+    sub.add_parser("voice-help")
+
     p = sub.add_parser("voice-record")
     p.add_argument("--user", required=True)
     p.add_argument("--assistant", required=True)
@@ -527,8 +482,20 @@ def main() -> int:
         ok = memory_reindex()
         print("Memory index updated." if ok else "Memory index skipped (TurboQuant off or empty).")
     elif args.cmd == "voice-enrich":
-        out = voice_session_enrich(args.text)
-        print(out)
+        print(voice_session_enrich(args.text))
+    elif args.cmd == "voice-prepare":
+        print(json.dumps(voice_prepare(args.text), ensure_ascii=False))
+    elif args.cmd == "voice-field":
+        prep = voice_prepare(args.text)
+        print(prep.get(args.field, ""))
+    elif args.cmd == "voice-format":
+        print(voice_format(args.text))
+    elif args.cmd == "voice-ack":
+        print(voice_ack(args.text))
+    elif args.cmd == "voice-progress":
+        print(voice_progress(args.skill))
+    elif args.cmd == "voice-help":
+        print(voice_help())
     elif args.cmd == "voice-record":
         voice_session_record(args.user, args.assistant)
     elif args.cmd == "voice-clear":

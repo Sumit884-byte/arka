@@ -189,14 +189,17 @@ class TurboQuantStore:
         self.index: object | None = None
 
     def _load_index(self) -> object | None:
-        TurboQuantIndex = _load_turboquant_index()
         tq_path = _tq_index_path(self.dir)
-        if (tq_path / "meta.json").is_file():
-            try:
-                return TurboQuantIndex.load(tq_path)
-            except Exception:
-                return None
-        return None
+        if not (tq_path / "meta.json").is_file():
+            return None
+        try:
+            TurboQuantIndex = _load_turboquant_index()
+        except ImportError:
+            return None
+        try:
+            return TurboQuantIndex.load(tq_path)
+        except Exception:
+            return None
 
     def load(self) -> None:
         self.dir.mkdir(parents=True, exist_ok=True)

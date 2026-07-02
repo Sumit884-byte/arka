@@ -1,0 +1,136 @@
+#!/usr/bin/env python3
+"""Test wake/STT accuracy from an audio or video file (local dev — not committed)."""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+
+
+def test_media_file(
+    media_path: Path,
+    *,
+    expected: str = "",
+    run_agent_cmd: bool = False,
+    full: bool = False,
+    no_wake: bool = False,
+) -> int:
+    from arka_wake import (
+        SAMPLE_RATE,
+        _stt_backend,
+        ensure_model,
+        fish_agent_route,
+        fish_strip_wake,
+        listen_loop,
+        load_media_pcm,
+        pcm_stream,
+        run_agent,
+        set_debug,
+        transcribe_full_file,
+        wake_aliases,
+        word_accuracy,
+    )
+
+    set_debug(True)
+    media_path = media_path.expanduser().resolve()
+    pcm = load_media_pcm(media_path)
+    duration = len(pcm) / (SAMPLE_RATE * 2)
+    model_path = ensure_model()
+    stt = _stt_backend()
+
+    print(f"file={media_path}")
+    print(f"duration={duration:.2f}s pcm_bytes={len(pcm)} stt={stt}")
+    print(f"wake_words={', '.join(wake_aliases()[:6])}…")
+    print("")
+
+    if full or no_wake:
+        texts = transcribe_full_file(model_path, pcm)
+        print("=== Full-file transcription ===")
+        for backend, text in texts.items():
+            if text.startswith("(error"):
+                print(f"{backend}: {text}")
+                continue
+            print(f"{backend}: {text!r}")
+            if expected:
+                print(f"  accuracy vs expected: {word_accuracy(expected, text)}%")
+            stripped = fish_strip_wake(text) or text
+            route = fish_agent_route(stripped)
+            if route:
+                print(f"  route: {route}")
+        print("")
+
+    if no_wake:
+        best = ""
+        for text in transcribe_full_file(model_path, pcm).values():
+            if text and not text.startswith("(error"):
+                best = text
+        if best and run_agent_cmd:
+            run_agent(best)
+        return 0 if best else 1
+
+    detections = listen_loop(model_path, pcm_stream(pcm), realtime=False)
+    print(f"=== Wake+command detections: {len(detections)} ===")
+    if not detections:
+        print("No wake word detected in this clip.")
+        if not full:
+            texts = transcribe_full_file(model_path, pcm)
+            print("")
+            print("Full-file fallback (no wake gate):")
+            for backend, text in texts.items():
+                print(f"  {backend}: {text!r}")
+                if expected:
+                    print(f"    accuracy: {word_accuracy(expected, text)}%")
+        return 1
+
+    ok = 0
+    for i, hit in enumerate(detections, 1):
+        wake = hit.get("wake", "")
+        command = hit.get("command", "")
+        full_phrase = f"{wake} {command}".strip()
+        stripped = fish_strip_wake(full_phrase) or fish_strip_wake(command) or command
+        route = fish_agent_route(stripped or full_phrase)
+
+        print(f"[{i}] wake={wake!r}")
+        print(f"    command={command!r}")
+        print(f"    stripped={stripped!r}")
+        if route:
+            print(f"    route={route}")
+        if expected:
+            acc_cmd = word_accuracy(expected, command)
+            acc_strip = word_accuracy(expected, stripped)
+            print(f"    accuracy(command)={acc_cmd}%  accuracy(stripped)={acc_strip}%")
+            if acc_strip >= 70.0 or acc_cmd >= 70.0:
+                ok += 1
+
+        if run_agent_cmd and command:
+            run_agent(command)
+
+    if expected:
+        print("")
+        print(f"Summary: {ok}/{len(detections)} detection(s) ≥70% word match vs {expected!r}")
+    return 0 if detections else 1
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Test wake/STT from a media file")
+    parser.add_argument("media", type=Path, help="Audio or video file")
+    parser.add_argument("--expected", default="", help="Expected phrase for accuracy scoring")
+    parser.add_argument("--run", action="store_true", help="Run agent on detected command")
+    parser.add_argument("--full", action="store_true", help="Always run full-file transcription")
+    parser.add_argument("--no-wake", action="store_true", help="Skip wake-word gate")
+    args = parser.parse_args()
+    return test_media_file(
+        args.media,
+        expected=args.expected,
+        run_agent_cmd=args.run,
+        full=args.full,
+        no_wake=args.no_wake,
+    )
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

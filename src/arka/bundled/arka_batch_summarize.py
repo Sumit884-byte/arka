@@ -18,7 +18,13 @@ from arka_media import (
     transcribe_file,
 )
 from arka_progress import ProgressBar, progress_enabled
-from arka_youtube import _ytdlp_path, extract_video_id, fetch_transcript_text
+from arka_youtube import (
+    _ytdlp_path,
+    confirm_download_transcribe,
+    extract_video_id,
+    fetch_transcript_text,
+    fetch_transcript_with_source,
+)
 
 DEFAULT_MAX_ITEMS = int(os.environ.get("ARKA_BATCH_MAX_ITEMS", "25"))
 YT_FETCH_DELAY = float(os.environ.get("ARKA_YT_RESEARCH_DELAY", "2") or "0")
@@ -84,13 +90,23 @@ def _playlist_entries(url: str, limit: int | None) -> list[tuple[str, str]]:
     return entries
 
 
-def _youtube_transcript(video_id: str) -> str:
-    if YT_FETCH_DELAY > 0:
-        time.sleep(YT_FETCH_DELAY)
-    text = fetch_transcript_text(video_id)
-    if not text:
-        raise RuntimeError("no captions available (try ARKA_YT_COOKIES or ARKA_YT_WHISPER_FALLBACK=1)")
-    return text
+def _research_allow_no_caption() -> bool:
+    return os.environ.get("ARKA_YT_RESEARCH_ALLOW_NO_CAPTION", "0").lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def _transcribe_override(args: argparse.Namespace) -> bool | None:
+    if getattr(args, "no_transcribe", False):
+        return False
+    if getattr(args, "yes_transcribe", False):
+        return True
+    if _research_allow_no_caption():
+        return True
+    return None
 
 
 def _summarize_transcript(text: str, label: str, question: str, src: Path | None) -> str:
@@ -122,6 +138,7 @@ def _merge_digest(items: list[tuple[str, str]], question: str) -> str:
         "You merge multiple media summaries into one readable digest.",
         user,
         temperature=0.2,
+        task="research",
     ).strip()
 
 
@@ -140,11 +157,11 @@ def cmd_folder(args: argparse.Namespace) -> int:
     per_q = args.question or PER_ITEM_QUESTION
     merge_q = args.merge_question or (args.question or MERGE_QUESTION)
     items: list[tuple[str, str]] = []
-    bar = ProgressBar("Folder summarize", total=len(files)) if progress_enabled() else None
+    bar = ProgressBar("Folder", total=len(files)) if progress_enabled() else None
 
     for i, path in enumerate(files, start=1):
         if bar is not None:
-            bar.set(i - 1, total=len(files), label=path.name[:40])
+            bar.set(i - 1, total=len(files), label=f"→ {path.name[:32]}")
         else:
             _emit(f"[{i}/{len(files)}] {path.name}")
         try:
@@ -154,6 +171,9 @@ def cmd_folder(args: argparse.Namespace) -> int:
                 print(f"\n── {path.name} ──\n{summary}\n", file=sys.stderr)
         except Exception as exc:
             print(f"Skipped {path.name}: {exc}", file=sys.stderr)
+        finally:
+            if bar is not None:
+                bar.set(i, total=len(files), label=path.name[:36])
 
     if bar is not None:
         bar.set(len(files), total=len(files), label="Merging")
@@ -163,7 +183,7 @@ def cmd_folder(args: argparse.Namespace) -> int:
 
     digest = _merge_digest(items, merge_q)
     if bar is not None:
-        bar.done("Done")
+        bar.done("Summarized")
     print("━━━ Folder digest ━━━")
     print(digest)
     return 0
@@ -178,6 +198,8 @@ def cmd_playlist(args: argparse.Namespace) -> int:
             question=args.question,
             merge_question=args.merge_question,
             retranscribe=args.retranscribe,
+            yes_transcribe=getattr(args, "yes_transcribe", False),
+            no_transcribe=getattr(args, "no_transcribe", False),
         ))
 
     if not args.url:
@@ -187,33 +209,73 @@ def cmd_playlist(args: argparse.Namespace) -> int:
     entries = _playlist_entries(args.url, args.limit or DEFAULT_MAX_ITEMS)
     per_q = args.question or PER_ITEM_QUESTION
     merge_q = args.merge_question or (args.question or MERGE_QUESTION)
+    transcribe = _transcribe_override(args)
     items: list[tuple[str, str]] = []
-    bar = ProgressBar("Playlist summarize", total=len(entries)) if progress_enabled() else None
+    pending: list[tuple[str, str]] = []
+    bar = ProgressBar("Playlist", total=len(entries)) if progress_enabled() else None
 
     for i, (vid, title) in enumerate(entries, start=1):
         label = title or vid
         if bar is not None:
-            bar.set(i - 1, total=len(entries), label=label[:40])
+            bar.set(i - 1, total=len(entries), label=f"→ {label[:32]}")
         else:
             _emit(f"[{i}/{len(entries)}] {label}")
         try:
-            text = _youtube_transcript(vid)
-            summary = _summarize_transcript(text, label, per_q, None)
-            items.append((label, summary))
-            if not progress_enabled():
-                print(f"\n── {label} ──\n{summary}\n", file=sys.stderr)
+            text, source = fetch_transcript_with_source(vid, research=True, allow_whisper=False)
+            if text:
+                summary = _summarize_transcript(text, label, per_q, None)
+                items.append((label, summary))
+                if not progress_enabled():
+                    print(f"\n── {label} ──\n{summary}\n", file=sys.stderr)
+            else:
+                pending.append((vid, label))
         except Exception as exc:
             print(f"Skipped {label}: {exc}", file=sys.stderr)
+        finally:
+            if bar is not None:
+                bar.set(i, total=len(entries), label=label[:36])
+
+    if pending:
+        do_transcribe = transcribe
+        if do_transcribe is None:
+            do_transcribe = confirm_download_transcribe(
+                pending[0][1],
+                count=len(pending),
+            )
+        if do_transcribe:
+            tbar = ProgressBar("Transcribe", total=len(pending)) if progress_enabled() else None
+            for j, (vid, label) in enumerate(pending, start=1):
+                if tbar is not None:
+                    tbar.set(j - 1, label=f"→ {label[:32]}")
+                try:
+                    text = fetch_transcript_text(vid, research=True, allow_whisper=True)
+                    if not text:
+                        print(f"Skipped {label}: transcribe failed", file=sys.stderr)
+                        continue
+                    summary = _summarize_transcript(text, label, per_q, None)
+                    items.append((label, summary))
+                    if not progress_enabled():
+                        print(f"\n── {label} (transcribed) ──\n{summary}\n", file=sys.stderr)
+                except Exception as exc:
+                    print(f"Skipped {label}: {exc}", file=sys.stderr)
+                finally:
+                    if tbar is not None:
+                        tbar.set(j, label=label[:36])
+            if tbar is not None:
+                tbar.done("Transcribed")
+        else:
+            for _vid, label in pending:
+                print(f"Skipped {label}: no captions", file=sys.stderr)
 
     if bar is not None:
-        bar.set(len(entries), total=len(entries), label="Merging")
+        bar.set(len(entries), total=len(entries), label="Merging…")
     if not items:
         print("No playlist items summarized.", file=sys.stderr)
         return 1
 
     digest = _merge_digest(items, merge_q)
     if bar is not None:
-        bar.done("Done")
+        bar.done("Summarized")
     print("━━━ Playlist digest ━━━")
     print(digest)
     return 0
@@ -240,6 +302,16 @@ def main() -> int:
     p_pl.add_argument("-q", "--question")
     p_pl.add_argument("--merge-question")
     p_pl.add_argument("--retranscribe", action="store_true")
+    p_pl.add_argument(
+        "--yes-transcribe",
+        action="store_true",
+        help="Download + transcribe when captions missing (no prompt)",
+    )
+    p_pl.add_argument(
+        "--no-transcribe",
+        action="store_true",
+        help="Skip videos without captions (never download audio)",
+    )
     p_pl.set_defaults(func=cmd_playlist)
 
     args = parser.parse_args()

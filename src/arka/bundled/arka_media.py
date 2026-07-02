@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -57,22 +58,31 @@ def _emit_status(msg: str) -> None:
 
 
 def _load_fish_env() -> None:
-    """Load ~/.config/fish/.env when Python is not started from a fully-sourced fish shell."""
-    env_file = Path.home() / ".config/fish/.env"
-    if not env_file.is_file():
+    """Load user .env when Python is not started from a fully-sourced fish shell."""
+    try:
+        import arka_paths as ap
+
+        ap.load_env_file()
         return
-    for line in env_file.read_text(encoding="utf-8", errors="replace").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
+    except ImportError:
+        pass
+    for env_file in (
+        Path.home() / ".config" / "arka" / ".env",
+        Path.home() / ".config" / "fish" / ".env",
+    ):
+        if not env_file.is_file():
             continue
-        if "=" not in line:
-            continue
-        key, _, val = line.partition("=")
-        key = key.strip()
-        val = val.strip().strip('"').strip("'")
-        val = re.sub(r"\s+#.*$", "", val).strip()
-        if key and not os.environ.get(key, "").strip():
-            os.environ[key] = val
+        for line in env_file.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            key = key.strip()
+            val = val.strip().strip('"').strip("'")
+            val = re.sub(r"\s+#.*$", "", val).strip()
+            if key and not os.environ.get(key, "").strip():
+                os.environ[key] = val
+        return
 
 
 def _which(name: str) -> str | None:
@@ -327,17 +337,55 @@ def _sarvam_transcribe_pcm(pcm: bytes) -> str | None:
 
 
 def _local_python_candidates() -> list[str]:
-    raw = [
-        os.environ.get("ARKA_MEDIA_PYTHON", "").strip(),
+    raw: list[str] = []
+    if os.environ.get("ARKA_MEDIA_PYTHON", "").strip():
+        raw.append(os.environ["ARKA_MEDIA_PYTHON"].strip())
+    try:
+        import arka_paths as ap
+
+        raw.append(str(ap.arka_home() / "venv-arka/bin/python3"))
+        raw.append(str(ap.config_dir() / "venv-voice-hf/bin/python3"))
+    except ImportError:
+        pass
+    raw.extend([
+        str(Path.home() / ".config/arka/venv-voice-hf/bin/python3"),
         str(Path.home() / ".config/fish/venv-voice-hf/bin/python3"),
         str(Path.home() / ".config/fish/venv-arka/bin/python3"),
         sys.executable,
-    ]
+    ])
     out: list[str] = []
     for py in raw:
         if py and py not in out and Path(py).is_file():
             out.append(py)
     return out
+
+
+def _faster_whisper_available(py: str) -> bool:
+    proc = subprocess.run(
+        [py, "-c", "from faster_whisper import WhisperModel"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return proc.returncode == 0
+
+
+def _ensure_local_stt(*, auto_install: bool = True) -> bool:
+    for py in _local_python_candidates():
+        if _faster_whisper_available(py):
+            if not os.environ.get("ARKA_MEDIA_PYTHON", "").strip():
+                os.environ["ARKA_MEDIA_PYTHON"] = py
+            return True
+    if not auto_install:
+        return False
+    print("arka_media: setting up offline STT (faster-whisper) …", file=sys.stderr)
+    if cmd_setup_local(argparse.Namespace()) != 0:
+        return False
+    for py in _local_python_candidates():
+        if _faster_whisper_available(py):
+            os.environ["ARKA_MEDIA_PYTHON"] = py
+            return True
+    return False
 
 
 def _local_whisper_config() -> tuple[str, str, str, str | None]:
@@ -448,6 +496,13 @@ def _local_whisper_transcribe(path: Path, bar: ProgressBar | None = None) -> str
                     if not bar and progress_enabled():
                         print(f"arka_media: local STT via {py}", file=sys.stderr)
                     return text
+            if _ensure_local_stt(auto_install=True):
+                for py in _local_python_candidates():
+                    text = _faster_whisper_via_python(py, wav)
+                    if text is not None:
+                        if not bar and progress_enabled():
+                            print(f"arka_media: local STT via {py}", file=sys.stderr)
+                        return text
             text = _whisper_cli_transcribe(wav)
             if text is not None and not bar and progress_enabled():
                 print("arka_media: local STT via whisper CLI", file=sys.stderr)
@@ -475,22 +530,36 @@ def _local_allowed() -> bool:
 
 
 def _local_setup_hint() -> str:
-    venv = Path.home() / ".config/fish/venv-voice-hf"
+    try:
+        import arka_paths as ap
+
+        venv = ap.config_dir() / "venv-voice-hf"
+    except ImportError:
+        venv = Path.home() / ".config/fish/venv-voice-hf"
     return (
         "Local STT not available. Install faster-whisper:\n"
-        f"  python3.12 -m venv {venv}\n"
-        f"  {venv}/bin/pip install faster-whisper\n"
-        "Or: media_transcript --setup-local\n"
+        f"  media_transcript --setup-local\n"
+        f"  (creates {venv})\n"
         "Then set ARKA_MEDIA_STT=local to force offline, or leave auto for cloud+local fallback."
     )
 
 
 def cmd_setup_local(_args: argparse.Namespace) -> int:
-    venv = Path.home() / ".config/fish/venv-voice-hf"
+    try:
+        import arka_paths as ap
+
+        venv = ap.config_dir() / "venv-voice-hf"
+    except ImportError:
+        venv = Path.home() / ".config/fish/venv-voice-hf"
+    venv.parent.mkdir(parents=True, exist_ok=True)
     py = venv / "bin/python3"
     if not py.is_file():
         print(f"Creating {venv} …", file=sys.stderr)
-        subprocess.run(["python3.12", "-m", "venv", str(venv)], check=False)
+        for creator in ("python3.12", "python3.11", "python3", sys.executable):
+            if creator == sys.executable or shutil.which(creator.split()[0]):
+                r = subprocess.run([creator, "-m", "venv", str(venv)], check=False)
+                if r.returncode == 0 and py.is_file():
+                    break
     if not py.is_file():
         subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True)
     print("Installing faster-whisper (CPU) …", file=sys.stderr)
@@ -650,6 +719,9 @@ def _transcribe_pcm(pcm: bytes, bar: ProgressBar | None = None, src: Path | None
         elif len(chunks) > 1 and not progress_enabled():
             _emit_status(f"Transcribing part {idx + 1}/{len(chunks)} …")
         text = _transcribe_pcm_chunk(chunks[idx], skip_groq=idx in groq_failed)
+        if text is None and _local_allowed():
+            _ensure_local_stt(auto_install=(idx == 0))
+            text = _transcribe_pcm_chunk_local(chunks[idx])
         if text is None:
             hints = [_local_setup_hint()]
             if _cloud_allowed():
@@ -827,7 +899,7 @@ def _llm_answer_question(context: str, question: str) -> str:
 
     system = answer_system_prompt(question)
     user = f"Question: {question}\n\nTranscript excerpts:\n{context[:QA_CONTEXT_CHARS + 2000]}"
-    return llm_complete(system, user, temperature=0.2).strip()
+    return llm_complete(system, user, temperature=0.2, task="summarize").strip()
 
 
 def _answer_question_from_transcript(
@@ -849,14 +921,38 @@ def _answer_question_from_transcript(
 
 
 def _llm_summarize_once(text: str, question: str) -> str:
-    from arka_llm import llm_complete
+    from arka_llm import llm_complete, llm_last_error
 
     system = (
         "Summarize or answer from the audio/video transcript. Follow the user's instructions exactly "
         "(length, focus, format, questions). Use short paragraphs or bullets when helpful."
     )
     user = f"Question/focus: {question}\n\nTranscript:\n{text[:SUMMARY_CHUNK_CHARS + 2000]}"
-    return llm_complete(system, user, temperature=0.2).strip()
+    out = llm_complete(system, user, temperature=0.2, task="summarize").strip()
+    if not out:
+        detail = llm_last_error().strip()
+        hint = "check GEMINI_API_KEY / GROQ_API_KEY or AI_PREFERRED_MODEL in .env"
+        if detail:
+            low = detail.lower()
+            if "quota" in low or "resource_exhausted" in low or "429" in low:
+                hint = (
+                    "Gemini quota exceeded — set AI_PREFERRED_PROVIDER=groq, wait for quota reset, "
+                    "or enable billing"
+                )
+            elif "invalid api key" in low or "invalid_api_key" in low:
+                hint = "API key rejected — fix keys in ~/.config/arka/.env or dev/arka/.env"
+            detail = detail[:240]
+            raise RuntimeError(f"LLM returned empty summary ({detail}). {hint}")
+        raise RuntimeError(f"LLM returned empty summary — {hint}")
+    return out
+
+
+def _summarize_fallback(text: str, question: str) -> str:
+    """Single-shot summarize when chunked/parallel path yields nothing."""
+    snippet = text[:80000]
+    if len(text) > len(snippet):
+        _emit_status(f"Fallback: summarizing first {len(snippet.split())} words …")
+    return _llm_summarize_once(snippet, question)
 
 
 def _merge_partial_summaries(partials: list[str], question: str) -> str:
@@ -913,7 +1009,10 @@ def summarize_text(
             }
             for fut in as_completed(futures):
                 i = futures[fut]
-                indexed[i] = fut.result()
+                try:
+                    indexed[i] = fut.result()
+                except Exception as exc:
+                    _emit_status(f"  Section {i + 1}/{len(chunks)} failed: {exc}")
                 step += 1
                 if bar is not None:
                     bar.set(step, total=total_steps, label=f"Summarizing {step}/{len(chunks)}")
@@ -924,8 +1023,14 @@ def summarize_text(
                 bar.set(step, total=total_steps, label=f"Summarizing {idx}/{len(chunks)}")
             elif not progress_enabled():
                 _emit_status(f"  Section {idx}/{len(chunks)} …")
-            partials.append(_llm_summarize_once(chunk, section_q))
+            try:
+                partials.append(_llm_summarize_once(chunk, section_q))
+            except Exception as exc:
+                _emit_status(f"  Section {idx}/{len(chunks)} failed: {exc}")
             step += 1
+
+    if not partials:
+        return _summarize_fallback(text, question)
 
     while len(partials) > 1:
         next_partials: list[str] = []
@@ -939,9 +1044,16 @@ def summarize_text(
                     bar.set(step, total=total_steps, label=f"Merging {len(group)} sections")
                 elif not progress_enabled():
                     _emit_status(f"  Merging {len(group)} sections …")
-                next_partials.append(_merge_partial_summaries(group, question))
+                try:
+                    next_partials.append(_merge_partial_summaries(group, question))
+                except Exception as exc:
+                    _emit_status(f"  Merge failed ({len(group)} sections): {exc}")
+                    next_partials.extend(group)
                 step += 1
-        partials = next_partials
+        partials = [p for p in next_partials if p]
+        if not partials:
+            return _summarize_fallback(text, question)
+
     if bar is not None:
         bar.set(total_steps, total=total_steps, label="Summarizing")
     return partials[0]

@@ -16,6 +16,7 @@ from html import unescape
 from pathlib import Path
 
 from arka_compute import ffmpeg_threads, log_compute_summary, yt_dlp_concurrent_fragments
+from arka_ytdlp_progress import build_format_opts, run_ytdlp_download
 
 VIDEO_ID_RE = re.compile(
     r"(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/|youtube\.com/shorts/)([A-Za-z0-9_-]{11})"
@@ -55,6 +56,9 @@ def shutil_which(name: str) -> str | None:
 
 
 def _ytdlp_path() -> str | None:
+    venv_py = Path(sys.executable).parent / "yt-dlp"
+    if venv_py.is_file():
+        return str(venv_py)
     bulk_venv = Path.home() / "Projects/python/products/youtube_bulk_downloader/.venv/bin/yt-dlp"
     if bulk_venv.is_file():
         return str(bulk_venv)
@@ -318,6 +322,87 @@ def _whisper_enabled() -> bool:
     return pref not in {"0", "false", "no", "off"}
 
 
+def transcribe_fallback_policy() -> str:
+    """When captions are missing: ask | yes | no (download audio + local STT)."""
+    raw = _yt_env("ARKA_YT_TRANSCRIBE_FALLBACK", "ask").lower()
+    if raw in {"1", "true", "yes", "always", "y", "on"}:
+        return "yes"
+    if raw in {"0", "false", "no", "never", "n", "off"}:
+        return "no"
+    return "ask"
+
+
+def confirm_download_transcribe(
+    label: str,
+    *,
+    count: int = 1,
+    force: bool | None = None,
+) -> bool:
+    """Ask user before downloading audio for local transcription."""
+    if force is True:
+        return True
+    if force is False:
+        return False
+    policy = transcribe_fallback_policy()
+    if policy == "yes":
+        return True
+    if policy == "no":
+        return False
+    if not sys.stdin.isatty():
+        print(
+            f"No captions for {label if count == 1 else f'{count} videos'} "
+            "(non-interactive — set ARKA_YT_TRANSCRIBE_FALLBACK=yes to allow STT)",
+            file=sys.stderr,
+        )
+        return False
+    if count > 1:
+        prompt = f"No captions for {count} videos. Download audio and transcribe locally? [y/N] "
+    else:
+        prompt = f'No captions for "{label}". Download audio and transcribe locally? [y/N] '
+    try:
+        answer = input(prompt).strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print(file=sys.stderr)
+        return False
+    return answer in {"y", "yes"}
+
+
+def resolve_transcript_text(
+    video_id: str,
+    *,
+    research: bool = False,
+    label: str = "",
+    transcribe: bool | None = None,
+) -> str:
+    """Captions first; optionally prompt before download + local STT."""
+    video_id = (video_id or "").strip()
+    if not video_id:
+        raise SystemExit("Invalid YouTube video id")
+
+    text, source = fetch_transcript_with_source(
+        video_id, research=research, allow_whisper=False
+    )
+    if text:
+        if source != "cache" and not _yt_env("ARKA_YT_QUIET"):
+            print(f"arka_youtube: captions via {source}", file=sys.stderr)
+        return text
+
+    name = label or video_id
+    if not confirm_download_transcribe(name, force=transcribe):
+        raise SystemExit(
+            "No captions available. "
+            "Re-run with --yes-transcribe or set ARKA_YT_TRANSCRIBE_FALLBACK=yes"
+        )
+
+    text = fetch_transcript_text(video_id, research=research, allow_whisper=True)
+    if not text:
+        raise SystemExit(
+            "Captions unavailable and local transcribe failed "
+            "(try: media_transcript --setup-local)"
+        )
+    return text
+
+
 def _ytdlp_extra_args(*, player_client: str | None = None) -> list[str]:
     args: list[str] = []
     args.extend(_node_js_runtime_args())
@@ -532,82 +617,133 @@ def transcript_via_whisper(video_id: str) -> str | None:
             from arka_media import _load_fish_env, transcribe_file
 
             _load_fish_env()
-            return transcribe_file(audio_files[0], skip_youtube=True).strip() or None
+            prev_lang = os.environ.get("ARKA_MEDIA_LANG")
+            os.environ["ARKA_MEDIA_LANG"] = "en"
+            try:
+                return transcribe_file(audio_files[0], skip_youtube=True).strip() or None
+            finally:
+                if prev_lang is None:
+                    os.environ.pop("ARKA_MEDIA_LANG", None)
+                else:
+                    os.environ["ARKA_MEDIA_LANG"] = prev_lang
         except Exception as exc:
             print(f"arka_youtube: whisper fallback failed: {exc}", file=sys.stderr)
             return None
 
 
-def get_transcript(target: str) -> tuple[str, str]:
+def get_transcript(
+    target: str,
+    *,
+    transcribe: bool | None = None,
+    label: str = "",
+) -> tuple[str, str]:
     video_id = extract_video_id(target)
     if not video_id:
         raise SystemExit("Could not parse YouTube URL or video id")
-    text = fetch_transcript_text(video_id)
-    if not text:
-        raise SystemExit("Transcript not available")
+    text = resolve_transcript_text(
+        video_id,
+        label=label or video_id,
+        transcribe=transcribe,
+    )
     return video_id, text
 
 
-def fetch_transcript_text(video_id: str, *, use_cache: bool = True) -> str | None:
+def _fetch_transcript_impl(
+    video_id: str,
+    *,
+    use_cache: bool = True,
+    research: bool = False,
+    allow_whisper: bool = True,
+    quiet: bool = False,
+) -> tuple[str | None, str]:
+    """Return (text, source) where source is cache|ytdlp|api|whisper|none."""
     video_id = (video_id or "").strip()
     if not video_id:
-        return None
+        return None, "none"
 
     if use_cache:
         cached = _read_cached_transcript(video_id)
         if cached:
-            return cached
+            return cached, "cache"
 
     text: str | None = None
+    source = "none"
     backend = _yt_env("ARKA_YT_TRANSCRIPT", "auto").lower()
 
     if backend in {"ytdlp", "yt-dlp"}:
         text = transcript_via_ytdlp(video_id)
+        if text:
+            source = "ytdlp"
     elif backend == "api":
-        text = transcript_via_api(video_id)
+        text = transcript_via_api(video_id, quiet=quiet)
+        if text:
+            source = "api"
+    elif research and not _skip_transcript_api():
+        # Research: free caption API first (avoids yt-dlp 429 + whisper STT)
+        text = transcript_via_api(video_id, quiet=quiet)
+        if text:
+            source = "api"
+        else:
+            text = transcript_via_ytdlp(video_id)
+            if text:
+                source = "ytdlp"
     elif _prefer_ytdlp_transcripts():
         text = transcript_via_ytdlp(video_id)
+        if text:
+            source = "ytdlp"
         if not text:
             text = transcript_via_api(video_id, quiet=True)
+            if text:
+                source = "api"
     else:
-        text = transcript_via_api(video_id)
+        text = transcript_via_api(video_id, quiet=quiet)
+        if text:
+            source = "api"
         if not text:
             text = transcript_via_ytdlp(video_id)
+            if text:
+                source = "ytdlp"
 
-    if not text:
+    if not text and allow_whisper and _whisper_enabled():
         text = transcript_via_whisper(video_id)
+        if text:
+            source = "whisper"
 
     if text:
         _write_cached_transcript(video_id, text)
-        return text.strip()
-    return None
-
-
-def fetch_transcript_with_source(video_id: str) -> tuple[str | None, str]:
-    """Return (text, source) where source is cache|ytdlp|api|whisper|none."""
-    cached = _read_cached_transcript(video_id)
-    if cached:
-        return cached, "cache"
-
-    if _prefer_ytdlp_transcripts() and not _skip_transcript_api():
-        text = transcript_via_ytdlp(video_id)
-        if text:
-            _write_cached_transcript(video_id, text)
-            return text.strip(), "ytdlp"
-        text = transcript_via_api(video_id, quiet=True)
-        if text:
-            _write_cached_transcript(video_id, text)
-            return text.strip(), "api"
-    else:
-        text = fetch_transcript_text(video_id, use_cache=False)
-        if text:
-            return text, "auto"
-
-    text = transcript_via_whisper(video_id)
-    if text:
-        _write_cached_transcript(video_id, text)
-        return text.strip(), "whisper"
+        return text.strip(), source
     return None, "none"
+
+
+def fetch_transcript_text(
+    video_id: str,
+    *,
+    use_cache: bool = True,
+    research: bool = False,
+    allow_whisper: bool = True,
+) -> str | None:
+    text, _ = _fetch_transcript_impl(
+        video_id,
+        use_cache=use_cache,
+        research=research,
+        allow_whisper=allow_whisper,
+    )
+    return text
+
+
+def fetch_transcript_with_source(
+    video_id: str,
+    *,
+    research: bool = False,
+    allow_whisper: bool = True,
+) -> tuple[str | None, str]:
+    """Return (text, source) where source is cache|ytdlp|api|whisper|none."""
+    return _fetch_transcript_impl(
+        video_id,
+        use_cache=True,
+        research=research,
+        allow_whisper=allow_whisper,
+    )
 
 
 def try_transcript_for_media(path: Path, youtube_url: str | None = None) -> tuple[str, str, str] | None:
@@ -641,56 +777,26 @@ def cmd_download(argv: list[str]) -> int:
     url = video_watch_url(args.target)
     out_dir = Path(args.output_dir).expanduser() if args.output_dir else DEFAULT_DOWNLOAD_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
-    ytdlp = _ytdlp_path()
-    if not ytdlp:
+    if not _ytdlp_path():
         raise SystemExit("yt-dlp not found — install: pip install yt-dlp  (or youtube_bulk --setup via project venv)")
     out_tpl = str(out_dir / "%(title)s.%(ext)s")
     threads = ffmpeg_threads()
     frags = yt_dlp_concurrent_fragments()
     log_compute_summary()
 
-    common = [
-        ytdlp,
-        "--write-info-json",
-        "-o",
-        out_tpl,
-        "--no-playlist",
-        "--concurrent-fragments",
-        str(frags),
-        url,
-    ]
+    ydl_opts = {
+        "outtmpl": out_tpl,
+        "noplaylist": True,
+        **build_format_opts(
+            audio=args.audio,
+            quality=args.quality,
+            threads=threads,
+            frags=frags,
+        ),
+    }
 
-    if args.audio:
-        cmd = [
-            *common[:1],
-            "-f",
-            "bestaudio/best",
-            "--extract-audio",
-            "--audio-format",
-            "mp3",
-            "--audio-quality",
-            "0",
-            *common[1:],
-        ]
-    else:
-        if args.quality == "best":
-            fmt = "bestvideo+bestaudio/best"
-        else:
-            fmt = f"bestvideo[height<={args.quality}]+bestaudio/best[height<={args.quality}]"
-        cmd = [
-            *common[:1],
-            "-f",
-            fmt,
-            "--merge-output-format",
-            "mp4",
-            "--downloader-args",
-            f"ffmpeg:-threads {threads}",
-            *common[1:],
-        ]
-
-    print(f"Downloading → {out_dir}/", file=sys.stderr)
-    proc = subprocess.run(cmd, check=False)
-    if proc.returncode == 0 and video_id:
+    code = run_ytdlp_download(url, ydl_opts, phase="Download")
+    if code == 0 and video_id:
         for info in sorted(out_dir.glob("*.info.json"), key=lambda p: p.stat().st_mtime, reverse=True):
             if _video_id_from_info_json(info) != video_id:
                 continue
@@ -701,7 +807,7 @@ def cmd_download(argv: list[str]) -> int:
                     write_video_id_sidecar(media, video_id)
                     break
             break
-    return proc.returncode
+    return code
 
 
 def summarize_transcript(text: str, question: str) -> str:
@@ -712,7 +818,7 @@ def summarize_transcript(text: str, question: str) -> str:
         "If the user asked a specific question, answer it from the transcript."
     )
     user = f"Question/focus: {question}\n\nTranscript:\n{text[:14000]}"
-    return llm_complete(system, user, temperature=0.2).strip()
+    return llm_complete(system, user, temperature=0.2, task="summarize").strip()
 
 
 def main() -> int:
@@ -724,9 +830,20 @@ def main() -> int:
     parser.add_argument("--summarize", "-s", action="store_true", help="Summarize via LLM")
     parser.add_argument("--question", "-q", default="Summarize the main points")
     parser.add_argument("-o", "--output", help="Save transcript to file")
+    parser.add_argument(
+        "--yes-transcribe",
+        action="store_true",
+        help="If captions missing, download audio and transcribe (no prompt)",
+    )
+    parser.add_argument(
+        "--no-transcribe",
+        action="store_true",
+        help="Never download/transcribe when captions are missing",
+    )
     args = parser.parse_args()
 
-    video_id, text = get_transcript(args.target)
+    transcribe = False if args.no_transcribe else True if args.yes_transcribe else None
+    video_id, text = get_transcript(args.target, transcribe=transcribe)
     print(f"Video: https://youtube.com/watch?v={video_id}")
     print(f"Length: {len(text.split())} words\n")
 

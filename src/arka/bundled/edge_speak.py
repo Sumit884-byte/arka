@@ -14,6 +14,20 @@ from pathlib import Path
 
 VENV_PY = Path.home() / ".config" / "fish" / "venv-tts" / "bin" / "python3"
 
+
+def _tts_python() -> Path:
+    arka_home = Path(os.environ.get("ARKA_HOME", Path.home() / "dev/arka")).expanduser()
+    for candidate in (
+        arka_home / "venv-arka/bin/python3",
+        Path.home() / "dev/arka/venv-arka/bin/python3",
+        Path.home() / ".config/fish/venv-arka/bin/python3",
+        VENV_PY,
+        Path(sys.executable),
+    ):
+        if candidate.is_file():
+            return candidate
+    return VENV_PY
+
 # Curated natural-sounding neural voices per language
 VOICES: dict[str, dict[str, str]] = {
     "en-IN": {
@@ -130,6 +144,7 @@ def resolve_voice(lang: str | None = None, voice: str | None = None) -> str:
 def play_audio(path: Path) -> None:
     for cmd in (
         ["mpv", "--no-video", str(path)],
+        ["afplay", str(path)],
         ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", str(path)],
         ["paplay", str(path)],
         ["aplay", str(path)],
@@ -203,7 +218,7 @@ def speak(text: str, lang: str | None = None, voice: str | None = None) -> None:
 
 
 def ensure_venv() -> None:
-    py = VENV_PY
+    py = _tts_python()
     if not py.parent.parent.exists():
         import venv
 
@@ -231,8 +246,9 @@ def print_voices(lang_filter: str | None = None) -> None:
 
 
 def main() -> int:
-    if VENV_PY.exists() and Path(sys.executable).resolve() != VENV_PY.resolve():
-        os.execv(str(VENV_PY), [str(VENV_PY), __file__, *sys.argv[1:]])
+    venv_py = _tts_python()
+    if venv_py.is_file() and Path(sys.executable).resolve() != venv_py.resolve():
+        os.execv(str(venv_py), [str(venv_py), __file__, *sys.argv[1:]])
 
     parser = argparse.ArgumentParser(description="Natural neural TTS for Arka")
     sub = parser.add_subparsers(dest="cmd")
@@ -270,7 +286,7 @@ def main() -> int:
             import edge_tts  # noqa: F401
         except ImportError:
             ensure_venv()
-            os.execv(str(VENV_PY), [str(VENV_PY), __file__, *sys.argv])
+            os.execv(str(_tts_python()), [str(_tts_python()), __file__, *sys.argv])
         try:
             speak(text, args.lang or None, args.voice or None)
         except Exception as exc:

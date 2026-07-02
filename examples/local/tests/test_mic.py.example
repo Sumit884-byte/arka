@@ -1,0 +1,15 @@
+#!/usr/bin/env python3
+"""Microphone signal check (local dev — not committed)."""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+
+from arka_mac_mic import mic_selftest  # noqa: E402
+
+if __name__ == "__main__":
+    raise SystemExit(mic_selftest())

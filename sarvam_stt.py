@@ -36,7 +36,8 @@ def transcribe_pcm(pcm: bytes, *, sample_rate: int = 16000) -> str:
     model = (os.environ.get("SARVAM_STT_MODEL") or "saaras:v3").strip()
     mode = (os.environ.get("SARVAM_STT_MODE") or "transcribe").strip()
     lang = (
-        os.environ.get("SARVAM_STT_LANG")
+        os.environ.get("ARKA_LISTEN_STT_LANG")
+        or os.environ.get("SARVAM_STT_LANG")
         or os.environ.get("ARKA_SPEAK_LANG")
         or os.environ.get("SARVAM_TTS_LANG")
         or "hi-IN"
