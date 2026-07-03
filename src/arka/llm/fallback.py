@@ -16,6 +16,15 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Iterator
 
+from arka.llm.api_keys import (
+    apply_provider_key,
+    iter_provider_keys,
+    is_key_retryable,
+    provider_has_keys,
+    reset_key_rotators,
+    rotate_provider_key,
+    key_rotation_label,
+)
 from arka.llm.servers import LOCAL_PROVIDERS, LlmServerSession, is_reachable, provider_available_with_servers
 
 DEFAULT_GEMINI_MODELS = [
@@ -265,8 +274,8 @@ def fetch_gemini_models_live(*, force: bool = False) -> list[str]:
     if not _gemini_list_enabled():
         return []
 
-    key = _ensure_google_key()
-    if not key:
+    keys = iter_provider_keys("gemini")
+    if not keys:
         return []
 
     now = time.time()
@@ -274,12 +283,23 @@ def fetch_gemini_models_live(*, force: bool = False) -> list[str]:
         if not force and _GEMINI_LIVE_CACHE and now - _GEMINI_LIVE_CACHE[0] < _GEMINI_LIVE_TTL:
             return list(_GEMINI_LIVE_CACHE[1])
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key}"
-    try:
-        req = urllib.request.Request(url, method="GET")
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            data = json.loads(resp.read().decode())
-    except (urllib.error.URLError, OSError, TimeoutError, json.JSONDecodeError):
+    data = None
+    for key in keys:
+        os.environ["GEMINI_API_KEY"] = key
+        os.environ["GOOGLE_API_KEY"] = key
+        url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key}"
+        try:
+            req = urllib.request.Request(url, method="GET")
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = json.loads(resp.read().decode())
+            break
+        except urllib.error.HTTPError as exc:
+            if is_key_retryable(str(exc)) and key != keys[-1]:
+                continue
+        except (urllib.error.URLError, OSError, TimeoutError, json.JSONDecodeError):
+            if key != keys[-1]:
+                continue
+    if data is None:
         with _GEMINI_LIVE_LOCK:
             if _GEMINI_LIVE_CACHE:
                 return list(_GEMINI_LIVE_CACHE[1])
@@ -413,7 +433,7 @@ def build_default_chain(*, task: str = "default") -> list[tuple[str, str]]:
         for model_id in gemini_model_ids():
             add("gemini", model_id)
 
-    if env("GROQ_API_KEY"):
+    if provider_has_keys("groq") or env("GROQ_API_KEY"):
         for model_id in groq_model_ids():
             add("groq", model_id)
 
@@ -432,10 +452,10 @@ def build_default_chain(*, task: str = "default") -> list[tuple[str, str]]:
 
 
 def _ensure_google_key() -> str:
-    key = env("GEMINI_API_KEY") or env("GOOGLE_API_KEY")
-    if key and not env("GOOGLE_API_KEY"):
-        os.environ["GOOGLE_API_KEY"] = key
-    return key
+    apply_provider_key("gemini")
+    return (
+        (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or "").strip()
+    )
 
 
 def _ollama_host() -> str:
@@ -494,6 +514,7 @@ def build_model(provider: str, model_id: str, temperature: float, *, session: Ll
     if provider == "groq":
         from agno.models.groq import Groq
 
+        apply_provider_key("groq")
         return Groq(id=normalize_groq_model(model_id), temperature=temperature)
 
     if provider == "ollama":
@@ -502,6 +523,7 @@ def build_model(provider: str, model_id: str, temperature: float, *, session: Ll
         mid = model_id or env("OLLAMA_CHAT_MODEL") or "minimax-m2.5:cloud"
         if mid.startswith("gemini-"):
             mid = "minimax-m2.5:cloud"
+        apply_provider_key("ollama")
         return Ollama(
             id=mid,
             host=_ollama_host(),
@@ -634,51 +656,74 @@ class LlmFallbackEngine:
                 for provider, model_id in chain:
                     if self.store.exhausted(provider, model_id):
                         continue
-                    model = build_model(provider, model_id, temperature, session=session)
-                    if model is None:
-                        continue
-                    attempts += 1
-                    label = f"{provider}/{model_id}"
-                    tried.append(label)
-                    try:
-                        if verbose:
-                            print(
-                                f"arka_llm: trying {label} (task={normalize_task(self.task)})",
-                                file=sys.stderr,
-                            )
-                        agent = Agent(model=model, instructions=system, markdown=False)
-                        run = agent.run(user)
-                        text = getattr(run, "content", None)
-                        if text is None:
-                            text = str(run)
-                        text = _strip_fences(str(text).strip())
-                        if text and not _looks_like_error(text):
-                            _LAST_MODEL = (provider, model_id)
-                            _LAST_ERROR = ""
-                            if notify and len(tried) > 1:
+                    key_retry = True
+                    while key_retry:
+                        key_retry = False
+                        apply_provider_key(provider)
+                        model = build_model(provider, model_id, temperature, session=session)
+                        if model is None:
+                            break
+                        attempts += 1
+                        label = f"{provider}/{model_id}"
+                        kr = key_rotation_label(provider)
+                        if kr:
+                            label = f"{label} ({kr})"
+                        tried.append(label)
+                        try:
+                            if verbose:
                                 print(
-                                    f"arka_llm: fallback ok → {label} "
-                                    f"(after {len(tried) - 1} failure(s))",
+                                    f"arka_llm: trying {label} (task={normalize_task(self.task)})",
                                     file=sys.stderr,
                                 )
-                            elif verbose:
-                                print(f"arka_llm: ok {label}", file=sys.stderr)
-                            return CompletionResult(
-                                text=text,
-                                provider=provider,
-                                model_id=model_id,
-                                attempts=attempts,
-                            )
-                        err_text = (text or "empty response")[:300]
-                        last_error = f"{label}: {err_text}"
-                        self.store.mark(provider, model_id, RuntimeError(err_text))
-                        if verbose:
-                            print(f"arka_llm: fail {label}: {err_text}", file=sys.stderr)
-                    except Exception as exc:
-                        last_error = f"{label}: {exc}"
-                        self.store.mark(provider, model_id, exc)
-                        if verbose:
-                            print(f"arka_llm: fail {label}: {exc}", file=sys.stderr)
+                            agent = Agent(model=model, instructions=system, markdown=False)
+                            run = agent.run(user)
+                            text = getattr(run, "content", None)
+                            if text is None:
+                                text = str(run)
+                            text = _strip_fences(str(text).strip())
+                            if text and not _looks_like_error(text):
+                                _LAST_MODEL = (provider, model_id)
+                                _LAST_ERROR = ""
+                                if notify and len(tried) > 1:
+                                    print(
+                                        f"arka_llm: fallback ok → {label} "
+                                        f"(after {len(tried) - 1} failure(s))",
+                                        file=sys.stderr,
+                                    )
+                                elif verbose:
+                                    print(f"arka_llm: ok {label}", file=sys.stderr)
+                                return CompletionResult(
+                                    text=text,
+                                    provider=provider,
+                                    model_id=model_id,
+                                    attempts=attempts,
+                                )
+                            err_text = (text or "empty response")[:300]
+                            last_error = f"{label}: {err_text}"
+                            if rotate_provider_key(provider, err_text):
+                                if verbose:
+                                    print(
+                                        f"arka_llm: rotating {provider} API key after error",
+                                        file=sys.stderr,
+                                    )
+                                key_retry = True
+                                continue
+                            self.store.mark(provider, model_id, RuntimeError(err_text))
+                            if verbose:
+                                print(f"arka_llm: fail {label}: {err_text}", file=sys.stderr)
+                        except Exception as exc:
+                            last_error = f"{label}: {exc}"
+                            if rotate_provider_key(provider, exc):
+                                if verbose:
+                                    print(
+                                        f"arka_llm: rotating {provider} API key after {exc}",
+                                        file=sys.stderr,
+                                    )
+                                key_retry = True
+                                continue
+                            self.store.mark(provider, model_id, exc)
+                            if verbose:
+                                print(f"arka_llm: fail {label}: {exc}", file=sys.stderr)
             finally:
                 session.close()
 
@@ -686,6 +731,87 @@ class LlmFallbackEngine:
         if last_error and verbose:
             print(f"arka_llm: all providers failed ({last_error})", file=sys.stderr)
         return CompletionResult(error=last_error, attempts=attempts)
+
+    def stream_complete(
+        self, system: str, user: str, *, temperature: float = 0.2
+    ) -> Iterator[str]:
+        """Yield incremental text deltas from the first successful provider."""
+        from agno.agent import Agent
+
+        global _LAST_MODEL, _LAST_ERROR
+
+        if not _truthy("ARKA_LLM_AUTO_FALLBACK", "1") and self.chain is None:
+            chain = self.candidates()[:1]
+        else:
+            chain = self.candidates()
+
+        last_error = ""
+        session = LlmServerSession()
+        with _quiet_llm_logs():
+            try:
+                for provider, model_id in chain:
+                    if self.store.exhausted(provider, model_id):
+                        continue
+                    key_retry = True
+                    while key_retry:
+                        key_retry = False
+                        apply_provider_key(provider)
+                        model = build_model(provider, model_id, temperature, session=session)
+                        if model is None:
+                            break
+                        try:
+                            agent = Agent(model=model, instructions=system, markdown=False)
+                            seen = ""
+                            for event in agent.run(user, stream=True):
+                                event_name = getattr(event, "event", "") or type(event).__name__
+                                if event_name not in (
+                                    "RunContent",
+                                    "IntermediateRunContent",
+                                    "ReasoningContentDelta",
+                                ):
+                                    continue
+                                piece = getattr(event, "content", None)
+                                if piece is None:
+                                    piece = getattr(event, "reasoning_content", None)
+                                if not piece:
+                                    continue
+                                text = str(piece)
+                                if text.startswith(seen):
+                                    delta = text[len(seen) :]
+                                    seen = text
+                                else:
+                                    delta = text
+                                    seen += text
+                                if delta:
+                                    yield delta
+                            if seen.strip():
+                                text = _strip_fences(seen.strip())
+                                if text and not _looks_like_error(text):
+                                    _LAST_MODEL = (provider, model_id)
+                                    _LAST_ERROR = ""
+                                    return
+                                last_error = text[:300] if text else "empty stream response"
+                                if rotate_provider_key(provider, last_error):
+                                    key_retry = True
+                                    continue
+                            else:
+                                last_error = "empty stream response"
+                                if rotate_provider_key(provider, last_error):
+                                    key_retry = True
+                                    continue
+                            self.store.mark(provider, model_id, RuntimeError(last_error))
+                        except Exception as exc:
+                            last_error = str(exc)
+                            if rotate_provider_key(provider, exc):
+                                key_retry = True
+                                continue
+                            self.store.mark(provider, model_id, exc)
+            finally:
+                session.close()
+
+        _LAST_ERROR = last_error
+        if last_error:
+            yield f"[LLM error: {last_error}]"
 
 
 _DEFAULT_ENGINE = LlmFallbackEngine(task="default")
@@ -710,6 +836,24 @@ def llm_complete(
     return result.text
 
 
+def llm_stream_complete(
+    system: str,
+    user: str,
+    temperature: float = 0.2,
+    *,
+    task: str | None = None,
+    chain: list[tuple[str, str]] | None = None,
+) -> Iterator[str]:
+    if task or chain:
+        engine = LlmFallbackEngine(
+            task=normalize_task(task) if task else "default",
+            chain=chain,
+        )
+    else:
+        engine = _DEFAULT_ENGINE
+    yield from engine.stream_complete(system, user, temperature=temperature)
+
+
 def llm_last_error() -> str:
     return _LAST_ERROR
 
@@ -724,6 +868,7 @@ def ordered_model_candidates(*, task: str | None = None) -> list[tuple[str, str]
 
 def reset_llm_exhaustion() -> None:
     EXHAUSTION.reset()
+    reset_key_rotators()
 
 
 def model_label(*, prefer_last: bool = True, task: str | None = None) -> str:

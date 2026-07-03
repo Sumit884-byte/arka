@@ -283,9 +283,19 @@ def provider_available_with_servers(provider: str) -> bool:
     """Provider check that can auto-start local servers when configured."""
     provider = provider.lower()
     if provider == "gemini":
-        return bool(_env("GEMINI_API_KEY") or _env("GOOGLE_API_KEY"))
+        try:
+            from arka.llm.api_keys import provider_has_keys
+
+            return provider_has_keys("gemini") or bool(_env("GOOGLE_API_KEY"))
+        except ImportError:
+            return bool(_env("GEMINI_API_KEY") or _env("GOOGLE_API_KEY"))
     if provider == "groq":
-        return bool(_env("GROQ_API_KEY"))
+        try:
+            from arka.llm.api_keys import provider_has_keys
+
+            return provider_has_keys("groq")
+        except ImportError:
+            return bool(_env("GROQ_API_KEY"))
     if provider == "openai":
         return bool(_env("OPENAI_API_KEY"))
     if provider == "anthropic":

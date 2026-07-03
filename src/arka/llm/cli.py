@@ -12,6 +12,7 @@ from arka.llm.fallback import (
     gemini_model_ids,
     llm_complete as _fallback_complete,
     llm_last_error,
+    llm_stream_complete as _fallback_stream,
     model_label,
     ordered_model_candidates,
     provider_available,
@@ -213,6 +214,32 @@ def cmd_complete(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_stream(args: argparse.Namespace) -> int:
+    if not args.skip_security:
+        try:
+            from arka.core.security import apply_llm_security
+
+            blocked, system, user = apply_llm_security(args.system, args.user, task=args.task)
+            if blocked:
+                print(blocked, end="", flush=True)
+                return 0
+            args.system, args.user = system, user
+        except ImportError:
+            pass
+    got = False
+    for delta in _fallback_stream(
+        args.system, args.user, args.temperature, task=args.task or None
+    ):
+        got = True
+        print(delta, end="", flush=True)
+    if not got:
+        err = llm_last_error()
+        if err:
+            print(err, file=sys.stderr)
+        return 1
+    return 0
+
+
 def cmd_models(args: argparse.Namespace) -> int:
     if args.gemini_live:
         live = fetch_gemini_models_live(force=args.refresh)
@@ -255,6 +282,14 @@ def main() -> int:
     p_complete.add_argument("--temperature", "-t", type=float, default=0.2)
     p_complete.add_argument("--task", help="Task profile: summarize|route|chat|research|agent|pdf|predictions")
     p_complete.set_defaults(func=cmd_complete)
+
+    p_stream = sub.add_parser("stream", help="Stream system + user completion (stdout deltas)")
+    p_stream.add_argument("--system", "-s", required=True)
+    p_stream.add_argument("--user", "-u", required=True)
+    p_stream.add_argument("--temperature", "-t", type=float, default=0.2)
+    p_stream.add_argument("--task", help="Task profile: summarize|route|chat|research|agent|pdf|predictions")
+    p_stream.add_argument("--skip-security", action="store_true", help=argparse.SUPPRESS)
+    p_stream.set_defaults(func=cmd_stream, skip_security=False)
 
     p_route = sub.add_parser("route", help="NL command -> skill/shell (agent routing)")
     p_route.add_argument("cmd")

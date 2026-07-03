@@ -99,6 +99,7 @@ arka reload --listen   # also restart wake listener after Python changes
 | `agent_route <q>`          | Preview routing without executing                  |
 | `arka reload`              | Reload `config.fish` + `.env` in the current shell |
 | `arka start` / `arka stop` | Wake listener + background services                |
+| `arka serve`               | Remote server for phone STT/TTS (PC agent)         |
 | `arka listen`              | Wake-word listener ("hey arka, …")                 |
 | `arka speak-lang hi-IN`    | Voice language (Sarvam / Edge TTS)                 |
 | `arka usage report`        | App + website screen time                          |
@@ -174,6 +175,7 @@ Arka’s LLM layer is **not** a single model or a simple router. `arka_llm_fallb
 | **Provider chain** | Ordered candidates: preferred provider/model → env chain → defaults (Gemini → Groq → Ollama). Override globally or per task. |
 | **Task profiles** | `route`, `summarize`, `chat`, `research`, `agent`, `pdf`, `predictions` — each can use `ARKA_LLM_FALLBACK_<TASK>` (e.g. `ARKA_LLM_FALLBACK_SUMMARIZE`). |
 | **Failover** | On 401, 429, quota, decommissioned model, timeout, etc., marks provider/model exhausted and tries the next candidate (`ARKA_LLM_AUTO_FALLBACK=1` default). |
+| **API key rotation** | Multiple keys per provider (`GEMINI_API_KEYS`, `GROQ_API_KEYS`, or `GEMINI_API_KEY_2`, …) rotate on 429/quota/key errors before switching provider (`ARKA_API_KEY_ROTATION=1` default). |
 | **Local servers** | Auto-start/stop Ollama or vLLM when needed (`ARKA_LLM_AUTO_START_SERVERS`, `ARKA_LLM_AUTO_STOP_SERVERS`). |
 | **Gemini model list** | With `GEMINI_API_KEY`, fetches live `generateContent` models via ListModels (`ARKA_GEMINI_LIST=1`, default). Merges with `ARKA_GEMINI_MODELS`; per-model 429 only exhausts that model, then tries the next Gemini before Groq/Ollama. |
 | **Shared exhaustion** | One session cache — exhausted models are skipped across skills until `reset-exhaustion`. |
