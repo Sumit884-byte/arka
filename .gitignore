@@ -27,6 +27,8 @@ Thumbs.db
 
 # Runtime cache (user machine, not repo)
 .cache/
+platform.json
+platform.env
 
 # Test / coverage (local dev harnesses — not committed)
 /local/
