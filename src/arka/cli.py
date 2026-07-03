@@ -18,6 +18,7 @@ from arka.paths import (
     checkout_root,
     config_dir,
     ensure_layout,
+    entry_script,
     env_file,
     fish_config,
     package_dir,
@@ -442,7 +443,7 @@ def _cmd_setup() -> int:
 
 def _cmd_platform(extra: list[str]) -> int:
     sub = extra[0] if extra else "show"
-    script = arka_home() / "arka_platform.py"
+    script = entry_script("arka_platform.py")
     if not script.is_file():
         print(f"Missing {script}", file=sys.stderr)
         return 1
@@ -464,7 +465,7 @@ def _cmd_doctor() -> int:
     print(f"  ARKA_HOME:      {arka_home()}")
     print(f"  Config:         {config_dir()}")
     print(f"  Cache:          {cache_dir()}")
-    print(f"  arka_chat.py:   {('ok' if (arka_home() / 'arka_chat.py').is_file() else 'missing — run: python scripts/sync_bundled.py')}")
+    print(f"  config.fish:    {('ok' if (arka_home() / 'config.fish').is_file() else 'missing — run: python scripts/sync_bundled.py')}")
     mode = skill_mode()
     if mode == "full":
         print(f"  Skills:         full (70+) via {fish_config()}")

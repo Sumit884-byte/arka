@@ -24,7 +24,7 @@ def _fish_env() -> dict[str, str]:
     env.setdefault("ARKA_CONFIG_DIR", str(config_dir()))
     bundled = bundled_dir()
     if bundled.is_dir():
-        env["ARKA_HOME"] = str(bundled if (bundled / "arka_chat.py").is_file() else arka_home())
+        env["ARKA_HOME"] = str(bundled if (bundled / "config.fish").is_file() else arka_home())
     return env
 
 

@@ -2,6 +2,16 @@
 
 A modern, AI-powered Fish shell setup with **Arka** — a voice-capable natural-language agent that routes requests to 70+ built-in skills, third-party plugins, cloud memory, deep web search, PDF RAG, and system automation.
 
+> [!IMPORTANT]
+> **Security (on by default)** — symbolic checks in `arka_security.py` before web search and risky actions:
+>
+> - **Web queries** — blocks prompt-injection and malicious instructions before DuckDuckGo search or LLM synthesis (`ARKA_SECURITY_WEB=1`)
+> - **Scraped pages** — strips suspicious lines from web results before they reach the model (`ARKA_SECURITY_SANITIZE=1`)
+> - **Risky actions** — prompts `[y/N]` before install, delete, download, WhatsApp send, browser automation, and scripts (`ARKA_SECURITY_ACTIONS=1`)
+> - **Destructive shell** — hard-blocks patterns like `curl | bash`, `rm -rf /`, fork bombs
+>
+> Master switch: `ARKA_SECURITY=1` in `.env`. Set any layer to `0` to disable it.
+
 > [!TIP]
 > **Lightweight & secure**: Commands run locally. LLM calls go through a **fallback orchestrator** (`arka_llm_fallback.py`) across Gemini, Groq, Ollama, and vLLM — no Docker required for daily use (PrivateGPT + Qdrant only for PDF ingest).
 
@@ -570,19 +580,21 @@ See `.env.example` for the full list of options.
 ### Layout
 
 ```
-~/.config/fish/
-├── config.fish          # Main entry: skills, skill router, Arka
-├── .env                 # Secrets & preferences (not committed)
-├── arka_*.py            # Python skills & engines
-├── arka_llm_fallback.py # AI fallback orchestrator (provider/model chains)
-├── arka_llm.py          # LLM CLI: complete, route, models, active-model
-├── skills/              # Bundled third-party plugin examples
-├── arka_chat_requirements.txt
-├── privategpt/
-│   └── settings.override.yaml
-└── functions/           # Extra fish functions (e.g. i → uv pip install)
-
-~/.config/arka/skills/   # User-installed third-party plugins (created on install)
+arka/                          # Git repo
+├── bin/                       # Python entry shims (Fish invokes these)
+├── config.fish                # Stub → sources src/arka/fish/config.fish
+├── src/arka/                  # Python package
+│   ├── cli.py                 # `arka` CLI
+│   ├── paths.py               # Config, cache, env, entry_script()
+│   ├── fish/                  # config.fish, scripts/, completions/
+│   ├── llm/ youtube/ media/ stock/ agent/ integrations/ …
+│   ├── aie/                   # Desktop automation scripts + cli.py
+│   ├── requirements/          # chat.txt, turboquant.txt
+│   └── bundled/               # Assembled for pip wheels (sync_bundled.py)
+├── scripts/
+│   ├── sync_bundled.py
+│   └── organize_repo.py
+└── pyproject.toml
 ```
 
 ---

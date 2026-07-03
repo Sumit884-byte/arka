@@ -48,11 +48,11 @@ def ensure_platform_cache(*, force: bool = False) -> dict:
         except (OSError, json.JSONDecodeError):
             pass
 
-    bundled = Path(__file__).resolve().parent / "bundled" / "arka_platform.py"
-    if bundled.is_file():
+    script = Path(__file__).resolve().parent / "core" / "platform.py"
+    if script.is_file():
         import subprocess
 
-        cmd = [sys.executable, str(bundled), "detect"]
+        cmd = [sys.executable, str(script), "detect"]
         if force:
             cmd.append("--force")
         subprocess.run(cmd, check=False)

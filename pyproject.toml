@@ -78,4 +78,10 @@ arka = [
     "bundled/privategpt/*",
     "bundled/aie/*",
     "bundled/whatsapp/*",
+    "aie/*.py",
+    "fish/config.fish",
+    "fish/scripts/*",
+    "requirements/*.txt",
+    "pdf/privategpt/*",
+    "env.example",
 ]

@@ -11,7 +11,7 @@ from arka.paths import arka_home, bundled_dir, cache_dir, config_dir, python_exe
 
 def apply_env() -> None:
     bundled = bundled_dir()
-    home = bundled if (bundled / "arka_chat.py").is_file() else arka_home()
+    home = bundled if (bundled / "config.fish").is_file() else arka_home()
     os.environ["ARKA_HOME"] = str(home)
     os.environ.setdefault("ARKA_CONFIG_DIR", str(config_dir()))
     os.environ.setdefault("ARKA_CACHE_DIR", str(cache_dir()))
