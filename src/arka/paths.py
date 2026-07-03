@@ -132,7 +132,15 @@ def ensure_layout() -> Path:
 
 def stock_project_dir() -> Path:
     """Optional stock_analysis checkout (bridge commands need this directory)."""
-    default = Path.home() / "Projects/python/products/stock_analysis"
+    try:
+        from arka.agent.profession_projects import profession_project_path
+
+        inv = profession_project_path("investor")
+        if inv:
+            return inv
+    except ImportError:
+        pass
+    default = Path.home() / "Projects/professions/investor/stock_analyzer"
     raw = os.environ.get("ARKA_STOCK_PROJECT", "").strip()
     if raw:
         configured = Path(raw).expanduser()

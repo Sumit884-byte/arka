@@ -163,9 +163,14 @@ RULES: tuple[MemoryRule, ...] = (
         "profession",
         "is_a(user, role)",
         re.compile(
-            r"(?i)^i\s*'?m\s+a(?:n)?\s+(?P<role>developer|engineer|designer|student|"
-            r"teacher|doctor|lawyer|manager|founder|freelancer|researcher|writer|"
-            r"artist|musician|chef|nurse|accountant|consultant|programmer|data scientist)\b"
+            r"(?i)^i\s*'?m\s+a(?:n)?\s+"
+            r"(?P<role>news anchor|content creator|social media manager|data scientist|"
+            r"software engineer|venture capitalist|angel investor|"
+            r"developer|engineer|designer|student|teacher|doctor|lawyer|manager|founder|"
+            r"freelancer|researcher|writer|artist|musician|chef|nurse|accountant|consultant|"
+            r"programmer|nutritionist|dietitian|entrepreneur|investor|journalist|reporter|"
+            r"anchor|marketer|copywriter|therapist|counselor|psychologist|cpa|bookkeeper|"
+            r"broadcaster|attorney|professor|tutor)\b"
             r"(?:\s+(?:at|for|in)\s+(?P<org>.+))?$"
         ),
         "User is a {role}" + "{org_suffix}",

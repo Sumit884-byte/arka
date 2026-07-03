@@ -71,6 +71,25 @@ def delegate_subcommand(sub: str, rest: list[str]) -> int | None:
         return None
 
 
+def delegate_fish_function(func: str, rest: list[str]) -> int | None:
+    """Run a fish skill/function directly (e.g. goal), not via the arka NL router."""
+    cfg = fish_config()
+    if cfg is None:
+        return None
+    fish = _find_fish()
+    if not fish:
+        return None
+
+    args = " ".join(shlex.quote(a) for a in rest)
+    cfg_q = shlex.quote(str(cfg))
+    inner = f"source {cfg_q}; {func} {args}".strip()
+    try:
+        result = subprocess.run([fish, "-c", inner], check=False, env=_fish_env())
+        return result.returncode
+    except OSError:
+        return None
+
+
 def _find_fish() -> str | None:
     import shutil
 

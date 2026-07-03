@@ -10,7 +10,7 @@ import sys
 from arka import __version__
 from arka.dispatch import run_fish_skill, run_script, run_skill
 from arka.env import load_env
-from arka.fish_bridge import delegate_subcommand, delegate_to_fish
+from arka.fish_bridge import delegate_fish_function, delegate_subcommand, delegate_to_fish
 from arka.paths import (
     arka_home,
     bundled_dir,
@@ -61,6 +61,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args[0] in ("refetch", "update", "sync"):
         return _cmd_refetch(args[1:])
+
+    if args[0] in ("goal", "loop"):
+        return _cmd_goal(args[1:])
 
     if args[0] in ("reload", "refresh") and has_full_fish_agent():
         code = delegate_subcommand(args[0], args[1:])
@@ -373,12 +376,51 @@ def _cmd_shell_init(rest: list[str]) -> int:
         print(f"Unsupported shell: {shell}  (try: arka shell-init zsh)", file=sys.stderr)
         return 1
     print(
-        """# Add to ~/.zshrc so URLs with ? are not glob-expanded:
+        """# Add to ~/.zshrc (Arka + zsh-safe URLs):
 arka() {
   noglob command arka "$@"
+}
+goal() {
+  command arka goal "$@"
+}
+loop() {
+  command arka goal "$@"
 }"""
     )
     return 0
+
+
+def _cmd_goal(rest: list[str]) -> int:
+    if rest and rest[0] in ("-h", "--help", "help"):
+        print(
+            "Usage: arka goal [options] <goal description>\n"
+            "       arka loop <goal>          (alias)\n"
+            "\n"
+            "Autonomous multi-step agent (works from zsh/bash — no fish required).\n"
+            "\n"
+            "Options:\n"
+            "  -b, --butterfish   Butterfish Goal Mode (asks to install via brew/go)\n"
+            "  -y, --yes          Auto-approve risky actions and installs\n"
+            "  -n, --max N        Max steps (default 25)\n"
+            "  -v, --verify       LLM verification when goal completes\n"
+            "\n"
+            "Examples:\n"
+            "  arka goal debug my nginx setup\n"
+            "  arka goal -b -y set up venv and run pytest\n"
+            "  arka loop install requests and verify import\n"
+            "\n"
+            "Fish shell also has a native goal function (same behavior)."
+        )
+        return 0
+
+    if has_full_fish_agent() and "--python" not in rest:
+        code = delegate_fish_function("goal", rest)
+        if code is not None:
+            return code
+
+    from arka.agent.goal import main as goal_main
+
+    return goal_main(argv=["goal", *rest])
 
 
 def _cmd_youtube(rest: list[str]) -> int:
@@ -494,6 +536,9 @@ Install:
 Usage:
   arka <request>                  # natural language (routes to best skill)
   arka ask <question>             # web + AI answer
+  arka goal <goal>                # autonomous multi-step agent (zsh/bash/fish)
+  arka goal -b <goal>             # Butterfish Goal Mode (install on confirm)
+  arka loop <goal>                # alias for arka goal
   arka password save wifi         # generate + store password
   arka password set wifi <secret> # store your own password
   arka password get wifi          # retrieve stored password

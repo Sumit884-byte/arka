@@ -118,11 +118,46 @@ def _route_llm(cmd: str) -> Route | None:
     return Route(line, source="llm", kind="llm")
 
 
+def _parse_password_name(cmd: str) -> str:
+    m = re.search(r"(?:for|as|named|to)\s+(.+)$", cmd.strip(), re.I)
+    if not m:
+        m = re.search(r"password\s+for\s+(.+)$", cmd.strip(), re.I)
+    if not m:
+        return ""
+    name = m.group(1).strip()
+    name = re.sub(r"\s+\d{1,3}$", "", name)
+    return name
+
+
 def _route_offline(cmd: str) -> Route | None:
     clean = cmd.lower()
 
     if clean in ("help", "skills", "?"):
         return Route("help")
+
+    if re.search(r"(?i)\b(clone|setup|install)\b.*\b(profession|professions)\b.*\b(projects?|repos?)\b", clean):
+        return Route("profession setup")
+    if re.search(r"(?i)\bprofession\s+(setup|clone|status|combine)\b", clean):
+        m = re.search(r"(?i)\bprofession\s+(setup|clone|status|combine)(?:\s+(\w+))?\b", cmd)
+        if m:
+            sub = m.group(1).lower()
+            if sub in ("setup", "clone"):
+                prof = (m.group(2) or "").lower()
+                return Route(f"profession setup {prof}".strip())
+            return Route(f"profession {sub}")
+        return Route("profession setup")
+
+    if re.search(r"(?i)\b(list professions|profession list|what professions)\b", clean):
+        return Route("profession list")
+
+    try:
+        from arka.agent.professions import route_command
+
+        prof_route = route_command(cmd)
+        if prof_route:
+            return Route(prof_route, source="offline")
+    except ImportError:
+        pass
 
     if re.match(r"^(generate|create|make)\s+(?:a |an |the |me )?(?:new )?(password|passcode)\b", clean):
         return Route("generate_password")
@@ -138,20 +173,19 @@ def _route_offline(cmd: str) -> Route | None:
             return Route(f"generate_password set {name} {shlex.quote(pwd)}")
 
     if re.search(r"(save|store|remember).*(password|pass).*(for|as|named)", clean) or re.search(
-        r"generate.*password.*(for|named)\s+\w+", clean
+        r"generate.*password.*(for|named)\s+\S", clean
     ):
-        m = re.search(r"(?:for|as|named)\s+([a-zA-Z0-9._-]+)", cmd, re.I)
-        if not m:
-            m = re.search(r"password\s+(?:for\s+)?([a-zA-Z0-9._-]+)", cmd, re.I)
-        name = m.group(1) if m else ""
-        return Route(f"generate_password save {name}".strip())
+        name = _parse_password_name(cmd)
+        if name:
+            return Route(f"generate_password save {shlex.quote(name)}")
+        return Route("generate_password save")
 
     if re.search(r"(get|show|retrieve).*(password|pass).*(for|named)", clean) or re.search(
-        r"what.*password.*(for|to)\s+\w+", clean
+        r"what.*password.*(for|to)\s+\S", clean
     ):
-        m = re.search(r"(?:for|to|named)\s+([a-zA-Z0-9._-]+)", cmd, re.I)
-        if m:
-            return Route(f"generate_password get {m.group(1)}")
+        name = _parse_password_name(cmd)
+        if name:
+            return Route(f"generate_password get {shlex.quote(name)}")
 
     if re.search(r"\b(list|show)\s+(?:my\s+|saved\s+|stored\s+)?(?:passwords?|passcodes?)\b", clean):
         return Route("generate_password list")

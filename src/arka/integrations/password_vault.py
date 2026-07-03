@@ -26,8 +26,8 @@ except ImportError:
 VAULT_FILE = CACHE / "passwords.vault.json"
 KEY_FILE = CACHE / "vault.key"
 
-DEFAULT_LENGTH = 20
-NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$")
+DEFAULT_LENGTH = 16
+NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._ -]{0,63}$")
 
 
 def _load_env() -> None:
@@ -75,10 +75,10 @@ def _fernet():
 
 
 def _validate_name(name: str) -> str:
-    name = name.strip()
+    name = re.sub(r"\s+", " ", name.strip())
     if not NAME_RE.match(name):
         raise SystemExit(
-            "Name must be 1–64 chars: letters, numbers, dot, underscore, hyphen (start with alphanumeric)."
+            "Name must be 1–64 chars: letters, numbers, spaces, dot, underscore, hyphen (start with alphanumeric)."
         )
     return name
 

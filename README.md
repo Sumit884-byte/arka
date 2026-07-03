@@ -252,7 +252,33 @@ The model picks based on intent (watch the film vs. hear the track only). Clear,
 
 **5. Agent loop & multi-step work**
 
-`agent_loop` / `loop` injects the same **concise skill name list once** at the start of the loop JSON protocol, plus cwd, a shallow directory listing, and truncated command history — not the entire `arka help` dump each step.
+`goal` is the primary autonomous agent — Butterfish Goal Mode–style run/fix loop with shell history, file reads, 25-step budget, and security gates. `loop` / `agent_loop` delegate to `goal` when `ARKA_GOAL_ENGINE=auto` (default).
+
+```fish
+goal set up a venv, install requests, and run pytest
+goal -y -n 30 debug why nginx fails
+goal --butterfish refactor this module and run tests   # interactive Butterfish shell (!goal)
+ARKA_GOAL_ENGINE=legacy agent_loop ...               # old JSON loop only
+```
+
+From **zsh/bash** (no fish required):
+
+```bash
+arka goal debug my nginx setup
+arka goal -b -y set up venv and run pytest
+# Optional ~/.zshrc wrappers: arka shell-init zsh
+```
+
+| Engine | Behavior |
+|--------|----------|
+| `auto` / `arka` | Built-in goal agent (`arka.agent.goal`) |
+| `butterfish` | Asks to install via brew/go if missing, then launches Butterfish shell (`!goal`) |
+| `legacy` | Original `agent_loop` JSON protocol only |
+| `off` | Disables goal delegation |
+
+**Env:** `ARKA_GOAL_MAX_STEPS`, `ARKA_GOAL_AUTO_CONTINUE=1`, `ARKA_GOAL_OUTPUT_LIMIT=8000`
+
+`agent_plan` still does upfront JSON planning; `goal` is reactive step-by-step like Butterfish Goal Mode.
 
 **6. Model-agnostic by design**
 

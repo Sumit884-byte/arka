@@ -859,7 +859,7 @@ def code_agent(goal: str, *, repo: str | None = None, ingest: bool = False) -> i
         except json.JSONDecodeError:
             pass
     if not steps:
-        cmd = f"cd {shlex.quote(str(cwd))}; agent_loop -n 10 {shlex.quote(goal)}"
+        cmd = f"cd {shlex.quote(str(cwd))}; goal -n 10 {shlex.quote(goal)}"
         return subprocess.run(["fish", "-ic", cmd]).returncode
 
     os.chdir(cwd)
@@ -1057,6 +1057,14 @@ def main() -> int:
     p = sub.add_parser("inbox")
     p.add_argument("text", nargs="+")
 
+    p = sub.add_parser("goal")
+    p.add_argument("goal", nargs="*")
+    p.add_argument("-n", "--max", type=int, default=None)
+    p.add_argument("-y", "--yes", action="store_true")
+    p.add_argument("-v", "--verify", action="store_true")
+    p.add_argument("--butterfish", action="store_true")
+    p.add_argument("--unsafe", action="store_true")
+
     args = parser.parse_args()
 
     if args.cmd == "remember":
@@ -1154,6 +1162,19 @@ def main() -> int:
         research("study: " + " ".join(args.topic), deep=True)
     elif args.cmd == "inbox":
         research("inbox triage: " + " ".join(args.text), deep=False)
+    elif args.cmd == "goal":
+        from arka.agent.goal import DEFAULT_MAX, run_goal
+        from arka.integrations.butterfish import launch_shell
+
+        goal_text = " ".join(args.goal).strip()
+        if args.butterfish or os.environ.get("ARKA_GOAL_ENGINE", "auto").strip().lower() == "butterfish":
+            return launch_shell(goal=goal_text, unsafe=args.unsafe, auto_yes=args.yes)
+        return run_goal(
+            goal_text,
+            max_steps=args.max or DEFAULT_MAX,
+            auto_yes=args.yes,
+            verify=args.verify,
+        )
     else:
         parser.print_help()
         return 1

@@ -482,8 +482,9 @@ if status is-interactive
         echo "agent_hear <speech> -> agent with wake-word stripping (STT)"
         echo "AGENT_NAME=arka in .env (default); arka listen to start wake word; AGENT_WAKE_AUTO=1 for auto-start"
         echo "agent_plan <goal> -> AI plans & runs multi-step tasks"
+        echo "goal <goal>       -> Autonomous goal agent (Arka or Butterfish Goal Mode)"
         echo "agent_loop  -> AI loop: run cmd → read output → fix & retry (-n max)"
-        echo "loop <goal> -> Same as agent_loop"
+        echo "loop <goal> -> Same as agent_loop (uses goal engine when ARKA_GOAL_ENGINE=auto)"
         echo "skills      -> Show safe vs dangerous commands"
         echo "fix         -> AI fixes your last failed command"
         echo ""
@@ -1701,7 +1702,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         agent_remember agent_recall agent_memory agent_trace agent_why agent_last \
         agent_resume agent_research agent_nudge agent_watch agent_routine agent_fanout \
         agent_code agent_handoff agent_browser transcript_ask media_ask \
-        meeting_agent study_agent inbox_agent compare_agent \
+        meeting_agent study_agent inbox_agent compare_agent profession \
         arka_ask semantic_memory supermemory speak_research voice_session handoff_notify remind predictions stock \
         rag_setup rag_status voice_agent wake_control \
         agent_ask web_answer deep_web_answer web_essay calc chat_reset set_location \
@@ -2262,6 +2263,23 @@ function agent_loop --description "AI feedback loop: run command → read output
     argparse 'n/max=' 'y/yes' 's/safe-only' 'r/resume-id=' 'v/verify' 'a/auto' -- $argv
     or return
 
+    set -l engine (string lower (string trim -- "$ARKA_GOAL_ENGINE"))
+    test -z "$engine"; and set engine auto
+    if not set -q _flag_r
+        if test "$engine" = auto -o "$engine" = arka
+            set -l gflags
+            set -q _flag_y; and set -a gflags -y
+            set -q _flag_v; and set -a gflags -v
+            set -q _flag_s; and set -a gflags -s
+            set -q _flag_n; and set -a gflags -n $_flag_n
+            goal $gflags $argv
+            return $status
+        else if test "$engine" = butterfish
+            goal --butterfish $argv
+            return $status
+        end
+    end
+
     set -l goal (string join " " $argv)
     set -l max_iter 12
     if set -q _flag_n
@@ -2477,6 +2495,57 @@ $out
 
     echo (set_color yellow)"Max iterations ($max_iter) reached."(set_color normal)
     return 1
+end
+
+function _arka_ensure_butterfish --description "Install Butterfish on user confirm; prints path (internal)"
+    argparse 'y/yes' -- $argv
+    or return 1
+    set -l py (_arka_python)
+    set -l auto 0
+    set -q _flag_y; and set auto 1
+    $py -c "from arka.integrations.butterfish import ensure_butterfish; p=ensure_butterfish(auto_yes=bool($auto)); print(p or '')" 2>/dev/null | string trim
+end
+
+function goal --description "Autonomous multi-step agent (Arka Goal engine or Butterfish Goal Mode)"
+    argparse 'n/max=' 'y/yes' 'v/verify' 'b/butterfish' 'u/unsafe' 's/safe-only' -- $argv
+    or return 1
+
+    set -l py (_arka_python)
+
+    if set -q _flag_s
+        set -lx ARKA_GOAL_SAFE_ONLY 1
+    end
+
+    set -l engine (string lower (string trim -- "$ARKA_GOAL_ENGINE"))
+    test -z "$engine"; and set engine auto
+
+    if set -q _flag_b; or test "$engine" = butterfish
+        set -l goal_text (string join " " $argv)
+        set -l bflags
+        set -q _flag_y; and set -a bflags -y
+        set -l bf (_arka_ensure_butterfish $bflags)
+        if test -z "$bf"
+            echo (set_color yellow)"Using Arka built-in goal agent (Butterfish unavailable)."(set_color normal)
+            set -l flags
+            set -q _flag_y; and set -a flags -y
+            set -q _flag_v; and set -a flags -v
+            set -q _flag_n; and set -a flags -n $_flag_n
+            $py -m arka.agent.goal $flags $argv
+            return $status
+        end
+        set -l prefix "!"
+        set -q _flag_u; and set prefix "!!"
+        echo (set_color cyan)"Butterfish shell — type "(set_color --bold)"$prefix"(set_color normal)(set_color cyan)" then your goal:"(set_color normal)
+        echo "  $prefix$goal_text"
+        exec butterfish shell
+    end
+
+    set -l flags
+    set -q _flag_y; and set -a flags -y
+    set -q _flag_v; and set -a flags -v
+    set -q _flag_n; and set -a flags -n $_flag_n
+    $py -m arka.agent.goal $flags $argv
+    return $status
 end
 
 function loop --description "Alias for agent_loop (AI run/fix loop)"
@@ -6255,16 +6324,22 @@ function generate_password --description "Generate secure passwords; store/retri
             echo (set_color brblack)"  Vault: ~/.cache/fish-agent/passwords.vault.json (encrypted)"(set_color normal)
             echo (set_color brblack)"  (password not shown — use: generate_password get $name)"(set_color normal)
         case save store remember
-            if test (count $argv) -lt 3
+            if test (count $argv) -lt 2
                 echo "Usage: generate_password save <name> [length]"
                 echo "Example: generate_password save wifi 24"
+                echo "Example: generate_password save \"sumit gmail\""
                 return 1
             end
-            set -l name $argv[2]
-            set -l length 20
-            if test (count $argv) -ge 4; and string match -qr '^[0-9]+$' -- $argv[3]
-                set length $argv[3]
+            set -l name_parts $argv[2..-1]
+            set -l length 16
+            if test (count $name_parts) -ge 2
+                set -l last $name_parts[-1]
+                if string match -qr '^[0-9]+$' -- $last
+                    set length $last
+                    set -e name_parts[-1]
+                end
             end
+            set -l name (string join " " -- $name_parts)
             set -l out ($py $vault generate $name --length $length 2>&1)
             set -l exit_st $status
             if test $exit_st -ne 0
@@ -6285,11 +6360,12 @@ function generate_password --description "Generate secure passwords; store/retri
                 echo (set_color brblack)"  ✓ Copied to clipboard"(set_color normal)
             end
         case get show retrieve
-            if test (count $argv) -lt 3
+            if test (count $argv) -lt 2
                 echo "Usage: generate_password get <name>"
                 return 1
             end
-            set -l out ($py $vault get $argv[2] 2>&1)
+            set -l name (string join " " -- $argv[2..-1])
+            set -l out ($py $vault get $name 2>&1)
             if test $status -ne 0
                 echo $out
                 return 1
@@ -6304,7 +6380,7 @@ function generate_password --description "Generate secure passwords; store/retri
                 end
             end
             echo (set_color --bold blue)"━━━ Stored password ━━━"(set_color normal)
-            echo (set_color cyan)"  Name: "(set_color normal)"$argv[2]"
+            echo (set_color cyan)"  Name: "(set_color normal)"$name"
             echo (set_color --bold green)"  $pwd"(set_color normal)
             if test -n "$updated"
                 echo (set_color brblack)"  Updated: $updated"(set_color normal)
@@ -6315,21 +6391,28 @@ function generate_password --description "Generate secure passwords; store/retri
         case list ls
             $py $vault list
         case delete rm remove
-            if test (count $argv) -lt 3
+            if test (count $argv) -lt 2
                 echo "Usage: generate_password delete <name>"
                 return 1
             end
-            $py $vault delete $argv[2]
+            set -l name (string join " " -- $argv[2..-1])
+            $py $vault delete $name
         case rotate renew
-            if test (count $argv) -lt 3
+            if test (count $argv) -lt 2
                 echo "Usage: generate_password rotate <name> [length]"
                 return 1
             end
+            set -l name_parts $argv[2..-1]
             set -l len_flag
-            if test (count $argv) -ge 4; and string match -qr '^[0-9]+$' -- $argv[3]
-                set len_flag --length $argv[3]
+            if test (count $name_parts) -ge 2
+                set -l last $name_parts[-1]
+                if string match -qr '^[0-9]+$' -- $last
+                    set len_flag --length $last
+                    set -e name_parts[-1]
+                end
             end
-            set -l out ($py $vault rotate $argv[2] $len_flag 2>&1)
+            set -l name (string join " " -- $name_parts)
+            set -l out ($py $vault rotate $name $len_flag 2>&1)
             if test $status -ne 0
                 echo $out
                 return $status
@@ -6599,11 +6682,15 @@ function qr_code --description "Generate a QR code in the terminal"
     set -l text (string join " " $argv)
     echo (set_color --bold blue)"━━━ QR Code Generator ━━━"(set_color normal)
     echo ""
-    if command -v qrencode &>/dev/null
-        qrencode -t ansiutf8 "$text"
-    else
-        set -l encoded (python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1]))" "$text")
-        curl -s "https://qrencode.in/$encoded" || echo (set_color red)"✗ Failed to generate QR code. Check connection or install qrencode (sudo apt install qrencode)."(set_color normal)
+    set -l py (_arka_python)
+    set -l out ($py (_arka_py_script arka_qr.py) $argv 2>&1)
+    set -l exit_st $status
+    if test $exit_st -ne 0
+        echo (set_color red)"✗ $out"(set_color normal)
+        return $exit_st
+    end
+    if test -n "$out"
+        echo $out
     end
 end
 
@@ -7348,6 +7435,27 @@ function _agent_parse_install_app_name --description "Extract app name from inst
     set app (string replace -r -i '\s+(?:with|via|using)\s+apt(?:-get)?\s*$' '' "$app")
     set app (string replace -r -i '\s+(?:app|package)\s*$' '' "$app")
     echo (string trim -- "$app")
+end
+
+function _agent_parse_password_name --description "Extract vault label from NL password request (internal)"
+    set -l cmd (string trim -- "$argv[1]")
+    set -l name ""
+    set -l m (string match -r '(?i)(?:for|as|named|to)\s+(.+)$' "$cmd")
+    if test (count $m) -ge 2
+        set name (string trim -- "$m[2]")
+    end
+    if test -z "$name"
+        set m (string match -r '(?i)password\s+for\s+(.+)$' "$cmd")
+        if test (count $m) -ge 2
+            set name (string trim -- "$m[2]")
+        end
+    end
+    if test -z "$name"
+        return 1
+    end
+    # Optional trailing length: "wifi 24" -> name wifi
+    set name (string replace -r '(\s+)([0-9]+)$' '' "$name")
+    echo (string trim -- "$name")
 end
 
 function _agent_is_python_pip_package --description "True if name looks like a PyPI package (internal)"
@@ -9093,6 +9201,75 @@ function predictions --description "Arka talent: opportunity predictions (antiqu
     $py (_arka_py_script arka_predictions.py) run $flags -- (string join " " $args)
 end
 
+function profession --description "Profession domains: curated sources (RSS, web, local repos) — not role prompts"
+    set -l py (_arka_python)
+    set -l script (_arka_py_script arka_professions.py)
+    set -l proj (_arka_py_script arka_profession_projects.py)
+    if test (count $argv) -eq 0
+        $py $script list
+        return $status
+    end
+    switch $argv[1]
+        case list ls help -h --help
+            $py $script list
+        case ask run
+            if test (count $argv) -ge 2
+                $py $script ask $argv[2..-1]
+                return $status
+            end
+            echo "Usage: profession ask <domain> <question>"
+            echo "       profession ask <question>  (needs saved profession in memory)"
+            return 1
+        case setup clone
+            if test (count $argv) -ge 2
+                $py $proj setup $argv[2]
+            else
+                $py $proj setup
+            end
+            return $status
+        case status
+            $py $proj status
+            return $status
+        case sources
+            $py $script sources $argv[2..-1]
+            return $status
+        case open cd
+            if test (count $argv) -lt 2
+                echo "Usage: profession open <nutrition|startup|investor|engineer>"
+                return 1
+            end
+            set -l dir ($py $proj path $argv[2] 2>/dev/null)
+            if test -n "$dir"; and test -d "$dir"
+                cd "$dir"
+                echo (set_color green)"✓ "(set_color normal)"$dir"
+            else
+                echo (set_color yellow)"No project for '$argv[2]' — run: profession setup $argv[2]"(set_color normal)
+                return 1
+            end
+        case route match
+            $py $script $argv[1] $argv[2..-1]
+            return $status
+        case '*'
+            set -l route ($py $script route (string join " " $argv) 2>/dev/null | string trim)
+            if test -n "$route"
+                _agent_run_skill_line "$route"
+                return $status
+            end
+            echo "Usage: profession ask <domain> <question>"
+            echo "Domains: health, nutrition, startup, investor, teacher, legal, engineer, journalism, marketing, finance, counselor, chef"
+            return 1
+    end
+end
+
+function _agent_route_profession --description "Symbolic profession routing (doctor, nutritionist, startup, …)"
+    set -l cmd "$argv[1]"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_professions.py) route "$cmd" 2>/dev/null | string trim)
+    if test -n "$route"
+        echo $route
+    end
+end
+
 function _agent_trace_log --description "Log routing decision for agent_why (internal)"
     set -l input_text $argv[1]
     set -l interpreted $argv[2]
@@ -9445,22 +9622,19 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
             return
         end
     end
-    if string match -qr '(?i)(save|store|remember).*(password|pass).*(for|as|named)|generate.*password.*(for|named)\s+\w+' "$clean"
-        set -l pname (string match -r '(?i)(?:for|as|named)\s+([a-zA-Z0-9._-]+)' "$cmd")[2]
-        if test -z "$pname"
-            set pname (string match -r '(?i)password\s+(?:for\s+)?([a-zA-Z0-9._-]+)' "$cmd")[2]
-        end
+    if string match -qr '(?i)(save|store|remember).*(password|pass).*(for|as|named)|generate.*password.*(for|named)\s+\S' "$clean"
+        set -l pname (_agent_parse_password_name "$cmd")
         if test -n "$pname"
-            echo "skill|generate_password save $pname|Generate + store encrypted password"
+            echo "skill|generate_password save "(string escape --style=script -- $pname)"|Generate + store encrypted password"
         else
             echo "skill|generate_password save|Generate + store encrypted password"
         end
         return
     end
-    if string match -qr '(?i)(get|show|retrieve).*(password|pass).*(for|named)|what.*password.*(for|to)\s+\w+' "$clean"
-        set -l pname (string match -r '(?i)(?:for|to|named)\s+([a-zA-Z0-9._-]+)' "$cmd")[2]
+    if string match -qr '(?i)(get|show|retrieve).*(password|pass).*(for|named)|what.*password.*(for|to)\s+\S' "$clean"
+        set -l pname (_agent_parse_password_name "$cmd")
         if test -n "$pname"
-            echo "skill|generate_password get $pname|Retrieve stored password"
+            echo "skill|generate_password get "(string escape --style=script -- $pname)"|Retrieve stored password"
             return
         end
     end
@@ -9761,6 +9935,12 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
     if set -l aie_route (_agent_route_aie "$cmd")
         echo "skill|$aie_route|Artificial Internet Enhancements"
         return
+    end
+    if set -l prof_route (_agent_route_profession "$cmd")
+        if test -n "$prof_route"
+            echo "skill|$prof_route|Profession domain (explicit)"
+            return
+        end
     end
     if set -l wa_route (_agent_route_whatsapp_inbox "$cmd")
         echo "skill|$wa_route|WhatsApp inbox listener"
@@ -11625,6 +11805,8 @@ function agent --description "Run commands safely: executes safe commands automa
         echo "  transcript_ask / media_ask - Q&A on video/audio transcripts"
         echo "  rag_setup / rag_status    - TurboQuant RAG backend"
         echo "  predictions [--domain antiques|stocks|strategy] [--deep] <topic> - Opportunity analysis talent"
+        echo "  profession ask <domain> <q>       - Domain-aware answer (health, nutrition, startup, …)"
+        echo "  profession setup [domain]       - Clone repos: investor, nutrition, startup, engineer"
         echo "  stock news|prices|analyze TICKER|dashboard - stock_analysis project bridge"
         echo "  arka_ask / speak_research / semantic_memory / supermemory - Unified brain & memory"
         echo ""
@@ -11889,20 +12071,17 @@ function agent --description "Run commands safely: executes safe commands automa
         if test (count $m) -ge 3
             set interpreted "generate_password set $m[3] "(string escape --style=script -- $m[2])
         end
-    else if string match -qr '(?i)(save|store|remember).*(password|pass).*(for|as|named)|generate.*password.*(for|named)\s+\w+' "$clean_cmd"
-        set -l pname (string match -r '(?i)(?:for|as|named)\s+([a-zA-Z0-9._-]+)' "$cmd")[2]
-        if test -z "$pname"
-            set pname (string match -r '(?i)password\s+(?:for\s+)?([a-zA-Z0-9._-]+)' "$cmd")[2]
-        end
+    else if string match -qr '(?i)(save|store|remember).*(password|pass).*(for|as|named)|generate.*password.*(for|named)\s+\S' "$clean_cmd"
+        set -l pname (_agent_parse_password_name "$cmd")
         if test -n "$pname"
-            set interpreted "generate_password save $pname"
+            set interpreted "generate_password save "(string escape --style=script -- $pname)
         else
             set interpreted "generate_password save"
         end
-    else if string match -qr '(?i)(get|show|retrieve).*(password|pass).*(for|named)|what.*password.*(for|to)\s+\w+' "$clean_cmd"
-        set -l pname (string match -r '(?i)(?:for|to|named)\s+([a-zA-Z0-9._-]+)' "$cmd")[2]
+    else if string match -qr '(?i)(get|show|retrieve).*(password|pass).*(for|named)|what.*password.*(for|to)\s+\S' "$clean_cmd"
+        set -l pname (_agent_parse_password_name "$cmd")
         if test -n "$pname"
-            set interpreted "generate_password get $pname"
+            set interpreted "generate_password get "(string escape --style=script -- $pname)
         end
     else if string match -qr '(?i)\b(list|show)\s+(?:my\s+|saved\s+|stored\s+)?(?:passwords?|passcodes?)\b' "$clean_cmd"
         set interpreted "generate_password list"
@@ -12071,6 +12250,9 @@ function agent --description "Run commands safely: executes safe commands automa
         set interpreted "pomodoro $args"
     else if string match -qr '(git|branch|commit)' "$clean_cmd"
         set interpreted "git_summary"
+    else if set -l prof_route (_agent_route_profession "$cmd")
+        set interpreted $prof_route
+        set route_source offline
     else if string match -qr '(project|open.*project)' "$clean_cmd"
         set interpreted "open_project $args"
     else if string match -qr '(finance|stocks)' "$clean_cmd"
@@ -12094,20 +12276,17 @@ function agent --description "Run commands safely: executes safe commands automa
         if test (count $m) -ge 3
             set interpreted "generate_password set $m[3] "(string escape --style=script -- $m[2])
         end
-    else if string match -qr '(?i)(save|store|remember).*(password|pass).*(for|as|named)|generate.*password.*(for|named)\s+\w+' "$clean_cmd"
-        set -l pname (string match -r '(?i)(?:for|as|named)\s+([a-zA-Z0-9._-]+)' "$cmd")[2]
-        if test -z "$pname"
-            set pname (string match -r '(?i)password\s+(?:for\s+)?([a-zA-Z0-9._-]+)' "$cmd")[2]
-        end
+    else if string match -qr '(?i)(save|store|remember).*(password|pass).*(for|as|named)|generate.*password.*(for|named)\s+\S' "$clean_cmd"
+        set -l pname (_agent_parse_password_name "$cmd")
         if test -n "$pname"
-            set interpreted "generate_password save $pname"
+            set interpreted "generate_password save "(string escape --style=script -- $pname)
         else
             set interpreted "generate_password save"
         end
-    else if string match -qr '(?i)(get|show|retrieve).*(password|pass).*(for|named)|what.*password.*(for|to)\s+\w+' "$clean_cmd"
-        set -l pname (string match -r '(?i)(?:for|to|named)\s+([a-zA-Z0-9._-]+)' "$cmd")[2]
+    else if string match -qr '(?i)(get|show|retrieve).*(password|pass).*(for|named)|what.*password.*(for|to)\s+\S' "$clean_cmd"
+        set -l pname (_agent_parse_password_name "$cmd")
         if test -n "$pname"
-            set interpreted "generate_password get $pname"
+            set interpreted "generate_password get "(string escape --style=script -- $pname)
         end
     else if string match -qr '(password)' "$clean_cmd"
         set interpreted "generate_password $args"
