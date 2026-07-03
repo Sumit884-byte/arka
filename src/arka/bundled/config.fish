@@ -5916,10 +5916,15 @@ function _arka_normalize_answer --description "Split inline markdown lists onto 
     printf '%s' "$text" | python3 -c '
 import re, sys
 text = sys.stdin.read()
+text = re.sub(r"\s+#{2,3}\s+", r"\n\n## ", text)
+text = re.sub(r"\s+---\s+", r"\n\n---\n\n", text)
+text = re.sub(r"\s+•\s+", r"\n* ", text)
 text = re.sub(r"(\*\*.+?\*\*)\s+(\d+)\.", r"\1\n\2.", text)
 text = re.sub(r"\.\s+(\d+)\.\s+", r".\n\1. ", text)
 text = re.sub(r"\s+(\d+)\.\s+", r"\n\1. ", text)
 text = re.sub(r"\s+\*\s+", r"\n* ", text)
+text = re.sub(r"\s+\|\s+:\s*---", r"\n| ---", text)
+text = re.sub(r"\s+\|\s+(?=[A-Za-z0-9*])", r"\n| ", text)
 lines = []
 for line in text.splitlines():
     m = re.match(r"^(\d+\.\s+(?:\*\*.+?\*\*:|\*\*.+?\*\*)\s*.+?\.\s+)([A-Z].+)$", line)
@@ -5971,6 +5976,27 @@ function _arka_print_answer --description "Pretty-print web/chat answer for the 
         set -l trimmed (string trim -- "$line")
         test -z "$trimmed"; and echo ""; and continue
 
+        set -l h2 (string match -r '^#+\s+(.+)$' "$trimmed")
+        if test (count $h2) -ge 2
+            set -l htext (string replace -a -r '\*\*([^*]+)\*\*' '$1' "$h2[2]")
+            set_color --bold cyan
+            echo "$htext"
+            set_color normal
+            echo ""
+            continue
+        end
+
+        if string match -qr '^\|?\s*:?[-| ]+:?\s*\|?$' "$trimmed"
+            continue
+        end
+        if string match -qr '^\|' "$trimmed"
+            set -l row (string replace -a -r '^\|\s*|\s*\|$' '' "$trimmed")
+            set row (string replace -a -r '\s*\|\s*' ' · ' "$row")
+            set row (string replace -a -r '\*\*([^*]+)\*\*' '$1' "$row")
+            echo "  $row"
+            continue
+        end
+
         set -l hdr (string match -r '^\*\*(.+?)\*\*\s*$' "$trimmed")
         if test (count $hdr) -ge 2
             set_color --bold cyan
@@ -6012,6 +6038,18 @@ function _arka_print_answer --description "Pretty-print web/chat answer for the 
         if string match -qr '(?i)^(based on|here .{0,60}(summary|answer|list)|these (places|cities|options)|in summary|to summarize)' "$trimmed"
             set_color brblack
             echo "  $trimmed"
+            set_color normal
+            continue
+        end
+
+        if string match -qr '^---+$' "$trimmed"
+            echo ""
+            continue
+        end
+        if string match -qr '^⚠' "$trimmed"
+            set -l warn (string replace -a -r '\*\*([^*]+)\*\*' '$1' "$trimmed")
+            set_color yellow
+            echo "  $warn"
             set_color normal
             continue
         end
@@ -7988,6 +8026,9 @@ function _agent_route_system_info --description "Route to system_info or system_
 end
 
 function _agent_is_knowledge_question --description "True if user wants a factual answer, not a browser search"
+    if _agent_is_investment_question "$argv[1]"
+        return 1
+    end
     if _agent_is_system_info_question "$argv[1]"
         return 1
     end
@@ -8016,6 +8057,9 @@ function _agent_is_knowledge_question --description "True if user wants a factua
 end
 
 function _agent_is_advisory_question --description "True if user wants an opinion/answer, not a metrics dump"
+    if _agent_is_investment_question "$argv[1]"
+        return 1
+    end
     if _agent_is_system_info_question "$argv[1]"
         return 1
     end
@@ -9211,7 +9255,15 @@ function predictions --description "Arka talent: opportunity predictions (antiqu
         echo "Usage: predictions [--domain antiques|stocks|strategy] <topic>"
         return 1
     end
-    $py (_arka_py_script arka_predictions.py) run $flags -- (string join " " $args)
+    set -l topic (string join " " $args)
+    printf '%s%s%s\n' (set_color cyan) "📈 $topic" (set_color normal) >&2
+    set -l answer ($py (_arka_py_script arka_predictions.py) run $flags -- $args 2>/dev/null)
+    set -l st $status
+    if test $st -ne 0 -o -z "$answer"
+        $py (_arka_py_script arka_predictions.py) run $flags -- $args
+        return $status
+    end
+    _arka_print_answer_block "$answer" "Investment research"
 end
 
 function profession --description "Profession domains: curated sources (RSS, web, local repos) — not role prompts"
@@ -10015,6 +10067,12 @@ function _agent_correct_interpretation --description "Fix bad LLM skill picks us
     set -l interpreted $argv[2]
     set -l clean (string lower "$cmd")
 
+    if _agent_is_investment_question "$cmd"
+        set -l topic (_agent_strip_query_prefix "$cmd")
+        echo "predictions --domain stocks --deep "(string escape --style=script -- $topic)
+        return
+    end
+
     if test -n "$interpreted"; and _agent_skill_matches_request "$cmd" "$interpreted"
         echo "$interpreted"
         return
@@ -10039,6 +10097,11 @@ function _agent_correct_interpretation --description "Fix bad LLM skill picks us
     end
 
     if string match -qr '(?i)^web_answer\b' "$interpreted"
+        if _agent_is_investment_question "$cmd"
+            set -l topic (_agent_strip_query_prefix "$cmd")
+            echo "predictions --domain stocks --deep "(string escape --style=script -- $topic)
+            return
+        end
         if _agent_is_system_info_question "$cmd"
             echo (_agent_route_system_info "$cmd")
             return
@@ -11870,7 +11933,13 @@ function agent --description "Run commands safely: executes safe commands automa
 
     set -l route_mode (_arka_route_mode)
 
-    if test "$route_mode" = ai -o "$route_mode" = ai_only
+    if _agent_is_investment_question "$cmd"
+        set -l topic (_agent_strip_query_prefix "$cmd")
+        set interpreted "predictions --domain stocks --deep "(string escape --style=script -- $topic)
+        set route_source offline
+    end
+
+    if test -z "$interpreted"; and test "$route_mode" = ai -o "$route_mode" = ai_only
         set interpreted (_agent_llm_route "$cmd" "$available_skills")
         if test -n "$interpreted"
             set route_source llm
@@ -12272,8 +12341,10 @@ function agent --description "Run commands safely: executes safe commands automa
     else if string match -qr '(git|branch|commit)' "$clean_cmd"
         set interpreted "git_summary"
     else if set -l prof_route (_agent_route_profession "$cmd")
-        set interpreted $prof_route
-        set route_source offline
+        if test -n "$prof_route"
+            set interpreted $prof_route
+            set route_source offline
+        end
     else if string match -qr '(project|open.*project)' "$clean_cmd"
         set interpreted "open_project $args"
     else if string match -qr '(finance|stocks)' "$clean_cmd"
