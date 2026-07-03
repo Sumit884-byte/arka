@@ -20,7 +20,15 @@ from urllib.parse import urlparse
 
 CACHE = Path.home() / ".cache" / "fish-agent"
 PID_PATH = CACHE / "arka_remote.pid"
-ENV_PATH = Path.home() / ".config" / "fish" / ".env"
+
+
+def _bootstrap_env() -> None:
+    try:
+        from arka.env import load_env
+
+        load_env()
+    except ImportError:
+        pass
 
 MOBILE_HTML = """<!DOCTYPE html>
 <html lang="en">
@@ -222,7 +230,9 @@ class ArkaRemoteHandler(BaseHTTPRequestHandler):
         print(f"[arka-remote] {self.address_string()} - {fmt % args}", flush=True)
 
     def _check_auth(self) -> bool:
-        token = os.environ.get("ARKA_REMOTE_TOKEN", "").strip()
+        from arka.env import env_get
+
+        token = env_get("REMOTE_TOKEN", "ARKA_REMOTE_TOKEN")
         if not token:
             return False
         auth = self.headers.get("Authorization", "")
@@ -281,7 +291,7 @@ class ArkaRemoteHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         if not self._check_auth():
-            self._json(401, {"ok": False, "error": "unauthorized — set ARKA_REMOTE_TOKEN on PC"})
+            self._json(401, {"ok": False, "error": "unauthorized — check REMOTE_TOKEN in .env"})
             return
 
         path = urlparse(self.path).path
@@ -390,20 +400,30 @@ class ArkaRemoteHandler(BaseHTTPRequestHandler):
 
 
 def ensure_token() -> str:
-    token = os.environ.get("ARKA_REMOTE_TOKEN", "").strip()
+    _bootstrap_env()
+    from arka.env import env_get
+    from arka.paths import env_file
+
+    token = env_get("REMOTE_TOKEN", "ARKA_REMOTE_TOKEN")
     if token:
+        os.environ["REMOTE_TOKEN"] = token
+        os.environ["ARKA_REMOTE_TOKEN"] = token
         return token
+
     token = secrets.token_urlsafe(24)
-    line = f"ARKA_REMOTE_TOKEN={token}\n"
-    if ENV_PATH.exists():
-        content = ENV_PATH.read_text()
-        if "ARKA_REMOTE_TOKEN=" not in content:
-            with ENV_PATH.open("a") as fh:
+    line = f"REMOTE_TOKEN={token}\n"
+    target = env_file()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if target.exists():
+        content = target.read_text(encoding="utf-8", errors="replace")
+        if "REMOTE_TOKEN=" not in content and "ARKA_REMOTE_TOKEN=" not in content:
+            with target.open("a", encoding="utf-8") as fh:
                 fh.write(line)
     else:
-        ENV_PATH.write_text(line)
+        target.write_text(line, encoding="utf-8")
+    os.environ["REMOTE_TOKEN"] = token
     os.environ["ARKA_REMOTE_TOKEN"] = token
-    print(f"[arka-remote] Generated ARKA_REMOTE_TOKEN and saved to {ENV_PATH}", flush=True)
+    print(f"[arka-remote] Generated REMOTE_TOKEN and saved to {target}", flush=True)
     return token
 
 
@@ -430,8 +450,11 @@ def remove_pid() -> None:
 
 
 def serve() -> int:
-    host = os.environ.get("ARKA_REMOTE_HOST", "0.0.0.0")
-    port = int(os.environ.get("ARKA_REMOTE_PORT", "8765"))
+    _bootstrap_env()
+    from arka.env import env_get
+
+    host = env_get("REMOTE_HOST", "ARKA_REMOTE_HOST") or "0.0.0.0"
+    port = int(env_get("REMOTE_PORT", "ARKA_REMOTE_PORT") or "8765")
     token = ensure_token()
 
     write_pid()

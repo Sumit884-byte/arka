@@ -163,6 +163,35 @@ if test -f "$_ARKA_CFG/.env"
         end
     end
 end
+# Dev checkout .env — fill in vars not already set (e.g. REMOTE_TOKEN in repo root)
+if test -f "$_ARKA_ROOT/.env"; and test "$_ARKA_ROOT/.env" != "$_ARKA_CFG/.env"
+    for line in (cat "$_ARKA_ROOT/.env" | grep -v '^#' | grep -v '^\s*$')
+        set -l kv (string split -m 1 "=" $line)
+        if test (count $kv) -eq 2
+            if not set -q $kv[1]
+                set -l val (string trim -c '"' $kv[2])
+                set val (string replace -r '#.*$' '' -- "$val" | string trim)
+                set -gx $kv[1] $val
+            end
+        end
+    end
+end
+# Short env names → legacy ARKA_* (REMOTE_TOKEN → ARKA_REMOTE_TOKEN)
+if set -q REMOTE_TOKEN; and not set -q ARKA_REMOTE_TOKEN
+    set -gx ARKA_REMOTE_TOKEN $REMOTE_TOKEN
+else if set -q ARKA_REMOTE_TOKEN; and not set -q REMOTE_TOKEN
+    set -gx REMOTE_TOKEN $ARKA_REMOTE_TOKEN
+end
+if set -q REMOTE_PORT; and not set -q ARKA_REMOTE_PORT
+    set -gx ARKA_REMOTE_PORT $REMOTE_PORT
+else if set -q ARKA_REMOTE_PORT; and not set -q REMOTE_PORT
+    set -gx REMOTE_PORT $ARKA_REMOTE_PORT
+end
+if set -q SPEAK_LANG; and not set -q ARKA_SPEAK_LANG
+    set -gx ARKA_SPEAK_LANG $SPEAK_LANG
+else if set -q ARKA_SPEAK_LANG; and not set -q SPEAK_LANG
+    set -gx SPEAK_LANG $ARKA_SPEAK_LANG
+end
 
 function _arka_platform_init --description "Load cached platform profile (detect once on first run)"
     set -l pf "$_ARKA_CFG/platform.env"
@@ -463,7 +492,7 @@ if status is-interactive
         echo "arka stop      -> stop everything"
         echo "arka autostart install -> survive reboot (systemd)"
         echo "arka phone-env -> print Termux config (one-time setup)"
-        echo "arka serve     -> remote server only (phone STT/TTS, PC agent)"
+        echo "arka serve     -> remote server (phone STT/TTS, PC agent)"
         echo "arka listen    -> wake listener only"
         echo "arka reload    -> pick up config changes (auto on next arka/agent command)"
         echo "arka reload --listen -> also restart wake listener after Python edits"
@@ -1181,7 +1210,7 @@ try:
 except OSError:
     print('127.0.0.1')
 " 2>/dev/null)
-    set -l token $ARKA_REMOTE_TOKEN
+    set -l token (test -n "$REMOTE_TOKEN"; and echo $REMOTE_TOKEN; or echo $ARKA_REMOTE_TOKEN)
     set -l lang hi-IN
     if set -q ARKA_SPEAK_LANG
         set lang $ARKA_SPEAK_LANG
@@ -1190,7 +1219,7 @@ except OSError:
     echo "# Paste on Termux:  mkdir -p ~/.arka && nano ~/.arka/env"
     echo "export ARKA_REMOTE_URL=\"http://$ip:$port\""
     if test -n "$token"
-        echo "export ARKA_REMOTE_TOKEN=\"$token\""
+        echo "export REMOTE_TOKEN=\"$token\""
     end
     echo "export ARKA_SPEAK_LANG=\"$lang\""
     echo ""
@@ -1201,14 +1230,9 @@ except OSError:
 end
 
 function _agent_remote_start --description "Start Arka remote server for phone STT/TTS (internal)"
-    set -l script (_arka_py_script arka_remote_server.py)
+    set -l py (_arka_python)
     set -l pidfile ~/.cache/fish-agent/arka_remote.pid
     set -l logfile ~/.cache/fish-agent/arka_remote.log
-
-    if not test -f "$script"
-        echo (set_color red)"Missing $script"(set_color normal)
-        return 1
-    end
 
     if test -f "$pidfile"
         set -l pid (cat "$pidfile" 2>/dev/null)
@@ -1220,7 +1244,12 @@ function _agent_remote_start --description "Start Arka remote server for phone S
 
     mkdir -p ~/.cache/fish-agent
     echo (set_color cyan)"Starting Arka remote server (phone STT/TTS → PC agent)..."(set_color normal)
-    nohup python3 "$script" serve >>"$logfile" 2>&1 &
+    set -l src "$_ARKA_ROOT/src"
+    if test -d "$src/arka"
+        env PYTHONPATH="$src" $py -m arka.integrations.remote_server serve >>"$logfile" 2>&1 &
+    else
+        $py -m arka.integrations.remote_server serve >>"$logfile" 2>&1 &
+    end
     disown
     sleep 2
 
@@ -1270,8 +1299,9 @@ except OSError:
             echo (set_color green)"Arka remote: running (pid $pid)"(set_color normal)
             echo (set_color cyan)"  Phone UI:  http://$ip:$port/"(set_color normal)
             echo (set_color brblack)"  log: $logfile  |  stop: arka remote-stop"(set_color normal)
-            if set -q ARKA_REMOTE_TOKEN
-                echo (set_color brblack)"  token: $ARKA_REMOTE_TOKEN"(set_color normal)
+            if set -q REMOTE_TOKEN; or set -q ARKA_REMOTE_TOKEN
+                set -l tok (test -n "$REMOTE_TOKEN"; and echo $REMOTE_TOKEN; or echo $ARKA_REMOTE_TOKEN)
+                echo (set_color brblack)"  token: $tok"(set_color normal)
             else
                 echo (set_color yellow)"  token: see $logfile (auto-generated on first start)"(set_color normal)
             end
@@ -6046,7 +6076,7 @@ function _arka_print_answer --description "Pretty-print web/chat answer for the 
             echo ""
             continue
         end
-        if string match -qr '^⚠' "$trimmed"
+        if string match -q '⚠*' -- "$trimmed"
             set -l warn (string replace -a -r '\*\*([^*]+)\*\*' '$1' "$trimmed")
             set_color yellow
             echo "  $warn"

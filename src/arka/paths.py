@@ -209,3 +209,6 @@ def load_env_file() -> None:
             continue
         seen.add(path)
         _apply_env_file(path)
+    from arka.env import normalize_env_aliases
+
+    normalize_env_aliases()
