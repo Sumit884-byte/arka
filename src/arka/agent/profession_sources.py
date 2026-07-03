@@ -24,6 +24,17 @@ except ImportError:
         except Exception:
             return []
 
+_FEEDPARSER_WARNED = False
+
+
+def _rss_available() -> bool:
+    try:
+        import feedparser  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
 
 @dataclass(frozen=True)
 class RssSource:
@@ -276,37 +287,61 @@ def list_sources(domain_id: str) -> list[tuple[str, str]]:
 
 
 def _fetch_web(query: str, search_bias: str, *, deep: bool) -> tuple[str, str]:
-    try:
-        from arka.agent.chat import scrape_search_results, snippet_lookup
-    except ImportError:
-        return "", ""
-    search_q = f"{search_bias} {query}".strip() if search_bias else query
-    snip = snippet_lookup(search_q)
-    min_words = 350 if deep else 200
-    limit = 8 if deep else 5
-    web = scrape_search_results(search_q, min_words=min_words, hard_limit=limit)
-    parts: list[str] = []
-    if snip:
-        parts.append(snip)
-    if web:
-        parts.append(web[:8000 if deep else 5000])
-    if not parts:
-        return "", ""
-    return "\n\n".join(parts), "web"
+    import concurrent.futures
+
+    def _inner() -> tuple[str, str]:
+        try:
+            from arka.agent.chat import scrape_search_results, snippet_lookup
+        except ImportError:
+            return "", ""
+        search_q = f"{search_bias} {query}".strip() if search_bias else query
+        snip = snippet_lookup(search_q)
+        min_words = 300 if deep else 120
+        limit = 6 if deep else 3
+        web = scrape_search_results(search_q, min_words=min_words, hard_limit=limit)
+        parts: list[str] = []
+        if snip:
+            parts.append(snip)
+        if web:
+            parts.append(web[:8000 if deep else 5000])
+        if not parts:
+            return "", ""
+        return "\n\n".join(parts), "web"
+
+    timeout = 90 if deep else 45
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        fut = pool.submit(_inner)
+        try:
+            return fut.result(timeout=timeout)
+        except concurrent.futures.TimeoutError:
+            import sys
+
+            print(f"Web source timed out after {timeout}s — continuing with other sources.", file=sys.stderr)
+            return "", ""
 
 
 def _fetch_codebase(query: str, artifact: str) -> tuple[str, str]:
-    try:
-        from arka.stock.turboquant_rag import search_documents, use_turboquant
+    import concurrent.futures
 
-        if not use_turboquant():
+    def _inner() -> tuple[str, str]:
+        try:
+            from arka.stock.turboquant_rag import search_documents, use_turboquant
+
+            if not use_turboquant():
+                return _local_project_fallback(artifact, query)
+            code, ctx = search_documents(query, artifact=artifact, max_chars=9000)
+            if code == 0 and ctx.strip():
+                return ctx.strip(), artifact
+        except Exception:
+            pass
+        return _local_project_fallback(artifact, query)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        fut = pool.submit(_inner)
+        try:
+            return fut.result(timeout=20)
+        except concurrent.futures.TimeoutError:
             return _local_project_fallback(artifact, query)
-        code, ctx = search_documents(query, artifact=artifact, max_chars=9000)
-        if code == 0 and ctx.strip():
-            return ctx.strip(), artifact
-    except Exception:
-        pass
-    return _local_project_fallback(artifact, query)
 
 
 def _local_project_fallback(artifact: str, query: str) -> tuple[str, str]:
@@ -429,6 +464,16 @@ def gather_profession_context(
 
     blocks: list[str] = []
     sources: list[str] = []
+
+    global _FEEDPARSER_WARNED
+    if pack.rss and not _rss_available() and not _FEEDPARSER_WARNED:
+        import sys
+
+        print(
+            "RSS feeds skipped — install feedparser (pip install feedparser).",
+            file=sys.stderr,
+        )
+        _FEEDPARSER_WARNED = True
 
     mem, mem_id = _memory_facts()
     if mem:
