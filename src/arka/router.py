@@ -234,6 +234,13 @@ def _route_offline(cmd: str) -> Route | None:
     if chat_route:
         return chat_route
 
+    if _is_investment_question(clean):
+        topic = _strip_query_prefix(cmd)
+        return Route(
+            f"predictions --domain stocks --deep {shlex.quote(topic)}",
+            source="offline",
+        )
+
     if _is_knowledge_question(clean):
         return Route(f"web_answer {cmd}")
 
@@ -296,7 +303,29 @@ def _route_chat_intent(cmd: str) -> Route | None:
     return None
 
 
+def _strip_query_prefix(cmd: str) -> str:
+    stripped = re.sub(
+        r"^(?i)(?:please\s+)?(?:tell|explain|describe)(?:\s+me)?(?:\s+about)?\s+",
+        "",
+        cmd.strip(),
+    ).strip()
+    return stripped or cmd.strip()
+
+
+def _is_investment_question(clean: str) -> bool:
+    return bool(
+        re.search(
+            r"(?i)(where\s+(to|should\s+i)\s+invest|how\s+(to|can\s+i)\s+invest|invest\s+\d|"
+            r"make\s+(?:a\s+)?profit|best\s+(?:place|option|way|stock|fund)\s+to\s+(?:invest|put)|"
+            r"\d+\s+for\s+\d+\s*(?:day|week|month)|\b(?:stock|market)\s+invest)",
+            clean,
+        )
+    )
+
+
 def _is_knowledge_question(clean: str) -> bool:
+    if _is_investment_question(clean):
+        return False
     if re.search(r"\b(my|this pc|my computer|my mac|my macbook|my machine|should i)\b", clean):
         return False
     return bool(

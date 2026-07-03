@@ -7869,6 +7869,18 @@ function _agent_is_essay_request --description "True if user wants an essay/arti
     return 1
 end
 
+function _agent_strip_query_prefix --description "Strip tell/explain/describe prefixes from NL (internal)"
+    set -l q (string trim -- "$argv[1]")
+    set q (string replace -r -i '^(?:please\s+)?(?:tell|explain|describe)(?:\s+me)?(?:\s+about)?\s+' '' "$q")
+    echo (string trim -- "$q")
+end
+
+function _agent_is_investment_question --description "True for core invest/profit NL (internal; narrow for tell/ask)"
+    set -l clean (string lower (string trim -- "$argv[1]"))
+    test -z "$clean"; and return 1
+    string match -qr '(?i)(where\s+(to|should\s+i)\s+invest|how\s+(to|can\s+i)\s+invest|invest\s+\d|make\s+(?:a\s+)?profit|best\s+(?:place|option|way|stock|fund)\s+to\s+(?:invest|put)|\d+\s+for\s+\d+\s*(?:day|week|month)|\b(?:stock|market)\s+invest)' "$clean"
+end
+
 function _agent_normalize_knowledge_q --description "Strip tell/explain prefixes for web lookup (internal)"
     set -l q (string trim -- "$argv[1]")
     set q (string replace -r -i '^tell\s+(me\s+)?about\s+' '' "$q")
@@ -9139,6 +9151,7 @@ function remind --description "Schedule a reminder (fires at time; again when yo
             echo "       remind list | status | cancel <id> | start | stop"
             echo ""
             echo "Examples:"
+            echo "  remind to go to gym"
             echo "  remind in 30m stretch"
             echo "  remind at 5pm call mom"
             echo "  remind tomorrow 9am standup"
@@ -9703,7 +9716,8 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         return
     end
     if string match -qr '(?i)(where\s+(to|should\s+i)\s+invest|how\s+(to|can\s+i)\s+invest|invest\s+\d|make\s+(?:a\s+)?profit|best\s+(?:place|option|way)\s+to\s+(?:invest|put))' "$clean"
-        echo "skill|predictions --domain stocks --deep $cmd|Short-term investment research"
+        set -l topic (_agent_strip_query_prefix "$cmd")
+        echo "skill|predictions --domain stocks --deep $topic|Short-term investment research"
         return
     end
     if string match -qr '(?i)(predict|prediction|forecast|opportunit).*(antique|stock|market|strategy|invest|collectible|portfolio)|^(predict|forecast)\s+' "$clean"
@@ -11144,6 +11158,12 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                             _agent_run_skill_line "$route"
                             return $status
                         end
+                        set -l topic (_agent_normalize_knowledge_q "$q")
+                        test -z "$topic"; and set topic "$q"
+                        if _agent_is_investment_question "$topic"
+                            predictions --domain stocks --deep (string escape --style=script -- $topic)
+                            return $status
+                        end
                         web_answer (_agent_normalize_knowledge_q "tell me about $q")
                         return $status
                     end
@@ -12016,7 +12036,8 @@ function agent --description "Run commands safely: executes safe commands automa
     else if string match -qr '(?i)(disaster|earthquake|flood|cyclone|drought|oil.*price|war|sanction|natural resource|geopolit|which stock.*(rise|increase|surge)|predict.*stock)' "$clean_cmd"
         set interpreted "predictions --domain stocks --deep "(string escape --style=script -- $cmd)
     else if string match -qr '(?i)(where\s+(to|should\s+i)\s+invest|how\s+(to|can\s+i)\s+invest|invest\s+\d|make\s+(?:a\s+)?profit|best\s+(?:place|option|way|stock|fund)\s+to\s+(?:invest|put)|\d+\s+for\s+\d+\s*(?:day|week|month))' "$clean_cmd"
-        set interpreted "predictions --domain stocks --deep "(string escape --style=script -- $cmd)
+        set -l topic (_agent_strip_query_prefix "$cmd")
+        set interpreted "predictions --domain stocks --deep "(string escape --style=script -- $topic)
     else if string match -qr '(?i)^macro(\s+\d+)?$' "$clean_cmd"
         set -l n (string match -r '(?i)^macro\s+(\d+)$' "$clean_cmd")[2]
         if test -n "$n"

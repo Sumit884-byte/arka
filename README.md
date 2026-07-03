@@ -104,6 +104,8 @@ arka reload --listen   # also restart wake listener after Python changes
 | `arka usage report`        | App + website screen time                          |
 | `arka skills list`         | Installed third-party plugins                      |
 | `supermemory status`       | Memory backend (cloud API vs local cache)          |
+| `profession list`          | Profession domains and curated sources             |
+| `profession ask <d> <q>`   | Source-backed answer with citations                |
 
 
 Voice flow: say **"hey arka, …"** → STT → skill router → optional TTS reply (`AGENT_SPEAK=1` default). In voice mode, Arka speaks short acks while skills run and plain-language answers when done — usable without looking at the screen.
@@ -299,6 +301,20 @@ set -x ARKA_ROUTE_MODE ai
 For humans (not the model), `arka help` is the full catalog; `arka tell your skills` is a short voice-friendly summary plus the active model label.
 
 Answers from `web_answer` / chat show the model used at the bottom (`Model: provider/name`). Set `ARKA_SHOW_MODEL=0` in `.env` to hide it.
+
+**7. Profession domains — source registries, not role prompts**
+
+Arka professions are **curated source lists** (RSS, trusted web, local repos, data bridges) — not “act as a lawyer” prompts. The agent gathers evidence first, then synthesizes with citations. Same sources regardless of which LLM model runs.
+
+```fish
+profession list
+profession sources journalism
+profession ask legal what is an NDA
+arka "as a news anchor how do I open a breaking story"
+profession setup nutrition    # clone + index local repo
+```
+
+Twelve domains: `health`, `nutrition`, `startup`, `investor`, `teacher`, `legal`, `engineer`, `journalism`, `marketing`, `finance`, `counselor`, `chef`. Routing is strict — generic questions like *symptoms of diabetes* stay on `web_answer`; professions activate on explicit role mention or saved memory + keywords. Verify: `python3 scripts/verify_features.py --live`
 
 ### Speech-to-text (listen)
 

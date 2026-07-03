@@ -92,7 +92,10 @@ def main(argv: list[str] | None = None) -> int:
         return run_script("arka_aie.py", args[1:] or ["status"])
 
     if args[0] == "remind":
-        return run_script("arka_remind.py", args[1:])
+        rest = args[1:]
+        if not rest:
+            return run_script("arka_remind.py", ["status"])
+        return run_script("arka_remind.py", rest)
 
     if args[0] in ("ask", "web"):
         q = " ".join(args[1:]).strip()

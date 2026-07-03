@@ -32,6 +32,8 @@ GAP_SEC = float(os.environ.get("ARKA_REMIND_GAP_SEC", "120"))
 IDLE_SEC = float(os.environ.get("ARKA_REMIND_IDLE_SEC", "300"))
 ACTIVE_SEC = float(os.environ.get("ARKA_REMIND_ACTIVE_SEC", "60"))
 
+_KNOWN_CMDS = frozenset({"daemon", "add", "list", "status", "start", "stop", "check", "cancel"})
+
 
 def _load_json(path: Path, default: object) -> object:
     try:
@@ -179,9 +181,26 @@ def _parse_clock(token: str, base: datetime) -> datetime | None:
     return dt
 
 
-def _parse_due(text: str, *, at: str | None = None, in_spec: str | None = None) -> tuple[int, str]:
+def _parse_default_in_spec() -> str | None:
+    spec = os.environ.get("ARKA_REMIND_DEFAULT", "1h").strip().lower()
+    if spec in ("0", "off", "false", "no", "none"):
+        return None
+    return spec or None
+
+
+def _task_message(text: str) -> str:
+    msg = text.strip()
+    msg = re.sub(r"^(?:to|that)\s+", "", msg, flags=re.I).strip()
+    msg = re.sub(r"^(?:remind(?:\s+me)?|me)\s+", "", msg, flags=re.I).strip()
+    return msg
+
+
+def _parse_due(
+    text: str, *, at: str | None = None, in_spec: str | None = None
+) -> tuple[int, str, bool]:
     now = datetime.now()
     msg = text.strip()
+    used_default = False
 
     if at:
         try:
@@ -189,7 +208,7 @@ def _parse_due(text: str, *, at: str | None = None, in_spec: str | None = None) 
                 due = datetime.fromtimestamp(int(at.strip()))
             else:
                 due = datetime.fromisoformat(at.strip())
-            return int(due.timestamp()), msg or "Reminder"
+            return int(due.timestamp()), msg or "Reminder", used_default
         except ValueError as exc:
             raise SystemExit(f"Invalid --at time: {at!r} ({exc})") from exc
 
@@ -203,7 +222,7 @@ def _parse_due(text: str, *, at: str | None = None, in_spec: str | None = None) 
         n, unit = int(m.group(1)), m.group(2)[0]
         mult = {"s": 1, "m": 60, "h": 3600, "d": 86400}[unit]
         due = now + timedelta(seconds=n * mult)
-        return int(due.timestamp()), msg or "Reminder"
+        return int(due.timestamp()), msg or "Reminder", used_default
 
     patterns: list[tuple[str, str]] = [
         (r"\bin\s+(\d+)\s*(seconds?|secs?|s)\b", "s"),
@@ -235,8 +254,14 @@ def _parse_due(text: str, *, at: str | None = None, in_spec: str | None = None) 
         break
 
     if due is None:
+        default_in = _parse_default_in_spec()
+        task = _task_message(msg)
+        if default_in and task:
+            due_ts, message, _ = _parse_due(task, in_spec=default_in)
+            return due_ts, message, True
         raise SystemExit(
             "Could not parse when to remind. Examples:\n"
+            "  remind to go to gym          (default delay: 1h — set ARKA_REMIND_DEFAULT=30m)\n"
             "  remind in 30m stretch\n"
             "  remind at 5pm call mom\n"
             "  remind tomorrow 9am standup\n"
@@ -244,15 +269,20 @@ def _parse_due(text: str, *, at: str | None = None, in_spec: str | None = None) 
         )
 
     clean = re.sub(re.escape(matched), "", msg, count=1, flags=re.I).strip()
-    clean = re.sub(r"^(?:to|that)\s+", "", clean, flags=re.I).strip()
-    clean = re.sub(r"^(?:remind(?:\s+me)?)\s+", "", clean, flags=re.I).strip()
+    clean = _task_message(clean)
     if not clean:
         clean = "Reminder"
-    return int(due.timestamp()), clean
+    return int(due.timestamp()), clean, used_default
 
 
-def _add_reminder(text: str, *, at: str | None = None, in_spec: str | None = None) -> dict:
-    due_at, message = _parse_due(text, at=at, in_spec=in_spec)
+def _normalize_add_argv(argv: list[str]) -> str:
+    """Natural language: 'me in 1 min stretch' -> 'in 1 min stretch'."""
+    text = " ".join(argv).strip()
+    return re.sub(r"^(?:please\s+)?(?:remind(?:\s+me)?|me)\s+", "", text, flags=re.I).strip()
+
+
+def _add_reminder(text: str, *, at: str | None = None, in_spec: str | None = None) -> tuple[dict, bool]:
+    due_at, message, used_default = _parse_due(text, at=at, in_spec=in_spec)
     rem = {
         "id": uuid.uuid4().hex[:8],
         "text": message,
@@ -266,7 +296,7 @@ def _add_reminder(text: str, *, at: str | None = None, in_spec: str | None = Non
     items = _load_reminders()
     items.append(rem)
     _save_reminders(items)
-    return rem
+    return rem, used_default
 
 
 def _format_rem(rem: dict) -> str:
@@ -428,11 +458,19 @@ def cmd_status(_args: argparse.Namespace) -> int:
 
 def cmd_add(args: argparse.Namespace) -> int:
     text = " ".join(args.message).strip() if args.message else ""
+    text = _normalize_add_argv(text.split()) if text else ""
     if not text and not args.at and not args.in_spec:
         raise SystemExit("Usage: remind add [--in 30m | --at TIME] <message>")
-    rem = _add_reminder(text, at=args.at, in_spec=args.in_spec)
+    rem, used_default = _add_reminder(text, at=args.at, in_spec=args.in_spec)
     due = datetime.fromtimestamp(rem["due_at"]).strftime("%Y-%m-%d %H:%M")
     print(f"✓ Reminder set for {due} — {rem['text']} (id {rem['id']})")
+    if used_default:
+        default_in = _parse_default_in_spec() or "1h"
+        print(
+            f"  (no time given — used default delay {default_in}; "
+            f"override with 'in 30m …' or ARKA_REMIND_DEFAULT=30m)",
+            file=sys.stderr,
+        )
     start_daemon()
     return 0
 
@@ -463,6 +501,11 @@ def cmd_cancel(args: argparse.Namespace) -> int:
 
 
 def main() -> int:
+    argv = sys.argv[1:]
+    if argv and argv[0] not in _KNOWN_CMDS and argv[0] not in ("-h", "--help"):
+        text = _normalize_add_argv(argv)
+        return cmd_add(argparse.Namespace(message=[text], at=None, in_spec=None))
+
     parser = argparse.ArgumentParser(
         description="Schedule reminders — fires at due time; again when you're back after idle or shutdown.",
     )
@@ -490,10 +533,9 @@ def main() -> int:
 
     args = parser.parse_args()
     if args.cmd is None:
-        # Default: treat argv as add message
         if len(sys.argv) > 1 and sys.argv[1] not in ("-h", "--help"):
-            ns = argparse.Namespace(message=sys.argv[1:], at=None, in_spec=None)
-            return cmd_add(ns)
+            text = _normalize_add_argv(sys.argv[1:])
+            return cmd_add(argparse.Namespace(message=[text], at=None, in_spec=None))
         parser.print_help()
         return 0
     if args.cmd == "daemon":
