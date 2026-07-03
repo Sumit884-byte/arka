@@ -99,7 +99,7 @@ arka reload --listen   # also restart wake listener after Python changes
 | `agent_route <q>`          | Preview routing without executing                  |
 | `arka reload`              | Reload `config.fish` + `.env` in the current shell |
 | `arka start` / `arka stop` | Wake listener + background services                |
-| `arka serve`               | Remote server for phone STT/TTS (PC agent)         |
+| `arka serve`               | Remote server + desktop web UI on port 8765        |
 | `arka listen`              | Wake-word listener ("hey arka, …")                 |
 | `arka speak-lang hi-IN`    | Voice language (Sarvam / Edge TTS)                 |
 | `arka usage report`        | App + website screen time                          |
@@ -110,6 +110,31 @@ arka reload --listen   # also restart wake listener after Python changes
 
 
 Voice flow: say **"hey arka, …"** → STT → skill router → optional TTS reply (`AGENT_SPEAK=1` default). In voice mode, Arka speaks short acks while skills run and plain-language answers when done — usable without looking at the screen.
+
+### Desktop web UI (React)
+
+Use Arka from a modern chat UI in your browser on PC (same machine or LAN):
+
+```fish
+arka serve
+# Open http://127.0.0.1:8765/ — paste `REMOTE_TOKEN` from `.env` (or the token printed by serve)
+```
+
+- **Desktop UI** — `http://127.0.0.1:8765/` — React chat (type requests, formatted answers)
+- **Mobile voice UI** — `http://<your-ip>:8765/mobile` — phone mic + TTS (unchanged)
+
+Rebuild the frontend after editing `web/`:
+
+```bash
+cd web && npm install && npm run build
+# output: src/arka/web/dist/ (bundled with pip install)
+```
+
+For local UI development with hot reload (proxy to `arka serve`):
+
+```bash
+cd web && npm run dev   # http://localhost:5173
+```
 
 ### How skills get activated
 

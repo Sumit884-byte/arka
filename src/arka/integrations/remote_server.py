@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import mimetypes
 import os
 import re
 import secrets
@@ -193,6 +194,64 @@ def run_agent_remote(text: str) -> tuple[str, str, int]:
     return output.strip(), speak_text, proc.returncode
 
 
+def iter_agent_remote_stream(text: str):
+    """Run fish agent with live stdout; yield {type, text?} dicts for SSE."""
+    text = text.strip()
+    if not text:
+        yield {"type": "done", "ok": False, "exit_code": 1, "output": ""}
+        return
+
+    env = os.environ.copy()
+    env["AGENT_SPEAK"] = "0"
+    env["ARKA_WEB_STREAM"] = "1"
+
+    cmd = f"agent {shlex.quote(text)}"
+    timeout = int(os.environ.get("ARKA_REMOTE_TIMEOUT", "600"))
+    try:
+        proc = subprocess.Popen(
+            ["fish", "-ic", cmd],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            env=env,
+        )
+    except OSError as exc:
+        yield {"type": "chunk", "text": str(exc)}
+        yield {"type": "done", "ok": False, "exit_code": 1, "output": str(exc)}
+        return
+
+    assert proc.stdout is not None
+    chunks: list[str] = []
+    start = time.monotonic()
+    try:
+        while True:
+            if time.monotonic() - start > timeout:
+                proc.kill()
+                yield {"type": "chunk", "text": "\n[timeout]\n"}
+                yield {"type": "done", "ok": False, "exit_code": 124, "output": "".join(chunks)}
+                return
+            piece = proc.stdout.read(256)
+            if not piece:
+                if proc.poll() is not None:
+                    break
+                time.sleep(0.05)
+                continue
+            decoded = piece.decode("utf-8", errors="replace")
+            chunks.append(decoded)
+            yield {"type": "chunk", "text": decoded}
+        code = proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        yield {"type": "done", "ok": False, "exit_code": 124, "output": "".join(chunks)}
+        return
+
+    output = strip_ansi("".join(chunks)).strip()
+    yield {"type": "done", "ok": code == 0, "exit_code": code, "output": output}
+
+
+def _sse_event(event: str, payload: dict) -> bytes:
+    return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n".encode("utf-8")
+
+
 def transcribe_wav(wav_bytes: bytes) -> str:
     """Optional server-side STT when phone sends audio instead of text."""
     venv_py = Path.home() / ".config" / "fish" / "venv-arka" / "bin" / "python3"
@@ -223,6 +282,29 @@ with wave.open(str(wav_path), "rb") as wf:
     return proc.stdout.strip()
 
 
+def web_static_dir() -> Path | None:
+    """Built React UI (web/dist copied into package at build time)."""
+    candidates: list[Path] = []
+    try:
+        from arka.paths import package_dir
+
+        candidates.append(package_dir() / "web" / "dist")
+    except ImportError:
+        pass
+    here = Path(__file__).resolve()
+    candidates.extend(
+        [
+            here.parent.parent / "web" / "dist",
+            here.parents[3] / "src" / "arka" / "web" / "dist",
+            here.parents[3] / "web" / "dist",
+        ]
+    )
+    for d in candidates:
+        if (d / "index.html").is_file():
+            return d
+    return None
+
+
 class ArkaRemoteHandler(BaseHTTPRequestHandler):
     server_version = "ArkaRemote/1.0"
 
@@ -248,19 +330,80 @@ class ArkaRemoteHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _sse_stream(self, events) -> None:
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "keep-alive")
+        self.end_headers()
+        for item in events:
+            event = item.get("type", "chunk")
+            if event == "chunk":
+                payload = {"text": item.get("text", "")}
+                self.wfile.write(_sse_event("chunk", payload))
+            elif event == "done":
+                payload = {
+                    "ok": item.get("ok", False),
+                    "exit_code": item.get("exit_code", 1),
+                    "output": item.get("output", ""),
+                }
+                self.wfile.write(_sse_event("done", payload))
+            self.wfile.flush()
+
     def _read_body(self) -> bytes:
         length = int(self.headers.get("Content-Length", "0"))
         return self.rfile.read(length) if length else b""
 
+    def _serve_file(self, file_path: Path) -> None:
+        mime, _ = mimetypes.guess_type(str(file_path))
+        if not mime:
+            mime = "application/octet-stream"
+        body = file_path.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", mime)
+        self.send_header("Content-Length", str(len(body)))
+        if file_path.suffix in (".js", ".css", ".woff2"):
+            self.send_header("Cache-Control", "public, max-age=86400")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _serve_web_static(self, path: str) -> bool:
+        root = web_static_dir()
+        if not root:
+            return False
+        if path in ("/", "/app", "/desk"):
+            rel = "index.html"
+        else:
+            rel = path.lstrip("/")
+            if not rel or ".." in rel or rel.startswith("/"):
+                return False
+        file_path = (root / rel).resolve()
+        try:
+            file_path.relative_to(root.resolve())
+        except ValueError:
+            return False
+        if file_path.is_file():
+            self._serve_file(file_path)
+            return True
+        if path.startswith("/v1/"):
+            return False
+        index = root / "index.html"
+        if index.is_file():
+            self._serve_file(index)
+            return True
+        return False
+
     def do_GET(self) -> None:
         path = urlparse(self.path).path
-        if path in ("/", "/app", "/mobile"):
+        if path == "/mobile":
             body = MOBILE_HTML.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+            return
+        if self._serve_web_static(path):
             return
         if path == "/v1/health":
             self._json(
@@ -291,7 +434,7 @@ class ArkaRemoteHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         if not self._check_auth():
-            self._json(401, {"ok": False, "error": "unauthorized — check REMOTE_TOKEN in .env"})
+            self._json(401, {"ok": False, "error": "unauthorized — check REMOTE_TOKEN in .env matches Settings"})
             return
 
         path = urlparse(self.path).path
@@ -306,6 +449,10 @@ class ArkaRemoteHandler(BaseHTTPRequestHandler):
             text = (data.get("text") or "").strip()
             if not text:
                 self._json(400, {"ok": False, "error": "missing text"})
+                return
+
+            if data.get("stream", True):
+                self._sse_stream(iter_agent_remote_stream(text))
                 return
 
             output, speak_text, code = run_agent_remote(text)
@@ -454,7 +601,8 @@ def serve() -> int:
     from arka.env import env_get
 
     host = env_get("REMOTE_HOST", "ARKA_REMOTE_HOST") or "0.0.0.0"
-    port = int(env_get("REMOTE_PORT", "ARKA_REMOTE_PORT") or "8765")
+    port_str = env_get("REMOTE_PORT", "ARKA_REMOTE_PORT") or "8765"
+    port = int(port_str)
     token = ensure_token()
 
     write_pid()
@@ -469,10 +617,18 @@ def serve() -> int:
 
     httpd = ThreadingHTTPServer((host, port), ArkaRemoteHandler)
     ip = local_ip()
-    print(f"[arka-remote] Listening on http://{ip}:{port}/", flush=True)
-    print(f"[arka-remote] Mobile UI: http://{ip}:{port}/", flush=True)
+    has_web = web_static_dir() is not None
+    print(f"[arka-remote] Desktop UI: http://127.0.0.1:{port}/", flush=True)
+    if has_web:
+        print(f"[arka-remote] LAN desktop: http://{ip}:{port}/", flush=True)
+    else:
+        print(
+            "[arka-remote] Desktop UI not built — run: cd web && npm install && npm run build",
+            flush=True,
+        )
+    print(f"[arka-remote] Mobile voice UI: http://{ip}:{port}/mobile", flush=True)
     print(f"[arka-remote] Token: {token}", flush=True)
-    print("[arka-remote] Phone does STT/TTS · PC runs agent", flush=True)
+    print("[arka-remote] PC runs agent · phone STT/TTS at /mobile", flush=True)
 
     try:
         httpd.serve_forever()

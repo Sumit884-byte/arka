@@ -492,7 +492,7 @@ if status is-interactive
         echo "arka stop      -> stop everything"
         echo "arka autostart install -> survive reboot (systemd)"
         echo "arka phone-env -> print Termux config (one-time setup)"
-        echo "arka serve     -> remote server (phone STT/TTS, PC agent)"
+        echo "arka serve     -> remote server + desktop web UI (React chat at :8765)"
         echo "arka listen    -> wake listener only"
         echo "arka reload    -> pick up config changes (auto on next arka/agent command)"
         echo "arka reload --listen -> also restart wake listener after Python edits"
@@ -1243,7 +1243,7 @@ function _agent_remote_start --description "Start Arka remote server for phone S
     end
 
     mkdir -p ~/.cache/fish-agent
-    echo (set_color cyan)"Starting Arka remote server (phone STT/TTS → PC agent)..."(set_color normal)
+    echo (set_color cyan)"Starting Arka remote server (desktop web + phone voice)..."(set_color normal)
     set -l src "$_ARKA_ROOT/src"
     if test -d "$src/arka"
         env PYTHONPATH="$src" $py -m arka.integrations.remote_server serve >>"$logfile" 2>&1 &
@@ -1297,7 +1297,8 @@ except OSError:
         set -l pid (cat "$pidfile" 2>/dev/null)
         if test -n "$pid"; and kill -0 "$pid" 2>/dev/null
             echo (set_color green)"Arka remote: running (pid $pid)"(set_color normal)
-            echo (set_color cyan)"  Phone UI:  http://$ip:$port/"(set_color normal)
+            echo (set_color cyan)"  Desktop:   http://127.0.0.1:$port/"(set_color normal)
+            echo (set_color cyan)"  Mobile:    http://$ip:$port/mobile"(set_color normal)
             echo (set_color brblack)"  log: $logfile  |  stop: arka remote-stop"(set_color normal)
             if set -q REMOTE_TOKEN; or set -q ARKA_REMOTE_TOKEN
                 set -l tok (test -n "$REMOTE_TOKEN"; and echo $REMOTE_TOKEN; or echo $ARKA_REMOTE_TOKEN)
@@ -1315,7 +1316,7 @@ except OSError:
     return 1
 end
 
-function arka_serve --description "Start Arka remote server (phone voice → PC agent)"
+function arka_serve --description "Start Arka remote server (desktop web UI + phone voice)"
     _agent_remote_start
 end
 
@@ -1849,6 +1850,10 @@ function _agent_llm_complete --description "LLM system+user prompt via modular a
     end
 
     set -l py (_arka_python)
+    if test "$ARKA_WEB_STREAM" = 1
+        $py (_arka_py_script arka_llm.py) stream --system "$system_text" --user "$user_text" --temperature $temperature --task $task
+        return $status
+    end
     set -l out ($py (_arka_py_script arka_llm.py) complete --system "$system_text" --user "$user_text" --temperature $temperature --task $task 2>/dev/null)
     if test -n "$out"
         _agent_clean_llm_output "$out"

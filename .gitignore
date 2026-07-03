@@ -10,6 +10,8 @@ __pycache__/
 *.egg-info/
 .eggs/
 dist/
+!src/arka/web/dist/
+!src/arka/web/dist/**
 build/
 *.egg
 .venv/

@@ -86,4 +86,5 @@ arka = [
     "requirements/*.txt",
     "pdf/privategpt/*",
     "env.example",
+    "web/dist/**/*",
 ]
