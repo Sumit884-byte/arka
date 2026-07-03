@@ -91,7 +91,7 @@ def _truthy(name: str, default: str = "1") -> bool:
 
 
 def normalize_task(task: str | None) -> str:
-    raw = (task or env("ARKA_LLM_TASK") or "default").strip().lower()
+    raw = (task or env("LLM_TASK") or "default").strip().lower()
     return TASK_ALIASES.get(raw, raw or "default")
 
 
@@ -227,9 +227,9 @@ def _gemini_models_in_error(msg: str) -> list[str]:
 
 
 def _gemini_list_enabled() -> bool:
-    if env("ARKA_GEMINI_LIST") in {"0", "false", "no", "off"}:
+    if env("GEMINI_LIST") in {"0", "false", "no", "off"}:
         return False
-    if env("ARKA_GEMINI_LIST") in {"1", "true", "yes", "on"}:
+    if env("GEMINI_LIST") in {"1", "true", "yes", "on"}:
         return bool(_ensure_google_key())
     return bool(_ensure_google_key())
 
@@ -325,11 +325,11 @@ def fetch_gemini_models_live(*, force: bool = False) -> list[str]:
 
 
 def gemini_model_ids(*, include_live: bool = True) -> list[str]:
-    explicit = [normalize_gemini_model(m.strip()) for m in env("ARKA_GEMINI_MODELS").split(",") if m.strip()]
+    explicit = [normalize_gemini_model(m.strip()) for m in env("GEMINI_MODELS").split(",") if m.strip()]
     raw = [
-        env("ARKA_CHAT_MODEL"),
+        env("CHAT_MODEL"),
         env("AI_PREFERRED_MODEL"),
-        env("ARKA_LLM_MODEL"),
+        env("LLM_MODEL"),
     ]
     raw.extend(explicit or DEFAULT_GEMINI_MODELS)
     if include_live and _gemini_list_enabled():
@@ -383,12 +383,12 @@ def groq_model_ids() -> list[str]:
 
 
 def ollama_model_ids() -> list[str]:
-    pref_provider = (env("AI_PREFERRED_PROVIDER") or env("ARKA_LLM_PROVIDER")).lower()
-    pref_model = env("AI_PREFERRED_MODEL") or env("ARKA_LLM_MODEL")
+    pref_provider = (env("AI_PREFERRED_PROVIDER") or env("LLM_PROVIDER")).lower()
+    pref_model = env("AI_PREFERRED_MODEL") or env("LLM_MODEL")
     raw = [
         env("OLLAMA_CHAT_MODEL"),
         pref_model if pref_provider == "ollama" else "",
-        env("ARKA_LLM_MODEL") if pref_provider == "ollama" else "",
+        env("LLM_MODEL") if pref_provider == "ollama" else "",
         "minimax-m2.5:cloud",
         "minimax-m2:cloud",
         "qwen3:8b",
@@ -403,13 +403,13 @@ def ollama_model_ids() -> list[str]:
 
 def build_default_chain(*, task: str = "default") -> list[tuple[str, str]]:
     task_key = normalize_task(task).upper()
-    for env_name in (f"ARKA_LLM_FALLBACK_{task_key}", "ARKA_LLM_FALLBACK"):
+    for env_name in (f"LLM_FALLBACK_{task_key}", "LLM_FALLBACK"):
         explicit = parse_chain(env(env_name))
         if explicit:
             return explicit
 
-    pref_provider = (env("AI_PREFERRED_PROVIDER") or env("ARKA_LLM_PROVIDER")).lower()
-    pref_model = env("AI_PREFERRED_MODEL") or env("ARKA_LLM_MODEL")
+    pref_provider = (env("AI_PREFERRED_PROVIDER") or env("LLM_PROVIDER")).lower()
+    pref_model = env("AI_PREFERRED_MODEL") or env("LLM_MODEL")
 
     seen: set[tuple[str, str]] = set()
     ordered: list[tuple[str, str]] = []
@@ -599,7 +599,7 @@ def _looks_like_error(text: str) -> bool:
 
 @contextmanager
 def _quiet_llm_logs() -> Iterator[None]:
-    if env("ARKA_LLM_VERBOSE") in {"1", "true", "yes"}:
+    if env("LLM_VERBOSE") in {"1", "true", "yes"}:
         yield
         return
     prev_disable = logging.root.manager.disable
@@ -639,14 +639,14 @@ class LlmFallbackEngine:
 
         global _LAST_MODEL, _LAST_ERROR
 
-        if not _truthy("ARKA_LLM_AUTO_FALLBACK", "1") and self.chain is None:
+        if not _truthy("LLM_AUTO_FALLBACK", "1") and self.chain is None:
             chain = self.candidates()[:1]
         else:
             chain = self.candidates()
 
         last_error = ""
-        verbose = env("ARKA_LLM_VERBOSE") in {"1", "true", "yes"}
-        notify = _truthy("ARKA_LLM_FALLBACK_NOTIFY", "0")
+        verbose = env("LLM_VERBOSE") in {"1", "true", "yes"}
+        notify = _truthy("LLM_FALLBACK_NOTIFY", "0")
         attempts = 0
         tried: list[str] = []
 
@@ -740,7 +740,7 @@ class LlmFallbackEngine:
 
         global _LAST_MODEL, _LAST_ERROR
 
-        if not _truthy("ARKA_LLM_AUTO_FALLBACK", "1") and self.chain is None:
+        if not _truthy("LLM_AUTO_FALLBACK", "1") and self.chain is None:
             chain = self.candidates()[:1]
         else:
             chain = self.candidates()

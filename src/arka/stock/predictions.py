@@ -20,7 +20,7 @@ FISH_DIR = Path.home() / ".config" / "fish"
 CACHE = Path.home() / ".cache" / "fish-agent"
 HISTORY_FILE = CACHE / "predictions.json"
 STOCK_PROJECT = Path(
-    os.environ.get("ARKA_STOCK_PROJECT", Path.home() / "Projects/python/products/stock_analysis")
+    os.environ.get("STOCK_PROJECT", Path.home() / "Projects/python/products/stock_analysis")
 )
 VENV_PY = FISH_DIR / "venv-arka" / "bin" / "python3"
 
@@ -938,7 +938,7 @@ def main() -> int:
     p.add_argument("query", nargs="+")
     p.add_argument("--domain", "-d", default="auto", choices=["auto", "antiques", "stocks", "strategy", "all"])
     p.add_argument("--deep", action="store_true", help="Extra web research")
-    p.add_argument("--horizon", default=os.environ.get("ARKA_PREDICT_HORIZON", "3-6 months"))
+    p.add_argument("--horizon", default=os.environ.get("PREDICT_HORIZON", "3-6 months"))
 
     p = sub.add_parser("history", help="List recent predictions")
     p.add_argument("--limit", "-n", type=int, default=10)

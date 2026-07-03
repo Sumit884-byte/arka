@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 STOCK_PROJECT = Path(
-    os.environ.get("ARKA_STOCK_PROJECT", Path.home() / "Projects/python/products/stock_analysis")
+    os.environ.get("STOCK_PROJECT", Path.home() / "Projects/python/products/stock_analysis")
 )
 
 EMOTION_NEWS_FEEDS: list[tuple[str, str]] = [
@@ -182,12 +182,12 @@ def _score_headlines_batch(headlines: list[str]) -> list[tuple[str, float]]:
     if not py.is_file():
         return _score_headlines_textblob_local(headlines)
 
-    use_finbert = os.environ.get("ARKA_USE_FINBERT", "0") == "1"
+    use_finbert = os.environ.get("USE_FINBERT", "0") == "1"
     headlines_json = json.dumps(headlines[:25])
     code = f"""
 import json, os
 from sentiment_analyzer import get_analyzer
-use_fb = os.environ.get("ARKA_USE_FINBERT", "0") == "1"
+use_fb = os.environ.get("USE_FINBERT", "0") == "1"
 analyzer = get_analyzer(use_finbert=use_fb)
 headlines = {headlines_json}
 out = []
@@ -197,7 +197,7 @@ for h in headlines:
 print(json.dumps(out))
 """
     env = os.environ.copy()
-    env["ARKA_USE_FINBERT"] = "0" if not use_finbert else "1"
+    env["USE_FINBERT"] = "0" if not use_finbert else "1"
     try:
         proc = subprocess.run(
             [str(py), "-c", code],
@@ -499,7 +499,7 @@ def main() -> int:
     args = p.parse_args()
     if args.plain:
         import os
-        os.environ["ARKA_STOCK_PLAIN"] = "1"
+        os.environ["STOCK_PLAIN"] = "1"
     if use_terminal_ui():
         print_emotion_terminal(news_limit=args.limit)
     else:

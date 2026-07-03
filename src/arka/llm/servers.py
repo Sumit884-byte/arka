@@ -27,16 +27,16 @@ def _truthy(name: str, default: str = "1") -> bool:
 
 
 def auto_start_enabled() -> bool:
-    return _truthy("ARKA_LLM_AUTO_START_SERVERS", "1")
+    return _truthy("LLM_AUTO_START_SERVERS", "1")
 
 
 def auto_stop_enabled() -> bool:
-    return _truthy("ARKA_LLM_AUTO_STOP_SERVERS", "1")
+    return _truthy("LLM_AUTO_STOP_SERVERS", "1")
 
 
 def start_timeout() -> float:
     try:
-        return max(3.0, float(_env("ARKA_LLM_SERVER_START_TIMEOUT", "15")))
+        return max(3.0, float(_env("LLM_SERVER_START_TIMEOUT", "15")))
     except ValueError:
         return 15.0
 
@@ -75,7 +75,7 @@ def is_reachable(provider: str) -> bool:
     if provider == "ollama":
         return _http_ok(f"{_ollama_base_url()}/api/tags")
     if provider == "vllm":
-        if not (_env("VLLM_HOST") or _env("VLLM_API_URL") or _env("ARKA_VLLM_START_CMD")):
+        if not (_env("VLLM_HOST") or _env("VLLM_API_URL") or _env("VLLM_START_CMD")):
             return False
         return _http_ok(_vllm_health_url())
     return False
@@ -255,7 +255,7 @@ def _start_ollama() -> subprocess.Popen[bytes] | None:
 
 
 def _start_vllm() -> subprocess.Popen[bytes] | None:
-    raw = _env("ARKA_VLLM_START_CMD")
+    raw = _env("VLLM_START_CMD")
     if not raw:
         print(
             "vLLM not reachable — set ARKA_VLLM_START_CMD (e.g. "
@@ -303,7 +303,7 @@ def provider_available_with_servers(provider: str) -> bool:
     if provider == "ollama":
         return is_reachable("ollama") or (auto_start_enabled() and bool(shutil.which("ollama")))
     if provider == "vllm":
-        if _env("VLLM_HOST") or _env("VLLM_API_URL") or _env("ARKA_VLLM_START_CMD"):
-            return is_reachable("vllm") or (auto_start_enabled() and bool(_env("ARKA_VLLM_START_CMD")))
+        if _env("VLLM_HOST") or _env("VLLM_API_URL") or _env("VLLM_START_CMD"):
+            return is_reachable("vllm") or (auto_start_enabled() and bool(_env("VLLM_START_CMD")))
         return False
     return False

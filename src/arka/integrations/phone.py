@@ -107,13 +107,13 @@ def cmd_ask(url: str, token: str, text: str, no_speak: bool) -> int:
     if not no_speak:
         speak = data.get("speak_text", "")
         if speak:
-            lang = os.environ.get("ARKA_SPEAK_LANG", "en-IN")
+            lang = os.environ.get("SPEAK_LANG", "en-IN")
             termux_tts(speak, lang)
     return 0 if data.get("ok") else 1
 
 
 def cmd_listen(url: str, token: str) -> int:
-    lang = os.environ.get("ARKA_SPEAK_LANG", "en-IN")
+    lang = os.environ.get("SPEAK_LANG", "en-IN")
     print(f"Arka phone client → {url}")
     print("Press Enter, then speak. Ctrl+C to quit.")
     while True:
@@ -150,8 +150,8 @@ def phone_matches(a: str, b: str) -> bool:
 
 def cmd_sms_watch(url: str, token: str) -> int:
     """Poll Termux SMS inbox and forward allowed senders to PC /v1/inbox."""
-    from_num = os.environ.get("ARKA_WHATSAPP_FROM", "+919073153257")
-    poll = float(os.environ.get("ARKA_WHATSAPP_POLL", "5"))
+    from_num = os.environ.get("WHATSAPP_FROM", "+919073153257")
+    poll = float(os.environ.get("WHATSAPP_POLL", "5"))
     seen: set[str] = set()
     print(f"SMS watch → {url} for {from_num} (poll {poll}s)")
     while True:
@@ -189,8 +189,8 @@ def cmd_sms_watch(url: str, token: str) -> int:
 def main() -> int:
     load_env()
     parser = argparse.ArgumentParser(description="Arka phone client (Termux)")
-    parser.add_argument("--url", default=os.environ.get("ARKA_REMOTE_URL", ""), help="PC server URL")
-    parser.add_argument("--token", default=os.environ.get("ARKA_REMOTE_TOKEN", ""), help="Access token")
+    parser.add_argument("--url", default=os.environ.get("REMOTE_URL", ""), help="PC server URL")
+    parser.add_argument("--token", default=os.environ.get("REMOTE_TOKEN", ""), help="Access token")
     sub = parser.add_subparsers(dest="cmd")
 
     sub.add_parser("health")

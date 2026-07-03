@@ -12,7 +12,7 @@ from datetime import datetime
 from arka.agent.core import CACHE, load_json, save_json
 
 VOICE_SESSION_FILE = CACHE / "voice_session.json"
-MAX_VOICE_TURNS = int(os.environ.get("ARKA_VOICE_SESSION_TURNS", "8"))
+MAX_VOICE_TURNS = int(os.environ.get("VOICE_SESSION_TURNS", "8"))
 SPEAK_MAX = int(os.environ.get("AGENT_SPEAK_MAX", "900"))
 
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")

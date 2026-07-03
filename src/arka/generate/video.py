@@ -37,7 +37,7 @@ def _pollinations_key() -> str:
 
 
 def _backend() -> str:
-    return os.environ.get("ARKA_VIDEO_BACKEND", "auto").strip().lower() or "auto"
+    return os.environ.get("VIDEO_BACKEND", "auto").strip().lower() or "auto"
 
 
 def _default_output(prompt: str) -> Path:
@@ -196,7 +196,7 @@ def generate(
     if backend == "pollinations":
         if not _pollinations_key():
             raise SystemExit(_setup_hint())
-        poll_model = os.environ.get("ARKA_VIDEO_POLLINATIONS_MODEL", DEFAULT_POLLINATIONS_MODEL)
+        poll_model = os.environ.get("VIDEO_POLLINATIONS_MODEL", DEFAULT_POLLINATIONS_MODEL)
         result = _try("pollinations", lambda: generate_pollinations(prompt, output, aspect, poll_model, duration, audio))
         if result:
             return result
@@ -207,7 +207,7 @@ def generate(
         raise SystemExit(_setup_hint())
 
     if _pollinations_key():
-        poll_model = os.environ.get("ARKA_VIDEO_POLLINATIONS_MODEL", DEFAULT_POLLINATIONS_MODEL)
+        poll_model = os.environ.get("VIDEO_POLLINATIONS_MODEL", DEFAULT_POLLINATIONS_MODEL)
         result = _try("pollinations", lambda: generate_pollinations(prompt, output, aspect, poll_model, duration, audio))
         if result:
             return result
@@ -225,9 +225,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Generate real AI video (Pollinations or Gemini Veo)")
     parser.add_argument("prompt", help="Video description")
     parser.add_argument("-o", "--output", help="Output .mp4 path")
-    parser.add_argument("-a", "--aspect", default=os.environ.get("ARKA_VIDEO_ASPECT", "16:9"))
-    parser.add_argument("-d", "--duration", type=int, default=int(os.environ.get("ARKA_VIDEO_DURATION", "5")))
-    parser.add_argument("-m", "--model", default=os.environ.get("ARKA_VIDEO_MODEL", DEFAULT_GEMINI_MODEL))
+    parser.add_argument("-a", "--aspect", default=os.environ.get("VIDEO_ASPECT", "16:9"))
+    parser.add_argument("-d", "--duration", type=int, default=int(os.environ.get("VIDEO_DURATION", "5")))
+    parser.add_argument("-m", "--model", default=os.environ.get("VIDEO_MODEL", DEFAULT_GEMINI_MODEL))
     parser.add_argument("--no-audio", action="store_true", help="Disable Pollinations audio track")
     args = parser.parse_args()
 
@@ -237,7 +237,7 @@ def main() -> int:
         return 1
 
     duration = min(max(args.duration, 2), 15)
-    audio = not args.no_audio and os.environ.get("ARKA_VIDEO_AUDIO", "1") not in ("0", "false")
+    audio = not args.no_audio and os.environ.get("VIDEO_AUDIO", "1") not in ("0", "false")
 
     print(f"Generating video ({aspect}, {duration}s) …")
     try:
@@ -256,7 +256,7 @@ def main() -> int:
         return 1
 
     print(f"Saved ({provider}): {saved}")
-    if os.environ.get("ARKA_OPEN_VIDEO", "1") not in ("0", "false"):
+    if os.environ.get("OPEN_VIDEO", "1") not in ("0", "false"):
         try:
             subprocess.Popen(["xdg-open", str(saved)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except OSError:

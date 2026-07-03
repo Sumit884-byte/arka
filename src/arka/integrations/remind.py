@@ -27,10 +27,10 @@ STATE_FILE = CACHE / "reminders_state.json"
 PID_FILE = CACHE / "arka_remind.pid"
 LOG_FILE = CACHE / "arka_remind.log"
 
-TICK_SEC = float(os.environ.get("ARKA_REMIND_TICK_SEC", "30"))
-GAP_SEC = float(os.environ.get("ARKA_REMIND_GAP_SEC", "120"))
-IDLE_SEC = float(os.environ.get("ARKA_REMIND_IDLE_SEC", "300"))
-ACTIVE_SEC = float(os.environ.get("ARKA_REMIND_ACTIVE_SEC", "60"))
+TICK_SEC = float(os.environ.get("REMIND_TICK_SEC", "30"))
+GAP_SEC = float(os.environ.get("REMIND_GAP_SEC", "120"))
+IDLE_SEC = float(os.environ.get("REMIND_IDLE_SEC", "300"))
+ACTIVE_SEC = float(os.environ.get("REMIND_ACTIVE_SEC", "60"))
 
 _KNOWN_CMDS = frozenset({"daemon", "add", "list", "status", "start", "stop", "check", "cancel"})
 
@@ -126,7 +126,7 @@ def _notify(title: str, body: str) -> None:
             capture_output=True,
             timeout=5,
         )
-    if os.environ.get("ARKA_REMIND_SPEAK", "").strip().lower() in {"1", "true", "yes"}:
+    if os.environ.get("REMIND_SPEAK", "").strip().lower() in {"1", "true", "yes"}:
         try:
             subprocess.Popen(
                 [sys.executable, str(Path(__file__).resolve().parent / "edge_speak.py"), body[:200]],
@@ -182,7 +182,7 @@ def _parse_clock(token: str, base: datetime) -> datetime | None:
 
 
 def _parse_default_in_spec() -> str | None:
-    spec = os.environ.get("ARKA_REMIND_DEFAULT", "1h").strip().lower()
+    spec = os.environ.get("REMIND_DEFAULT", "1h").strip().lower()
     if spec in ("0", "off", "false", "no", "none"):
         return None
     return spec or None

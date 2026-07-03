@@ -28,23 +28,23 @@ def _truthy(name: str, default: str = "1") -> bool:
 
 
 def security_enabled() -> bool:
-    return _truthy("ARKA_SECURITY", "1")
+    return _truthy("SECURITY", "1")
 
 
 def web_checks_enabled() -> bool:
-    return security_enabled() and _truthy("ARKA_SECURITY_WEB", "1")
+    return security_enabled() and _truthy("SECURITY_WEB", "1")
 
 
 def action_checks_enabled() -> bool:
-    return security_enabled() and _truthy("ARKA_SECURITY_ACTIONS", "1")
+    return security_enabled() and _truthy("SECURITY_ACTIONS", "1")
 
 
 def sanitize_enabled() -> bool:
-    return security_enabled() and _truthy("ARKA_SECURITY_SANITIZE", "1")
+    return security_enabled() and _truthy("SECURITY_SANITIZE", "1")
 
 
 def llm_checks_enabled() -> bool:
-    return security_enabled() and _truthy("ARKA_SECURITY_LLM", "1")
+    return security_enabled() and _truthy("SECURITY_LLM", "1")
 
 
 # --- Prompt injection / malicious instruction patterns (web queries + actions) ---

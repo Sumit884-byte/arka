@@ -102,8 +102,8 @@ def youtube_search(query: str, limit: int = 10) -> list[tuple[str, str, str]]:
 
 def _caption_languages() -> list[str]:
     raw = (
-        os.environ.get("ARKA_MEDIA_LANG")
-        or os.environ.get("ARKA_SPEAK_LANG")
+        os.environ.get("MEDIA_LANG")
+        or os.environ.get("SPEAK_LANG")
         or os.environ.get("YOUTUBE_CAPTION_LANG")
         or "en"
     ).strip()
@@ -214,7 +214,7 @@ def _video_id_from_metadata(path: Path) -> str | None:
 
 
 def _video_id_from_title_search(path: Path) -> str | None:
-    if os.environ.get("ARKA_MEDIA_YOUTUBE_SEARCH", "1").strip().lower() in {"0", "no", "false", "off"}:
+    if os.environ.get("MEDIA_YOUTUBE_SEARCH", "1").strip().lower() in {"0", "no", "false", "off"}:
         return None
     ytdlp = _ytdlp_path()
     if not ytdlp:
@@ -253,7 +253,7 @@ def resolve_video_id_for_path(path: Path, youtube_url: str | None = None) -> str
     path = path.expanduser().resolve()
     for candidate in (
         youtube_url,
-        os.environ.get("ARKA_YOUTUBE_URL", "").strip(),
+        os.environ.get("YOUTUBE_URL", "").strip(),
     ):
         if candidate:
             vid = extract_video_id(candidate)
@@ -301,7 +301,7 @@ def _is_ip_block_error(exc: Exception) -> bool:
 
 
 def _node_js_runtime_args() -> list[str]:
-    if _yt_env("ARKA_YT_NO_NODE", "").lower() in {"1", "true", "yes"}:
+    if _yt_env("YT_NO_NODE", "").lower() in {"1", "true", "yes"}:
         return []
     node = shutil_which("node")
     if not node:
@@ -318,13 +318,13 @@ def _node_js_runtime_args() -> list[str]:
 
 
 def _whisper_enabled() -> bool:
-    pref = _yt_env("ARKA_YT_WHISPER_FALLBACK", "auto").lower()
+    pref = _yt_env("YT_WHISPER_FALLBACK", "auto").lower()
     return pref not in {"0", "false", "no", "off"}
 
 
 def transcribe_fallback_policy() -> str:
     """When captions are missing: ask | yes | no (download audio + local STT)."""
-    raw = _yt_env("ARKA_YT_TRANSCRIBE_FALLBACK", "ask").lower()
+    raw = _yt_env("YT_TRANSCRIBE_FALLBACK", "ask").lower()
     if raw in {"1", "true", "yes", "always", "y", "on"}:
         return "yes"
     if raw in {"0", "false", "no", "never", "n", "off"}:
@@ -383,7 +383,7 @@ def resolve_transcript_text(
         video_id, research=research, allow_whisper=False
     )
     if text:
-        if source != "cache" and not _yt_env("ARKA_YT_QUIET"):
+        if source != "cache" and not _yt_env("YT_QUIET"):
             print(f"arka_youtube: captions via {source}", file=sys.stderr)
         return text
 
@@ -406,7 +406,7 @@ def resolve_transcript_text(
 def _ytdlp_extra_args(*, player_client: str | None = None) -> list[str]:
     args: list[str] = []
     args.extend(_node_js_runtime_args())
-    cookies = _yt_env("ARKA_YT_COOKIES") or _yt_env("YOUTUBE_COOKIES")
+    cookies = _yt_env("YT_COOKIES") or _yt_env("YOUTUBE_COOKIES")
     if not cookies:
         for default in (
             Path.home() / ".config/fish/youtube-cookies.txt",
@@ -419,16 +419,16 @@ def _ytdlp_extra_args(*, player_client: str | None = None) -> list[str]:
         cp = Path(cookies).expanduser()
         if cp.is_file():
             args.extend(["--cookies", str(cp)])
-    browser = _yt_env("ARKA_YT_COOKIES_BROWSER")
+    browser = _yt_env("YT_COOKIES_BROWSER")
     if browser:
         args.extend(["--cookies-from-browser", browser])
-    proxy = _yt_env("ARKA_YT_PROXY") or _yt_env("HTTPS_PROXY") or _yt_env("ALL_PROXY")
+    proxy = _yt_env("YT_PROXY") or _yt_env("HTTPS_PROXY") or _yt_env("ALL_PROXY")
     if proxy:
         args.extend(["--proxy", proxy])
-    client = player_client or _yt_env("ARKA_YT_PLAYER_CLIENT", "android_vr")
+    client = player_client or _yt_env("YT_PLAYER_CLIENT", "android_vr")
     if client:
         args.extend(["--extractor-args", f"youtube:player_client={client}"])
-    sleep = _yt_env("ARKA_YT_SLEEP", "")
+    sleep = _yt_env("YT_SLEEP", "")
     if sleep.isdigit() and int(sleep) > 0:
         args.extend(["--sleep-interval", sleep, "--max-sleep-interval", str(int(sleep) + 2)])
     return args
@@ -456,12 +456,12 @@ def _skip_transcript_api() -> bool:
     global _API_IP_BLOCKED
     if _API_IP_BLOCKED:
         return True
-    pref = _yt_env("ARKA_YT_SKIP_TRANSCRIPT_API", "").lower()
+    pref = _yt_env("YT_SKIP_TRANSCRIPT_API", "").lower()
     return pref in {"1", "true", "yes", "on"}
 
 
 def _prefer_ytdlp_transcripts() -> bool:
-    pref = _yt_env("ARKA_YT_PREFER_YTDLP", "1").lower()
+    pref = _yt_env("YT_PREFER_YTDLP", "1").lower()
     return pref not in {"0", "false", "no", "off"}
 
 
@@ -504,12 +504,12 @@ def _ytdlp_run_subs(video_id: str, *, quiet: bool = False) -> str | None:
     sub_langs = f"{langs},en.*,hi.*"
     clients = [
         c.strip()
-        for c in (_yt_env("ARKA_YT_PLAYER_CLIENT", "android_vr") + ",web").split(",")
+        for c in (_yt_env("YT_PLAYER_CLIENT", "android_vr") + ",web").split(",")
         if c.strip()
     ]
     seen: set[str] = set()
-    retries = max(0, int(_yt_env("ARKA_YT_SUB_RETRIES", "1") or "0"))
-    retry_wait = max(5, int(_yt_env("ARKA_YT_429_WAIT", "45") or "45"))
+    retries = max(0, int(_yt_env("YT_SUB_RETRIES", "1") or "0"))
+    retry_wait = max(5, int(_yt_env("YT_429_WAIT", "45") or "45"))
 
     for client in clients:
         if client in seen:
@@ -545,7 +545,7 @@ def _ytdlp_run_subs(video_id: str, *, quiet: bool = False) -> str | None:
                             )
                         time.sleep(retry_wait)
                         continue
-                    if not quiet and not _yt_env("ARKA_YT_QUIET"):
+                    if not quiet and not _yt_env("YT_QUIET"):
                         print(
                             f"arka_youtube: yt-dlp subtitles ({client}): {err.split(chr(10))[0][:200]}",
                             file=sys.stderr,
@@ -617,15 +617,15 @@ def transcript_via_whisper(video_id: str) -> str | None:
             from arka.media.transcript import _load_fish_env, transcribe_file
 
             _load_fish_env()
-            prev_lang = os.environ.get("ARKA_MEDIA_LANG")
-            os.environ["ARKA_MEDIA_LANG"] = "en"
+            prev_lang = os.environ.get("MEDIA_LANG")
+            os.environ["MEDIA_LANG"] = "en"
             try:
                 return transcribe_file(audio_files[0], skip_youtube=True).strip() or None
             finally:
                 if prev_lang is None:
-                    os.environ.pop("ARKA_MEDIA_LANG", None)
+                    os.environ.pop("MEDIA_LANG", None)
                 else:
-                    os.environ["ARKA_MEDIA_LANG"] = prev_lang
+                    os.environ["MEDIA_LANG"] = prev_lang
         except Exception as exc:
             print(f"arka_youtube: whisper fallback failed: {exc}", file=sys.stderr)
             return None
@@ -668,7 +668,7 @@ def _fetch_transcript_impl(
 
     text: str | None = None
     source = "none"
-    backend = _yt_env("ARKA_YT_TRANSCRIPT", "auto").lower()
+    backend = _yt_env("YT_TRANSCRIPT", "auto").lower()
 
     if backend in {"ytdlp", "yt-dlp"}:
         text = transcript_via_ytdlp(video_id)

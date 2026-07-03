@@ -66,8 +66,8 @@ end
 
 # --- Arka install root (package bundle or legacy $_ARKA_ROOT) ---
 function _arka_root --description "Arka scripts directory (bundled in pip package)"
-    if set -q ARKA_HOME; and test -n "$ARKA_HOME"
-        echo $ARKA_HOME
+    if set -q INSTALL_HOME; and test -n "$INSTALL_HOME"
+        echo $INSTALL_HOME
         return
     end
     set -l here (path dirname (status filename))
@@ -90,8 +90,8 @@ function _arka_root --description "Arka scripts directory (bundled in pip packag
 end
 
 function _arka_config_dir --description "User config dir (.env, secrets)"
-    if set -q ARKA_CONFIG_DIR; and test -n "$ARKA_CONFIG_DIR"
-        echo $ARKA_CONFIG_DIR
+    if set -q CONFIG_DIR; and test -n "$CONFIG_DIR"
+        echo $CONFIG_DIR
         return
     end
     if test -f "$HOME/.config/fish/.env"
@@ -152,6 +152,17 @@ end
 set -g _ARKA_ROOT (_arka_root)
 set -g _ARKA_CFG (_arka_config_dir)
 
+function _arka_env_key --description "Canonical .env key (strip legacy ARKA_ prefix)"
+    set -l key $argv[1]
+    if string match -qr '^ARKA_' -- $key
+        set key (string replace -r '^ARKA_' '' -- $key)
+        if test "$key" = HOME
+            set key INSTALL_HOME
+        end
+    end
+    echo $key
+end
+
 # --- Environment Setup ---
 if test -f "$_ARKA_CFG/.env"
     for line in (cat "$_ARKA_CFG/.env" | grep -v '^#' | grep -v '^\s*$')
@@ -159,7 +170,8 @@ if test -f "$_ARKA_CFG/.env"
         if test (count $kv) -eq 2
             set -l val (string trim -c '"' $kv[2])
             set val (string replace -r '#.*$' '' -- "$val" | string trim)
-            set -gx $kv[1] $val
+            set -l key (_arka_env_key $kv[1])
+            set -gx $key $val
         end
     end
 end
@@ -168,30 +180,43 @@ if test -f "$_ARKA_ROOT/.env"; and test "$_ARKA_ROOT/.env" != "$_ARKA_CFG/.env"
     for line in (cat "$_ARKA_ROOT/.env" | grep -v '^#' | grep -v '^\s*$')
         set -l kv (string split -m 1 "=" $line)
         if test (count $kv) -eq 2
-            if not set -q $kv[1]
+            set -l key (_arka_env_key $kv[1])
+            if not set -q $key
                 set -l val (string trim -c '"' $kv[2])
                 set val (string replace -r '#.*$' '' -- "$val" | string trim)
-                set -gx $kv[1] $val
+                set -gx $key $val
             end
         end
     end
 end
-# Short env names → legacy ARKA_* (REMOTE_TOKEN → ARKA_REMOTE_TOKEN)
-if set -q REMOTE_TOKEN; and not set -q ARKA_REMOTE_TOKEN
-    set -gx ARKA_REMOTE_TOKEN $REMOTE_TOKEN
-else if set -q ARKA_REMOTE_TOKEN; and not set -q REMOTE_TOKEN
-    set -gx REMOTE_TOKEN $ARKA_REMOTE_TOKEN
+
+function _arka_src_pythonpath --description "Directory to put on PYTHONPATH for arka imports (internal)"
+    if test -d "$_ARKA_ROOT/src/arka"
+        echo "$_ARKA_ROOT/src"
+        return
+    end
+    if test -f "$_ARKA_ROOT/../__init__.py"
+        echo (path resolve "$_ARKA_ROOT/..")
+        return
+    end
 end
-if set -q REMOTE_PORT; and not set -q ARKA_REMOTE_PORT
-    set -gx ARKA_REMOTE_PORT $REMOTE_PORT
-else if set -q ARKA_REMOTE_PORT; and not set -q REMOTE_PORT
-    set -gx REMOTE_PORT $ARKA_REMOTE_PORT
+
+function _arka_apply_pythonpath --description "Export PYTHONPATH so bundled scripts can import arka (internal)"
+    set -l src (_arka_src_pythonpath)
+    test -z "$src"; and return
+    if set -q PYTHONPATH; and test -n "$PYTHONPATH"
+        for part in (string split : -- "$PYTHONPATH")
+            if test "$part" = "$src"
+                return
+            end
+        end
+        set -gx PYTHONPATH "$src:$PYTHONPATH"
+    else
+        set -gx PYTHONPATH "$src"
+    end
 end
-if set -q SPEAK_LANG; and not set -q ARKA_SPEAK_LANG
-    set -gx ARKA_SPEAK_LANG $SPEAK_LANG
-else if set -q ARKA_SPEAK_LANG; and not set -q SPEAK_LANG
-    set -gx SPEAK_LANG $ARKA_SPEAK_LANG
-end
+
+_arka_apply_pythonpath
 
 function _arka_platform_init --description "Load cached platform profile (detect once on first run)"
     set -l pf "$_ARKA_CFG/platform.env"
@@ -211,16 +236,16 @@ function _arka_platform_init --description "Load cached platform profile (detect
             end
         end
     end
-    if set -q ARKA_PLATFORM; and test -n "$ARKA_PLATFORM"
-        set -gx _ARKA_PLATFORM $ARKA_PLATFORM
-    else if not set -q _ARKA_PLATFORM
+    if set -q PLATFORM; and test -n "$PLATFORM"
+        set -gx _PLATFORM $PLATFORM
+    else if not set -q _PLATFORM
         set -l uname (uname -s)
         if test "$uname" = Darwin
-            set -gx _ARKA_PLATFORM macos
+            set -gx _PLATFORM macos
         else if test "$uname" = Linux
-            set -gx _ARKA_PLATFORM linux
+            set -gx _PLATFORM linux
         else
-            set -gx _ARKA_PLATFORM unknown
+            set -gx _PLATFORM unknown
         end
     end
 end
@@ -228,15 +253,15 @@ end
 _arka_platform_init
 
 function _arka_is_macos --description "True on macOS (cached from first-run detect)"
-    test "$_ARKA_PLATFORM" = macos
+    test "$_PLATFORM" = macos
 end
 
 function _arka_is_linux --description "True on Linux (cached from first-run detect)"
-    test "$_ARKA_PLATFORM" = linux
+    test "$_PLATFORM" = linux
 end
 
 function _arka_is_windows --description "True on Windows (cached from first-run detect)"
-    test "$_ARKA_PLATFORM" = windows
+    test "$_PLATFORM" = windows
 end
 
 function _arka_agent_platform_label --description "Platform label for LLM agent prompts (internal)"
@@ -282,12 +307,12 @@ end
 function _arka_copy_to_clipboard --description "Copy text to system clipboard (macOS/Linux)"
     set -l text "$argv[1]"
     test -z "$text"; and return 1
-    if set -q ARKA_CLIPBOARD_COPY; and test -n "$ARKA_CLIPBOARD_COPY"
-        if test "$ARKA_CLIPBOARD_COPY" = xclip
+    if set -q CLIPBOARD_COPY; and test -n "$CLIPBOARD_COPY"
+        if test "$CLIPBOARD_COPY" = xclip
             printf '%s' "$text" | xclip -selection clipboard 2>/dev/null
             return $status
         end
-        printf '%s' "$text" | $ARKA_CLIPBOARD_COPY
+        printf '%s' "$text" | $CLIPBOARD_COPY
         return $status
     end
     if _arka_is_macos; and command -v pbcopy >/dev/null
@@ -513,7 +538,7 @@ if status is-interactive
         echo "agent_plan <goal> -> AI plans & runs multi-step tasks"
         echo "goal <goal>       -> Autonomous goal agent (Arka or Butterfish Goal Mode)"
         echo "agent_loop  -> AI loop: run cmd → read output → fix & retry (-n max)"
-        echo "loop <goal> -> Same as agent_loop (uses goal engine when ARKA_GOAL_ENGINE=auto)"
+        echo "loop <goal> -> Same as agent_loop (uses goal engine when GOAL_ENGINE=auto)"
         echo "skills      -> Show safe vs dangerous commands"
         echo "fix         -> AI fixes your last failed command"
         echo ""
@@ -657,9 +682,9 @@ CRITICAL NOTE ON ALIASES:
 - `cat` is aliased to `batcat`."
 
     if test -n "$provider_req" -a -n "$model_req"
-        set -lx ARKA_LLM_FALLBACK "$provider_req:$model_req"
+        set -lx LLM_FALLBACK "$provider_req:$model_req"
     else if test -n "$provider_req"
-        set -lx ARKA_LLM_FALLBACK "$provider_req:gemini-2.0-flash,$provider_req:llama-3.3-70b-versatile"
+        set -lx LLM_FALLBACK "$provider_req:gemini-2.0-flash,$provider_req:llama-3.3-70b-versatile"
     end
 
     set -l result (_agent_llm_complete "$system_prompt" "$prompt" 0.1 chat)
@@ -870,8 +895,8 @@ function _arka_speak_lang --description "Set or list Arka voice language (intern
         python3 (_arka_py_script indic_tts.py) langs
         echo ""
         set -l cur en-IN
-        if set -q ARKA_SPEAK_LANG
-            set cur $ARKA_SPEAK_LANG
+        if set -q SPEAK_LANG
+            set cur $SPEAK_LANG
         end
         echo "Current: $cur"
         echo "Usage: arka speak-lang hi-IN   (aliases: hi, ta, en, ...)"
@@ -883,13 +908,13 @@ function _arka_speak_lang --description "Set or list Arka voice language (intern
         echo "Run: arka speak-lang   for supported codes"
         return 1
     end
-    set -gx ARKA_SPEAK_LANG $code
+    set -gx SPEAK_LANG $code
     set -gx SARVAM_TTS_LANG $code
     if test -f $_ARKA_CFG/.env
-        set -l env_content (cat $_ARKA_CFG/.env | grep -v '^ARKA_SPEAK_LANG=')
+        set -l env_content (cat $_ARKA_CFG/.env | grep -v '^SPEAK_LANG=')
         printf "%s\n" $env_content > $_ARKA_CFG/.env
     end
-    echo "ARKA_SPEAK_LANG=$code" >> $_ARKA_CFG/.env
+    echo "SPEAK_LANG=$code" >> $_ARKA_CFG/.env
     echo (set_color green)"Arka voice language: $code"(set_color normal)
 end
 
@@ -899,19 +924,19 @@ function _arka_speak_voice --description "Set or list Arka neural voice (interna
         return 0
     end
     set -l voice $argv[1]
-    set -gx ARKA_SPEAK_VOICE $voice
+    set -gx SPEAK_VOICE $voice
     if test -f $_ARKA_CFG/.env
-        set -l env_content (cat $_ARKA_CFG/.env | grep -v '^ARKA_SPEAK_VOICE=')
+        set -l env_content (cat $_ARKA_CFG/.env | grep -v '^SPEAK_VOICE=')
         printf "%s\n" $env_content > $_ARKA_CFG/.env
     end
-    echo "ARKA_SPEAK_VOICE=$voice" >> $_ARKA_CFG/.env
+    echo "SPEAK_VOICE=$voice" >> $_ARKA_CFG/.env
     echo (set_color green)"Arka voice: $voice"(set_color normal)
     speak_aloud "Hello, this is how I sound now."
 end
 
 function _arka_usage_autostart_ensure --description "Install autostart for usage tracker on login (internal)"
-    if set -q ARKA_USAGE_TRACK
-        test "$ARKA_USAGE_TRACK" = 0 -o "$ARKA_USAGE_TRACK" = false; and return 0
+    if set -q USAGE_TRACK
+        test "$USAGE_TRACK" = 0 -o "$USAGE_TRACK" = false; and return 0
     end
     set -l py (_arka_python)
     set -l script (_arka_py_script arka_usage.py)
@@ -1015,7 +1040,7 @@ function _arka_usage_status --description "App/website usage tracker status (int
         set -l pid (cat $pidfile 2>/dev/null)
         if test -n "$pid"; and kill -0 $pid 2>/dev/null
             set -l mode "app + website"
-            if set -q ARKA_WEB_TRACK; and test "$ARKA_WEB_TRACK" = 0 -o "$ARKA_WEB_TRACK" = false
+            if set -q WEB_TRACK; and test "$WEB_TRACK" = 0 -o "$WEB_TRACK" = false
                 set mode app
             end
             echo (set_color green)"Usage tracker: running ($mode, pid $pid)"(set_color normal)
@@ -1025,9 +1050,9 @@ function _arka_usage_status --description "App/website usage tracker status (int
     end
     echo (set_color yellow)"Usage tracker: stopped"(set_color normal)
     if _arka_is_macos
-        echo "Starts on login when ARKA_USAGE_TRACK=1, or: arka usage start"
+        echo "Starts on login when USAGE_TRACK=1, or: arka usage start"
     else if _arka_is_linux
-        echo "Starts on login when ARKA_USAGE_TRACK=1, or: arka usage start"
+        echo "Starts on login when USAGE_TRACK=1, or: arka usage start"
     else
         echo "Start manually: arka usage start"
     end
@@ -1046,7 +1071,7 @@ function _arka_start_all --description "Start remote server + wake listener (int
         sleep 1
         _arka_status_all
     else
-        env ARKA_START_QUIET=1 bash (_arka_shell_script arka_boot.sh) start 2>/dev/null
+        env START_QUIET=1 bash (_arka_shell_script arka_boot.sh) start 2>/dev/null
     end
 end
 
@@ -1107,7 +1132,7 @@ function _arka_autostart_install --description "Enable Arka on PC boot via syste
     systemctl --user daemon-reload
 
     set -l enable_remote 1
-    if set -q ARKA_REMOTE_AUTO; and test "$ARKA_REMOTE_AUTO" = 0 -o "$ARKA_REMOTE_AUTO" = false
+    if set -q REMOTE_AUTO; and test "$REMOTE_AUTO" = 0 -o "$REMOTE_AUTO" = false
         set enable_remote 0
     end
     set -l enable_listen 0
@@ -1123,7 +1148,7 @@ function _arka_autostart_install --description "Enable Arka on PC boot via syste
     end
 
     set -l enable_whatsapp 0
-    if set -q ARKA_WHATSAPP_AUTO; and test "$ARKA_WHATSAPP_AUTO" = 1 -o "$ARKA_WHATSAPP_AUTO" = true
+    if set -q WHATSAPP_AUTO; and test "$WHATSAPP_AUTO" = 1 -o "$WHATSAPP_AUTO" = true
         set enable_whatsapp 1
     end
     if test $enable_whatsapp -eq 1
@@ -1146,7 +1171,7 @@ function _arka_autostart_install --description "Enable Arka on PC boot via syste
     end
 
     set -l enable_usage 1
-    if set -q ARKA_USAGE_TRACK; and test "$ARKA_USAGE_TRACK" = 0 -o "$ARKA_USAGE_TRACK" = false
+    if set -q USAGE_TRACK; and test "$USAGE_TRACK" = 0 -o "$USAGE_TRACK" = false
         set enable_usage 0
     end
 
@@ -1197,8 +1222,8 @@ end
 
 function _arka_phone_env --description "Print Termux env file for phone (internal)"
     set -l port 8765
-    if set -q ARKA_REMOTE_PORT
-        set port $ARKA_REMOTE_PORT
+    if set -q REMOTE_PORT
+        set port $REMOTE_PORT
     end
     set -l ip (python3 -c "
 import socket
@@ -1210,18 +1235,18 @@ try:
 except OSError:
     print('127.0.0.1')
 " 2>/dev/null)
-    set -l token (test -n "$REMOTE_TOKEN"; and echo $REMOTE_TOKEN; or echo $ARKA_REMOTE_TOKEN)
+    set -l token (test -n "$REMOTE_TOKEN"; and echo $REMOTE_TOKEN; or echo $REMOTE_TOKEN)
     set -l lang hi-IN
-    if set -q ARKA_SPEAK_LANG
-        set lang $ARKA_SPEAK_LANG
+    if set -q SPEAK_LANG
+        set lang $SPEAK_LANG
     end
 
     echo "# Paste on Termux:  mkdir -p ~/.arka && nano ~/.arka/env"
-    echo "export ARKA_REMOTE_URL=\"http://$ip:$port\""
+    echo "export REMOTE_URL=\"http://$ip:$port\""
     if test -n "$token"
         echo "export REMOTE_TOKEN=\"$token\""
     end
-    echo "export ARKA_SPEAK_LANG=\"$lang\""
+    echo "export SPEAK_LANG=\"$lang\""
     echo ""
     echo "# One-time Termux setup:"
     echo "#   pkg install python termux-api openssh"
@@ -1278,8 +1303,8 @@ function _agent_remote_status --description "Arka remote server status (internal
     set -l pidfile ~/.cache/fish-agent/arka_remote.pid
     set -l logfile ~/.cache/fish-agent/arka_remote.log
     set -l port 8765
-    if set -q ARKA_REMOTE_PORT
-        set port $ARKA_REMOTE_PORT
+    if set -q REMOTE_PORT
+        set port $REMOTE_PORT
     end
 
     set -l ip (python3 -c "
@@ -1299,8 +1324,8 @@ except OSError:
             echo (set_color green)"Arka remote: running (pid $pid)"(set_color normal)
             echo (set_color cyan)"  Phone UI:  http://$ip:$port/"(set_color normal)
             echo (set_color brblack)"  log: $logfile  |  stop: arka remote-stop"(set_color normal)
-            if set -q REMOTE_TOKEN; or set -q ARKA_REMOTE_TOKEN
-                set -l tok (test -n "$REMOTE_TOKEN"; and echo $REMOTE_TOKEN; or echo $ARKA_REMOTE_TOKEN)
+            if set -q REMOTE_TOKEN; or set -q REMOTE_TOKEN
+                set -l tok (test -n "$REMOTE_TOKEN"; and echo $REMOTE_TOKEN; or echo $REMOTE_TOKEN)
                 echo (set_color brblack)"  token: $tok"(set_color normal)
             else
                 echo (set_color yellow)"  token: see $logfile (auto-generated on first start)"(set_color normal)
@@ -1397,10 +1422,10 @@ function speak_aloud --description "Speak text aloud (Sarvam → neural edge →
     if _arka_is_macos; and command -v say >/dev/null
         # Built-in macOS speech (always available; no mpv/edge-tts required)
         set -l voice ""
-        if set -q ARKA_SPEAK_VOICE; and test -n "$ARKA_SPEAK_VOICE"
-            set voice $ARKA_SPEAK_VOICE
-        else if set -q ARKA_SPEAK_LANG
-            switch $ARKA_SPEAK_LANG
+        if set -q SPEAK_VOICE; and test -n "$SPEAK_VOICE"
+            set voice $SPEAK_VOICE
+        else if set -q SPEAK_LANG
+            switch $SPEAK_LANG
                 case hi hi-IN
                     set voice Veena
                 case bn bn-IN
@@ -1472,7 +1497,7 @@ function __agent_classify --description "Classify shell command safety"
 end
 
 function _arka_security_enabled --description "True when symbolic security checks are on (internal)"
-    test "$ARKA_SECURITY" = 0; and return 1
+    test "$SECURITY" = 0; and return 1
     return 0
 end
 
@@ -1480,7 +1505,7 @@ function _arka_verify_web_query --description "Block prompt-injection in web/sea
     if not _arka_security_enabled
         return 0
     end
-    if test "$ARKA_SECURITY_WEB" = 0
+    if test "$SECURITY_WEB" = 0
         return 0
     end
     set -l q "$argv[1]"
@@ -1500,7 +1525,7 @@ function _arka_confirm_risky_action --description "Confirm install/delete/send/d
     if not _arka_security_enabled
         return 0
     end
-    if test "$ARKA_SECURITY_ACTIONS" = 0
+    if test "$SECURITY_ACTIONS" = 0
         return 0
     end
     set -l cmd (string trim -- "$argv[1]")
@@ -1735,7 +1760,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         meeting_agent study_agent inbox_agent compare_agent profession \
         arka_ask semantic_memory supermemory speak_research voice_session handoff_notify remind predictions stock \
         rag_setup rag_status voice_agent wake_control \
-        agent_ask web_answer deep_web_answer web_essay calc chat_reset set_location \
+        agent_ask web_answer deep_web_answer web_essay calc chat_reset set_location files_preference_help google \
         nearby_places map_download error_helper deep_queue app_usage internet_enhance aie \
         youtube_bulk yt_bulk
 end
@@ -1778,17 +1803,73 @@ function _ollama_chat_model --description "Preferred Ollama chat model (minimax 
     end
 end
 
-function _arka_python --description "Python interpreter for Arka agents/LLM (internal)"
-    set -l vpy $_ARKA_ROOT/venv-arka/bin/python3
-    if test -x $vpy
-        echo $vpy
-    else
-        echo python3
+function _arka_venv_python --description "First venv-arka python with agno installed (internal)"
+    set -l seen
+    set -l candidates
+    set -a candidates "$_ARKA_ROOT/venv-arka/bin/python3"
+    set -l here $_ARKA_ROOT
+    for _i in (seq 1 8)
+        set -a candidates "$here/venv-arka/bin/python3"
+        if test -f "$here/pyproject.toml"; and test -d "$here/src/arka"
+            break
+        end
+        set here (path dirname $here)
+        test "$here" = /; and break
+    end
+    set -a candidates "$HOME/.config/fish/venv-arka/bin/python3"
+    if set -q CONFIG_DIR; and test -n "$CONFIG_DIR"
+        set -a candidates "$CONFIG_DIR/venv-arka/bin/python3"
+    end
+    for vpy in $candidates
+        contains -- "$vpy" $seen; and continue
+        set -a seen $vpy
+        test -x "$vpy"; or continue
+        if $vpy -c "import agno" 2>/dev/null
+            echo "$vpy"
+            return
+        end
     end
 end
 
+function _arka_ensure_venv --description "Create venv-arka + chat deps when agno missing (internal)"
+    set -l vpy (_arka_venv_python)
+    test -n "$vpy"; and return 0
+    echo (set_color cyan) "→ arka setup (venv-arka + agno, ddgs, …)" (set_color normal) >&2
+    set -l bootstrap python3
+    if test -f "$_ARKA_ROOT/pyproject.toml"
+        if not test -x "$_ARKA_ROOT/venv-arka/bin/python3"
+            python3 -m venv "$_ARKA_ROOT/venv-arka" 2>/dev/null
+        end
+        if test -x "$_ARKA_ROOT/venv-arka/bin/python3"
+            set bootstrap "$_ARKA_ROOT/venv-arka/bin/python3"
+        end
+    end
+    $bootstrap -m arka setup 2>&1 | string match -ev \
+        '^Requirement|^  |^Collecting|^Using cached|^Installing|^Successfully|^Obtaining|^Building|^Created wheel|^Stored in|^Attempting uninstall|^Found existing|^Can.t uninstall'
+    set vpy (_arka_venv_python)
+    if test -z "$vpy"
+        echo (set_color red) "✗ Missing Python deps (agno). Run: arka setup" (set_color normal) >&2
+        return 1
+    end
+    return 0
+end
+
+function _arka_python --description "Python interpreter for Arka agents/LLM (internal)"
+    set -l vpy (_arka_venv_python)
+    if test -n "$vpy"
+        echo "$vpy"
+        return
+    end
+    set -l fallback "$_ARKA_ROOT/venv-arka/bin/python3"
+    if test -x "$fallback"
+        echo "$fallback"
+        return
+    end
+    echo python3
+end
+
 function _arka_llm_model_label --description "Last-used or preferred LLM provider/model (internal)"
-    if set -q ARKA_SHOW_MODEL; and test "$ARKA_SHOW_MODEL" = 0 -o "$ARKA_SHOW_MODEL" = false
+    if set -q SHOW_MODEL; and test "$SHOW_MODEL" = 0 -o "$SHOW_MODEL" = false
         return 1
     end
     set -l py (_arka_python)
@@ -1858,7 +1939,7 @@ function _agent_llm_complete --description "LLM system+user prompt via modular a
 end
 
 function _arka_route_mode --description "Routing strategy: symbolic|ai|symbolic_only|ai_only (internal)"
-    set -l mode (string lower (string trim -- "$ARKA_ROUTE_MODE"))
+    set -l mode (string lower (string trim -- "$ROUTE_MODE"))
     switch $mode
         case ai llm ai-first ai_first
             echo ai
@@ -1879,7 +1960,7 @@ function _agent_llm_route --description "Interpret NL command to skill/shell via
     test -z "$cmd"; and return 1
 
     set -l py (_arka_python)
-    set -lx ARKA_ROUTE_ALIASES (alias | string join "\n")
+    set -lx ROUTE_ALIASES (alias | string join "\n")
     set -l out ($py (_arka_py_script arka_llm.py) route "$cmd" --skills "$available_skills" 2>/dev/null)
     if test -n "$out"
         _agent_clean_llm_output "$out"
@@ -2293,7 +2374,7 @@ function agent_loop --description "AI feedback loop: run command → read output
     argparse 'n/max=' 'y/yes' 's/safe-only' 'r/resume-id=' 'v/verify' 'a/auto' -- $argv
     or return
 
-    set -l engine (string lower (string trim -- "$ARKA_GOAL_ENGINE"))
+    set -l engine (string lower (string trim -- "$GOAL_ENGINE"))
     test -z "$engine"; and set engine auto
     if not set -q _flag_r
         if test "$engine" = auto -o "$engine" = arka
@@ -2352,7 +2433,7 @@ function agent_loop --description "AI feedback loop: run command → read output
         echo "  -s, --safe-only  Skip dangerous commands"
         echo "  -r, --resume-id ID  Resume saved loop state (agent_resume list)"
         echo "  -v, --verify  LLM verification pass when loop completes"
-        echo "  -a, --auto    Auto-continue steps (ARKA_AGENT_AUTO=safe|all)"
+        echo "  -a, --auto    Auto-continue steps (AGENT_AUTO=safe|all)"
         echo ""
         echo "Examples:"
         echo "  agent_loop find why nginx fails and fix the config"
@@ -2433,7 +2514,7 @@ Iteration $iter/$max_iter — return the NEXT command as JSON."
             if test -n "$step_why"
                 echo "  "(set_color brblack)$step_why(set_color normal)
             end
-            if set -q _flag_v; or test "$ARKA_AGENT_VERIFY" = 1 -o "$ARKA_AGENT_VERIFY" = true
+            if set -q _flag_v; or test "$AGENT_VERIFY" = 1 -o "$AGENT_VERIFY" = true
                 set -l verify (_arka_agent loop-verify "$goal" --history "$history_text" 2>/dev/null)
                 set -l vdone (printf '%s' "$verify" | jq -r '.done // false' 2>/dev/null)
                 set -l vsummary (printf '%s' "$verify" | jq -r '.summary // empty' 2>/dev/null)
@@ -2503,9 +2584,9 @@ $out
         _arka_agent loop-save "$goal" --cwd "$cwd" --history "$history_text" --iter $iter --max $max_iter 2>/dev/null
 
         set -l auto_continue 0
-        if set -q _flag_a; or test "$ARKA_AGENT_AUTO" = all -o "$ARKA_AGENT_AUTO" = 1 -o "$ARKA_AGENT_AUTO" = true
+        if set -q _flag_a; or test "$AGENT_AUTO" = all -o "$AGENT_AUTO" = 1 -o "$AGENT_AUTO" = true
             set auto_continue 1
-        else if test "$ARKA_AGENT_AUTO" = safe; and __agent_classify "$step_cmd"
+        else if test "$AGENT_AUTO" = safe; and __agent_classify "$step_cmd"
             set auto_continue 1
         end
         if test $auto_continue -eq 1; or set -q _flag_y
@@ -2543,10 +2624,10 @@ function goal --description "Autonomous multi-step agent (Arka Goal engine or Bu
     set -l py (_arka_python)
 
     if set -q _flag_s
-        set -lx ARKA_GOAL_SAFE_ONLY 1
+        set -lx GOAL_SAFE_ONLY 1
     end
 
-    set -l engine (string lower (string trim -- "$ARKA_GOAL_ENGINE"))
+    set -l engine (string lower (string trim -- "$GOAL_ENGINE"))
     test -z "$engine"; and set engine auto
 
     if set -q _flag_b; or test "$engine" = butterfish
@@ -2614,9 +2695,9 @@ CRITICAL NOTE ON ALIASES:
 - `cat` is aliased to `batcat`."
 
     if test -n "$provider_req" -a -n "$model_req"
-        set -lx ARKA_LLM_FALLBACK "$provider_req:$model_req"
+        set -lx LLM_FALLBACK "$provider_req:$model_req"
     else if test -n "$provider_req"
-        set -lx ARKA_LLM_FALLBACK "$provider_req:gemini-2.0-flash,$provider_req:llama-3.3-70b-versatile"
+        set -lx LLM_FALLBACK "$provider_req:gemini-2.0-flash,$provider_req:llama-3.3-70b-versatile"
     end
 
     set -l result (_agent_llm_complete "$system_prompt" "$prompt" 0.2 chat)
@@ -4742,8 +4823,8 @@ function app_usage --description "Show which apps you used and for how long"
 end
 
 function _agent_usage_start --description "Start app + website usage tracker (internal)"
-    if set -q ARKA_USAGE_TRACK
-        test "$ARKA_USAGE_TRACK" = 0 -o "$ARKA_USAGE_TRACK" = false; and return 0
+    if set -q USAGE_TRACK
+        test "$USAGE_TRACK" = 0 -o "$USAGE_TRACK" = false; and return 0
     end
     set -l py (_arka_python)
     $py (_arka_py_script arka_usage.py) start 2>/dev/null
@@ -4825,8 +4906,8 @@ function _parse_whatsapp_nl --description "Parse natural-language WhatsApp send 
 end
 
 function _arka_whatsapp_dir --description "Bundled WhatsApp automation directory (internal)"
-    if test -n "$ARKA_WHATSAPP_DIR"; and test -d "$ARKA_WHATSAPP_DIR"
-        echo "$ARKA_WHATSAPP_DIR"
+    if test -n "$WHATSAPP_DIR"; and test -d "$WHATSAPP_DIR"
+        echo "$WHATSAPP_DIR"
         return
     end
     if test -d "$_ARKA_ROOT/whatsapp"
@@ -4915,9 +4996,9 @@ function whatsapp_listen --description "Watch WhatsApp inbox → Arka (native de
         end
     end
     mkdir -p ~/.cache/fish-agent
-    set -l from "(set ARKA_WHATSAPP_FROM in .env)"
-    if set -q ARKA_WHATSAPP_FROM
-        set from $ARKA_WHATSAPP_FROM
+    set -l from "(set WHATSAPP_FROM in .env)"
+    if set -q WHATSAPP_FROM
+        set from $WHATSAPP_FROM
     end
     echo (set_color cyan)"Starting WhatsApp inbox → Arka for $from (Selenium)..."(set_color normal)
     echo (set_color brblack)"Keep WhatsApp Web logged in. Log: $logfile"(set_color normal)
@@ -4927,11 +5008,11 @@ function whatsapp_listen --description "Watch WhatsApp inbox → Arka (native de
     $py "$script" status
 end
 
-# --- Automation / AIE (bundled scripts + optional ARKA_AIE_DIR override) ---
+# --- Automation / AIE (bundled scripts + optional AIE_DIR override) ---
 
 function _arka_aie_dir --description "Directory containing AIE Python scripts (internal)"
-    if test -n "$ARKA_AIE_DIR"; and test -d "$ARKA_AIE_DIR"
-        echo "$ARKA_AIE_DIR"
+    if test -n "$AIE_DIR"; and test -d "$AIE_DIR"
+        echo "$AIE_DIR"
         return
     end
     if test -d "$_ARKA_ROOT/aie"
@@ -4971,6 +5052,32 @@ function decrypt_pdf --description "Decrypt password-protected PDF files"
         return 1
     end
     python3 /home/s/Projects/python/products/automation/autodecrypt_financial_pdfs.py $argv
+end
+
+function files_preference_help --description "Explain where Arka saves images and how to change the folder"
+    set -l gen_dir ~/Pictures/arka-generated
+    if test -n "$IMAGE_OUTPUT_DIR"
+        set gen_dir (string replace -a '~' "$HOME" -- "$IMAGE_OUTPUT_DIR")
+    end
+    set -l env_path "$_ARKA_CFG/.env"
+
+    set -l body "Arka does not save generated images to your Desktop by default.
+
+Where things go:
+  • generate_image  →  $gen_dir
+  • screenshot      →  ~/Pictures/screenshot_<timestamp>.png
+
+To use a different folder for generated images, add this to $env_path:
+  IMAGE_OUTPUT_DIR=$HOME/Pictures/arka-generated
+
+Then run: arka reload
+
+If images on your Desktop came from other apps or manual saves, move them to ~/Pictures (or any folder you prefer). For new files landing in Downloads, run: classify_files
+
+Say \"organize my downloads\" or \"clean up desktop images\" if you want help sorting."
+    _arka_ui_header "Image save locations" chat
+    echo ""
+    _arka_print_answer "$body"
 end
 
 function classify_files --description "Auto-classify files in Downloads by extension (images, docs, code, etc.)"
@@ -5330,7 +5437,8 @@ function generate_image --description "Generate images via Google Nano Banana (G
         echo "Nano Banana = Google Gemini image models (same as AI Studio API, not the website UI)."
         echo "  GEMINI_API_KEY  → gemini-3.1-flash-image, gemini-2.5-flash-image, …"
         echo "  POLLINATIONS_API_KEY → nanobanana model (Google via Pollinations proxy)"
-        echo "  ARKA_IMAGE_BACKEND=auto|nano-banana|pollinations"
+        echo "  IMAGE_BACKEND=auto|nano-banana|pollinations"
+        echo "  IMAGE_OUTPUT_DIR=~/Pictures/arka-generated  (default save folder)"
         return 1
     end
     set -l prompt (string join ' ' -- $prompt_parts)
@@ -5394,7 +5502,7 @@ function media_transcript --description "Transcribe or summarize local mp3/mp4/a
         echo "       media_transcript --setup-local"
         echo "Example: media_transcript ~/Videos/lecture.mp4 --summarize -q \"who is the villain?\""
         echo "Example: media_transcript podcast.mp3 -o podcast.txt"
-        echo "Uses GROQ/SARVAM when keys set; local faster-whisper fallback (ARKA_MEDIA_STT=local|auto)"
+        echo "Uses GROQ/SARVAM when keys set; local faster-whisper fallback (MEDIA_STT=local|auto)"
         echo "Setup offline STT: media_transcript --setup-local"
         return 1
     end
@@ -5525,13 +5633,16 @@ function summarize_url --description "Summarize a web page or article URL"
 end
 
 function daily_brief --description "Morning brief: local weather + top news headlines"
-    echo (set_color --bold blue)"━━━ Daily Brief ━━━"(set_color normal)
+    if not _arka_ensure_venv
+        return 1
+    end
+    _arka_ui_header "Daily Brief" info
     echo ""
-    echo (set_color --bold yellow)"Weather"(set_color normal)
+    _arka_ui_header "Weather" section
     hyperlocal_weather
     echo ""
-    echo (set_color --bold yellow)"Headlines"(set_color normal)
-    web_answer "Give 5 brief top news headlines for today in bullet points, India and world mix"
+    _arka_ui_header "Headlines" section
+    web_answer --no-session "Give 5 brief top news headlines for today in bullet points, India and world mix"
 end
 
 function _arka_wifi_iface --description "Wi-Fi device name (macOS, internal)"
@@ -5941,20 +6052,29 @@ function _pdf_print_answer --description "Pretty-print PDF RAG answer for the te
     end
 end
 
+function _arka_capture_output --description "Run a command; preserve stdout newlines in one string (internal)"
+    $argv | string collect
+end
+
 function _arka_normalize_answer --description "Split inline markdown lists onto separate lines (internal)"
-    set -l text (string trim -- "$argv[1]")
+    set -l text "$argv[1]"
+    test -z "$text"; and return
+    # Do not use string trim on multiline answers — fish collapses newlines to spaces.
     printf '%s' "$text" | python3 -c '
 import re, sys
-text = sys.stdin.read()
+text = sys.stdin.read().strip()
 text = re.sub(r"\s+#{2,3}\s+", r"\n\n## ", text)
 text = re.sub(r"\s+---\s+", r"\n\n---\n\n", text)
 text = re.sub(r"\s+•\s+", r"\n* ", text)
 text = re.sub(r"(\*\*.+?\*\*)\s+(\d+)\.", r"\1\n\2.", text)
 text = re.sub(r"\.\s+(\d+)\.\s+", r".\n\1. ", text)
-text = re.sub(r"\s+(\d+)\.\s+", r"\n\1. ", text)
-text = re.sub(r"\s+\*\s+", r"\n* ", text)
-text = re.sub(r"\s+\|\s+:\s*---", r"\n| ---", text)
-text = re.sub(r"\s+\|\s+(?=[A-Za-z0-9*])", r"\n| ", text)
+# Only split numbered lists at line boundaries — not "item #5" mid-sentence.
+text = re.sub(r"(?<=\n)\s*(\d+)\.\s+", r"\n\1. ", text)
+text = re.sub(r"(?<=\n)\s*\*\s+", r"\n* ", text)
+# Detach pipe tables from preceding headings or prose.
+text = re.sub(r"(#{1,6}\s[^\n|]+)\s+(\|)", r"\1\n\2", text)
+# Split inlined markdown table rows (| end-of-row | start-of-next-row |).
+text = re.sub(r"\|\s+\|", "|\n|", text)
 lines = []
 for line in text.splitlines():
     m = re.match(r"^(\d+\.\s+(?:\*\*.+?\*\*:|\*\*.+?\*\*)\s*.+?\.\s+)([A-Z].+)$", line)
@@ -5964,8 +6084,139 @@ for line in text.splitlines():
         lines.append(m.group(2).strip())
     else:
         lines.append(line)
+
+def regroup_vertical_rank_table(src):
+    out = []
+    i = 0
+    while i < len(src):
+        if i + 3 < len(src):
+            h = [src[i + j].strip() for j in range(4)]
+            hl = [x.lower() for x in h]
+            if hl[0] == "rank" and hl[1] == "option" and hl[2] == "risk" and hl[3] in ("strategy", "best for"):
+                i += 4
+                while i < len(src):
+                    t = src[i].strip()
+                    if not t or "---" in t or re.fullmatch(r"[\s:·\-|]+", t):
+                        i += 1
+                        continue
+                    break
+                rows = []
+                while i + 3 < len(src):
+                    chunk = [src[i + j].strip() for j in range(4)]
+                    if re.fullmatch(r"\d+", chunk[0]) and chunk[1]:
+                        rows.append(chunk)
+                        i += 4
+                    else:
+                        break
+                if rows:
+                    out.append("| " + " | ".join(h) + " |")
+                    for row in rows:
+                        out.append("| " + " | ".join(row) + " |")
+                    out.append("")
+                    continue
+        out.append(src[i])
+        i += 1
+    return out
+
+lines = regroup_vertical_rank_table(lines)
 print("\n".join(lines).strip())
 '
+end
+
+function _arka_color_source --description "Orange tone for source citations (internal)"
+    set_color D78700
+end
+
+function _arka_strip_atx_prefix --description "Remove ATX markdown heading prefix (# .. ###### + space) (internal)"
+    set -l text (string trim -- "$argv[1]")
+    test -z "$text"; and return
+    if string match -qr '^#{1,6}\s+\S' "$text"
+        set text (string replace -r '^#{1,6}\s+' '' -- "$text")
+    end
+    echo -n "$text"
+end
+
+function _arka_is_markdown_heading --description "True for ATX markdown headings (# .. ###### + space), not #hashtags (internal)"
+    set -l text (string trim -- "$argv[1]")
+    test -z "$text"; and return 1
+    # CommonMark ATX: 1–6 hashes, required space, then title (#health is NOT a heading).
+    if not string match -qr '^#{1,6}\s+\S' "$text"
+        return 1
+    end
+    set -l m (string match -r '^#{1,6}\s+(.+)$' -- "$text")
+    test (count $m) -lt 2; and return 1
+    set -l title (_arka_clean_markdown_stars "$m[2]")
+    test -z "$title"; and return 1
+    if _arka_is_source_line "$title"
+        return 1
+    end
+    if string match -qr '(?i)^Sources?\s*:' "$title"
+        return 1
+    end
+    return 0
+end
+
+function _arka_parse_markdown_heading --description "Heading title text without leading # marks (internal)"
+    set -l text (string trim -- "$argv[1]")
+    set -l m (string match -r '^#{1,6}\s+(.+)$' -- "$text")
+    test (count $m) -lt 2; and return
+    _arka_clean_markdown_stars "$m[2]"
+end
+
+function _arka_clean_markdown_stars --description "Strip *, **, *** markdown emphasis from displayed text (internal)"
+    set -l text (string trim -- "$argv[1]")
+    test -z "$text"; and return
+    set text (string replace -a -r '\*\*\*(.+?)\*\*\*' '$1' -- "$text")
+    set text (string replace -a -r '\*\*(.+?)\*\*' '$1' -- "$text")
+    set text (string replace -a -r '\*(.+?)\*' '$1' -- "$text")
+    set text (string replace -a '*' '' -- "$text")
+    set text (string replace -a -r '(?<![A-Za-z0-9])_([^_]+)_(?![A-Za-z0-9])' '$1' -- "$text")
+    set text (string trim -- "$text")
+    echo -n "$text"
+end
+
+function _arka_strip_source_text --description "Plain text for source citations — no bullets or * (internal)"
+    set -l text (_arka_strip_atx_prefix "$argv[1]")
+    test -z "$text"; and return
+    set text (_arka_clean_markdown_stars "$text")
+    test -z "$text"; and return
+    set text (string replace -r '^[•\-\*]\s+' '' -- "$text")
+    set text (string trim -- "$text")
+    echo -n "$text"
+end
+
+function _arka_print_source_line --description "Orange source / citation line (internal)"
+    set -l text (_arka_strip_source_text "$argv[1]")
+    test -z "$text"; and return
+    set -l rest ""
+    set -l m (string match -r '(?i)^([^\n]+?Sources?\s*:[^\n]+?)\s{2,}(.+)$' -- "$text")
+    if test (count $m) -ge 3
+        set text (string trim -- "$m[2]")
+        set rest (string trim -- "$m[3]")
+    end
+    _arka_color_source
+    echo "  $text"
+    set_color normal
+    if test -n "$rest"
+        echo "  $rest"
+    end
+end
+
+function _arka_is_source_line --description "True if line is a web/source citation (internal)"
+    set -l text (_arka_strip_source_text "$argv[1]")
+    test -z "$text"; and return 1
+    string match -qr '(?i)^Sources?\s*:' "$text"; and return 0
+    string match -qr '(?i)^\(Sources?\s*:' "$text"; and return 0
+    string match -qr '(?i)via (provided )?search results' "$text"; and return 0
+    string match -qr '(?i)via web search' "$text"; and return 0
+    string match -qr '(?i)^according to\s' "$text"; and return 0
+    return 1
+end
+
+function _arka_is_sources_section --description "True if line is a Sources section title (internal)"
+    set -l text (_arka_clean_markdown_stars (_arka_strip_atx_prefix "$argv[1]"))
+    test -z "$text"; and return 1
+    string match -qr '(?i)^Sources?\s*:?\s*$' "$text"
 end
 
 function _arka_print_numbered --description "Print one numbered answer line (internal)"
@@ -5982,17 +6233,150 @@ function _arka_print_numbered --description "Print one numbered answer line (int
     echo "$body"
 end
 
+function _arka_print_md_table --description "Render aligned markdown pipe table (internal)"
+    test (count $argv) -eq 0; and return
+    printf '%s\n' $argv | python3 -c '
+import re, sys
+
+def is_sep(cells):
+    return all(re.fullmatch(r":?-{2,}:?", c.strip()) for c in cells if c.strip())
+
+rows = []
+for line in sys.stdin:
+    line = line.strip()
+    if not line.startswith("|"):
+        continue
+    cells = [re.sub(r"\*\*([^*]+)\*\*", r"\1", c.strip()) for c in line.strip("|").split("|")]
+    if not cells or is_sep(cells):
+        continue
+    rows.append(cells)
+
+if not rows:
+    sys.exit(0)
+
+ncols = max(len(r) for r in rows)
+widths = [0] * ncols
+for r in rows:
+    for i, c in enumerate(r):
+        if i < ncols:
+            widths[i] = max(widths[i], len(c))
+
+for r in rows:
+    parts = []
+    for i in range(ncols):
+        cell = r[i] if i < len(r) else ""
+        parts.append(cell.ljust(widths[i]))
+    print("  " + "  ".join(parts))
+'
+end
+
+# ── Terminal UI (consistent headers, queries, answer blocks) ──
+
+function _arka_ui_header --description "Standard ━━━ section header (internal)"
+    set -l title "$argv[1]"
+    set -l kind info
+    test (count $argv) -ge 2; and set kind $argv[2]
+    switch $kind
+        case answer research essay
+            printf '%s%s%s\n' (set_color --bold green) "━━━ $title ━━━" (set_color normal)
+        case info tool
+            printf '%s%s%s\n' (set_color --bold blue) "━━━ $title ━━━" (set_color normal)
+        case section
+            echo (set_color --bold yellow) "$title" (set_color normal)
+        case query
+            printf '%s%s%s\n' (set_color cyan) "🔎 $title" (set_color normal) >&2
+        case chat
+            printf '%s%s%s\n' (set_color cyan) "💬 $title" (set_color normal) >&2
+        case math
+            printf '%s%s%s\n' (set_color cyan) "🧮 $title" (set_color normal) >&2
+        case error
+            printf '%s%s%s\n' (set_color cyan) "🔧 $title" (set_color normal) >&2
+        case warn
+            printf '%s%s%s\n' (set_color --bold yellow) "━━━ $title ━━━" (set_color normal)
+        case '*'
+            printf '%s%s%s\n' (set_color --bold green) "━━━ $title ━━━" (set_color normal)
+    end
+end
+
+function _arka_ui_model --description "Model footer under answer blocks (internal)"
+    if set -q SHOW_MODEL; and test "$SHOW_MODEL" = 0 -o "$SHOW_MODEL" = false
+        return
+    end
+    set -l model (_arka_llm_model_label 2>/dev/null)
+    test -z "$model"; and return
+    echo ""
+    set_color brblack
+    echo "  Model: $model"
+    set_color normal
+end
+
+function _arka_pretty_python_output --description "Format Python ━━━ blocks like web_answer (internal)"
+    set -l raw "$argv[1]"
+    test -z "$raw"; and return
+    set -l lines (string split \n -- "$raw")
+    set -l n (count $lines)
+    set -l i 1
+    set -l buf
+    while test $i -le $n
+        set -l line $lines[$i]
+        set -l trimmed (string trim -- "$line")
+        if string match -qr '^Searching web' "$trimmed"
+            echo "$trimmed" >&2
+            set i (math $i + 1)
+            continue
+        end
+        if string match -qr '^arka_llm:' "$trimmed"
+            echo "$trimmed" >&2
+            set i (math $i + 1)
+            continue
+        end
+        if string match -qr '^━━━ .+ ━━━$' "$trimmed"
+            if test -n "$buf"
+                printf '%s\n' $buf
+                set buf
+            end
+            set -l title (string replace -r '^━━━ (.+) ━━━$' '$1' "$trimmed")
+            set -l body_lines
+            set i (math $i + 1)
+            while test $i -le $n
+                set -l ln $lines[$i]
+                set -l tln (string trim -- "$ln")
+                if string match -qr '^━━━ .+ ━━━$' "$tln"
+                    break
+                end
+                if string match -qr '^Model:' "$tln"
+                    set i (math $i + 1)
+                    continue
+                end
+                if string match -qr '^  ' "$ln"
+                    set ln (string sub -s 3 -- "$ln")
+                end
+                set -a body_lines "$ln"
+                set i (math $i + 1)
+            end
+            set -l joined (string join \n -- $body_lines)
+            _arka_print_answer_block "$joined" "$title"
+            continue
+        end
+        set -a buf "$line"
+        set i (math $i + 1)
+    end
+    if test -n "$buf"
+        printf '%s\n' $buf
+    end
+end
+
 function _arka_print_answer --description "Pretty-print web/chat answer for the terminal (internal)"
-    set -l raw (string trim -- "$argv[1]")
+    set -l raw "$argv[1]"
     test -z "$raw"; and return
 
     set -l tag ""
-    if string match -qr '^\[FROM (SEARCH|MEMORY)\]' "$raw"
-        set tag (string match -r '^\[FROM (SEARCH|MEMORY)\]' "$raw")[2]
-        set raw (string replace -r '^\[FROM (SEARCH|MEMORY)\]\s*' '' "$raw")
-    else if string match -qr '^FROM (SEARCH|MEMORY):' "$raw"
-        set tag (string match -r '^FROM (SEARCH|MEMORY):' "$raw")[2]
-        set raw (string replace -r '^FROM (SEARCH|MEMORY):\s*' '' "$raw")
+    if string match -qr '^\[FROM (SEARCH|MEMORY)\]' -- "$raw"
+        set tag (string match -r '^\[FROM (SEARCH|MEMORY)\]' -- "$raw")[2]
+        set raw (string replace -r '^\[FROM (SEARCH|MEMORY)\]\s*' '' -- "$raw")
+    else if string match -qr '^FROM (SEARCH|MEMORY):' -- "$raw"
+        set tag (string match -r '^FROM (SEARCH|MEMORY):' -- "$raw")[2]
+        set raw (string replace -r '^FROM (SEARCH|MEMORY):\s*' '' -- "$raw")
     end
     if test -n "$tag"
         set_color brblack
@@ -6001,108 +6385,159 @@ function _arka_print_answer --description "Pretty-print web/chat answer for the 
         echo ""
     end
 
-    set -l lines (string split \n -- (_arka_normalize_answer "$raw"))
-    for line in $lines
-        set -l trimmed (string trim -- "$line")
+    set -l normalized (_arka_normalize_answer "$raw" | string collect)
+    set -l lines (string split \n -- "$normalized")
+    set -l n (count $lines)
+    set -l pending_table
+    for i in (seq 1 $n)
+        set -l trimmed (string trim -- $lines[$i])
         test -z "$trimmed"; and echo ""; and continue
 
-        set -l h2 (string match -r '^#+\s+(.+)$' "$trimmed")
-        if test (count $h2) -ge 2
-            set -l htext (string replace -a -r '\*\*([^*]+)\*\*' '$1' "$h2[2]")
+        if string match -qr '^\|' -- "$trimmed"
+            set -a pending_table "$trimmed"
+            set -l next_i (math $i + 1)
+            if test $next_i -gt $n; or not string match -qr '^\|' -- (string trim -- $lines[$next_i])
+                _arka_print_md_table $pending_table
+                set -e pending_table
+            end
+            continue
+        end
+
+        set -l h2 (_arka_parse_markdown_heading "$trimmed")
+        if _arka_is_markdown_heading "$trimmed"
             set_color --bold cyan
-            echo "$htext"
+            echo "$h2"
             set_color normal
             echo ""
             continue
         end
 
-        if string match -qr '^\|?\s*:?[-| ]+:?\s*\|?$' "$trimmed"
-            continue
-        end
-        if string match -qr '^\|' "$trimmed"
-            set -l row (string replace -a -r '^\|\s*|\s*\|$' '' "$trimmed")
-            set row (string replace -a -r '\s*\|\s*' ' · ' "$row")
-            set row (string replace -a -r '\*\*([^*]+)\*\*' '$1' "$row")
-            echo "  $row"
-            continue
-        end
-
-        set -l hdr (string match -r '^\*\*(.+?)\*\*\s*$' "$trimmed")
+        set -l hdr (string match -r '^\*\*(.+?)\*\*\s*$' -- "$trimmed")
         if test (count $hdr) -ge 2
             set_color --bold cyan
-            echo "$hdr[2]"
+            echo (_arka_clean_markdown_stars "$hdr[2]")
             set_color normal
             echo ""
             continue
         end
 
-        set -l num (string match -r '^(\d+)\.\s+\*\*(.+?)(?::\*\*|\*\*:)\s*(.*)$' "$trimmed")
+        set -l hdr3 (_arka_clean_markdown_stars (_arka_strip_atx_prefix "$trimmed"))
+        if _arka_is_sources_section "$trimmed"
+            set_color --bold cyan
+            echo "$hdr3"
+            set_color normal
+            echo ""
+            continue
+        end
+
+        if _arka_is_source_line "$trimmed"
+            _arka_print_source_line "$trimmed"
+            continue
+        end
+
+        set -l num (string match -r '^(\d+)\.\s+\*\*(.+?)(?::\*\*|\*\*:)\s*(.*)$' -- "$trimmed")
         if test (count $num) -ge 4
             _arka_print_numbered "$num[2]" "$num[3]" "$num[4]"
             continue
         end
-        set num (string match -r '^(\d+)\.\s+\*\*(.+?)\*\*\s*(.*)$' "$trimmed")
+        set num (string match -r '^(\d+)\.\s+\*\*(.+?)\*\*\s*(.*)$' -- "$trimmed")
         if test (count $num) -ge 4
             _arka_print_numbered "$num[2]" "$num[3]" "$num[4]"
             continue
         end
-        set num (string match -r '^(\d+)\.\s+(.+)$' "$trimmed")
+        set num (string match -r '^(\d+)\.\s+(.+)$' -- "$trimmed")
         if test (count $num) -ge 3
-            set -l body (string replace -a -r '\*\*([^*]+)\*\*' '$1' "$num[3]")
+            set -l body (string replace -a -r '\*\*([^*]+)\*\*' '$1' -- "$num[3]")
             _arka_print_numbered "$num[2]" "" "$body"
             continue
         end
 
-        set -l main (string match -r '^\*\s+\*\*(.+?)(?::\*\*|\*\*:)\s*(.*)$' "$trimmed")
+        set -l main (string match -r '^\*\s+\*\*(.+?)(?::\*\*|\*\*:)\s*(.*)$' -- "$trimmed")
         if test (count $main) -ge 3
             _pdf_bullet "  " "$main[2]" "$main[3]"
             continue
         end
-        set -l bul (string match -r '^\*\s+(.+)$' "$trimmed")
+        set -l bul (string match -r '^\*\s+(.+)$' -- "$trimmed")
         if test (count $bul) -ge 2
-            set -l body (string replace -a -r '\*\*([^*]+)\*\*' '$1' "$bul[2]")
+            set -l body (string replace -a -r '\*\*([^*]+)\*\*' '$1' -- "$bul[2]")
+            if _arka_is_source_line "$body"
+                _arka_print_source_line "$body"
+                continue
+            end
             _pdf_bullet "  " "" "$body"
             continue
         end
 
-        if string match -qr '(?i)^(based on|here .{0,60}(summary|answer|list)|these (places|cities|options)|in summary|to summarize)' "$trimmed"
+        set -l ubul (string match -r '^•\s+(.+)$' -- "$trimmed")
+        if test (count $ubul) -ge 2
+            if _arka_is_source_line "$ubul[2]"
+                _arka_print_source_line "$ubul[2]"
+                continue
+            end
+        end
+
+        if string match -qr '(?i)^(based on|here .{0,60}(summary|answer|list)|these (places|cities|options)|in summary|to summarize)' -- "$trimmed"
             set_color brblack
             echo "  $trimmed"
             set_color normal
             continue
         end
 
-        if string match -qr '^---+$' "$trimmed"
+        if string match -qr '^---+$' -- "$trimmed"
             echo ""
             continue
         end
         if string match -q '⚠*' -- "$trimmed"
-            set -l warn (string replace -a -r '\*\*([^*]+)\*\*' '$1' "$trimmed")
+            set -l warn (string replace -a -r '\*\*([^*]+)\*\*' '$1' -- "$trimmed")
             set_color yellow
             echo "  $warn"
             set_color normal
             continue
         end
 
-        set -l inline (string replace -a -r '\*\*([^*]+)\*\*' '$1' "$trimmed")
+        if _arka_is_source_line "$trimmed"
+            _arka_print_source_line "$trimmed"
+            continue
+        end
+
+        set -l src_tail (string match -r '(?i)^(.+?[.!?])\s+([\*_]*Sources?\s*:.+)$' -- "$trimmed")
+        if test (count $src_tail) -ge 3
+            set -l body (string trim -- "$src_tail[2]")
+            set -l src (string trim -- "$src_tail[3]")
+            set -l inline_body (string replace -a -r '\*\*([^*]+)\*\*' '$1' -- "$body")
+            echo "  $inline_body"
+            echo ""
+            _arka_print_source_line "$src"
+            continue
+        end
+
+        set -l inline (_arka_clean_markdown_stars "$trimmed")
+        test -z "$inline"; and continue
         echo "  $inline"
     end
 end
 
-function _arka_print_answer_block --description "Green header + styled answer (internal)"
+function _arka_print_answer_block --description "Standard answer block: header + body + model (internal)"
     set -l answer "$argv[1]"
     set -l title "$argv[2]"
     test -z "$title"; and set title "Answer"
-    printf '%s%s%s\n' (set_color --bold green) "━━━ $title ━━━" (set_color normal)
+    set -l kind answer
+    switch (string lower "$title")
+        case answer
+            set kind answer
+        case "research answer" research
+            set kind research
+        case essay
+            set kind essay
+        case "investment research" "error help" "pdf answer"
+            set kind answer
+        case '*'
+            set kind answer
+    end
+    _arka_ui_header "$title" $kind
     echo ""
     _arka_print_answer "$answer"
-    set -l model (_arka_llm_model_label 2>/dev/null)
-    if test -n "$model"
-        echo ""
-        set_color brblack
-        echo "  Model: $model"
-        set_color normal
-    end
+    _arka_ui_model
 end
 
 function pdf_ask --description "Ask or summarize ingested documents; optional --doc to pick one file"
@@ -6151,7 +6586,7 @@ function pdf_ask --description "Ask or summarize ingested documents; optional --
     echo "  🔍 Searching document…" >&2
     set_color normal
     set -l answer
-    set -lx ARKA_PDF_QUIET 1
+    set -lx PDF_QUIET 1
     set -l py (_arka_python)
     if test -n "$doc_flag"
         set answer ($py (_arka_py_script arka_pdf_rag.py) ask $doc_flag $question | string collect)
@@ -6552,8 +6987,8 @@ function ip_info --description "Show public IP and geolocation"
 end
 
 function _arka_stock_project_dir --description "stock_analysis project root (internal)"
-    if set -q ARKA_STOCK_PROJECT; and test -d "$ARKA_STOCK_PROJECT"
-        echo $ARKA_STOCK_PROJECT
+    if set -q STOCK_PROJECT; and test -d "$STOCK_PROJECT"
+        echo $STOCK_PROJECT
         return
     end
     set -l default ~/Projects/python/products/stock_analysis
@@ -6564,15 +6999,15 @@ function stock_analysis --description "Stock market intelligence (stock_analysis
     set -l bridge (_arka_py_script arka_stock_bridge.py)
     set -l py (_arka_python)
     set -l stock_dir (_arka_stock_project_dir)
-    if not set -q ARKA_STOCK_PLAIN
-        set -x ARKA_STOCK_TERMINAL 1
+    if not set -q STOCK_PLAIN
+        set -x STOCK_TERMINAL 1
     end
     if test (count $argv) -eq 0
         if test -d "$stock_dir"
             cd "$stock_dir"
         else
             echo (set_color yellow)"stock_analysis project not found:"(set_color normal) "$stock_dir"
-            echo "Set ARKA_STOCK_PROJECT in .env or clone the project there."
+            echo "Set STOCK_PROJECT in .env or clone the project there."
         end
         return
     end
@@ -7176,14 +7611,22 @@ function _arka_install_python_deps --description "Install Python packages for Ar
     if not test -x $pip
         set pip (dirname $py)/pip3
     end
+    # First-run bootstrap only — skip when chat + TurboQuant are already in venv-arka.
+    if $py -c "import agno, ddgs" 2>/dev/null
+        if $py (_arka_py_script arka_turboquant_install.py) check 2>/dev/null
+            mkdir -p $_ARKA_ROOT
+            touch $_ARKA_ROOT/.skills_setup_done
+            return 0
+        end
+    end
     echo (set_color --bold blue)"━━━ Installing Arka Python Dependencies ━━━"(set_color normal)
     if test -f (_arka_requirements)
         echo (set_color cyan)"Chat / web / LLM deps…"(set_color normal)
-        $pip install -r (_arka_requirements)
+        $pip install -q -r (_arka_requirements)
     end
     if test -f $_ARKA_ROOT/arka_turboquant_requirements.txt
         echo (set_color cyan)"RAG numeric deps (numpy, scipy)…"(set_color normal)
-        $pip install -r $_ARKA_ROOT/arka_turboquant_requirements.txt
+        $pip install -q -r $_ARKA_ROOT/arka_turboquant_requirements.txt
     end
     echo (set_color cyan)"Neural TTS (edge-tts)…"(set_color normal)
     $pip install -q edge-tts
@@ -7192,7 +7635,7 @@ function _arka_install_python_deps --description "Install Python packages for Ar
     echo (set_color cyan)"AssemblyAI STT (arka listen)…"(set_color normal)
     $pip install -q 'assemblyai>=0.64.0'
     echo (set_color cyan)"TurboQuant vector search…"(set_color normal)
-    rag_setup
+    rag_setup --quiet
     mkdir -p $_ARKA_ROOT
     touch $_ARKA_ROOT/.skills_setup_done
     echo (set_color --bold green)"✓ Python dependencies installed."(set_color normal)
@@ -8072,6 +8515,15 @@ function _agent_is_knowledge_question --description "True if user wants a factua
     if string match -qr '(?i)(google|search\s+(the\s+)?web|search\s+online|look\s+up\s+online|open\s+.*search|\bsearch\s+for\b|\bfind\s+on\s+google\b)' "$clean"
         return 1
     end
+    # Health / nutrition / general knowledge — web lookup, not shell context
+    if string match -qr '(?i)\b(vitamin|supplement|nutrition|nutrient|mineral|herbal|nootropic|focus|memory|concentration|cognitive|brain\s+health|diet|food|protein|caffeine|magnesium|omega|zinc|iron|b12|creatine|wellness|medication|symptom|treatment|remedy)\b' "$clean"
+        and not string match -qr '(?i)\b(my|this\s+(pc|computer|system|machine|mac|macbook|laptop)|my\s+(cpu|gpu|ram|disk|pc|computer|system|mac|macbook|machine|laptop|terminal|shell))\b' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)^which\s+' "$clean"
+        and not string match -qr '(?i)\b(my|this\s+(pc|computer|system|machine|mac|macbook|laptop)|my\s+(cpu|gpu|ram|disk|pc|computer|system|driver|terminal|shell|mac|macbook|machine|laptop))\b' "$clean"
+        return 0
+    end
     # Personal / system questions belong in agent_ask or system_info, not web_answer
     if string match -qr '(?i)\b(my|should\s+i|can\s+i|do\s+i|am\s+i|this\s+(pc|computer|system|machine|mac|macbook|laptop)|my\s+(cpu|gpu|ram|disk|pc|computer|system|driver|terminal|shell|mac|macbook|machine|laptop))\b' "$clean"
         return 1
@@ -8086,6 +8538,34 @@ function _agent_is_knowledge_question --description "True if user wants a factua
     return 1
 end
 
+function _agent_is_files_preference_question --description "True if user complains about images landing on desktop/home/downloads (internal)"
+    set -l clean (string lower "$argv[1]")
+    if not string match -qr '(?i)\b(image|images|photo|photos|picture|pictures|screenshot|screenshots|wallpaper|wallpapers|png|jpg|jpeg|pic|pics)\b' "$clean"
+        return 1
+    end
+    if not string match -qr '(?i)\b(desktop|download|downloads|home\s+folder|home\s+directory|my\s+home|on\s+home|\bhome\b|pictures\s+folder)\b' "$clean"
+        return 1
+    end
+    if string match -qr '(?i)(don'\''t\s+like|do\s+not\s+like|hate|annoy|clutter|messy|too\s+many|shouldn'\''t|should\s+not|stop\s+sav|where\s+(do|does|are)|change\s+(where|the)|move|organiz|clean|sort|prefer|instead\s+of|take\s+place|end\s+up|save\s+to|saved\s+to|put\s+on|putting|crowd|cluttered)' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)^(i\s+(?:don'\''t|do\s+not)\s+like|images?\s+on|photos?\s+on|pictures?\s+on|why\s+(?:are|do)\s+(?:images?|photos?|pictures?))' "$clean"
+        return 0
+    end
+    return 1
+end
+
+function _agent_is_desktop_organize_request --description "True if user wants to sort/clean desktop or downloads images (internal)"
+    set -l clean (string lower "$argv[1]")
+    if not string match -qr '(?i)\b(organiz|sort|classify|clean|tidy|declutter|arrange)\b' "$clean"
+        return 1
+    end
+    if not string match -qr '(?i)\b(desktop|download|downloads|file|files|image|images|photo|photos|picture|pictures|folder)\b' "$clean"
+        return 1
+    end
+    return 0
+end
+
 function _agent_is_advisory_question --description "True if user wants an opinion/answer, not a metrics dump"
     if _agent_is_investment_question "$argv[1]"
         return 1
@@ -8096,10 +8576,22 @@ function _agent_is_advisory_question --description "True if user wants an opinio
     if _agent_is_knowledge_question "$argv[1]"
         return 1
     end
+    if _agent_is_files_preference_question "$argv[1]"
+        return 1
+    end
     if _agent_is_storage_breakdown_question "$argv[1]"
         return 1
     end
     set -l clean (string lower "$argv[1]")
+    # Health / nutrition / general "which …" — web_answer, not shell advisory
+    if string match -qr '(?i)\b(vitamin|supplement|nutrition|nutrient|mineral|herbal|nootropic|focus|memory|concentration|cognitive|brain\s+health|diet|food|protein|health|wellness|medication|symptom|treatment|remedy)\b' "$clean"
+        and not string match -qr '(?i)\b(my|this\s+(pc|computer|system|machine|mac|macbook|laptop)|my\s+(cpu|gpu|ram|disk|pc|computer|system|mac|macbook|machine|laptop|terminal|shell))\b' "$clean"
+        return 1
+    end
+    if string match -qr '(?i)^which\s+' "$clean"
+        and not string match -qr '(?i)\b(my|this\s+(pc|computer|system|machine|mac|macbook|laptop)|my\s+(cpu|gpu|ram|disk|pc|computer|system|driver|terminal|shell|mac|macbook|machine|laptop))\b' "$clean"
+        return 1
+    end
     # Explicit metrics / monitor requests
     if string match -qr '(?i)(system\s*monitor|system\s*status|show\s+(me\s+)?(system\s+)?(monitor|resources)|check\s+(cpu|ram|memory|disk|battery)|\b(cpu|ram|memory|disk)\s+(usage|load|percent)|how\s+much\s+(cpu|ram|memory|disk)\s+(left|free|used|available)|\buptime\b|\bbattery\b|\bload\s+average|port_scan|speedtest|system_info|take\s+a\s+screenshot)' "$clean"
         return 1
@@ -8134,6 +8626,9 @@ end
 function _agent_is_general_chat --description "True if plain conversational input, not shell/skill"
     set -l clean (string lower (string trim -- "$argv[1]"))
     test -z "$clean"; and return 1
+    if _agent_is_files_preference_question "$argv[1]"; or _agent_is_desktop_organize_request "$argv[1]"
+        return 1
+    end
     if _agent_is_system_info_question "$argv[1]"
         return 1
     end
@@ -8204,13 +8699,64 @@ end
 
 function _agent_route_general_chat --description "Pick web_answer vs agent_ask for conversational input (internal)"
     set -l cmd "$argv[1]"
-    if _agent_is_system_info_question "$cmd"
+    if _agent_is_files_preference_question "$cmd"
+        echo "files_preference_help $cmd"
+    else if _agent_is_system_info_question "$cmd"
         echo (_agent_route_system_info "$cmd")
     else if string match -qr '(?i)\b(my|this pc|my pc|my computer|my cpu|my gpu|my system|my laptop|my mac|my macbook|my machine|this mac|my terminal|my shell|malware|infected|hacked|compromised)\b' "$cmd"
         echo "agent_ask $cmd"
     else
         echo "web_answer $cmd"
     end
+end
+
+function _agent_is_google_login_request --description "True if user wants Google OAuth sign-in (internal)"
+    string match -qr '(?i)(google\s+(?:login|sign[\s-]?in|connect|auth|setup|status|logout)|connect\s+(?:my\s+)?(?:google|gmail|calendar)|sign[\s-]?in\s+(?:to\s+)?(?:google|gmail|calendar)|link\s+(?:my\s+)?google|oauth\s+google)' "$argv[1]"
+end
+
+function _agent_is_google_gmail_request --description "True if user wants Gmail via Google integration (internal)"
+    string match -qr '(?i)(gmail|google\s+mail|google\s+email|\bemail\b|\bemails\b|\binbox\b)' "$argv[1]"
+    and string match -qr '(?i)(unread|check|read|show|list|recent|today|inbox|my\s+mail|my\s+email|any\s+mail|any\s+email)' "$argv[1]"
+    and not string match -qr '(?i)(send\s+email|compose|write\s+email|draft)' "$argv[1]"
+end
+
+function _agent_is_google_calendar_request --description "True if user wants Google Calendar (internal)"
+    string match -qr '(?i)(google\s+calendar|my\s+calendar|calendar\s+today|calendar\s+this\s+week|what(?:'\''s|\s+is)\s+on\s+my\s+calendar|meetings?\s+today|schedule\s+today|events?\s+today|upcoming\s+meetings?)' "$argv[1]"
+end
+
+function _agent_route_google --description "Map NL to google subcommand (internal)"
+    set -l cmd "$argv[1]"
+    if _agent_is_google_login_request "$cmd"
+        if string match -qr '(?i)\b(setup|configure|config)\b' "$cmd"
+            echo "google setup"
+        else if string match -qr '(?i)\b(status|connected|signed\s+in)\b' "$cmd"
+            echo "google status"
+        else if string match -qr '(?i)\b(logout|sign[\s-]?out|disconnect)\b' "$cmd"
+            echo "google logout"
+        else
+            echo "google login"
+        end
+        return 0
+    end
+    if _agent_is_google_gmail_request "$cmd"
+        if string match -qr '(?i)\bunread\b' "$cmd"
+            echo "google gmail --unread"
+        else if string match -qr '(?i)\btoday\b' "$cmd"
+            echo "google gmail --today"
+        else
+            echo "google gmail --unread --snippet"
+        end
+        return 0
+    end
+    if _agent_is_google_calendar_request "$cmd"
+        if string match -qr '(?i)\b(week|7\s+days)\b' "$cmd"
+            echo "google calendar --week"
+        else
+            echo "google calendar --today"
+        end
+        return 0
+    end
+    return 1
 end
 
 function _agent_is_whatsapp_inbox_request --description "True if user wants WhatsApp inbox listener"
@@ -8611,16 +9157,40 @@ function _arka_answer_ok --description "True if arka_chat answer is usable (inte
     return 0
 end
 
+function _arka_web_answer_llm_fallback --description "Snippet + LLM when arka_chat returned nothing (internal)"
+    set -l question "$argv[1]"
+    set -l py (_arka_python)
+    set -l snippet ($py (_arka_py_script web_answer.py) snippet "$question" 2>/dev/null)
+    set -l system_text "You are a helpful assistant. Answer clearly in 2-5 short sentences for TTS. Start with [FROM MEMORY] or [FROM SEARCH]. Be factual."
+    set -l user_text "Question: $question"
+    if test -n "$snippet"
+        set user_text "Web snippet:\n$snippet\n\nQuestion: $question"
+    end
+    set -l answer (_arka_capture_output _agent_llm_complete "$system_text" "$user_text")
+    if test -n "$answer"
+        _arka_print_answer_block "$answer"
+        return 0
+    end
+    if test -n "$snippet"
+        _arka_print_answer_block "$snippet"
+        return 0
+    end
+    return 1
+end
+
 function _arka_chat_ask --description "Run arka_chat.py ask; prints answer (internal)"
     argparse 'd/deep' 'n/no-session' -- $argv
     or return 1
+    if not _arka_ensure_venv
+        return 1
+    end
     set -l py_args ask
     test -n "$_flag_d"; and set -a py_args --deep
     test -n "$_flag_n"; and set -a py_args --no-session
     set -l question (_agent_with_voice_context (string join " " $argv))
     set -a py_args "$question"
     set -l py (_arka_python)
-    $py (_arka_py_script arka_chat.py) $py_args 2>/dev/null
+    $py (_arka_py_script arka_chat.py) $py_args
 end
 
 function deep_web_answer --description "Deep web search + scrape RAG answer"
@@ -8632,10 +9202,11 @@ function deep_web_answer --description "Deep web search + scrape RAG answer"
     if not _arka_verify_web_query "$question"
         return 1
     end
-    printf '%s%s%s\n' (set_color cyan) "🔎 Deep search: $question" (set_color normal) >&2
-    set -l answer (_arka_chat_ask --deep $argv)
+    _arka_ui_header "Deep search: $question" query
+    set -l answer (_arka_capture_output _arka_chat_ask --deep $argv)
     if test -z "$answer"
-        echo (set_color red)"Deep search failed (check API keys / pip: ddgs trafilatura beautifulsoup4)"(set_color normal)
+        echo (set_color red)"Deep search failed (check API keys / network / pip: ddgs trafilatura beautifulsoup4)"(set_color normal) >&2
+        echo (set_color brblack)"Tip: run the same question with web_answer (without --deep) or check keys in .env"(set_color normal) >&2
         return 1
     end
     _arka_print_answer_block "$answer"
@@ -8648,8 +9219,8 @@ function calc --description "Symbolic math via SymPy + AI explanation"
         return 1
     end
     set -l expr (string join " " $argv)
-    printf '%s%s%s\n' (set_color cyan) "🧮 $expr" (set_color normal) >&2
-    set -l answer (python3 (_arka_py_script arka_chat.py) ask $argv 2>/dev/null)
+    _arka_ui_header "$expr" math
+    set -l answer (_arka_capture_output python3 (_arka_py_script arka_chat.py) ask $argv)
     if test -z "$answer"
         set -l raw (python3 (_arka_py_script arka_chat.py) calc $argv 2>/dev/null)
         test -n "$raw"; and echo "[FROM MEMORY] $raw"; and return 0
@@ -8694,8 +9265,8 @@ function error_helper --description "Explain a Python/shell error or traceback"
         return 1
     end
     set -l text (string join " " $argv)
-    printf '%s%s%s\n' (set_color cyan) "🔧 Analyzing error…" (set_color normal) >&2
-    set -l answer (python3 (_arka_py_script arka_chat.py) error-explain $argv 2>/dev/null)
+    _arka_ui_header "Analyzing error…" error
+    set -l answer (_arka_capture_output python3 (_arka_py_script arka_chat.py) error-explain $argv)
     if test -z "$answer"
         echo (set_color red)"Could not analyze error"(set_color normal)
         return 1
@@ -8729,7 +9300,18 @@ end
 
 function _arka_agent --description "Run arka_agent.py subcommand (internal)"
     set -l py (_arka_python)
-    $py (_arka_py_script arka_agent.py) $argv
+    set -l sub "$argv[1]"
+    switch $sub
+        case research ask
+            set -l raw (_arka_capture_output $py (_arka_py_script arka_agent.py) $argv)
+            set -l st $status
+            if test -n "$raw"
+                _arka_pretty_python_output "$raw"
+            end
+            return $st
+        case '*'
+            $py (_arka_py_script arka_agent.py) $argv
+    end
 end
 
 function _arka_memory_detect_fact --description "Symbolic autodetect of memorable facts (internal)"
@@ -8808,15 +9390,19 @@ end
 
 function agent_research --description "Unified research: TurboQuant + web + media"
     if test (count $argv) -eq 0
-        echo "Usage: agent_research [--deep] [--doc DOC] [--path FILE] <question>"
+        echo "Usage: agent_research [--deep] [--light] [--doc DOC] [--path FILE] <question>"
         return 1
     end
     set -l flags
     set -l args $argv
+    set -l light false
     while test (count $args) -gt 0
         switch $args[1]
             case --deep -d
                 set -a flags --deep
+                set args $args[2..-1]
+            case --light --snippet -s
+                set light true
                 set args $args[2..-1]
             case --doc
                 set -a flags --doc $args[2]
@@ -8828,7 +9414,12 @@ function agent_research --description "Unified research: TurboQuant + web + medi
                 break
         end
     end
-    _arka_agent research $flags (string join " " $args)
+    if test "$light" != true; and not contains -- --deep $flags
+        set -a flags --deep
+    end
+    set -l question (string join " " $args)
+    _arka_ui_header "Research: $question" query
+    _arka_agent research $flags $question
 end
 
 function agent_nudge --description "Proactive hints (disk, queue, handoff)"
@@ -9013,13 +9604,26 @@ function compare_agent --description "Compare two topics with web research"
 end
 
 function rag_setup --description "Install Firmamento TurboQuant for unified RAG"
+    argparse q/quiet -- $argv
+    or return 1
     set -l py (_arka_python)
-    $py (_arka_py_script arka_turboquant_install.py) install
+    set -l flags install
+    test -n "$_flag_q"; and set -a flags --quiet
+    $py (_arka_py_script arka_turboquant_install.py) $flags
 end
 
 function rag_status --description "Check TurboQuant RAG backend status"
     set -l py (_arka_python)
     $py (_arka_py_script arka_turboquant_install.py) check
+end
+
+function google --description "Google Calendar and Gmail — login, status, mail, calendar"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        $py (_arka_py_script arka_google.py) help
+        return $status
+    end
+    $py (_arka_py_script arka_google.py) $argv
 end
 
 function voice_agent --description "Multi-turn voice chat via wake listener"
@@ -9287,13 +9891,44 @@ function predictions --description "Arka talent: opportunity predictions (antiqu
     end
     set -l topic (string join " " $args)
     printf '%s%s%s\n' (set_color cyan) "📈 $topic" (set_color normal) >&2
-    set -l answer ($py (_arka_py_script arka_predictions.py) run $flags -- $args 2>/dev/null)
+    set -l answer (_arka_capture_output $py (_arka_py_script arka_predictions.py) run $flags -- $args)
     set -l st $status
     if test $st -ne 0 -o -z "$answer"
         $py (_arka_py_script arka_predictions.py) run $flags -- $args
         return $status
     end
     _arka_print_answer_block "$answer" "Investment research"
+end
+
+function _arka_profession_title --description "Display title for profession domain id (internal)"
+    switch $argv[1]
+        case health
+            echo "Health & Clinical"
+        case nutrition
+            echo "Nutrition"
+        case startup
+            echo "Startup"
+        case investor
+            echo "Investor"
+        case teacher
+            echo "Education"
+        case legal
+            echo "Legal"
+        case engineer
+            echo "Engineering"
+        case journalism
+            echo "Journalism"
+        case marketing
+            echo "Marketing"
+        case finance
+            echo "Finance"
+        case counselor
+            echo "Counseling"
+        case chef
+            echo "Culinary"
+        case '*'
+            echo (string upper $argv[1])
+    end
 end
 
 function profession --description "Profession domains: curated sources (RSS, web, local repos) — not role prompts"
@@ -9309,8 +9944,21 @@ function profession --description "Profession domains: curated sources (RSS, web
             $py $script list
         case ask run
             if test (count $argv) -ge 2
-                $py $script ask $argv[2..-1]
-                return $status
+                set -l domains health nutrition startup investor teacher legal engineer journalism marketing finance counselor chef
+                set -l title "Answer"
+                if contains -- $argv[2] $domains
+                    set title (_arka_profession_title $argv[2])
+                end
+                set -l answer (_arka_capture_output $py $script ask $argv[2..-1])
+                set -l st $status
+                if test $st -ne 0
+                    return $st
+                end
+                if test -z "$answer"
+                    return 1
+                end
+                _arka_print_answer_block "$answer" "$title"
+                return 0
             end
             echo "Usage: profession ask <domain> <question>"
             echo "       profession ask <question>  (needs saved profession in memory)"
@@ -9378,19 +10026,31 @@ end
 
 function web_answer --description "Answer factual questions via web lookup + AI (auto deep search when needed)"
     if test (count $argv) -eq 0
-        echo "Usage: web_answer [--deep] <question>"
+        echo "Usage: web_answer [--deep] [--no-session] <question>"
         echo "Example: web_answer where is Tokyo"
         echo "Example: web_answer --deep who won IPL 2025"
         return 1
     end
+    if not _arka_ensure_venv
+        return 1
+    end
     set -l force_deep false
+    set -l no_session false
     set -l args $argv
-    if test "$argv[1]" = --deep -o "$argv[1]" = -d
-        set force_deep true
-        set args $argv[2..-1]
+    while test (count $args) -gt 0
+        switch $args[1]
+            case --deep -d
+                set force_deep true
+                set args $args[2..-1]
+            case --no-session -n
+                set no_session true
+                set args $args[2..-1]
+            case '*'
+                break
+        end
     end
     if test (count $args) -eq 0
-        echo "Usage: web_answer [--deep] <question>"
+        echo "Usage: web_answer [--deep] [--no-session] <question>"
         return 1
     end
     set -l question (_agent_with_voice_context (string join " " $args))
@@ -9401,9 +10061,10 @@ function web_answer --description "Answer factual questions via web lookup + AI 
     if not _arka_verify_web_query "$question"
         return 1
     end
-    printf '%s%s%s\n' (set_color cyan) "🔎 $question" (set_color normal) >&2
+    _arka_ui_header "$question" query
 
-    set -l intent (python3 (_arka_py_script arka_chat.py) intent "$question" 2>/dev/null)
+    set -l py (_arka_python)
+    set -l intent ($py (_arka_py_script arka_chat.py) intent "$question" 2>/dev/null)
     set -l action (string split -f 1 \t "$intent")
     if test "$force_deep" = true; or contains -- "$action" SEARCH CALC WEATHER ERROR
         if test "$action" = CALC
@@ -9422,43 +10083,39 @@ function web_answer --description "Answer factual questions via web lookup + AI 
             deep_web_answer (_agent_with_voice_context (string join " " $args))
             return $status
         end
-        set -l answer (_arka_chat_ask $args)
-        if not _arka_answer_ok "$answer"
-            set answer ""
+        set -l answer ""
+        if test "$no_session" = true
+            set answer (_arka_capture_output _arka_chat_ask --no-session $args)
+        else
+            set answer (_arka_capture_output _arka_chat_ask $args)
         end
-        if test -z "$answer"
-            deep_web_answer $args
-            return $status
+        if test -n "$answer"
+            _arka_print_answer_block "$answer"
+            return 0
         end
-        _arka_print_answer_block "$answer"
-        return 0
+        if _arka_web_answer_llm_fallback "$question"
+            return 0
+        end
+        deep_web_answer $args
+        return $status
     end
 
-    set -l answer (_arka_chat_ask $args)
-    if not _arka_answer_ok "$answer"
-        set answer ""
+    set -l answer ""
+    if test "$no_session" = true
+        set answer (_arka_capture_output _arka_chat_ask --no-session $args)
+    else
+        set answer (_arka_capture_output _arka_chat_ask $args)
     end
     if test -n "$answer"
         _arka_print_answer_block "$answer"
         return 0
     end
 
-    set -l snippet (python3 (_arka_py_script web_answer.py) snippet "$question" 2>/dev/null)
-    set -l system_text "You are a helpful assistant. Answer clearly in 2-5 short sentences for TTS. Start with [FROM MEMORY] or [FROM SEARCH]. Be factual."
-    set -l user_text "Question: $question"
-    if test -n "$snippet"
-        set user_text "Web snippet:\n$snippet\n\nQuestion: $question"
+    if _arka_web_answer_llm_fallback "$question"
+        return 0
     end
-    set answer (_agent_llm_complete "$system_text" "$user_text")
-    if test -z "$answer"
-        if test -n "$snippet"
-            _arka_print_answer_block "$snippet"
-            return 0
-        end
-        echo (set_color red)"Could not get an answer (check GEMINI_API_KEY or GROQ_API_KEY)"(set_color normal)
-        return 1
-    end
-    _arka_print_answer_block "$answer"
+    echo (set_color red)"Could not get an answer (check GEMINI_API_KEY or GROQ_API_KEY)"(set_color normal)
+    return 1
 end
 
 function hyperlocal_weather --description "Weather via Open-Meteo + IP geolocation"
@@ -9470,18 +10127,16 @@ function hyperlocal_weather --description "Weather via Open-Meteo + IP geolocati
         return $status
     end
     if test -z "$question"
-        echo (set_color --bold blue)"━━━ Weather (hyperlocal) ━━━"(set_color normal)
-        echo "$wx"
+        _arka_pretty_python_output "$wx"
         return 0
     end
     set -l system_text "Summarize this weather data for the user's question. Start with [FROM MEMORY]. Be concise for speech."
     set -l user_text "Weather data:\n$wx\n\nQuestion: $question"
-    set -l answer (_agent_llm_complete "$system_text" "$user_text")
-    echo (set_color --bold blue)"━━━ Weather ━━━"(set_color normal)
+    set -l answer (_arka_capture_output _agent_llm_complete "$system_text" "$user_text")
     if test -n "$answer"
-        _arka_print_answer "$answer"
+        _arka_print_answer_block "$answer" "Weather"
     else
-        echo "$wx"
+        _arka_pretty_python_output "$wx"
     end
 end
 
@@ -9492,7 +10147,7 @@ function web_essay --description "Write an essay on a topic via web lookup + AI"
         return 1
     end
     set -l topic (string join " " $argv)
-    printf '%s%s%s\n' (set_color cyan) "✍️  Essay: $topic" (set_color normal) >&2
+    _arka_ui_header "Essay: $topic" query
 
     set -l snippet (python3 (_arka_py_script web_answer.py) snippet "$topic" 2>/dev/null)
 
@@ -9505,11 +10160,10 @@ $snippet
 Topic: $topic"
     end
 
-    set -l answer (_agent_llm_complete "$system_text" "$user_text")
+    set -l answer (_arka_capture_output _agent_llm_complete "$system_text" "$user_text")
     if test -z "$answer"
         if test -n "$snippet"
-            printf '%s%s%s\n' (set_color --bold green) "━━━ Essay ━━━" (set_color normal)
-            printf "%s\n" "$snippet"
+            _arka_print_answer_block "$snippet" "Essay"
             return 0
         end
         echo (set_color red)"Could not write essay (check GEMINI_API_KEY, GROQ_API_KEY, or ollama serve)"(set_color normal)
@@ -9525,12 +10179,20 @@ function agent_ask --description "Answer advisory questions: AI gathers context 
         return 1
     end
     set -l question (_agent_with_voice_context (string join " " $argv))
+    if _agent_is_files_preference_question "$question"
+        files_preference_help $argv
+        return $status
+    end
+    if _agent_is_knowledge_question "$question"
+        web_answer $argv
+        return $status
+    end
     if _agent_is_system_info_question "$question"
         set -l route (_agent_route_system_info "$question")
         _agent_run_skill_line "$route"
         return $status
     end
-    printf '%s%s%s\n' (set_color cyan) "💬 $question" (set_color normal) >&2
+    _arka_ui_header "$question" chat
 
     set -l facts (_agent_ask_gather_context "$question" 6)
     echo ""
@@ -9542,7 +10204,7 @@ $facts
 
 Question: $question"
 
-    set -l answer (_agent_llm_complete "$system_text" "$user_text")
+    set -l answer (_arka_capture_output _agent_llm_complete "$system_text" "$user_text")
     if test -n "$answer"
         _arka_print_answer_block "$answer"
         return 0
@@ -9559,6 +10221,16 @@ function _agent_skill_matches_request --description "True if skill fits the user
         case agent_ask
             _agent_is_advisory_question "$cmd"
             and not _agent_is_knowledge_question "$cmd"
+            and not _agent_is_files_preference_question "$cmd"
+        case files_preference_help
+            _agent_is_files_preference_question "$cmd"
+        case google
+            _agent_is_google_login_request "$cmd"
+            or _agent_is_google_gmail_request "$cmd"
+            or _agent_is_google_calendar_request "$cmd"
+        case classify_files
+            _agent_is_desktop_organize_request "$cmd"
+            or string match -qr '(?i)(classify.*file|sort.*file|organize.*file|auto.*sort)' "$cmd"
         case web_answer
             _agent_is_knowledge_question "$cmd"
         case web_essay
@@ -9679,7 +10351,7 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
             return
         end
         if test "$route_mode" = ai_only
-            echo "none||No AI route (ARKA_ROUTE_MODE=ai_only)"
+            echo "none||No AI route (ROUTE_MODE=ai_only)"
             return
         end
     end
@@ -10070,8 +10742,26 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         end
         return
     end
+    if _agent_is_knowledge_question "$cmd"
+        set -l kq (_agent_normalize_knowledge_q "$cmd")
+        test -z "$kq"; and set kq $cmd
+        echo "skill|web_answer $kq|Factual web lookup"
+        return
+    end
     if _agent_is_advisory_question "$cmd"
         echo "skill|agent_ask $cmd|AI gathers context via shell, then answers"
+        return
+    end
+    if _agent_is_files_preference_question "$cmd"
+        echo "skill|files_preference_help $cmd|Where Arka saves images and how to change it"
+        return
+    end
+    if set -l g_route (_agent_route_google "$cmd")
+        echo "skill|$g_route|Google Calendar or Gmail"
+        return
+    end
+    if _agent_is_desktop_organize_request "$cmd"
+        echo "skill|classify_files|Auto-sort files in Downloads by type"
         return
     end
     if _agent_is_general_chat "$cmd"
@@ -10084,7 +10774,7 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         return
     end
     if test "$route_mode" = symbolic_only
-        echo "none||No symbolic match (ARKA_ROUTE_MODE=symbolic_only)"
+        echo "none||No symbolic match (ROUTE_MODE=symbolic_only)"
     else if test "$route_mode" = ai
         echo "none||No route after AI + symbolic passes"
     else
@@ -10120,10 +10810,35 @@ function _agent_correct_interpretation --description "Fix bad LLM skill picks us
     end
 
     if string match -qr '(?i)^agent_ask\b' "$interpreted"
+        if _agent_is_files_preference_question "$cmd"
+            echo "files_preference_help $cmd"
+            return
+        end
+        if _agent_is_knowledge_question "$cmd"
+            set -l kq (_agent_normalize_knowledge_q "$cmd")
+            test -z "$kq"; and set kq $cmd
+            echo "web_answer $kq"
+            return
+        end
         if _agent_is_system_info_question "$cmd"
             echo (_agent_route_system_info "$cmd")
             return
         end
+    end
+
+    if _agent_is_files_preference_question "$cmd"
+        echo "files_preference_help $cmd"
+        return
+    end
+
+    if _agent_is_desktop_organize_request "$cmd"
+        echo "classify_files"
+        return
+    end
+
+    if set -l g_route (_agent_route_google "$cmd")
+        echo $g_route
+        return
     end
 
     if string match -qr '(?i)^web_answer\b' "$interpreted"
@@ -10606,7 +11321,7 @@ end
 function _agent_stt_quick_map --description "Fix common STT mis-hearings before routing (internal)"
     set -l text (string trim -- "$argv[1]")
     test -z "$text"; and return
-    if test "$ARKA_STT_QUICK_MAP" = 0; or test "$ARKA_STT_QUICK_MAP" = false
+    if test "$STT_QUICK_MAP" = 0; or test "$STT_QUICK_MAP" = false
         echo "$text"
         return
     end
@@ -11177,6 +11892,17 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                 case brief morning daily
                     daily_brief $argv[2..-1]
                     return $status
+                case setup init
+                    set -l py python3
+                    if test -x "$_ARKA_ROOT/venv-arka/bin/python3"
+                        set py "$_ARKA_ROOT/venv-arka/bin/python3"
+                    end
+                    $py -m arka setup $argv[2..-1]
+                    return $status
+                case doctor
+                    set -l py (_arka_python)
+                    $py -m arka doctor
+                    return $status
                 case wifi wireless
                     wifi_info $argv[2..-1]
                     return $status
@@ -11303,7 +12029,7 @@ function _agent_strip_color --description "Remove ANSI color codes for TTS (inte
 end
 
 function _agent_voice_enabled --description "True when running from arka listen / voice (internal)"
-    if set -q ARKA_VOICE; and test "$ARKA_VOICE" = 1
+    if set -q VOICE; and test "$VOICE" = 1
         return 0
     end
     if set -q AGENT_VOICE; and test "$AGENT_VOICE" = 1
@@ -11314,8 +12040,8 @@ end
 
 function _agent_with_voice_context --description "Prepend multi-turn voice context for LLM skills (internal)"
     set -l question (string join " " $argv)
-    if _agent_voice_enabled; and set -q ARKA_VOICE_CONTEXT; and test -n "$ARKA_VOICE_CONTEXT"
-        printf '%s\n\nCurrent question: %s' "$ARKA_VOICE_CONTEXT" "$question"
+    if _agent_voice_enabled; and set -q VOICE_CONTEXT; and test -n "$VOICE_CONTEXT"
+        printf '%s\n\nCurrent question: %s' "$VOICE_CONTEXT" "$question"
         return 0
     end
     echo "$question"
@@ -11415,7 +12141,7 @@ function _agent_speak_reply --description "Speak agent output aloud (internal)"
 end
 
 function agent_hear --description "Run agent on speech transcript; speaks the reply"
-    set -gx ARKA_VOICE 1
+    set -gx VOICE 1
     set -l text (_agent_stt_quick_map (string join " " $argv))
     if test -z "$text"
         set -l call (_agent_call_name)
@@ -11465,9 +12191,9 @@ function agent_hear --description "Run agent on speech transcript; speaks the re
     set -l ack ($py (_arka_py_script arka_talents.py) voice-field ack "$stripped" 2>/dev/null)
 
     if test -n "$llm_ctx"
-        set -gx ARKA_VOICE_CONTEXT "$llm_ctx"
+        set -gx VOICE_CONTEXT "$llm_ctx"
     else
-        set -e ARKA_VOICE_CONTEXT 2>/dev/null
+        set -e VOICE_CONTEXT 2>/dev/null
     end
 
     if test -n "$ack"
@@ -11476,7 +12202,7 @@ function agent_hear --description "Run agent on speech transcript; speaks the re
 
     set -l out (agent $route_text 2>&1)
     set -l st $status
-    set -e ARKA_VOICE_CONTEXT 2>/dev/null
+    set -e VOICE_CONTEXT 2>/dev/null
     printf '%s\n' "$out"
     $py (_arka_py_script arka_talents.py) voice-record --user "$stripped" --assistant "$out" 2>/dev/null
     if test $st -eq 0
@@ -11603,15 +12329,15 @@ function _agent_listen_start --description "Start continuous wake-word listener 
     mkdir -p ~/.cache/fish-agent
     set -l stt_hint "Vosk"
     if set -q ASSEMBLYAI_API_KEY; and test -n "$ASSEMBLYAI_API_KEY"
-        if not set -q ARKA_STT; or contains -- (string lower "$ARKA_STT") auto assemblyai aai
+        if not set -q STT; or contains -- (string lower "$STT") auto assemblyai aai
             set stt_hint "AssemblyAI → Sarvam → Vosk"
         end
     else if set -q SARVAM_API_KEY; and test -n "$SARVAM_API_KEY"
-        if not set -q ARKA_STT; or contains -- (string lower "$ARKA_STT") auto sarvam
+        if not set -q STT; or contains -- (string lower "$STT") auto sarvam
             set stt_hint "Sarvam → Vosk"
         end
     else if set -q GROQ_API_KEY; and test -n "$GROQ_API_KEY"
-        if not set -q ARKA_STT; or contains -- (string lower "$ARKA_STT") auto groq
+        if not set -q STT; or contains -- (string lower "$STT") auto groq
             set stt_hint "Groq Whisper + Vosk wake"
         end
     end
@@ -11630,7 +12356,7 @@ function _agent_listen_start --description "Start continuous wake-word listener 
 
     set -l py_args
     if test $debug -eq 1
-        set -gx ARKA_LISTEN_DEBUG 1
+        set -gx LISTEN_DEBUG 1
         set py_args --debug
     end
 
@@ -11647,7 +12373,7 @@ function _agent_listen_start --description "Start continuous wake-word listener 
     end
 
     if test $debug -eq 1
-        nohup env ARKA_LISTEN_DEBUG=1 $wake_py "$script" --debug >>"$logfile" 2>&1 &
+        nohup env LISTEN_DEBUG=1 $wake_py "$script" --debug >>"$logfile" 2>&1 &
     else
         nohup $wake_py "$script" >>"$logfile" 2>&1 &
     end
@@ -11656,8 +12382,8 @@ function _agent_listen_start --description "Start continuous wake-word listener 
 
     if test -f "$pidfile"; and _agent_pid_alive (string trim (cat "$pidfile"))
         set -l lang en-IN
-        if set -q ARKA_SPEAK_LANG
-            set lang $ARKA_SPEAK_LANG
+        if set -q SPEAK_LANG
+            set lang $SPEAK_LANG
         end
         echo (set_color green)"Listening for '$call' — say: hey $call, what's the weather"(set_color normal)
         echo (set_color brblack)"  log: $logfile  |  stop: $call stop"(set_color normal)
@@ -11701,8 +12427,8 @@ function _agent_listen_status --description "Wake listener status (internal)"
         set -l pid (string trim (cat "$pidfile" 2>/dev/null))
         if test -n "$pid"; and _agent_pid_alive "$pid"
             set -l lang en-IN
-            if set -q ARKA_SPEAK_LANG
-                set lang $ARKA_SPEAK_LANG
+            if set -q SPEAK_LANG
+                set lang $SPEAK_LANG
             end
             echo (set_color green)"$call listener: running (pid $pid)"(set_color normal)
             echo (set_color brblack)"  log: $logfile  |  voice lang: $lang"(set_color normal)
@@ -11887,6 +12613,8 @@ function agent --description "Run commands safely: executes safe commands automa
         echo "  auto_copy              - Auto-copy text selections to clipboard on paste (X11)"
         echo "  decrypt_pdf <path> <pw> - Decrypt password-protected PDF files"
         echo "  classify_files         - Auto-sort files by extension (images, docs, code)"
+        echo "  google setup|login     - Google Calendar + Gmail (browser OAuth sign-in)"
+        echo "  google gmail|calendar  - Read mail or list events (after login)"
         echo "  cleanup_downloads      - Remove .zip/.deb/.tar.gz clutter from Downloads"
         echo "  watch_zip              - Watch a folder and auto-extract new .zip files"
         echo "  monitor_x <handle>     - Monitor a Twitter/X profile for new tweets"
@@ -12346,6 +13074,20 @@ function agent --description "Run commands safely: executes safe commands automa
     else if _agent_is_system_info_question "$cmd"
         set interpreted (_agent_route_system_info "$cmd")
         set route_source offline
+    else if _agent_is_knowledge_question "$cmd"
+        set -l kq (_agent_normalize_knowledge_q "$cmd")
+        test -z "$kq"; and set kq $cmd
+        set interpreted "web_answer $kq"
+        set route_source offline
+    else if set -l g_route (_agent_route_google "$cmd")
+        set interpreted $g_route
+        set route_source offline
+    else if _agent_is_files_preference_question "$cmd"
+        set interpreted "files_preference_help $cmd"
+        set route_source offline
+    else if _agent_is_desktop_organize_request "$cmd"
+        set interpreted "classify_files"
+        set route_source offline
     else if _agent_is_general_chat "$cmd"
         set interpreted (_agent_route_general_chat "$cmd")
         set route_source offline
@@ -12671,6 +13413,15 @@ function agent --description "Run commands safely: executes safe commands automa
         else
             web_answer $kq
         end
+    else if set -l g_route (_agent_route_google "$cmd")
+        echo (set_color yellow)"💡 [Google → $g_route]"(set_color normal)
+        _agent_dispatch_one "$g_route"
+    else if _agent_is_files_preference_question "$cmd"
+        echo (set_color yellow)"💡 [Image save locations]"(set_color normal)
+        files_preference_help $argv
+    else if _agent_is_desktop_organize_request "$cmd"
+        echo (set_color yellow)"💡 [Organize files → classify_files]"(set_color normal)
+        classify_files
     else if _agent_is_advisory_question "$cmd"
         echo (set_color yellow)"💡 [Advisory question → AI]"(set_color normal)
         agent_ask $argv
@@ -13333,20 +14084,20 @@ set -g _ARKA_RELOAD_STAMP (_arka_reload_stamp)
 _arka_load_third_party_skills 2>/dev/null
 _agent_register_call_name
 if status is-interactive
-    if set -q ARKA_USAGE_TRACK; and test "$ARKA_USAGE_TRACK" = 1 -o "$ARKA_USAGE_TRACK" = true
+    if set -q USAGE_TRACK; and test "$USAGE_TRACK" = 1 -o "$USAGE_TRACK" = true
         _arka_usage_autostart_ensure 2>/dev/null
     end
-    if set -q ARKA_AGENT_NUDGE; and test "$ARKA_AGENT_NUDGE" = 1 -o "$ARKA_AGENT_NUDGE" = true
+    if set -q AGENT_NUDGE; and test "$AGENT_NUDGE" = 1 -o "$AGENT_NUDGE" = true
         agent_nudge --quiet 2>/dev/null
     end
     _arka_remind_autostart_ensure 2>/dev/null
     set -l _arka_remind_py (_arka_python)
     $_arka_remind_py (_arka_py_script arka_remind.py) check --quiet 2>/dev/null
-    if set -q ARKA_AUTO_START; and test "$ARKA_AUTO_START" = 1 -o "$ARKA_AUTO_START" = true
+    if set -q AUTO_START; and test "$AUTO_START" = 1 -o "$AUTO_START" = true
         _arka_start_all --quiet 2>/dev/null
     else if test "$AGENT_WAKE_AUTO" = 1 -o "$AGENT_WAKE_AUTO" = true
         _agent_listen_start 2>/dev/null
-    else if set -q ARKA_USAGE_TRACK; and test "$ARKA_USAGE_TRACK" = 1 -o "$ARKA_USAGE_TRACK" = true
+    else if set -q USAGE_TRACK; and test "$USAGE_TRACK" = 1 -o "$USAGE_TRACK" = true
         _agent_usage_start 2>/dev/null
     end
 end

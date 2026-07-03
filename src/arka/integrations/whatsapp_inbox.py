@@ -44,7 +44,7 @@ def load_dotenv() -> None:
 
 
 def allowed_senders() -> list[str]:
-    raw = os.environ.get("ARKA_WHATSAPP_FROM", "+919073153257").strip()
+    raw = os.environ.get("WHATSAPP_FROM", "+919073153257").strip()
     return [normalize_phone(p.strip()) for p in raw.split(",") if p.strip()]
 
 
@@ -83,7 +83,7 @@ def run_arka_agent(text: str) -> tuple[str, str, int]:
             capture_output=True,
             text=True,
             env=env,
-            timeout=int(os.environ.get("ARKA_REMOTE_TIMEOUT", "600")),
+            timeout=int(os.environ.get("REMOTE_TIMEOUT", "600")),
         )
     except subprocess.TimeoutExpired:
         return "", "Sorry, that took too long.", 124
@@ -153,7 +153,7 @@ def handle_inbox_message(
     replied = False
     if auto_reply is None:
         auto_reply = source != "whatsapp"
-    if auto_reply and os.environ.get("ARKA_WHATSAPP_REPLY", "1").strip().lower() not in (
+    if auto_reply and os.environ.get("WHATSAPP_REPLY", "1").strip().lower() not in (
         "0",
         "false",
         "no",
@@ -186,7 +186,7 @@ def _on_whatsapp_message(sender: str, text: str) -> str | None:
     if result.get("skipped"):
         return None
     reply = result.get("speak_text") or result.get("output") or ""
-    max_len = int(os.environ.get("ARKA_WHATSAPP_REPLY_MAX", "1500"))
+    max_len = int(os.environ.get("WHATSAPP_REPLY_MAX", "1500"))
     if len(reply) > max_len:
         reply = reply[: max_len - 3].rstrip() + "..."
     return reply if reply else None
@@ -205,7 +205,7 @@ def listen_whatsapp_web() -> int:
         print("Set ARKA_WHATSAPP_FROM in ~/.config/fish/.env", file=sys.stderr)
         return 1
 
-    poll = float(os.environ.get("ARKA_WHATSAPP_POLL", "5"))
+    poll = float(os.environ.get("WHATSAPP_POLL", "5"))
     CACHE.mkdir(parents=True, exist_ok=True)
     PID_PATH.write_text(str(os.getpid()))
 
@@ -216,7 +216,7 @@ def listen_whatsapp_web() -> int:
     signal.signal(signal.SIGTERM, _stop)
     signal.signal(signal.SIGINT, _stop)
 
-    reply_in_browser = os.environ.get("ARKA_WHATSAPP_REPLY", "1").strip().lower() not in (
+    reply_in_browser = os.environ.get("WHATSAPP_REPLY", "1").strip().lower() not in (
         "0",
         "false",
         "no",
@@ -238,8 +238,8 @@ def listen_whatsapp_web() -> int:
 def cmd_status() -> int:
     load_dotenv()
     print(f"Allowed senders: {', '.join(allowed_senders())}")
-    print(f"Reply enabled: {os.environ.get('ARKA_WHATSAPP_REPLY', '1')}")
-    print(f"Debug: {os.environ.get('ARKA_WHATSAPP_DEBUG', '0')}  log: {DEBUG_LOG}")
+    print(f"Reply enabled: {os.environ.get('WHATSAPP_REPLY', '1')}")
+    print(f"Debug: {os.environ.get('WHATSAPP_DEBUG', '0')}  log: {DEBUG_LOG}")
     print("Engine: pywhatkit (send) + Selenium (listen)")
     if PID_PATH.exists():
         pid = PID_PATH.read_text().strip()

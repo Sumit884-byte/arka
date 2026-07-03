@@ -183,7 +183,7 @@ def run_agent_remote(text: str) -> tuple[str, str, int]:
             capture_output=True,
             text=True,
             env=env,
-            timeout=int(os.environ.get("ARKA_REMOTE_TIMEOUT", "600")),
+            timeout=int(os.environ.get("REMOTE_TIMEOUT", "600")),
         )
     except subprocess.TimeoutExpired:
         return "", "Sorry, that took too long.", 124
@@ -232,7 +232,7 @@ class ArkaRemoteHandler(BaseHTTPRequestHandler):
     def _check_auth(self) -> bool:
         from arka.env import env_get
 
-        token = env_get("REMOTE_TOKEN", "ARKA_REMOTE_TOKEN")
+        token = env_get("REMOTE_TOKEN")
         if not token:
             return False
         auth = self.headers.get("Authorization", "")
@@ -268,7 +268,7 @@ class ArkaRemoteHandler(BaseHTTPRequestHandler):
                 {
                     "ok": True,
                     "agent": os.environ.get("AGENT_NAME", "arka"),
-                    "speak_lang": os.environ.get("ARKA_SPEAK_LANG", "en-IN"),
+                    "speak_lang": os.environ.get("SPEAK_LANG", "en-IN"),
                 },
             )
             return
@@ -404,10 +404,9 @@ def ensure_token() -> str:
     from arka.env import env_get
     from arka.paths import env_file
 
-    token = env_get("REMOTE_TOKEN", "ARKA_REMOTE_TOKEN")
+    token = env_get("REMOTE_TOKEN")
     if token:
         os.environ["REMOTE_TOKEN"] = token
-        os.environ["ARKA_REMOTE_TOKEN"] = token
         return token
 
     token = secrets.token_urlsafe(24)
@@ -416,13 +415,12 @@ def ensure_token() -> str:
     target.parent.mkdir(parents=True, exist_ok=True)
     if target.exists():
         content = target.read_text(encoding="utf-8", errors="replace")
-        if "REMOTE_TOKEN=" not in content and "ARKA_REMOTE_TOKEN=" not in content:
+        if "REMOTE_TOKEN=" not in content:
             with target.open("a", encoding="utf-8") as fh:
                 fh.write(line)
     else:
         target.write_text(line, encoding="utf-8")
     os.environ["REMOTE_TOKEN"] = token
-    os.environ["ARKA_REMOTE_TOKEN"] = token
     print(f"[arka-remote] Generated REMOTE_TOKEN and saved to {target}", flush=True)
     return token
 
@@ -453,8 +451,8 @@ def serve() -> int:
     _bootstrap_env()
     from arka.env import env_get
 
-    host = env_get("REMOTE_HOST", "ARKA_REMOTE_HOST") or "0.0.0.0"
-    port = int(env_get("REMOTE_PORT", "ARKA_REMOTE_PORT") or "8765")
+    host = env_get("REMOTE_HOST") or "0.0.0.0"
+    port = int(env_get("REMOTE_PORT") or "8765")
     token = ensure_token()
 
     write_pid()

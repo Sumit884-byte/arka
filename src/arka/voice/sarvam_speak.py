@@ -70,7 +70,7 @@ def synthesize_chunk(text: str) -> bytes:
     payload = {
         "text": text,
         "target_language_code": (
-            os.environ.get("ARKA_SPEAK_LANG")
+            os.environ.get("SPEAK_LANG")
             or os.environ.get("SARVAM_TTS_LANG")
             or "en-IN"
         ),

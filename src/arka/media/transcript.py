@@ -39,15 +39,15 @@ CACHE_DIR = Path.home() / ".cache/fish-agent/transcripts"
 SAMPLE_RATE = 16000
 GROQ_MAX_BYTES = 24 * 1024 * 1024
 SARVAM_MAX_CHUNK_SECONDS = 25
-LOCAL_FULL_MAX_SECONDS = int(os.environ.get("ARKA_LOCAL_FULL_MAX_SECONDS", "1800"))
+LOCAL_FULL_MAX_SECONDS = int(os.environ.get("LOCAL_FULL_MAX_SECONDS", "1800"))
 DEFAULT_LOCAL_MODEL = "base"
 DEFAULT_SUMMARY_QUESTION = (
     "Summarize the entire video from beginning to end. Explain everything important — "
     "plot, characters, key events, turning points, and how it ends — in a short, concise way. "
     "Use clear paragraphs or bullets. No filler or repetition, but do not skip major story beats."
 )
-SUMMARY_CHUNK_CHARS = int(os.environ.get("ARKA_MEDIA_SUMMARY_CHUNK", "12000"))
-STT_CHUNK_SECONDS = int(os.environ.get("ARKA_STT_CHUNK_SECONDS", "300"))
+SUMMARY_CHUNK_CHARS = int(os.environ.get("MEDIA_SUMMARY_CHUNK", "12000"))
+STT_CHUNK_SECONDS = int(os.environ.get("STT_CHUNK_SECONDS", "300"))
 
 
 def _emit_status(msg: str) -> None:
@@ -95,8 +95,8 @@ def _which(name: str) -> str | None:
 
 def _speak_lang_code() -> str:
     raw = (
-        os.environ.get("ARKA_MEDIA_LANG")
-        or os.environ.get("ARKA_SPEAK_LANG")
+        os.environ.get("MEDIA_LANG")
+        or os.environ.get("SPEAK_LANG")
         or os.environ.get("SARVAM_STT_LANG")
         or "en-IN"
     ).strip()
@@ -338,8 +338,8 @@ def _sarvam_transcribe_pcm(pcm: bytes) -> str | None:
 
 def _local_python_candidates() -> list[str]:
     raw: list[str] = []
-    if os.environ.get("ARKA_MEDIA_PYTHON", "").strip():
-        raw.append(os.environ["ARKA_MEDIA_PYTHON"].strip())
+    if os.environ.get("MEDIA_PYTHON", "").strip():
+        raw.append(os.environ["MEDIA_PYTHON"].strip())
     try:
         import arka.paths as ap
 
@@ -373,8 +373,8 @@ def _faster_whisper_available(py: str) -> bool:
 def _ensure_local_stt(*, auto_install: bool = True) -> bool:
     for py in _local_python_candidates():
         if _faster_whisper_available(py):
-            if not os.environ.get("ARKA_MEDIA_PYTHON", "").strip():
-                os.environ["ARKA_MEDIA_PYTHON"] = py
+            if not os.environ.get("MEDIA_PYTHON", "").strip():
+                os.environ["MEDIA_PYTHON"] = py
             return True
     if not auto_install:
         return False
@@ -383,15 +383,15 @@ def _ensure_local_stt(*, auto_install: bool = True) -> bool:
         return False
     for py in _local_python_candidates():
         if _faster_whisper_available(py):
-            os.environ["ARKA_MEDIA_PYTHON"] = py
+            os.environ["MEDIA_PYTHON"] = py
             return True
     return False
 
 
 def _local_whisper_config() -> tuple[str, str, str, str | None]:
     model = (
-        os.environ.get("ARKA_LOCAL_WHISPER_MODEL")
-        or os.environ.get("ARKA_HF_STT_MODEL")
+        os.environ.get("LOCAL_WHISPER_MODEL")
+        or os.environ.get("HF_STT_MODEL")
         or DEFAULT_LOCAL_MODEL
     ).strip()
     device = whisper_device()
@@ -449,7 +449,7 @@ def _whisper_cli_transcribe(wav: Path) -> str | None:
     whisper = _which("whisper")
     if not whisper:
         return None
-    model = (os.environ.get("ARKA_LOCAL_WHISPER_MODEL") or "small").strip()
+    model = (os.environ.get("LOCAL_WHISPER_MODEL") or "small").strip()
     lang = _speak_lang_code()
     out_dir = Path(tempfile.mkdtemp(prefix="arka-whisper-"))
     proc = subprocess.run(
@@ -518,7 +518,7 @@ def _local_whisper_transcribe(path: Path, bar: ProgressBar | None = None) -> str
 
 
 def _stt_preference() -> str:
-    return (os.environ.get("ARKA_MEDIA_STT") or os.environ.get("ARKA_STT") or "auto").strip().lower()
+    return (os.environ.get("MEDIA_STT") or os.environ.get("STT") or "auto").strip().lower()
 
 
 def _cloud_allowed() -> bool:
@@ -755,7 +755,7 @@ def _groq_transcribe_upload_path_from_pcm(pcm: bytes) -> str | None:
 
 
 def _youtube_captions_allowed() -> bool:
-    pref = (os.environ.get("ARKA_MEDIA_YOUTUBE") or "auto").strip().lower()
+    pref = (os.environ.get("MEDIA_YOUTUBE") or "auto").strip().lower()
     return pref not in {"0", "no", "false", "off", "never", "skip"}
 
 

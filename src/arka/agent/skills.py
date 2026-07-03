@@ -20,7 +20,7 @@ try:
     load_env_file()
 except ImportError:
     def config_dir() -> Path:
-        if env := os.environ.get("ARKA_CONFIG_DIR", "").strip():
+        if env := os.environ.get("CONFIG_DIR", "").strip():
             return Path(env).expanduser()
         legacy = Path.home() / ".config" / "fish"
         return legacy if (legacy / ".env").is_file() else Path.home() / ".config" / "arka"
@@ -29,7 +29,7 @@ except ImportError:
         return Path.home() / ".cache" / "fish-agent"
 
     def arka_home() -> Path:
-        if env := os.environ.get("ARKA_HOME", "").strip():
+        if env := os.environ.get("INSTALL_HOME", "").strip():
             return Path(env).expanduser()
         return Path(__file__).resolve().parent
 
@@ -39,7 +39,7 @@ SKILL_NAME_RE = re.compile(r"^[a-z][a-z0-9_-]{1,48}$")
 
 def skills_search_paths() -> list[Path]:
     paths: list[Path] = []
-    for raw in (os.environ.get("ARKA_SKILLS_PATH") or "").split(os.pathsep):
+    for raw in (os.environ.get("SKILLS_PATH") or "").split(os.pathsep):
         raw = raw.strip()
         if raw:
             paths.append(Path(raw).expanduser())

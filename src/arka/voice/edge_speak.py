@@ -16,7 +16,7 @@ VENV_PY = Path.home() / ".config" / "fish" / "venv-tts" / "bin" / "python3"
 
 
 def _tts_python() -> Path:
-    arka_home = Path(os.environ.get("ARKA_HOME", Path.home() / "dev/arka")).expanduser()
+    arka_home = Path(os.environ.get("INSTALL_HOME", Path.home() / "dev/arka")).expanduser()
     for candidate in (
         arka_home / "venv-arka/bin/python3",
         Path.home() / "dev/arka/venv-arka/bin/python3",
@@ -121,19 +121,19 @@ LANG_ALIASES = {
 
 
 def resolve_lang(code: str | None = None) -> str:
-    lang = (code or os.environ.get("ARKA_SPEAK_LANG") or "en-IN").strip()
+    lang = (code or os.environ.get("SPEAK_LANG") or "en-IN").strip()
     if lang in VOICES:
         return lang
     return LANG_ALIASES.get(lang.lower(), "en-IN")
 
 
 def resolve_voice(lang: str | None = None, voice: str | None = None) -> str:
-    explicit = (voice or os.environ.get("ARKA_SPEAK_VOICE") or "").strip()
+    explicit = (voice or os.environ.get("SPEAK_VOICE") or "").strip()
     if explicit:
         return explicit
     code = resolve_lang(lang)
     meta = VOICES.get(code, VOICES["en-IN"])
-    gender = os.environ.get("ARKA_SPEAK_GENDER", "female").strip().lower()
+    gender = os.environ.get("SPEAK_GENDER", "female").strip().lower()
     if gender in ("male", "m"):
         return meta["male"]
     if gender in ("female", "f"):
@@ -204,8 +204,8 @@ def speak(text: str, lang: str | None = None, voice: str | None = None) -> None:
     max_len = int(os.environ.get("AGENT_SPEAK_MAX", str(DEFAULT_CHUNK)))
     max_len = min(max_len, 2500)
     voice_id = resolve_voice(lang, voice)
-    rate = os.environ.get("ARKA_SPEAK_RATE", "-5%")
-    pitch = os.environ.get("ARKA_SPEAK_PITCH", "+0Hz")
+    rate = os.environ.get("SPEAK_RATE", "-5%")
+    pitch = os.environ.get("SPEAK_PITCH", "+0Hz")
 
     for chunk in chunk_text(text, max_len):
         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:

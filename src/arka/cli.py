@@ -51,7 +51,7 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_summarize(args[1:])
 
     if args[0] == "setup":
-        return _cmd_setup()
+        return _cmd_setup(args[1:])
 
     if args[0] == "platform":
         return _cmd_platform(args[1:])
@@ -90,6 +90,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args[0] == "aie":
         return run_script("arka_aie.py", args[1:] or ["status"])
+
+    if args[0] == "google":
+        return run_script("arka_google.py", args[1:])
 
     if args[0] == "remind":
         rest = args[1:]
@@ -468,21 +471,42 @@ def _cmd_route_preview(text: str) -> int:
     return 0
 
 
-def _cmd_setup() -> int:
+def _cmd_setup(extra: list[str] | None = None) -> int:
+    extra = extra or []
+    skip_venv = "--no-venv" in extra or "--layout-only" in extra
+
     home = ensure_layout()
     from arka.platform_info import ensure_platform_cache
+    from arka.setup_runtime import ensure_venv, resolve_venv_python, venv_dir, verify_chat_imports
 
     profile = ensure_platform_cache()
-    print(f"Arka setup complete ({profile.get('platform', system())})")
+    print(f"Arka setup ({profile.get('platform', system())})")
     print(f"  Scripts: (package) {home}")
     print(f"  Config:  {config_dir()}")
     print(f"  Cache:   {cache_dir()}")
     print(f"  Env:     {env_file()}")
+
+    if not skip_venv:
+        print(f"\n→ Python venv: {venv_dir()}")
+        try:
+            ensure_venv(install_chat=True)
+        except RuntimeError as exc:
+            print(f"  ✗ {exc}", file=sys.stderr)
+            return 1
+        vpy = resolve_venv_python(require_agno=True)
+        if not vpy:
+            missing = verify_chat_imports(venv_dir() / "bin" / "python3")
+            print(f"  ⚠ Missing modules in venv: {', '.join(missing) or 'agno'}", file=sys.stderr)
+            print("  Retry: arka setup", file=sys.stderr)
+            return 1
+        print(f"  ✓ Chat deps installed → {vpy}")
+        print("    (agno, ddgs, trafilatura, beautifulsoup4, …)")
+
     if not env_file().is_file():
         print("  Edit .env and add GEMINI_API_KEY or GROQ_API_KEY")
     if skill_mode() == "portable":
         print(f"\n  For all 70+ skills, install fish: {fish_install_hint()}")
-    print("\nNext: pip install 'arka-agent[chat]'  then  arka ask \"what is Python?\"")
+    print("\n✓ Setup complete — try: arka brief   or   arka ask \"what is Python?\"")
     return 0
 
 
@@ -498,6 +522,7 @@ def _cmd_platform(extra: list[str]) -> int:
 
 def _cmd_doctor() -> int:
     from arka.platform_info import ensure_platform_cache
+    from arka.setup_runtime import resolve_venv_python, venv_dir, verify_chat_imports
 
     profile = ensure_platform_cache()
     plat = profile.get("platform", system())
@@ -511,6 +536,14 @@ def _cmd_doctor() -> int:
     print(f"  Config:         {config_dir()}")
     print(f"  Cache:          {cache_dir()}")
     print(f"  config.fish:    {('ok' if (arka_home() / 'config.fish').is_file() else 'missing — run: python scripts/sync_bundled.py')}")
+    vpy = resolve_venv_python(require_agno=False)
+    print(f"  venv-arka:      {venv_dir()}{(' → ' + str(vpy) if vpy else ' (missing — run: arka setup)')}")
+    if vpy:
+        missing = verify_chat_imports(vpy)
+        if missing:
+            print(f"  chat modules:   missing {', '.join(missing)} — run: arka setup")
+        else:
+            print("  chat modules:   ok (agno, ddgs, trafilatura, …)")
     mode = skill_mode()
     if mode == "full":
         print(f"  Skills:         full (70+) via {fish_config()}")
@@ -527,7 +560,7 @@ def _cmd_help() -> int:
 Install:
   pip install arka-agent          # core
   pip install 'arka-agent[chat]'  # web answers, calc, weather
-  arka setup                      # create ~/.config/arka + .env (scripts live in package)
+  arka setup                      # config dirs + venv-arka + chat deps (ddgs, agno, …)
   arka platform [detect|show]     # cache OS profile on first run (~/.config/arka/platform.json)
   arka refetch [--install]        # git pull + sync bundled (after clone or on another PC)
   arka reload [--listen] [--dev]  # re-source config in this shell (fish); --listen restarts mic
@@ -545,6 +578,10 @@ Usage:
   arka password save wifi         # generate + store password
   arka password set wifi <secret> # store your own password
   arka password get wifi          # retrieve stored password
+  arka google setup               # Google Calendar + Gmail OAuth setup
+  arka google login               # sign in via browser URL
+  arka google gmail --unread      # list unread mail
+  arka google calendar --today    # today's events
   arka chat calc integrate sin(x) # SymPy
   arka route <request>            # preview routing (no run)
   arka doctor                     # install diagnostics

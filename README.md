@@ -10,7 +10,7 @@ A modern, AI-powered Fish shell setup with **Arka** — a voice-capable natural-
 > - **Risky actions** — prompts `[y/N]` before install, delete, download, WhatsApp send, browser automation, and scripts (`ARKA_SECURITY_ACTIONS=1`)
 > - **Destructive shell** — hard-blocks patterns like `curl | bash`, `rm -rf /`, fork bombs
 >
-> Master switch: `ARKA_SECURITY=1` in `.env`. Set any layer to `0` to disable it.
+> Master switch: `SECURITY=1` in `.env`. Set any layer to `0` to disable it.
 
 > [!TIP]
 > **Lightweight & secure**: Commands run locally. LLM calls go through a **fallback orchestrator** (`arka_llm_fallback.py`) across Gemini, Groq, Ollama, and vLLM — no Docker required for daily use (PrivateGPT + Qdrant only for PDF ingest).
@@ -302,7 +302,7 @@ set -x ARKA_ROUTE_MODE ai
 
 For humans (not the model), `arka help` is the full catalog; `arka tell your skills` is a short voice-friendly summary plus the active model label.
 
-Answers from `web_answer` / chat show the model used at the bottom (`Model: provider/name`). Set `ARKA_SHOW_MODEL=0` in `.env` to hide it.
+Answers from `web_answer` / chat show the model used at the bottom (`Model: provider/name`). Set `SHOW_MODEL=0` in `.env` to hide it.
 
 **7. Profession domains — source registries, not role prompts**
 
@@ -570,7 +570,7 @@ pip install --break-system-packages -r ~/.config/fish/arka_chat_requirements.txt
 
 ### Environment (`.env`)
 
-Create `~/.config/fish/.env`:
+Create `~/.config/arka/.env` (or use `arka/.env` in a dev checkout). Use short names — no `ARKA_` prefix.
 
 ```env
 # LLM — fallback orchestrator (at least one cloud key or local Ollama)
@@ -583,40 +583,44 @@ AI_PREFERRED_PROVIDER=groq
 AI_PREFERRED_MODEL=llama-3.3-70b-versatile
 
 # Orchestrator chains (optional — see .env.example)
-# ARKA_LLM_AUTO_FALLBACK=1
-# ARKA_LLM_FALLBACK=gemini:gemini-2.0-flash,groq:llama-3.3-70b-versatile,ollama:llama3.2:1b
-# ARKA_LLM_FALLBACK_SUMMARIZE=   # per-task: ROUTE, CHAT, RESEARCH, AGENT, PDF, PREDICTIONS
-# ARKA_LLM_FALLBACK_NOTIFY=1     # stderr when failover succeeds
-# ARKA_LLM_VERBOSE=1               # log each provider attempt
+# LLM_AUTO_FALLBACK=1
+# LLM_FALLBACK=gemini:gemini-2.0-flash,groq:llama-3.3-70b-versatile,ollama:llama3.2:1b
+# LLM_FALLBACK_SUMMARIZE=   # per-task: ROUTE, CHAT, RESEARCH, AGENT, PDF, PREDICTIONS
+# LLM_FALLBACK_NOTIFY=1     # stderr when failover succeeds
+# LLM_VERBOSE=1               # log each provider attempt
 
 # Arka
 AGENT_NAME=arka
 AGENT_SPEAK=1
-ARKA_SPEAK_LANG=en-IN
+SPEAK_LANG=en-IN
 AGENT_WAKE_WORDS=hey arka,arka
 
 # Listen / STT (optional — improves wake accuracy)
-# ARKA_LISTEN_ENGINE=auto
-# ARKA_STT=auto
+# LISTEN_ENGINE=auto
+# STT=auto
 # ASSEMBLYAI_API_KEY=
 # SARVAM_API_KEY=
 # SARVAM_STT_MODE=translit
 
 # Memory (optional cloud + local fallback)
 # SUPERMEMORY_API_KEY=
-# ARKA_MEMORY=auto
+# MEMORY=auto
 
 # Third-party plugins (optional extra search path)
-# ARKA_SKILLS_PATH=~/my-arka-plugins
+# SKILLS_PATH=~/my-arka-plugins
 
 # PDF RAG
-ARKA_PDF_RAG_URL=http://127.0.0.1:8080
-ARKA_PRIVATEGPT_HOME=~/Projects/private-gpt
-ARKA_PDF_RAG_AUTO_START=1
+PDF_RAG_URL=http://127.0.0.1:8080
+PRIVATEGPT_HOME=~/Projects/private-gpt
+PDF_RAG_AUTO_START=1
 
 # Usage tracking (autostart on login)
-ARKA_USAGE_TRACK=1
-ARKA_WEB_TRACK=1
+USAGE_TRACK=1
+WEB_TRACK=1
+
+# Remote serve (web/mobile API)
+# REMOTE_TOKEN=...
+# REMOTE_PORT=8765
 ```
 
 See `.env.example` for the full list of options.
@@ -831,7 +835,7 @@ agent_recall meeting
 | Devanagari transcript breaks routing | Fixed via `arka_stt_map.py` — ensure latest bundle; try `ARKA_LISTEN_STT_LANG=en-IN`                   |
 | Speech recognition poor (offline)    | `ARKA_VOSK_TIER=best`; `arka listen models`                                                            |
 | Listener crashes (no vosk)           | `~/.config/fish/venv-arka/bin/python3 ~/.config/fish/arka_wake.py --check` then `arka debug`           |
-| Wrong microphone                     | `pactl list sources short` → set `ARKA_MIC_DEVICE=<source name>` in `.env` (Linux)                     |
+| Wrong microphone                     | `pactl list sources short` → set `MIC_DEVICE=<source name>` in `.env` (Linux)                     |
 | Config changes not picked up         | `arka reload` or open a new shell; `arka reload --listen` for Python wake changes                      |
 | Supermemory not used                 | `supermemory status` — set `SUPERMEMORY_API_KEY`; `ARKA_MEMORY=auto`                                   |
 | Plugin not routing                   | `arka skills refresh`; check `skill.json` triggers; `agent_route "your trigger phrase"`                |

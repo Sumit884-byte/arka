@@ -54,11 +54,11 @@ def _pollinations_key() -> str:
 
 
 def _backend() -> str:
-    return os.environ.get("ARKA_IMAGE_BACKEND", "auto").strip().lower() or "auto"
+    return os.environ.get("IMAGE_BACKEND", "auto").strip().lower() or "auto"
 
 
 def _fallback_enabled() -> bool:
-    return os.environ.get("ARKA_IMAGE_FALLBACK", "1") not in ("0", "false", "no")
+    return os.environ.get("IMAGE_FALLBACK", "1") not in ("0", "false", "no")
 
 
 def _nano_banana_models(requested: str) -> list[str]:
@@ -66,7 +66,7 @@ def _nano_banana_models(requested: str) -> list[str]:
     models: list[str] = []
     if requested:
         models.append(requested)
-    env_model = os.environ.get("ARKA_IMAGE_MODEL", "").strip()
+    env_model = os.environ.get("IMAGE_MODEL", "").strip()
     if env_model and env_model not in models:
         models.append(env_model)
     for m in NANO_BANANA_MODELS:
@@ -78,7 +78,11 @@ def _nano_banana_models(requested: str) -> list[str]:
 def _default_output(prompt: str) -> Path:
     slug = re.sub(r"[^a-z0-9]+", "-", prompt.lower())[:40].strip("-") or "image"
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-    out_dir = Path.home() / "Pictures" / "arka-generated"
+    env_dir = os.environ.get("IMAGE_OUTPUT_DIR", "").strip()
+    if env_dir:
+        out_dir = Path(env_dir).expanduser()
+    else:
+        out_dir = Path.home() / "Pictures" / "arka-generated"
     out_dir.mkdir(parents=True, exist_ok=True)
     return out_dir / f"{slug}-{ts}.png"
 
@@ -216,7 +220,7 @@ def generate(
 ) -> tuple[Path, str]:
     backend = _backend()
     models = _nano_banana_models(model)
-    poll_model = os.environ.get("ARKA_IMAGE_POLLINATIONS_MODEL", "nanobanana").strip() or "nanobanana"
+    poll_model = os.environ.get("IMAGE_POLLINATIONS_MODEL", "nanobanana").strip() or "nanobanana"
 
     if backend == "pollinations":
         return generate_pollinations(prompt, output, aspect, poll_model)
@@ -279,11 +283,19 @@ def main() -> int:
         return 1
 
     print(f"Saved ({provider}): {saved}")
-    if os.environ.get("ARKA_OPEN_IMAGE", "1") not in ("0", "false"):
+    if os.environ.get("OPEN_IMAGE", "1") not in ("0", "false"):
         try:
             import subprocess
+            import sys
 
-            subprocess.Popen(["xdg-open", str(saved)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if sys.platform == "darwin":
+                opener = ["open", str(saved)]
+            elif sys.platform.startswith("linux"):
+                opener = ["xdg-open", str(saved)]
+            else:
+                opener = None
+            if opener:
+                subprocess.Popen(opener, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except OSError:
             pass
     return 0

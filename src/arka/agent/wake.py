@@ -33,7 +33,7 @@ VENV_PY = Path.home() / ".config" / "fish" / "venv-arka" / "bin" / "python3"
 def _load_dotenv() -> None:
     """Load ~/.env / ARKA_HOME/.env so listen works outside a sourced fish session."""
     candidates: list[Path] = []
-    for key in ("ARKA_CONFIG_DIR", "ARKA_HOME"):
+    for key in ("CONFIG_DIR", "INSTALL_HOME"):
         raw = (os.environ.get(key) or "").strip()
         if raw:
             candidates.append(Path(raw).expanduser() / ".env")
@@ -89,7 +89,7 @@ MODEL_CATALOG: dict[str, tuple[str, str]] = {
     ),
 }
 
-DEBUG = os.environ.get("ARKA_LISTEN_DEBUG", "").strip().lower() in ("1", "true", "yes")
+DEBUG = os.environ.get("LISTEN_DEBUG", "").strip().lower() in ("1", "true", "yes")
 _LAST_PARTIAL: dict[str, str] = {"wake": "", "cmd": ""}
 
 
@@ -117,11 +117,11 @@ def debug_hear(label: str, text: str, *, partial: bool = False) -> None:
 
 
 def _speak_lang() -> str:
-    return (os.environ.get("ARKA_SPEAK_LANG") or "en-IN").strip()
+    return (os.environ.get("SPEAK_LANG") or "en-IN").strip()
 
 
 def _stt_backend() -> str:
-    mode = (os.environ.get("ARKA_STT") or "auto").strip().lower()
+    mode = (os.environ.get("STT") or "auto").strip().lower()
     if mode in ("groq", "vosk", "sarvam", "assemblyai", "aai"):
         return "assemblyai" if mode in ("assemblyai", "aai") else mode
     if os.environ.get("ASSEMBLYAI_API_KEY", "").strip():
@@ -154,10 +154,10 @@ def _stt_chain_label() -> str:
 
 
 def resolve_model_preset() -> str:
-    explicit = (os.environ.get("ARKA_VOSK_PRESET") or "").strip().lower()
+    explicit = (os.environ.get("VOSK_PRESET") or "").strip().lower()
     if explicit in MODEL_CATALOG:
         return explicit
-    tier = (os.environ.get("ARKA_VOSK_TIER") or "medium").strip().lower()
+    tier = (os.environ.get("VOSK_TIER") or "medium").strip().lower()
     lang = _speak_lang().upper()
     indian = lang.endswith("-IN") or lang == "EN_IN"
     if tier in ("best", "large"):
@@ -168,7 +168,7 @@ def resolve_model_preset() -> str:
 
 
 def resolve_model_dir() -> Path:
-    custom = (os.environ.get("ARKA_VOSK_MODEL") or "").strip()
+    custom = (os.environ.get("VOSK_MODEL") or "").strip()
     if custom:
         return Path(custom).expanduser()
     preset = resolve_model_preset()
@@ -177,7 +177,7 @@ def resolve_model_dir() -> Path:
 
 
 def resolve_model_url(model_dir: Path) -> str:
-    custom = (os.environ.get("ARKA_VOSK_MODEL_URL") or "").strip()
+    custom = (os.environ.get("VOSK_MODEL_URL") or "").strip()
     if custom:
         return custom
     name = model_dir.name
@@ -229,7 +229,7 @@ def ensure_venv_deps() -> Path:
 
 
 def mic_device() -> str | None:
-    dev = (os.environ.get("ARKA_MIC_DEVICE") or os.environ.get("PULSE_SOURCE") or "").strip()
+    dev = (os.environ.get("MIC_DEVICE") or os.environ.get("PULSE_SOURCE") or "").strip()
     return dev or None
 
 
@@ -373,7 +373,7 @@ def wake_aliases() -> list[str]:
 
 
 def _wake_required() -> bool:
-    return os.environ.get("ARKA_WAKE_REQUIRED", "").strip().lower() in (
+    return os.environ.get("WAKE_REQUIRED", "").strip().lower() in (
         "1",
         "true",
         "yes",
@@ -633,7 +633,7 @@ def run_agent(transcript: str) -> None:
 
     root = Path(__file__).resolve().parent
     py = str(VENV_PY if VENV_PY.is_file() else sys.executable)
-    env.setdefault("ARKA_HOME", str(root))
+    env.setdefault("INSTALL_HOME", str(root))
     cmd = [py, str(root / "arka_talents.py"), "ask", transcript]
     if os.environ.get("AGENT_SPEAK", "1").strip().lower() not in ("0", "false", "no"):
         cmd.append("--speak")
@@ -694,7 +694,7 @@ def listen_loop(model_path: Path, stream=None, *, realtime: bool = True) -> list
     command_aai = None
     command_deadline = 0.0
     wake_cooldown_until = 0.0
-    command_seconds = float(os.environ.get("ARKA_COMMAND_SECONDS", "10"))
+    command_seconds = float(os.environ.get("COMMAND_SECONDS", "10"))
     audio_clock = 0.0
     results: list[dict] = []
     wake_text = ""
@@ -801,7 +801,7 @@ def listen_loop(model_path: Path, stream=None, *, realtime: bool = True) -> list
 
 def _listen_engine() -> str:
     """auto | assemblyai | vosk — which engine drives wake+command detection."""
-    mode = (os.environ.get("ARKA_LISTEN_ENGINE") or "auto").strip().lower()
+    mode = (os.environ.get("LISTEN_ENGINE") or "auto").strip().lower()
     if mode in ("assemblyai", "aai"):
         return "assemblyai"
     if mode == "vosk":

@@ -12,17 +12,17 @@ from typing import Iterable, Sequence
 def use_color() -> bool:
     if os.environ.get("NO_COLOR"):
         return False
-    if os.environ.get("ARKA_STOCK_PLAIN", "").lower() in {"1", "true", "yes"}:
+    if os.environ.get("STOCK_PLAIN", "").lower() in {"1", "true", "yes"}:
         return False
-    if os.environ.get("ARKA_STOCK_TERMINAL", "").lower() in {"1", "true", "yes"}:
+    if os.environ.get("STOCK_TERMINAL", "").lower() in {"1", "true", "yes"}:
         return True
     return sys.stdout.isatty()
 
 
 def use_terminal_ui() -> bool:
-    if os.environ.get("ARKA_STOCK_PLAIN", "").lower() in {"1", "true", "yes"}:
+    if os.environ.get("STOCK_PLAIN", "").lower() in {"1", "true", "yes"}:
         return False
-    if os.environ.get("ARKA_STOCK_TERMINAL", "").lower() in {"1", "true", "yes"}:
+    if os.environ.get("STOCK_TERMINAL", "").lower() in {"1", "true", "yes"}:
         return True
     return sys.stdout.isatty()
 

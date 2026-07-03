@@ -18,12 +18,12 @@ from pathlib import Path
 import numpy as np
 
 CACHE_ROOT = Path.home() / ".cache/fish-agent/turboquant"
-EMBED_MODEL = os.environ.get("ARKA_EMBED_MODEL", "nomic-embed-text")
-EMBED_DIM = int(os.environ.get("ARKA_EMBED_DIM", "768"))
-TQ_BITS = int(os.environ.get("ARKA_TURBOQUANT_BITS", "6"))
-DEFAULT_CHUNK = int(os.environ.get("ARKA_RAG_CHUNK_CHARS", "700"))
-DEFAULT_TOP_K = int(os.environ.get("ARKA_RAG_TOP_K", "24"))
-DEFAULT_CONTEXT = int(os.environ.get("ARKA_RAG_CONTEXT_CHARS", "14000"))
+EMBED_MODEL = os.environ.get("EMBED_MODEL", "nomic-embed-text")
+EMBED_DIM = int(os.environ.get("EMBED_DIM", "768"))
+TQ_BITS = int(os.environ.get("TURBOQUANT_BITS", "6"))
+DEFAULT_CHUNK = int(os.environ.get("RAG_CHUNK_CHARS", "700"))
+DEFAULT_TOP_K = int(os.environ.get("RAG_TOP_K", "24"))
+DEFAULT_CONTEXT = int(os.environ.get("RAG_CONTEXT_CHARS", "14000"))
 
 _STOP = frozenset({
     "a", "an", "the", "is", "are", "was", "were", "why", "what", "who", "how", "when", "where",
@@ -36,7 +36,7 @@ _STOP = frozenset({
 
 
 def use_turboquant() -> bool:
-    backend = (os.environ.get("ARKA_RAG_BACKEND") or "turboquant").strip().lower()
+    backend = (os.environ.get("RAG_BACKEND") or "turboquant").strip().lower()
     return backend not in {"0", "false", "no", "off", "privategpt", "pgpt", "legacy"}
 
 
@@ -447,8 +447,8 @@ CODEBASE_EXTENSIONS = frozenset({
     ".rb", ".php", ".swift", ".lua", ".vim", ".dockerfile", ".gradle",
     ".properties", ".env.example", ".gitignore", ".csv", ".tsv", ".txt",
 })
-MAX_CODEBASE_FILES = int(os.environ.get("ARKA_CODEBASE_MAX_FILES", "800"))
-MAX_CODEBASE_BYTES = int(os.environ.get("ARKA_CODEBASE_MAX_BYTES", str(512 * 1024)))
+MAX_CODEBASE_FILES = int(os.environ.get("CODEBASE_MAX_FILES", "800"))
+MAX_CODEBASE_BYTES = int(os.environ.get("CODEBASE_MAX_BYTES", str(512 * 1024)))
 
 
 def _iter_codebase_files(root: Path) -> list[Path]:

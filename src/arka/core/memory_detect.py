@@ -261,7 +261,7 @@ RULES: tuple[MemoryRule, ...] = (
 
 
 def autodetect_enabled() -> bool:
-    raw = (os.environ.get("ARKA_MEMORY_AUTODETECT") or "1").strip().lower()
+    raw = (os.environ.get("MEMORY_AUTODETECT") or "1").strip().lower()
     return raw not in ("0", "false", "no", "off")
 
 

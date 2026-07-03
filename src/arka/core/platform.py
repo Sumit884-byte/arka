@@ -24,7 +24,7 @@ PLATFORM_ENV = "platform.env"
 
 
 def _config_dir() -> Path:
-    if v := __import__("os").environ.get("ARKA_CONFIG_DIR", "").strip():
+    if v := __import__("os").environ.get("CONFIG_DIR", "").strip():
         return Path(v).expanduser().resolve()
     legacy = Path.home() / ".config" / "fish"
     if (legacy / ".env").is_file():
@@ -113,14 +113,14 @@ def save_platform(data: dict) -> Path:
     plat = data["platform"]
     caps = data.get("capabilities") or {}
     lines = [
-        f"ARKA_PLATFORM={plat}",
-        f"ARKA_PLATFORM_DETECTED_AT={data.get('detected_at', '')}",
-        f"ARKA_PLATFORM_IS_MACOS={1 if plat == 'macos' else 0}",
-        f"ARKA_PLATFORM_IS_LINUX={1 if plat == 'linux' else 0}",
-        f"ARKA_PLATFORM_IS_WINDOWS={1 if plat == 'windows' else 0}",
+        f"PLATFORM={plat}",
+        f"PLATFORM_DETECTED_AT={data.get('detected_at', '')}",
+        f"PLATFORM_IS_MACOS={1 if plat == 'macos' else 0}",
+        f"PLATFORM_IS_LINUX={1 if plat == 'linux' else 0}",
+        f"PLATFORM_IS_WINDOWS={1 if plat == 'windows' else 0}",
     ]
     for key, val in caps.items():
-        env_key = "ARKA_" + key.upper()
+        env_key = key.upper()
         lines.append(f"{env_key}={val or ''}")
     (cfg / PLATFORM_ENV).write_text("\n".join(lines) + "\n", encoding="utf-8")
     return json_path

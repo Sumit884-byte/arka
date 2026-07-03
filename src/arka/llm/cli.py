@@ -117,7 +117,7 @@ def llm_route(cmd: str, available_skills: str, aliases_list: str) -> str:
     except ImportError:
         pass
     if not aliases_list:
-        aliases_list = env("ARKA_ROUTE_ALIASES")
+        aliases_list = env("ROUTE_ALIASES")
     plat = _host_platform()
     plat_hint = _platform_hint(plat)
     system = (
@@ -264,7 +264,7 @@ def cmd_reset(_args: argparse.Namespace) -> int:
 
 
 def cmd_route(args: argparse.Namespace) -> int:
-    text = llm_route(args.cmd, args.skills, env("ARKA_ROUTE_ALIASES"))
+    text = llm_route(args.cmd, args.skills, env("ROUTE_ALIASES"))
     if not text:
         return 1
     print(text)

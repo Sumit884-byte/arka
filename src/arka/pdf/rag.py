@@ -98,7 +98,7 @@ def env(name: str, default: str = "") -> str:
 
 
 def quiet_status() -> bool:
-    return env("ARKA_PDF_QUIET") == "1"
+    return env("PDF_QUIET") == "1"
 
 
 def status_msg(msg: str) -> None:
@@ -107,25 +107,25 @@ def status_msg(msg: str) -> None:
 
 
 def base_url() -> str:
-    return (env("ARKA_PDF_RAG_URL") or env("PRIVATEGPT_URL") or DEFAULT_URL).rstrip("/")
+    return (env("PDF_RAG_URL") or env("PRIVATEGPT_URL") or DEFAULT_URL).rstrip("/")
 
 
 def collection() -> str:
-    return env("ARKA_PDF_COLLECTION") or env("PRIVATEGPT_COLLECTION") or DEFAULT_COLLECTION
+    return env("PDF_COLLECTION") or env("PRIVATEGPT_COLLECTION") or DEFAULT_COLLECTION
 
 
 def privategpt_home() -> Path:
-    raw = env("ARKA_PRIVATEGPT_HOME") or env("PRIVATEGPT_HOME")
+    raw = env("PRIVATEGPT_HOME") or env("PRIVATEGPT_HOME")
     return Path(raw).expanduser() if raw else DEFAULT_HOME
 
 
 def auto_start_enabled() -> bool:
-    value = env("ARKA_PDF_RAG_AUTO_START", "1").lower()
+    value = env("PDF_RAG_AUTO_START", "1").lower()
     return value not in {"0", "false", "no", "off"}
 
 
 def start_timeout() -> float:
-    raw = env("ARKA_PDF_RAG_START_TIMEOUT", "120")
+    raw = env("PDF_RAG_START_TIMEOUT", "120")
     try:
         return max(10.0, float(raw))
     except ValueError:
@@ -145,7 +145,7 @@ def auth_headers() -> dict[str, str]:
         "Accept": "application/json",
         "User-Agent": "arka-pdf-rag/1.0",
     }
-    secret = env("PRIVATEGPT_AUTH") or env("ARKA_PDF_RAG_AUTH")
+    secret = env("PRIVATEGPT_AUTH") or env("PDF_RAG_AUTH")
     if not secret:
         return headers
     if not secret.lower().startswith("basic "):
@@ -232,7 +232,7 @@ def _find_serve_cmd(port: int) -> tuple[list[str], Path | None]:
 
 
 def _qdrant_url() -> str:
-    return env("PGPT_QDRANT_URL") or env("ARKA_QDRANT_URL") or DEFAULT_QDRANT_URL
+    return env("PGPT_QDRANT_URL") or env("QDRANT_URL") or DEFAULT_QDRANT_URL
 
 
 def _qdrant_is_up() -> bool:
@@ -247,7 +247,7 @@ def _qdrant_is_up() -> bool:
 def _ensure_qdrant() -> bool:
     if _qdrant_is_up():
         return True
-    if env("ARKA_QDRANT_AUTO_START", "1").lower() in {"0", "false", "no", "off"}:
+    if env("QDRANT_AUTO_START", "1").lower() in {"0", "false", "no", "off"}:
         return False
     if not shutil.which("docker"):
         print("Qdrant is not running and docker is unavailable.", file=sys.stderr)
@@ -336,7 +336,7 @@ def _ensure_deps() -> bool:
     if not shutil.which("uv") or not (home / "pyproject.toml").is_file():
         return True
 
-    extra = env("ARKA_PRIVATEGPT_EXTRA", "core")
+    extra = env("PRIVATEGPT_EXTRA", "core")
     print(
         f"Installing PrivateGPT dependencies (uv sync --extra {extra}; first run may take several minutes)…",
         file=sys.stderr,
@@ -700,7 +700,7 @@ def cmd_ingest(path: str) -> int:
         else:
             status_msg(f"TurboQuant index skipped: {tq_detail}")
 
-    pgpt_wanted = env("ARKA_PDF_RAG_PGPT", "1").lower() not in {"0", "false", "no", "off"}
+    pgpt_wanted = env("PDF_RAG_PGPT", "1").lower() not in {"0", "false", "no", "off"}
     if not pgpt_wanted:
         if tq_ok:
             print(f"✓ Indexed {doc.name} (TurboQuant: {tq_detail})")
@@ -793,7 +793,7 @@ def semantic_search_context(question: str, artifact: str | None = None) -> tuple
 
 
 def _ollama_chat_model(default: str = "llama3.2:1b") -> str:
-    return env("ARKA_PDF_RAG_MODEL") or env("OLLAMA_CHAT_MODEL") or default
+    return env("PDF_RAG_MODEL") or env("OLLAMA_CHAT_MODEL") or default
 
 
 def _ollama_api_base() -> str:
@@ -807,7 +807,7 @@ def _gemini_models() -> list[str]:
     preferred = env("AI_PREFERRED_MODEL")
     models = [
         preferred,
-        env("ARKA_PDF_RAG_MODEL"),
+        env("PDF_RAG_MODEL"),
         "gemini-2.5-flash",
         "gemini-2.0-flash",
         "gemini-1.5-flash",
@@ -1038,7 +1038,7 @@ def cmd_ask(question: str, document: str | None = None) -> int:
 
     tq_docs = _list_turboquant_documents() if _turboquant_rag() else []
     if _turboquant_rag() and tq_docs:
-        mode = env("ARKA_PDF_RAG_ASK_MODE", "search").lower()
+        mode = env("PDF_RAG_ASK_MODE", "search").lower()
         if mode in {"search", "semantic", "auto", "turboquant"}:
             status, answer = _ask_via_search(question, artifact, doc_name)
             if status != 0:
@@ -1060,7 +1060,7 @@ def cmd_ask(question: str, document: str | None = None) -> int:
         print("  doc_ingest ~/Notes/readme.md", file=sys.stderr)
         return 1
 
-    mode = env("ARKA_PDF_RAG_ASK_MODE", "auto").lower()
+    mode = env("PDF_RAG_ASK_MODE", "auto").lower()
     if mode in {"search", "semantic"}:
         status, answer = _ask_via_search(question, artifact, doc_name)
         if status != 0:
@@ -1135,7 +1135,7 @@ def cmd_batch_ingest(
     ext_label = ", ".join(sorted(exts))
     print(f"Ingesting {len(files)} file(s) ({ext_label}) from {root}", file=sys.stderr)
 
-    pgpt_wanted = env("ARKA_PDF_RAG_PGPT", "1").lower() not in {"0", "false", "no", "off"}
+    pgpt_wanted = env("PDF_RAG_PGPT", "1").lower() not in {"0", "false", "no", "off"}
     if pgpt_wanted and not is_up():
         ensure_server(auto_start=True)
 

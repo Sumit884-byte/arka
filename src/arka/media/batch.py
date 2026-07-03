@@ -26,8 +26,8 @@ from arka.youtube.transcript import (
     fetch_transcript_with_source,
 )
 
-DEFAULT_MAX_ITEMS = int(os.environ.get("ARKA_BATCH_MAX_ITEMS", "25"))
-YT_FETCH_DELAY = float(os.environ.get("ARKA_YT_RESEARCH_DELAY", "2") or "0")
+DEFAULT_MAX_ITEMS = int(os.environ.get("BATCH_MAX_ITEMS", "25"))
+YT_FETCH_DELAY = float(os.environ.get("YT_RESEARCH_DELAY", "2") or "0")
 PER_ITEM_QUESTION = (
     "Summarize this video or audio in 3–6 bullet points. "
     "Include title/theme, main characters or speakers, and key events or ideas."
@@ -91,7 +91,7 @@ def _playlist_entries(url: str, limit: int | None) -> list[tuple[str, str]]:
 
 
 def _research_allow_no_caption() -> bool:
-    return os.environ.get("ARKA_YT_RESEARCH_ALLOW_NO_CAPTION", "0").lower() in {
+    return os.environ.get("YT_RESEARCH_ALLOW_NO_CAPTION", "0").lower() in {
         "1",
         "true",
         "yes",

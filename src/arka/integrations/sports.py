@@ -51,18 +51,18 @@ def _fetch_json(url: str) -> dict:
 
 
 def _default_league_keys(*, all_leagues: bool = False) -> list[str]:
-    custom = (os.environ.get("ARKA_SPORTS_DEFAULT") or "").strip().lower()
+    custom = (os.environ.get("SPORTS_DEFAULT") or "").strip().lower()
     if custom:
         if custom in ("all", "everything"):
             return ["ipl", "epl", "nba", "nfl"]
         return [k.strip() for k in custom.replace(",", " ").split() if k.strip() in LEAGUES]
     if all_leagues:
-        lang = (os.environ.get("ARKA_SPEAK_LANG") or "en-IN").lower()
+        lang = (os.environ.get("SPEAK_LANG") or "en-IN").lower()
         if lang.endswith("-in") or "hi" in lang:
             return ["ipl", "epl", "nba"]
         return ["nfl", "nba", "epl"]
     # Vague "sports scores" → one primary league (less noise on screen + voice)
-    lang = (os.environ.get("ARKA_SPEAK_LANG") or "en-IN").lower()
+    lang = (os.environ.get("SPEAK_LANG") or "en-IN").lower()
     if lang.endswith("-in") or "hi" in lang:
         return ["ipl"]
     return ["nfl"]

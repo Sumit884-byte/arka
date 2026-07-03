@@ -26,7 +26,7 @@ def _route_mode() -> str:
         load_env()
     except ImportError:
         pass
-    mode = os.environ.get("ARKA_ROUTE_MODE", "symbolic").lower().strip()
+    mode = os.environ.get("ROUTE_MODE", "symbolic").lower().strip()
     aliases = {
         "llm": "ai",
         "ai-first": "ai",

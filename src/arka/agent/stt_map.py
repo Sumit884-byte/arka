@@ -77,7 +77,7 @@ def _agent_name() -> str:
 
 
 def _enabled() -> bool:
-    return os.environ.get("ARKA_STT_QUICK_MAP", "1").strip().lower() not in (
+    return os.environ.get("STT_QUICK_MAP", "1").strip().lower() not in (
         "0",
         "false",
         "no",

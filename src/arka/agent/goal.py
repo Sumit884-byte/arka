@@ -12,10 +12,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-OUTPUT_LIMIT = int(os.environ.get("ARKA_GOAL_OUTPUT_LIMIT", "8000"))
-DEFAULT_MAX = int(os.environ.get("ARKA_GOAL_MAX_STEPS", "25"))
-TREE_DEPTH = int(os.environ.get("ARKA_GOAL_TREE_DEPTH", "3"))
-HISTORY_LINES = int(os.environ.get("ARKA_GOAL_SHELL_HISTORY", "40"))
+OUTPUT_LIMIT = int(os.environ.get("GOAL_OUTPUT_LIMIT", "8000"))
+DEFAULT_MAX = int(os.environ.get("GOAL_MAX_STEPS", "25"))
+TREE_DEPTH = int(os.environ.get("GOAL_TREE_DEPTH", "3"))
+HISTORY_LINES = int(os.environ.get("GOAL_SHELL_HISTORY", "40"))
 
 
 def _truthy(name: str, default: str = "1") -> bool:
@@ -145,7 +145,7 @@ def _parse_step(raw: str) -> dict:
 
 
 def _security_gate(cmd: str, *, auto_yes: bool) -> bool:
-    if _truthy("ARKA_GOAL_SAFE_ONLY", "0"):
+    if _truthy("GOAL_SAFE_ONLY", "0"):
         try:
             from arka.core.security import check_action
 
@@ -188,7 +188,7 @@ def _run_cmd(cmd: str, cwd: Path, *, auto_yes: bool) -> tuple[int, str]:
             cwd=cwd,
             capture_output=True,
             text=True,
-            timeout=int(os.environ.get("ARKA_GOAL_CMD_TIMEOUT", "300")),
+            timeout=int(os.environ.get("GOAL_CMD_TIMEOUT", "300")),
         )
         out = (proc.stdout or "") + (proc.stderr or "")
         return proc.returncode, _truncate(out.strip())
@@ -241,7 +241,7 @@ def run_goal(
         return 1
 
     if auto_continue is None:
-        auto_continue = _truthy("ARKA_GOAL_AUTO_CONTINUE", "1")
+        auto_continue = _truthy("GOAL_AUTO_CONTINUE", "1")
 
     cwd = Path.cwd()
     tree, listing = _dir_context(cwd, TREE_DEPTH)
@@ -357,7 +357,7 @@ Step {step}/{max_steps} — return the NEXT action as JSON."""
 
 
 def goal_engine_name() -> str:
-    return os.environ.get("ARKA_GOAL_ENGINE", "auto").strip().lower() or "auto"
+    return os.environ.get("GOAL_ENGINE", "auto").strip().lower() or "auto"
 
 
 def main(argv: list[str] | None = None) -> int:

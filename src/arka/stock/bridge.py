@@ -17,7 +17,7 @@ try:
 except ImportError:
     arka_home = lambda: Path(__file__).resolve().parent  # noqa: E731
     stock_project_dir = lambda: Path(  # noqa: E731
-        os.environ.get("ARKA_STOCK_PROJECT", Path.home() / "Projects/python/products/stock_analysis")
+        os.environ.get("STOCK_PROJECT", Path.home() / "Projects/python/products/stock_analysis")
     ).expanduser()
 
 STOCK_PROJECT = stock_project_dir()

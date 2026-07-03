@@ -19,7 +19,7 @@ VENV_PY = Path.home() / ".config/fish/venv-arka/bin/python3"
 
 def _venv_candidates() -> list[Path]:
     home = Path.home()
-    arka_home = Path(os.environ.get("ARKA_HOME", home / "dev/arka")).expanduser()
+    arka_home = Path(os.environ.get("INSTALL_HOME", home / "dev/arka")).expanduser()
     return [
         arka_home / "venv-arka/bin/pip",
         home / "dev/arka/venv-arka/bin/pip",
@@ -44,7 +44,7 @@ PYPI_WRONG_MSG = (
 
 
 def repo_dir() -> Path:
-    raw = (os.environ.get("ARKA_TURBOQUANT_DIR") or str(DEFAULT_REPO)).strip()
+    raw = (os.environ.get("TURBOQUANT_DIR") or str(DEFAULT_REPO)).strip()
     return Path(raw).expanduser()
 
 
@@ -114,26 +114,41 @@ def _uninstall_wrong_package(pip: Path) -> None:
         subprocess.run([str(pip), "uninstall", "-y", "turboquant"], check=False)
 
 
-def cmd_install() -> int:
+def cmd_install(*, quiet: bool = False) -> int:
+    ok, msg = check_install()
+    if ok:
+        if not quiet:
+            print(f"✓ TurboQuant already installed: {msg}")
+        return 0
+
     pip = _pip()
     repo = repo_dir()
     _ensure_repo(repo)
+    had_wrong = False
+    dist = _distribution_meta()
+    if dist is not None and (_requires_torch(dist) or not _has_vector_index()):
+        had_wrong = True
     _uninstall_wrong_package(pip)
 
-    print(f"Installing editable TurboQuant from {repo} (numpy + scipy only)…", file=sys.stderr)
+    if not quiet:
+        print(f"Installing editable TurboQuant from {repo} (numpy + scipy only)…", file=sys.stderr)
     subprocess.run(
-        [str(pip), "install", "-e", str(repo), "--no-deps"],
+        [str(pip), "install", "-q", "-e", str(repo), "--no-deps"],
         check=True,
     )
     subprocess.run(
-        [str(pip), "install", "numpy>=1.24", "scipy>=1.10"],
+        [str(pip), "install", "-q", "numpy>=1.24", "scipy>=1.10"],
         check=True,
     )
 
     ok, msg = check_install()
     if ok:
         print(f"✓ TurboQuant ready: {msg}")
-        print("Do NOT run: pip install turboquant  (PyPI = wrong package + PyTorch)", file=sys.stderr)
+        if had_wrong or not quiet:
+            print(
+                "Do NOT run: pip install turboquant  (PyPI = wrong package + PyTorch)",
+                file=sys.stderr,
+            )
         return 0
     print(f"Install finished but check failed: {msg}", file=sys.stderr)
     return 1
@@ -155,11 +170,17 @@ def main() -> int:
         description="Install Firmamento TurboQuant for Arka (avoids PyPI name collision)",
     )
     sub = parser.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("install", help="Clone repo if needed and pip install -e (lightweight)")
+    p_install = sub.add_parser("install", help="Clone repo if needed and pip install -e (lightweight)")
+    p_install.add_argument(
+        "--quiet",
+        "-q",
+        action="store_true",
+        help="Skip messages when already installed; less pip noise",
+    )
     sub.add_parser("check", help="Verify correct turboquant is installed")
     args = parser.parse_args()
     if args.cmd == "install":
-        return cmd_install()
+        return cmd_install(quiet=args.quiet)
     if args.cmd == "check":
         return cmd_check()
     return 1

@@ -10,9 +10,9 @@ import time
 
 
 def progress_enabled() -> bool:
-    if os.environ.get("ARKA_NO_PROGRESS", "").strip().lower() in {"1", "true", "yes"}:
+    if os.environ.get("NO_PROGRESS", "").strip().lower() in {"1", "true", "yes"}:
         return False
-    if os.environ.get("ARKA_PROGRESS", "1").strip().lower() in {"0", "false", "no"}:
+    if os.environ.get("PROGRESS", "1").strip().lower() in {"0", "false", "no"}:
         return False
     stream = sys.stderr
     return bool(getattr(stream, "isatty", lambda: False)())

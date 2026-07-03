@@ -25,9 +25,9 @@ CACHE = Path.home() / ".cache" / "fish-agent"
 USAGE_DIR = CACHE / "usage"
 WEBSITE_DIR = USAGE_DIR / "websites"
 PID_FILE = CACHE / "arka_usage.pid"
-INTERVAL = int(os.environ.get("ARKA_USAGE_INTERVAL", "20"))
-IDLE_SEC = int(os.environ.get("ARKA_USAGE_IDLE_SEC", "120"))
-WEB_TRACK = os.environ.get("ARKA_WEB_TRACK", "1").lower() not in ("0", "false", "no")
+INTERVAL = int(os.environ.get("USAGE_INTERVAL", "20"))
+IDLE_SEC = int(os.environ.get("USAGE_IDLE_SEC", "120"))
+WEB_TRACK = os.environ.get("WEB_TRACK", "1").lower() not in ("0", "false", "no")
 BROWSER_RE = re.compile(
     r"(?i)firefox|brave|chrome|chromium|vivaldi|edge|opera|navigator|zen|safari"
 )
@@ -538,7 +538,7 @@ def active_app() -> str:
 
 def activitywatch_summary(days: int = 1) -> dict[str, int] | None:
     """Optional: merge ActivityWatch bucket data if running."""
-    base = os.environ.get("ARKA_ACTIVITYWATCH_URL", "http://127.0.0.1:5600")
+    base = os.environ.get("ACTIVITYWATCH_URL", "http://127.0.0.1:5600")
     try:
         with urllib.request.urlopen(f"{base}/api/0/buckets/", timeout=3) as resp:
             buckets = json.loads(resp.read().decode())

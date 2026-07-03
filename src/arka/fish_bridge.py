@@ -20,11 +20,11 @@ class FishRoute:
 
 def _fish_env() -> dict[str, str]:
     env = os.environ.copy()
-    env.setdefault("ARKA_HOME", str(arka_home()))
-    env.setdefault("ARKA_CONFIG_DIR", str(config_dir()))
+    env.setdefault("INSTALL_HOME", str(arka_home()))
+    env.setdefault("CONFIG_DIR", str(config_dir()))
     bundled = bundled_dir()
     if bundled.is_dir():
-        env["ARKA_HOME"] = str(bundled if (bundled / "config.fish").is_file() else arka_home())
+        env["INSTALL_HOME"] = str(bundled if (bundled / "config.fish").is_file() else arka_home())
     return env
 
 

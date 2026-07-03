@@ -127,7 +127,7 @@ def play_wav(path: Path) -> None:
 
 
 def resolve_lang(code: str | None = None) -> str:
-    lang = (code or os.environ.get("ARKA_SPEAK_LANG") or os.environ.get("SARVAM_TTS_LANG") or "en-IN").strip()
+    lang = (code or os.environ.get("SPEAK_LANG") or os.environ.get("SARVAM_TTS_LANG") or "en-IN").strip()
     if lang in LANGS:
         return lang
     # short aliases: hi, ta, en
@@ -152,7 +152,7 @@ def resolve_lang(code: str | None = None) -> str:
 
 def resolve_voice(lang: str, speaker: str | None = None) -> tuple[str, str]:
     meta = LANGS.get(lang, LANGS["en-IN"])
-    sp = speaker or os.environ.get("ARKA_SPEAK_SPEAKER") or meta["speaker"]
+    sp = speaker or os.environ.get("SPEAK_SPEAKER") or meta["speaker"]
     desc = meta["desc"]
     if sp and sp not in desc:
         desc = f"{sp}'s voice is clear and natural at a moderate pace, with very clear audio."
@@ -252,7 +252,7 @@ def client_speak(text: str, lang: str | None = None, speaker: str | None = None)
         raise RuntimeError("Parler daemon not running (run: arka listen or indic_tts.py daemon)")
 
     payload = json.dumps(
-        {"text": text, "lang": resolve_lang(lang), "speaker": speaker or os.environ.get("ARKA_SPEAK_SPEAKER")}
+        {"text": text, "lang": resolve_lang(lang), "speaker": speaker or os.environ.get("SPEAK_SPEAKER")}
     ).encode("utf-8")
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     sock.settimeout(300)

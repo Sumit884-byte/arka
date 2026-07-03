@@ -14,8 +14,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from urllib.parse import urlparse
 
-HOST = os.environ.get("ARKA_HF_BRIDGE_HOST", "127.0.0.1")
-PORT = int(os.environ.get("ARKA_HF_BRIDGE_PORT", "8787"))
+HOST = os.environ.get("HF_BRIDGE_HOST", "127.0.0.1")
+PORT = int(os.environ.get("HF_BRIDGE_PORT", "8787"))
 PID_FILE = os.path.expanduser("~/.cache/fish-agent/arka_hf_bridge.pid")
 
 
@@ -67,7 +67,7 @@ def run_arka_agent(question: str) -> str:
         ["fish", "-ic", cmd],
         capture_output=True,
         text=True,
-        timeout=int(os.environ.get("ARKA_HF_BRIDGE_TIMEOUT", "180")),
+        timeout=int(os.environ.get("HF_BRIDGE_TIMEOUT", "180")),
         env=os.environ.copy(),
     )
     out = (proc.stdout or "") + ("\n" + proc.stderr if proc.stderr else "")

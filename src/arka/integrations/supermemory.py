@@ -32,7 +32,7 @@ TIMEOUT = 25
 
 
 def _mode() -> str:
-    raw = (os.environ.get("ARKA_MEMORY") or os.environ.get("ARKA_SUPERMEMORY_MODE") or "auto").strip().lower()
+    raw = (os.environ.get("MEMORY") or os.environ.get("SUPERMEMORY_MODE") or "auto").strip().lower()
     if raw in ("supermemory", "cloud", "api"):
         return "supermemory"
     if raw in ("local", "offline"):
@@ -41,12 +41,12 @@ def _mode() -> str:
 
 
 def _api_key() -> str:
-    return (os.environ.get("SUPERMEMORY_API_KEY") or os.environ.get("ARKA_SUPERMEMORY_API_KEY") or "").strip()
+    return (os.environ.get("SUPERMEMORY_API_KEY") or os.environ.get("SUPERMEMORY_API_KEY") or "").strip()
 
 
 def _container_tag() -> str:
     return (
-        os.environ.get("ARKA_SUPERMEMORY_CONTAINER")
+        os.environ.get("SUPERMEMORY_CONTAINER")
         or os.environ.get("SUPERMEMORY_CONTAINER_TAG")
         or os.environ.get("AGENT_NAME")
         or "arka"

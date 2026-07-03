@@ -156,7 +156,7 @@ SOURCE_REGISTRY: dict[str, DomainSources] = {
                 limit=5,
             ),
         ),
-        search_bias="legal overview statute regulation site:law.cornell.edu OR site:congress.gov (general information not legal advice)",
+        search_bias="legal overview statute regulation traffic violation fine penalty (general information not legal advice)",
     ),
     "engineer": DomainSources(
         "engineer",
@@ -286,7 +286,28 @@ def list_sources(domain_id: str) -> list[tuple[str, str]]:
     return out
 
 
-def _fetch_web(query: str, search_bias: str, *, deep: bool) -> tuple[str, str]:
+def _build_search_query(query: str, domain_id: str, search_bias: str) -> str:
+    q = query.strip()
+    if domain_id == "legal" and re.search(
+        r"(?i)\b(fine|penalty|traffic|violation|ticket|speeding|dui|dwi|infraction|motor vehicle|sentencing)\b",
+        q,
+    ):
+        try:
+            from arka.agent.chat import get_live_location, ground_search_query
+
+            ctx = get_live_location()
+            city = str(ctx.get("city") or "").strip()
+            if city and city.lower() not in ("unknown",) and city.lower() not in q.lower():
+                q = f"{q} {city}"
+            return ground_search_query(q)
+        except ImportError:
+            return q
+    if search_bias:
+        return f"{search_bias} {q}".strip()
+    return q
+
+
+def _fetch_web(query: str, search_bias: str, *, deep: bool, domain_id: str = "") -> tuple[str, str]:
     import concurrent.futures
 
     def _inner() -> tuple[str, str]:
@@ -294,10 +315,10 @@ def _fetch_web(query: str, search_bias: str, *, deep: bool) -> tuple[str, str]:
             from arka.agent.chat import scrape_search_results, snippet_lookup
         except ImportError:
             return "", ""
-        search_q = f"{search_bias} {query}".strip() if search_bias else query
+        search_q = _build_search_query(query, domain_id, search_bias)
         snip = snippet_lookup(search_q)
-        min_words = 300 if deep else 120
-        limit = 6 if deep else 3
+        min_words = 500 if deep else 200
+        limit = 8 if deep else 4
         web = scrape_search_results(search_q, min_words=min_words, hard_limit=limit)
         parts: list[str] = []
         if snip:
@@ -499,7 +520,7 @@ def gather_profession_context(
             blocks.append(ctx)
             sources.extend(bridge_srcs)
 
-    web, web_id = _fetch_web(query, pack.search_bias, deep=deep)
+    web, web_id = _fetch_web(query, pack.search_bias, deep=deep, domain_id=domain_id)
     if web:
         blocks.append(f"[{web_id}]\n{web}")
         if web_id not in sources:

@@ -26,7 +26,7 @@ def log(msg: str) -> None:
 
 
 def _env_device() -> str | None:
-    dev = (os.environ.get("ARKA_MIC_DEVICE") or os.environ.get("PULSE_SOURCE") or "").strip()
+    dev = (os.environ.get("MIC_DEVICE") or os.environ.get("PULSE_SOURCE") or "").strip()
     return dev or None
 
 

@@ -74,7 +74,7 @@ def _bundled_aie_dir() -> Path:
 
 
 def automation_dir() -> Path:
-    override = os.environ.get("ARKA_AIE_DIR", "").strip()
+    override = os.environ.get("AIE_DIR", "").strip()
     if override:
         return Path(override).expanduser().resolve()
     bundled = _bundled_aie_dir()
@@ -91,7 +91,7 @@ def _aie_cache_dir() -> Path:
 
 
 def _python() -> str:
-    override = os.environ.get("ARKA_AIE_PYTHON", "").strip()
+    override = os.environ.get("AIE_PYTHON", "").strip()
     if override and Path(override).is_file():
         return override
     return python_executable()

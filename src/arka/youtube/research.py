@@ -26,13 +26,13 @@ from arka.core.progress import ProgressBar, progress_enabled, progress_note
 from arka.youtube.transcript import fetch_transcript_with_source, youtube_search
 
 CACHE = Path.home() / ".cache" / "fish-agent" / "youtube-research"
-DEFAULT_LIMIT = int(os.environ.get("ARKA_YT_RESEARCH_MAX", "2"))
+DEFAULT_LIMIT = int(os.environ.get("YT_RESEARCH_MAX", "2"))
 DEFAULT_POOL_MAX = 50
 
 
 def _research_pool_size(target: int) -> int:
     """How many search hits to scan when filling a target of N captioned videos."""
-    raw = os.environ.get("ARKA_YT_RESEARCH_POOL", "").strip()
+    raw = os.environ.get("YT_RESEARCH_POOL", "").strip()
     if raw:
         try:
             pool = int(raw)
@@ -207,18 +207,18 @@ def _answer_from_index(slug: str, question: str) -> str:
 
 def _apply_research_env() -> None:
     """Prefer YouTube caption API over rate-limited yt-dlp for research runs."""
-    os.environ.setdefault("ARKA_YT_WHISPER_FALLBACK", "auto")
-    os.environ.setdefault("ARKA_YT_PLAYER_CLIENT", "android_vr,mweb,web")
-    os.environ.setdefault("ARKA_YT_RESEARCH_DELAY", "3")
-    os.environ.setdefault("ARKA_YT_RESEARCH_ALLOW_NO_CAPTION", "0")
+    os.environ.setdefault("YT_WHISPER_FALLBACK", "auto")
+    os.environ.setdefault("YT_PLAYER_CLIENT", "android_vr,mweb,web")
+    os.environ.setdefault("YT_RESEARCH_DELAY", "3")
+    os.environ.setdefault("YT_RESEARCH_ALLOW_NO_CAPTION", "0")
     # Override .env values that force yt-dlp-only (slow, 429-prone on macOS)
-    if os.environ.get("ARKA_YT_SKIP_TRANSCRIPT_API", "").lower() in {"1", "true", "yes", "on"}:
+    if os.environ.get("YT_SKIP_TRANSCRIPT_API", "").lower() in {"1", "true", "yes", "on"}:
         print(
             "arka_youtube_research: using caption API first (unset ARKA_YT_SKIP_TRANSCRIPT_API to persist)",
             file=sys.stderr,
         )
-    os.environ["ARKA_YT_SKIP_TRANSCRIPT_API"] = "0"
-    os.environ["ARKA_YT_PREFER_YTDLP"] = "0"
+    os.environ["YT_SKIP_TRANSCRIPT_API"] = "0"
+    os.environ["YT_PREFER_YTDLP"] = "0"
 
 
 def cmd_research(args: argparse.Namespace) -> int:

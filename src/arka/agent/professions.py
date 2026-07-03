@@ -148,7 +148,8 @@ DOMAINS: tuple[Domain, ...] = (
         ("lawyer", "attorney", "solicitor", "legal counsel", "barrister", "paralegal"),
         (
             "contract", "litigation", "compliance", "regulation", "clause",
-            "legal advice", "lawsuit", "nda",
+            "legal advice", "lawsuit", "nda", "fine", "penalty", "traffic",
+            "violation", "ticket", "statute", "offense", "offence",
         ),
         "General legal information — not legal advice. Consult a licensed attorney.",
     ),
@@ -351,7 +352,57 @@ def profession_ask(domain_id: str, question: str, *, deep: bool = False) -> int:
     ):
         return _dispatch_skill(f"study_agent {shlex.quote(question)}")
 
-    return _ask_from_sources(dom, question, deep=deep)
+    return _ask_from_sources(dom, question, deep=deep or _needs_deep_sources(domain_id, question))
+
+
+_INSUFFICIENT_RE = re.compile(
+    r"(?i)(source material does not|sources do not contain|sources do not|"
+    r"do not contain enough|not enough information|cannot find|"
+    r"no information regarding|provided sources do not|does not address|"
+    r"unable to answer based on|does not contain information)",
+)
+
+
+def _needs_deep_sources(domain_id: str, question: str) -> bool:
+    if domain_id != "legal":
+        return False
+    return bool(
+        re.search(
+            r"(?i)\b(fine|penalty|traffic|violation|ticket|speeding|statute|"
+            r"law|regulation|sentence|offense|offence|infraction|motor vehicle)\b",
+            question,
+        )
+    )
+
+
+def _answer_lacks_support(answer: str) -> bool:
+    return bool(_INSUFFICIENT_RE.search(answer))
+
+
+def _grounded_web_question(question: str, domain_id: str) -> str:
+    q = question
+    try:
+        from arka.agent.chat import get_live_location, ground_search_query
+
+        if domain_id == "legal" and re.search(
+            r"(?i)\b(fine|penalty|traffic|violation|ticket|speeding|infraction|motor vehicle)\b",
+            question,
+        ):
+            ctx = get_live_location()
+            city = str(ctx.get("city") or "").strip()
+            if city and city.lower() not in ("unknown",) and city.lower() not in q.lower():
+                q = f"{q} {city}"
+        q = ground_search_query(q)
+    except ImportError:
+        pass
+    return q
+
+
+def _fallback_web(question: str, *, domain_id: str, deep: bool = False) -> int:
+    q = _grounded_web_question(question, domain_id)
+    skill = "deep_web_answer" if deep else "web_answer"
+    print(f"Falling back to {skill}…", file=sys.stderr)
+    return _dispatch_skill(f"{skill} {shlex.quote(q)}")
 
 
 def _ask_from_sources(dom: Domain, question: str, *, deep: bool) -> int:
@@ -362,7 +413,7 @@ def _ask_from_sources(dom: Domain, question: str, *, deep: bool) -> int:
 
     if not context.strip():
         print("No sources returned — falling back to web_answer.", file=sys.stderr)
-        return _dispatch_skill(f"web_answer {shlex.quote(question)}")
+        return _fallback_web(question, domain_id=dom.id, deep=deep or _needs_deep_sources(dom.id, question))
 
     try:
         from arka.llm.cli import llm_complete
@@ -372,7 +423,10 @@ def _ask_from_sources(dom: Domain, question: str, *, deep: bool) -> int:
     src_line = ", ".join(sources) if sources else "none"
     system = (
         "Answer using ONLY the provided source material. "
-        "Cite claims with the source id in parentheses, e.g. (cdc), (web), (codebase-nutrition). "
+        "Write plain text for the terminal: no markdown (no **, *, ###, or _italic_). "
+        "Use a short opening sentence, then numbered items (1. 2. 3.) or lines starting with •. "
+        "Do not append (web) or (memory) after every line — put source ids once under a final "
+        "Sources: section. "
         "If the sources do not contain enough information, say so clearly — do not invent facts. "
         "Be structured and practical."
     )
@@ -387,17 +441,18 @@ def _ask_from_sources(dom: Domain, question: str, *, deep: bool) -> int:
     )
     answer = llm_complete(system, user, temperature=0.2, task="default")
     if not answer.strip():
-        return _dispatch_skill(f"web_answer {shlex.quote(question)}")
+        return _fallback_web(question, domain_id=dom.id, deep=deep)
 
-    print(answer.strip())
+    if _answer_lacks_support(answer) or ("web" not in sources and _needs_deep_sources(dom.id, question)):
+        return _fallback_web(question, domain_id=dom.id, deep=True)
+
+    body = answer.strip()
     if sources:
-        print(f"\n[Sources: {src_line}]", file=sys.stderr)
-    try:
-        from arka.core.progress import print_model_footer
+        body += f"\n\nSources:\n  {src_line}"
+    if dom.disclaimer and "disclaimer" not in body.lower():
+        body += f"\n\nNote: {dom.disclaimer}"
 
-        print_model_footer()
-    except ImportError:
-        pass
+    print(body)
     return 0
 
 

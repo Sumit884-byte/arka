@@ -335,7 +335,7 @@ def format_report(data: BreakdownData, csv_path: Path | None = None) -> str:
 
 def breakdown_report(root: Path | None = None, csv_path: Path | None = None) -> tuple[str, Path]:
     data = collect_breakdown(root)
-    out_csv = Path(csv_path or os.environ.get("ARKA_DISK_CSV", DEFAULT_CSV))
+    out_csv = Path(csv_path or os.environ.get("DISK_CSV", DEFAULT_CSV))
     write_csv(data, out_csv)
     return format_report(data, out_csv), out_csv
 

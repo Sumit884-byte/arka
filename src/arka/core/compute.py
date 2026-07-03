@@ -23,12 +23,12 @@ def _env_int(name: str, default: int, minimum: int = 1) -> int:
 
 @lru_cache(maxsize=1)
 def cpu_count() -> int:
-    return _env_int("ARKA_CPU_WORKERS", max(1, os.cpu_count() or 4))
+    return _env_int("CPU_WORKERS", max(1, os.cpu_count() or 4))
 
 
 @lru_cache(maxsize=1)
 def gpu_available() -> bool:
-    if os.environ.get("ARKA_FORCE_CPU", "").strip().lower() in {"1", "true", "yes"}:
+    if os.environ.get("FORCE_CPU", "").strip().lower() in {"1", "true", "yes"}:
         return False
     if shutil.which("nvidia-smi"):
         try:
@@ -66,14 +66,14 @@ def gpu_name() -> str:
 
 
 def whisper_device() -> str:
-    raw = os.environ.get("ARKA_LOCAL_WHISPER_DEVICE", "").strip()
+    raw = os.environ.get("LOCAL_WHISPER_DEVICE", "").strip()
     if raw:
         return raw
     return "cuda" if gpu_available() else "cpu"
 
 
 def whisper_compute_type(device: str | None = None) -> str:
-    raw = os.environ.get("ARKA_LOCAL_WHISPER_COMPUTE", "").strip()
+    raw = os.environ.get("LOCAL_WHISPER_COMPUTE", "").strip()
     if raw:
         return raw
     dev = device or whisper_device()
@@ -81,7 +81,7 @@ def whisper_compute_type(device: str | None = None) -> str:
 
 
 def ffmpeg_threads() -> int:
-    return _env_int("ARKA_FFMPEG_THREADS", max(1, min(cpu_count(), 8)))
+    return _env_int("FFMPEG_THREADS", max(1, min(cpu_count(), 8)))
 
 
 def ffmpeg_thread_args() -> list[str]:
@@ -89,33 +89,33 @@ def ffmpeg_thread_args() -> list[str]:
 
 
 def io_workers(cap: int = 16) -> int:
-    return _env_int("ARKA_IO_WORKERS", max(2, min(cpu_count(), cap)))
+    return _env_int("IO_WORKERS", max(2, min(cpu_count(), cap)))
 
 
 def process_workers(cap: int = 8) -> int:
     default = max(1, min(cpu_count() - 1, cap)) if cpu_count() > 1 else 1
-    return _env_int("ARKA_PROCESS_WORKERS", default)
+    return _env_int("PROCESS_WORKERS", default)
 
 
 def stt_parallel_workers(*, local: bool = False) -> int:
-    if os.environ.get("ARKA_STT_WORKERS", "").strip():
-        return _env_int("ARKA_STT_WORKERS", 1)
+    if os.environ.get("STT_WORKERS", "").strip():
+        return _env_int("STT_WORKERS", 1)
     if local:
         return 1
     return min(3, io_workers(16))
 
 
 def llm_parallel_workers() -> int:
-    return _env_int("ARKA_LLM_WORKERS", max(2, min(8, io_workers(8))))
+    return _env_int("LLM_WORKERS", max(2, min(8, io_workers(8))))
 
 
 def yt_dlp_concurrent_fragments() -> int:
-    return _env_int("ARKA_YTDLP_FRAGMENTS", max(4, min(16, io_workers(16))))
+    return _env_int("YTDLP_FRAGMENTS", max(4, min(16, io_workers(16))))
 
 
 def export_env_defaults() -> None:
     """Set worker env vars for child processes (youtube_bulk app, etc.)."""
-    os.environ.setdefault("ARKA_IO_WORKERS", str(io_workers()))
+    os.environ.setdefault("IO_WORKERS", str(io_workers()))
     os.environ.setdefault("YOUTUBE_BULK_WORKERS", str(io_workers(8)))
 
 

@@ -20,7 +20,7 @@ _DONE_ITEM_RE = re.compile(r"\[download\]\s+100%|\[ExtractAudio\]\s+Destination:
 def ytdlp_common_opts() -> dict[str, Any]:
     """Shared yt-dlp options (cookies, proxy, player client)."""
     opts: dict[str, Any] = {"noprogress": progress_enabled(), "no_update": True}
-    cookies = (os.environ.get("ARKA_YT_COOKIES") or os.environ.get("YOUTUBE_COOKIES") or "").strip()
+    cookies = (os.environ.get("YT_COOKIES") or os.environ.get("YOUTUBE_COOKIES") or "").strip()
     if not cookies:
         for default in (
             Path.home() / ".config/fish/youtube-cookies.txt",
@@ -33,21 +33,21 @@ def ytdlp_common_opts() -> dict[str, Any]:
         cp = Path(cookies).expanduser()
         if cp.is_file():
             opts["cookiefile"] = str(cp)
-    browser = (os.environ.get("ARKA_YT_COOKIES_BROWSER") or "").strip()
+    browser = (os.environ.get("YT_COOKIES_BROWSER") or "").strip()
     if browser:
         opts["cookiesfrombrowser"] = (browser.split(",")[0].strip(),)
     proxy = (
-        os.environ.get("ARKA_YT_PROXY")
+        os.environ.get("YT_PROXY")
         or os.environ.get("HTTPS_PROXY")
         or os.environ.get("ALL_PROXY")
         or ""
     ).strip()
     if proxy:
         opts["proxy"] = proxy
-    client = (os.environ.get("ARKA_YT_PLAYER_CLIENT") or "android_vr").strip()
+    client = (os.environ.get("YT_PLAYER_CLIENT") or "android_vr").strip()
     if client:
         opts["extractor_args"] = {"youtube": {"player_client": [c.strip() for c in client.split(",") if c.strip()]}}
-    sleep = (os.environ.get("ARKA_YT_SLEEP") or "").strip()
+    sleep = (os.environ.get("YT_SLEEP") or "").strip()
     if sleep.isdigit() and int(sleep) > 0:
         opts["sleep_interval"] = int(sleep)
         opts["max_sleep_interval"] = int(sleep) + 2

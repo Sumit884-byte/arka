@@ -178,7 +178,7 @@ def _get_rotator(provider: str) -> KeyRotator:
 
 
 def rotation_enabled() -> bool:
-    return _truthy("ARKA_API_KEY_ROTATION", "1")
+    return _truthy("API_KEY_ROTATION", "1")
 
 
 def provider_has_keys(provider: str) -> bool:

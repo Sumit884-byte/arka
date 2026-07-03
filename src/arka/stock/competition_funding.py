@@ -13,7 +13,7 @@ from pathlib import Path
 
 STOCK_PROJECT = Path(
     __import__("os").environ.get(
-        "ARKA_STOCK_PROJECT", Path.home() / "Projects/python/products/stock_analysis"
+        "STOCK_PROJECT", Path.home() / "Projects/python/products/stock_analysis"
     )
 )
 
@@ -574,7 +574,7 @@ def main() -> int:
     args = p.parse_args()
     if args.plain:
         import os
-        os.environ["ARKA_STOCK_PLAIN"] = "1"
+        os.environ["STOCK_PLAIN"] = "1"
     if use_terminal_ui():
         print_competition_funding_terminal(
             args.tickers, args.query, funding_limit=args.funding_limit

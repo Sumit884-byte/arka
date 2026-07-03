@@ -55,7 +55,7 @@ class DomainBundle:
 BUNDLES: tuple[DomainBundle, ...] = (
     DomainBundle(
         "investor",
-        "ARKA_STOCK_PROJECT",
+        "STOCK_PROJECT",
         (
             RepoSpec(
                 "stock_analyzer",
@@ -67,7 +67,7 @@ BUNDLES: tuple[DomainBundle, ...] = (
     ),
     DomainBundle(
         "startup",
-        "ARKA_PROFESSION_STARTUP_PROJECT",
+        "PROFESSION_STARTUP_PROJECT",
         (
             RepoSpec(
                 "GameGen",
@@ -78,7 +78,7 @@ BUNDLES: tuple[DomainBundle, ...] = (
     ),
     DomainBundle(
         "nutrition",
-        "ARKA_PROFESSION_NUTRITION_PROJECT",
+        "PROFESSION_NUTRITION_PROJECT",
         (
             RepoSpec(
                 "nourish-diet-planner",
@@ -90,7 +90,7 @@ BUNDLES: tuple[DomainBundle, ...] = (
     ),
     DomainBundle(
         "engineer",
-        "ARKA_PROFESSION_ENGINEER_PROJECT",
+        "PROFESSION_ENGINEER_PROJECT",
         (
             RepoSpec(
                 "agno",
@@ -105,7 +105,7 @@ _BY_ID = {b.id: b for b in BUNDLES}
 
 
 def projects_root() -> Path:
-    raw = os.environ.get("ARKA_PROFESSIONS_ROOT", "").strip()
+    raw = os.environ.get("PROFESSIONS_ROOT", "").strip()
     return Path(raw).expanduser() if raw else DEFAULT_ROOT
 
 

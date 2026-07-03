@@ -12,7 +12,7 @@ from arka.stock.turboquant_rag import (
     retrieve_transcript_context as _tq_retrieve,
 )
 
-QA_CONTEXT_CHARS = int(os.environ.get("ARKA_MEDIA_QA_CONTEXT", str(_DEFAULT_CONTEXT)))
+QA_CONTEXT_CHARS = int(os.environ.get("MEDIA_QA_CONTEXT", str(_DEFAULT_CONTEXT)))
 
 
 def _question_intent(question: str) -> str:

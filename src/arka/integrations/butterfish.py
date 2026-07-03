@@ -18,7 +18,7 @@ def butterfish_available() -> bool:
 
 def _auto_install_enabled() -> bool:
     """When true, install without prompting (ARKA_AUTO_INSTALL=1 or goal -y)."""
-    return os.environ.get("ARKA_AUTO_INSTALL", "").strip().lower() in (
+    return os.environ.get("AUTO_INSTALL", "").strip().lower() in (
         "1",
         "true",
         "yes",
@@ -120,7 +120,7 @@ def launch_shell(*, goal: str = "", unsafe: bool = False, auto_yes: bool = False
 
     env = os.environ.copy()
     if goal.strip():
-        env["ARKA_BUTTERFISH_SUGGESTED_GOAL"] = goal.strip()
+        env["BUTTERFISH_SUGGESTED_GOAL"] = goal.strip()
 
     try:
         return subprocess.call([bf, "shell"], env=env)

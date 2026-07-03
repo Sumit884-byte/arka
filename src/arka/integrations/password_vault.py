@@ -54,7 +54,7 @@ def _load_env() -> None:
 def _fernet():
     from cryptography.fernet import Fernet
 
-    raw = os.environ.get("ARKA_VAULT_KEY", "").strip()
+    raw = os.environ.get("VAULT_KEY", "").strip()
     if not raw:
         if KEY_FILE.is_file():
             raw = KEY_FILE.read_text(encoding="utf-8").strip()

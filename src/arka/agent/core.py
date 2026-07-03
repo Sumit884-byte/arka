@@ -81,7 +81,7 @@ def memory_remember(text: str, *, tags: list[str] | None = None) -> None:
     except ImportError:
         pass
     except Exception as exc:
-        if (os.environ.get("ARKA_MEMORY") or "auto").strip().lower() in ("supermemory", "cloud", "api"):
+        if (os.environ.get("MEMORY") or "auto").strip().lower() in ("supermemory", "cloud", "api"):
             print(f"Supermemory error: {exc}", file=sys.stderr)
             raise
 
@@ -106,7 +106,7 @@ def memory_remember_silent(text: str, *, tags: list[str] | None = None, source: 
     except ImportError:
         pass
     except Exception as exc:
-        if (os.environ.get("ARKA_MEMORY") or "auto").strip().lower() in ("supermemory", "cloud", "api"):
+        if (os.environ.get("MEMORY") or "auto").strip().lower() in ("supermemory", "cloud", "api"):
             print(f"Supermemory error: {exc}", file=sys.stderr)
             raise
 
@@ -165,7 +165,7 @@ def memory_recall(query: str, *, limit: int = 5) -> None:
     except ImportError:
         pass
     except Exception as exc:
-        if (os.environ.get("ARKA_MEMORY") or "auto").strip().lower() in ("supermemory", "cloud", "api"):
+        if (os.environ.get("MEMORY") or "auto").strip().lower() in ("supermemory", "cloud", "api"):
             print(f"Supermemory error: {exc}", file=sys.stderr)
             raise
 
@@ -416,7 +416,7 @@ def handoff_run(*, limit: int = 3) -> None:
             ["fish", "-ic", f"agent {shlex.quote(text)}"],
             capture_output=True,
             text=True,
-            timeout=int(os.environ.get("ARKA_HANDOFF_TIMEOUT", "600")),
+            timeout=int(os.environ.get("HANDOFF_TIMEOUT", "600")),
         )
         out = ((proc.stdout or "") + (proc.stderr or "")).strip()
         item["status"] = "done" if proc.returncode == 0 else "failed"
@@ -649,13 +649,13 @@ def fanout_run(jobs: list[str], *, merge_question: str | None = None) -> None:
             ["fish", "-ic", job],
             capture_output=True,
             text=True,
-            timeout=int(os.environ.get("ARKA_FANOUT_TIMEOUT", "900")),
+            timeout=int(os.environ.get("FANOUT_TIMEOUT", "900")),
         )
         out = ((proc.stdout or "") + (proc.stderr or "")).strip()
         return job, out[-4000:]
 
     results: list[tuple[str, str]] = []
-    workers = min(len(jobs), int(os.environ.get("ARKA_FANOUT_WORKERS", "4")))
+    workers = min(len(jobs), int(os.environ.get("FANOUT_WORKERS", "4")))
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
         for job, out in pool.map(_run_one, jobs):
             results.append((job, out))
@@ -679,6 +679,53 @@ def fanout_run(jobs: list[str], *, merge_question: str | None = None) -> None:
 def _is_path(s: str) -> bool:
     p = Path(s).expanduser()
     return p.exists()
+
+
+def _research_word_bounds() -> tuple[int, int]:
+    from arka.env import env_get
+
+    try:
+        lo = int(env_get("RESEARCH_MIN_WORDS", "500"))
+    except ValueError:
+        lo = 500
+    try:
+        hi = int(env_get("RESEARCH_MAX_WORDS", "900"))
+    except ValueError:
+        hi = 900
+    if hi < lo:
+        hi = lo + 200
+    return lo, hi
+
+
+def _research_length_hint() -> str:
+    lo, hi = _research_word_bounds()
+    return (
+        f"\nWrite a thorough research brief ({lo}–{hi} words). "
+        "Use clear sections or numbered bullets. Explain benefits, traditional use, and caveats where relevant. "
+        "Synthesize every source provided — do not stop after the first one. "
+        "Use plain section titles (e.g. Sources) — not markdown # headings, asterisks, or bullets. "
+        "End with one Source: line per site (e.g. Source: Example.com (via web search))."
+    )
+
+
+def _research_scrape_min_words(*, deep: bool) -> int:
+    from arka.env import env_get
+
+    default = "700" if deep else "400"
+    try:
+        return int(env_get("RESEARCH_SCRAPE_MIN_WORDS", default))
+    except ValueError:
+        return 700 if deep else 400
+
+
+def _research_scrape_pages(*, deep: bool) -> int:
+    from arka.env import env_get
+
+    default = "10" if deep else "6"
+    try:
+        return int(env_get("RESEARCH_SCRAPE_PAGES", default))
+    except ValueError:
+        return 10 if deep else 6
 
 
 def _research_mode(question: str) -> str:
@@ -726,14 +773,30 @@ def _specialist_prompt(mode: str, question: str) -> tuple[str, str]:
         ),
     }
     return prompts.get(mode, (
-        "You are a research assistant. Synthesize sources, cite provenance, be concise.",
+        "You are a research assistant. Synthesize all provided sources into a structured, "
+        "in-depth brief. Cite provenance; be thorough, not terse.",
         question,
     ))
+
+
+def _research_web_context(question: str, *, deep: bool) -> str:
+    from arka.agent.chat import scrape_search_results, snippet_lookup
+
+    min_words = _research_scrape_min_words(deep=deep)
+    pages = _research_scrape_pages(deep=deep)
+    if deep:
+        return scrape_search_results(question, min_words=min_words, hard_limit=pages)
+    snip = snippet_lookup(question)
+    if snip:
+        return snip
+    # Instant-answer API misses most topics — fall back to scraped search.
+    return scrape_search_results(question, min_words=min_words, hard_limit=pages)
 
 
 def research(question: str, *, doc: str | None = None, path: str | None = None, deep: bool = False) -> None:
     mode = _research_mode(question)
     contexts: list[str] = []
+    web_ctx = ""
 
     # TurboQuant docs
     if doc or mode in {"dev", "research", "compare"}:
@@ -770,36 +833,52 @@ def research(question: str, *, doc: str | None = None, path: str | None = None, 
         except Exception as exc:
             contexts.append(f"[Media error: {exc}]")
 
-    # Web
+    # Web — always try; shallow mode falls back from snippet to full scrape
     try:
-        if deep:
-            from arka.agent.chat import scrape_search_results
-
-            web = scrape_search_results(question, min_words=300)
-            if web:
-                contexts.append(f"[Web search]\n{web[:8000]}")
-        else:
-            from arka.agent.chat import snippet_lookup
-
-            snip = snippet_lookup(question)
-            if snip:
-                contexts.append(f"[Web snippet]\n{snip}")
+        web_ctx = _research_web_context(question, deep=deep)
+        if web_ctx:
+            label = "[Web search]" if deep or len(web_ctx) > 400 else "[Web snippet]"
+            contexts.append(f"{label}\n{web_ctx[:8000]}")
     except Exception:
         pass
 
     mem = memory_context_for(question)
     if mem:
-        contexts.insert(0, mem)
+        contexts.append(mem)
+
+    has_primary = bool(web_ctx) or any(
+        c.startswith("[TurboQuant") or c.startswith("[Media transcript") for c in contexts
+    )
+    if not has_primary:
+        try:
+            from arka.agent.chat import answer_question
+            from arka.output import print_block
+
+            _, answer = answer_question(question, deep=True, use_session=False, cleanup=True)
+            if answer and not re.match(r"(?i)^could not ", answer.strip()):
+                print_block("Research answer", answer)
+                return
+        except Exception:
+            pass
 
     system, user_q = _specialist_prompt(mode, question)
+    if mode == "research":
+        system += (
+            " Prefer web and document sources. Personal memories are background only — "
+            "never claim memories are the only sources when the question is factual."
+        )
+        user_q += _research_length_hint()
     if contexts:
-        user_q = f"Sources:\n\n" + "\n\n---\n\n".join(contexts) + f"\n\nQuestion: {question}"
-    answer = _llm(system, user_q)
+        user_q = f"Sources:\n\n" + "\n\n---\n\n".join(contexts) + f"\n\nQuestion: {user_q}"
+    task = "research" if mode == "research" else "agent"
+    answer = _llm(system, user_q, task=task)
     if not answer:
         print("Research failed — check LLM / embeddings.")
         return
-    print(f"━━━ {mode.title()} answer ━━━")
-    print(answer)
+    from arka.output import print_block
+
+    title = "Research answer" if mode == "research" else f"{mode.title()} answer"
+    print_block(title, answer)
 
 
 def transcript_ask(path: str, question: str) -> None:
@@ -1167,7 +1246,7 @@ def main() -> int:
         from arka.integrations.butterfish import launch_shell
 
         goal_text = " ".join(args.goal).strip()
-        if args.butterfish or os.environ.get("ARKA_GOAL_ENGINE", "auto").strip().lower() == "butterfish":
+        if args.butterfish or os.environ.get("GOAL_ENGINE", "auto").strip().lower() == "butterfish":
             return launch_shell(goal=goal_text, unsafe=args.unsafe, auto_yes=args.yes)
         return run_goal(
             goal_text,

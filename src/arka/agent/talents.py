@@ -170,7 +170,7 @@ def unified_ask(
             import io
             from contextlib import redirect_stdout
 
-            limit = int(os.environ.get("ARKA_ASK_YT_LIMIT", "4"))
+            limit = int(os.environ.get("ASK_YT_LIMIT", "4"))
             args = argparse.Namespace(
                 query=yt_query,
                 limit=limit,
@@ -240,8 +240,9 @@ def unified_ask(
     if not answer:
         answer = "I couldn't generate an answer. Check LLM API keys."
 
-    print("━━━ Answer ━━━")
-    print(answer)
+    from arka.output import print_block
+
+    print_block("Answer", answer)
     if sources_used:
         print(f"\n[Sources: {', '.join(sources_used)}]", file=sys.stderr)
 
@@ -270,7 +271,7 @@ def _speak(text: str) -> None:
 
 def speak_research(query: str, *, limit: int = 5, speak: bool = True) -> int:
     _load_fish_env()
-    os.environ.setdefault("ARKA_YT_WHISPER_FALLBACK", "auto")
+    os.environ.setdefault("YT_WHISPER_FALLBACK", "auto")
 
     py = _py()
     from arka.paths import entry_script
@@ -279,7 +280,7 @@ def speak_research(query: str, *, limit: int = 5, speak: bool = True) -> int:
         [py, str(entry_script("arka_youtube_research.py")), "search", query, "--limit", str(limit)],
         capture_output=True,
         text=True,
-        timeout=int(os.environ.get("ARKA_SPEAK_RESEARCH_TIMEOUT", "3600")),
+        timeout=int(os.environ.get("SPEAK_RESEARCH_TIMEOUT", "3600")),
     )
     out = (proc.stdout or "") + (proc.stderr or "")
     print(proc.stdout or "", end="")
@@ -294,7 +295,7 @@ def speak_research(query: str, *, limit: int = 5, speak: bool = True) -> int:
         digest = out.split("━━━ YouTube research ━━━", 1)[1]
 
     if speak:
-        lang_hint = os.environ.get("ARKA_SPEAK_LANG", "hi-IN")
+        lang_hint = os.environ.get("SPEAK_LANG", "hi-IN")
         tts = _llm(
             f"Summarize this YouTube research for spoken TTS in language matching {lang_hint}. "
             "3-6 short sentences, conversational, no markdown, no bullet symbols.",
@@ -459,7 +460,7 @@ def main() -> int:
     p.add_argument("query", nargs="*")
     p.add_argument("--domain", "-d", default="auto", choices=["auto", "antiques", "stocks", "strategy", "all"])
     p.add_argument("--deep", action="store_true")
-    p.add_argument("--horizon", default=os.environ.get("ARKA_PREDICT_HORIZON", "3-6 months"))
+    p.add_argument("--horizon", default=os.environ.get("PREDICT_HORIZON", "3-6 months"))
     p.add_argument("--history", action="store_true", help="List past predictions instead of running")
     p.add_argument("--limit", "-n", type=int, default=10)
 

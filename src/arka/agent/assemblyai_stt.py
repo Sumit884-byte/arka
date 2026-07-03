@@ -27,16 +27,16 @@ def enabled() -> bool:
 
 
 def rest_base_url() -> str:
-    if (os.environ.get("ARKA_ASSEMBLYAI_REGION") or "us").strip().lower() == "eu":
+    if (os.environ.get("ASSEMBLYAI_REGION") or "us").strip().lower() == "eu":
         return "https://api.eu.assemblyai.com"
     return "https://api.assemblyai.com"
 
 
 def streaming_host() -> str:
-    custom = (os.environ.get("ARKA_ASSEMBLYAI_STREAMING_HOST") or "").strip()
+    custom = (os.environ.get("ASSEMBLYAI_STREAMING_HOST") or "").strip()
     if custom:
         return custom
-    region = (os.environ.get("ARKA_ASSEMBLYAI_REGION") or "us").strip().lower()
+    region = (os.environ.get("ASSEMBLYAI_REGION") or "us").strip().lower()
     if region == "eu":
         return "streaming.eu.assemblyai.com"
     if region == "us-pinned":
@@ -45,14 +45,14 @@ def streaming_host() -> str:
 
 
 def _speech_models_prerecorded() -> list[str]:
-    raw = (os.environ.get("ARKA_ASSEMBLYAI_SPEECH_MODELS") or "universal-3-pro,universal-2").strip()
+    raw = (os.environ.get("ASSEMBLYAI_SPEECH_MODELS") or "universal-3-pro,universal-2").strip()
     return [m.strip() for m in raw.split(",") if m.strip()]
 
 
 def _realtime_speech_model():
     from assemblyai.streaming.v3.models import SpeechModel
 
-    name = (os.environ.get("ARKA_ASSEMBLYAI_REALTIME_MODEL") or "universal-3-5-pro").strip()
+    name = (os.environ.get("ASSEMBLYAI_REALTIME_MODEL") or "universal-3-5-pro").strip()
     for candidate in SpeechModel:
         if candidate.value == name:
             return candidate
@@ -60,7 +60,7 @@ def _realtime_speech_model():
 
 
 def _keyterms() -> list[str] | None:
-    raw = (os.environ.get("ARKA_ASSEMBLYAI_KEYTERMS") or os.environ.get("AGENT_NAME") or "").strip()
+    raw = (os.environ.get("ASSEMBLYAI_KEYTERMS") or os.environ.get("AGENT_NAME") or "").strip()
     if not raw:
         return None
     terms = [t.strip() for t in raw.replace(";", ",").split(",") if t.strip()]
