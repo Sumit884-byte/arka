@@ -135,7 +135,7 @@ python3 ~/.config/fish/arka_llm.py active-model
 
 Some skills ship their own defaults when you don't pass flags:
 
-- Gmail NL: unread requests fetch all unread (no hidden 2-day window); `--limit 100` only when a day window is set
+- Gmail NL: **unread** requests fetch **all** unread mail (`--all`); header shows total unread (e.g. `10 unread emails`), not just the fetched batch. Summarize without “unread” still defaults to the last 2 days; day-window queries use `--limit 100`. Caps: `ARKA_GMAIL_MAX`, `ARKA_GMAIL_SUMMARIZE_MAX`.
 - YouTube research: 2 videos (`YT_RESEARCH_MAX=2`)
 - Goal agent: 25 steps (`GOAL_MAX_STEPS=25`)
 - Reminders: 1 hour when no time given (`REMIND_DEFAULT=1h`)
@@ -191,6 +191,8 @@ arka reload --listen   # also restart wake listener after Python changes
 | `supermemory status`       | Memory backend (cloud API vs local cache)          |
 | `profession list`          | Profession domains and curated sources             |
 | `profession ask <d> <q>`   | Source-backed answer with citations                |
+| `arka google login`        | Sign in to Gmail + Google Calendar (OAuth)         |
+| `arka google gmail`        | List or summarize mail (see below)                 |
 
 
 Voice flow: say **"hey arka, …"** → STT → skill router → optional TTS reply (`AGENT_SPEAK=1` default). In voice mode, Arka speaks short acks while skills run and plain-language answers when done — usable without looking at the screen.
@@ -522,6 +524,55 @@ arka "summarize ENGLSH-2 weeks 1 to 3"
 
 
 
+### Google Calendar + Gmail (`arka google`)
+
+Read Gmail and Google Calendar after a one-time browser OAuth sign-in. On macOS, calendar NL can also merge **macOS Calendar.app** events when Google is unavailable.
+
+**Setup (once):**
+
+```fish
+arka google setup          # print Cloud Console steps + redirect URI
+# Add GOOGLE_OAUTH_CLIENT_ID + GOOGLE_OAUTH_CLIENT_SECRET to ~/.config/arka/.env
+arka reload
+arka google login          # opens browser; stores token locally
+arka google status
+```
+
+Enable **Gmail API** and **Google Calendar API** in Google Cloud Console. Redirect URI (default): `http://127.0.0.1:8766/oauth2callback` — override with `GOOGLE_OAUTH_PORT` / `GOOGLE_OAUTH_REDIRECT_URI`.
+
+| Command | Example |
+| ------- | ------- |
+| `google setup` | OAuth setup checklist |
+| `google login` / `logout` / `status` | Sign-in lifecycle |
+| `google gmail [--unread] [-n N]` | List messages (default limit 10; use `--all` for full match) |
+| `google gmail --summarize [--unread]` | AI digest with Overview / Worth your attention / FYI / Next steps |
+| `google gmail --today` / `--days N` / `--hours N` | Time-filtered mail |
+| `google calendar --today` / `--week` | Events (Google + optional macOS merge) |
+
+**Natural language (offline routing):**
+
+```fish
+arka give unread emails              # → google gmail --unread --all
+arka show my unread gmail
+arka summarize unread emails         # all unread, AI digest (no hidden 2-day cap)
+arka summarize emails                # last 2 days by default
+arka summarize unread emails within 3 days
+arka what's on my calendar today
+arka google login
+```
+
+**Unread counts:** Arka uses Gmail’s `resultSizeEstimate` for the header (`10 unread emails`). If a cap applies (summarize body limit or `ARKA_GMAIL_MAX`), you’ll see `10 unread emails (showing 7)`.
+
+```env
+GOOGLE_OAUTH_CLIENT_ID=....apps.googleusercontent.com
+GOOGLE_OAUTH_CLIENT_SECRET=...
+# ARKA_GMAIL_MAX=500                  # max messages when --all
+# ARKA_GMAIL_SUMMARIZE_MAX=40         # max emails in one AI digest
+# ARKA_GMAIL_SUMMARIZE_CHARS=120000   # model context budget for bodies
+```
+
+
+
 ### Other notable skills
 
 **Media:** `play_spotify`, `play_youtube`, `play_movie`, `play_song`
@@ -689,6 +740,10 @@ AGENT_WAKE_WORDS=hey arka,arka
 # Memory (optional cloud + local fallback)
 # SUPERMEMORY_API_KEY=
 # MEMORY=auto
+
+# Google Calendar + Gmail (OAuth — see README § Google Calendar + Gmail)
+# GOOGLE_OAUTH_CLIENT_ID=....apps.googleusercontent.com
+# GOOGLE_OAUTH_CLIENT_SECRET=...
 
 # Third-party plugins (optional extra search path)
 # SKILLS_PATH=~/my-arka-plugins
