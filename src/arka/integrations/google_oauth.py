@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import secrets
@@ -29,6 +30,8 @@ TOKEN_URI = "https://oauth2.googleapis.com/token"
 USERINFO_URI = "https://www.googleapis.com/oauth2/v2/userinfo"
 
 SCOPES = (
+    "openid",
+    "email",
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/gmail.send",
     "https://www.googleapis.com/auth/calendar.readonly",
@@ -82,6 +85,21 @@ def client_id() -> str:
 
 def client_secret() -> str:
     return _first_env("GOOGLE_OAUTH_CLIENT_SECRET", "GOOGLE_CLIENT_SECRET")
+
+
+def credentials_source() -> tuple[str, str]:
+    """Return (client_id_key_name, client_secret_key_name) actually used from .env."""
+    id_key = ""
+    for key in ("GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_CLIENT_ID"):
+        if _getenv(key):
+            id_key = key
+            break
+    sec_key = ""
+    for key in ("GOOGLE_OAUTH_CLIENT_SECRET", "GOOGLE_CLIENT_SECRET"):
+        if _getenv(key):
+            sec_key = key
+            break
+    return id_key, sec_key
 
 
 def redirect_uri() -> str:
@@ -144,6 +162,22 @@ def clear_tokens() -> None:
         path.unlink()
 
 
+def signed_in_email() -> str:
+    """Email from stored OAuth tokens (refresh if needed)."""
+    tokens = load_tokens()
+    if not tokens:
+        return ""
+    email = str(tokens.get("email") or "").strip()
+    if email:
+        return email
+    try:
+        get_access_token()
+    except RuntimeError:
+        return ""
+    tokens = load_tokens() or {}
+    return str(tokens.get("email") or "").strip()
+
+
 def _http_json(
     url: str,
     *,
@@ -173,7 +207,10 @@ def _http_json(
 def build_auth_url(state: str) -> str:
     cid = client_id()
     if not cid:
-        raise RuntimeError("GOOGLE_OAUTH_CLIENT_ID not set — run: arka google setup")
+        raise RuntimeError(
+            "Google OAuth client ID not set — add GOOGLE_CLIENT_ID or GOOGLE_OAUTH_CLIENT_ID to .env "
+            "(run: arka google setup)"
+        )
     params = {
         "client_id": cid,
         "redirect_uri": redirect_uri(),
@@ -189,7 +226,10 @@ def build_auth_url(state: str) -> str:
 def exchange_code(code: str) -> dict[str, Any]:
     secret = client_secret()
     if not secret:
-        raise RuntimeError("GOOGLE_OAUTH_CLIENT_SECRET not set — run: arka google setup")
+        raise RuntimeError(
+            "Google OAuth client secret not set — add GOOGLE_CLIENT_SECRET or GOOGLE_OAUTH_CLIENT_SECRET to .env "
+            "(run: arka google setup)"
+        )
     payload = _http_json(
         TOKEN_URI,
         method="POST",
@@ -231,6 +271,38 @@ def fetch_user_email(access_token: str) -> str:
     return str(info.get("email") or info.get("name") or "")
 
 
+def _email_from_id_token(id_token: str) -> str:
+    """Parse email from OIDC id_token (no extra API call)."""
+    try:
+        parts = id_token.split(".")
+        if len(parts) < 2:
+            return ""
+        payload = parts[1]
+        payload += "=" * (-len(payload) % 4)
+        data = json.loads(base64.urlsafe_b64decode(payload.encode("ascii")))
+        if isinstance(data, dict):
+            return str(data.get("email") or "")
+    except Exception:
+        return ""
+    return ""
+
+
+def resolve_user_email(token_payload: dict[str, Any]) -> str:
+    """Best-effort email after token exchange (id_token → userinfo → empty)."""
+    id_tok = str(token_payload.get("id_token") or "")
+    if id_tok:
+        email = _email_from_id_token(id_tok)
+        if email:
+            return email
+    access = str(token_payload.get("access_token") or "")
+    if access:
+        try:
+            return fetch_user_email(access)
+        except RuntimeError:
+            pass
+    return ""
+
+
 def _merge_token_response(existing: dict[str, Any] | None, fresh: dict[str, Any]) -> dict[str, Any]:
     out = dict(existing or {})
     out.update({k: v for k, v in fresh.items() if v})
@@ -258,7 +330,10 @@ def get_access_token(*, force_refresh: bool = False) -> str:
     fresh = refresh_access_token(refresh)
     merged = _merge_token_response(tokens, fresh)
     if not merged.get("email") and merged.get("access_token"):
-        merged["email"] = fetch_user_email(str(merged["access_token"]))
+        try:
+            merged["email"] = resolve_user_email(merged)
+        except RuntimeError:
+            pass
     save_tokens(merged)
     access = str(merged.get("access_token") or "")
     if not access:
@@ -369,8 +444,9 @@ h1{{font-size:1.25rem}}</style></head><body><h1>{message}</h1></body></html>"""
 
     token_payload = exchange_code(str(code))
     merged = _merge_token_response(None, token_payload)
-    email = fetch_user_email(str(merged["access_token"]))
-    merged["email"] = email
+    email = resolve_user_email(token_payload)
+    if email:
+        merged["email"] = email
     merged["scopes"] = " ".join(SCOPES)
     save_tokens(merged)
     return merged

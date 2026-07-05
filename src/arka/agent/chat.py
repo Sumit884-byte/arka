@@ -704,19 +704,51 @@ def fetch_weather(question: str = "", *, days: int = 0, detail: bool | None = No
         return f"Weather fetch failed: {exc}"
 
 
-def get_live_location(force_refresh: bool = False) -> dict:
-    ctx = load_context()
-    if not force_refresh and ctx.get("location_string"):
-        return ctx
+def _coords_from_geo_data(data: dict) -> str:
+    lat = data.get("latitude") if data.get("latitude") is not None else data.get("lat")
+    lon = data.get("longitude") if data.get("longitude") is not None else data.get("lon")
+    if lat is not None and lon is not None:
+        return f"{lat},{lon}"
+    return ""
 
-    coords = None
+
+def _fetch_ip_coords() -> str:
     try:
         req = urllib.request.Request("https://ipinfo.io/loc", headers={"User-Agent": "arka-chat/1.0"})
         with urllib.request.urlopen(req, timeout=4) as resp:
             coords = resp.read().decode().strip()
-            ctx["coords"] = coords
+            if coords and "," in coords:
+                return coords
     except Exception:
         pass
+    try:
+        req = urllib.request.Request("https://ipapi.co/json/", headers={"User-Agent": "arka-chat/1.0"})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode())
+        return _coords_from_geo_data(data)
+    except Exception:
+        pass
+    return ""
+
+
+def _ensure_coords(ctx: dict) -> dict:
+    if ctx.get("coords"):
+        return ctx
+    coords = _fetch_ip_coords()
+    if coords:
+        ctx["coords"] = coords
+        save_context(ctx)
+    return ctx
+
+
+def get_live_location(force_refresh: bool = False) -> dict:
+    ctx = load_context()
+    if not force_refresh and ctx.get("location_string"):
+        return _ensure_coords(ctx)
+
+    coords = _fetch_ip_coords()
+    if coords:
+        ctx["coords"] = coords
 
     public_ip = "Unknown"
     try:
@@ -741,7 +773,10 @@ def get_live_location(force_refresh: bool = False) -> dict:
                 loc = f"{city}, {region}, {country}".strip(", ")
                 ctx["city"] = city
                 ctx["location_string"] = f"{loc} (IP: {public_ip})"
-                save_context(ctx)
+                geo = _coords_from_geo_data(data)
+                if geo:
+                    ctx["coords"] = geo
+                save_context(_ensure_coords(ctx))
                 return ctx
         except Exception:
             continue
@@ -1245,15 +1280,59 @@ def math_from_question(question: str) -> str:
     return evaluate_math(expr)
 
 
-def relative_bearing(user_coords: str, poi_coords: str) -> str:
+POI_FILTER_TYPES: dict[str, set[str]] = {
+    "food": {"restaurant", "cafe", "fast_food", "food_court", "bakery", "bar", "pub", "biergarten", "ice_cream"},
+    "restaurant": {"restaurant", "fast_food", "food_court"},
+    "cafe": {"cafe", "coffee_shop"},
+    "coffee": {"cafe", "coffee_shop"},
+    "hospital": {"hospital", "clinic", "doctors", "pharmacy"},
+    "pharmacy": {"pharmacy", "chemist"},
+    "atm": {"atm"},
+    "bank": {"bank", "atm"},
+    "hotel": {"hotel", "hostel", "guest_house", "motel"},
+    "mall": {"mall", "supermarket", "department_store", "marketplace"},
+    "grocery": {"supermarket", "greengrocer", "convenience", "marketplace"},
+    "park": {"park", "garden", "playground"},
+}
+
+
+def _haversine_km(u_lat: float, u_lon: float, p_lat: float, p_lon: float) -> float:
+    r = 6371.0
+    d_lat = math.radians(p_lat - u_lat)
+    d_lon = math.radians(p_lon - u_lon)
+    a = (
+        math.sin(d_lat / 2) ** 2
+        + math.cos(math.radians(u_lat)) * math.cos(math.radians(p_lat)) * math.sin(d_lon / 2) ** 2
+    )
+    return r * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def _poi_distance_km(user_coords: str, poi_coords: str) -> float | None:
     if not user_coords or not poi_coords:
-        return ""
+        return None
+    try:
+        u_lat, u_lon = map(float, user_coords.split(","))
+        p_lat, p_lon = map(float, poi_coords.split(","))
+    except (TypeError, ValueError):
+        return None
     try:
         from geopy.distance import geodesic  # type: ignore
 
+        return float(geodesic((u_lat, u_lon), (p_lat, p_lon)).kilometers)
+    except Exception:
+        try:
+            return float(_haversine_km(u_lat, u_lon, p_lat, p_lon))
+        except Exception:
+            return None
+
+
+def relative_bearing(user_coords: str, poi_coords: str) -> str:
+    dist = _poi_distance_km(user_coords, poi_coords)
+    if dist is None:
+        return ""
+    try:
         u_lat, u_lon = map(float, user_coords.split(","))
         p_lat, p_lon = map(float, poi_coords.split(","))
-        dist = geodesic((u_lat, u_lon), (p_lat, p_lon)).kilometers
         d_lon = math.radians(p_lon - u_lon)
         lat1, lat2 = math.radians(u_lat), math.radians(p_lat)
         y = math.sin(d_lon) * math.cos(lat2)
@@ -1263,6 +1342,26 @@ def relative_bearing(user_coords: str, poi_coords: str) -> str:
         return f"{dist:.1f}km {dirs[round(bearing / 45)]}"
     except Exception:
         return ""
+
+
+def _poi_matches_filter(poi: dict, query: str) -> bool:
+    query = (query or "").strip().lower()
+    if not query:
+        return True
+    name = str(poi.get("name") or "").lower()
+    kind = str(poi.get("type") or "").lower()
+    tokens = re.findall(r"[a-z0-9]+", query)
+    for token in tokens:
+        types = POI_FILTER_TYPES.get(token)
+        if types and kind in types:
+            return True
+        if token == "food" and any(
+            x in name for x in ("food", "restaurant", "cafe", "kitchen", "bistro", "dhaba", "biryani")
+        ):
+            return True
+        if token in name or token in kind or token in kind.replace("_", " "):
+            return True
+    return False
 
 
 def map_file(city: str) -> Path:
@@ -1317,18 +1416,64 @@ def download_map(city: str) -> list[dict]:
         return []
 
 
-def format_nearby(city: str, limit: int = 15) -> str:
-    ctx = load_context()
+def parse_nearby_args(rest: list[str]) -> tuple[str, str]:
+    """Return (city, category_filter). Empty city → use live location."""
+    if not rest:
+        return "", ""
+    joined = " ".join(rest).strip()
+    low = joined.lower()
+    filter_tokens = set(POI_FILTER_TYPES) | {
+        "eat",
+        "places",
+        "place",
+        "near",
+        "nearby",
+        "around",
+        "close",
+    }
+    words = joined.split()
+    if len(words) == 1 and words[0].lower() in filter_tokens:
+        return "", words[0].lower()
+    if len(words) >= 2 and words[0][0:1].isupper() and words[0].lower() not in filter_tokens:
+        return words[0], " ".join(words[1:])
+    return "", joined
+
+
+def format_nearby(city: str, limit: int = 15, *, query: str = "") -> str:
+    ctx = _ensure_coords(get_live_location())
     pois = load_map(city)
     if not pois:
         pois = download_map(city)
-    coords = ctx.get("coords")
-    lines: list[str] = []
-    for p in pois[:50]:
-        dist = relative_bearing(str(coords or ""), p.get("coords", ""))
-        extra = f" ({dist})" if dist else ""
-        lines.append(f"• {p.get('name')} — {p.get('type', 'place')}{extra}")
-    return "\n".join(lines[:limit])
+    if not pois:
+        return (
+            f"No offline map for {city}. Download once while online:\n"
+            f"  map_download {city}"
+        )
+    coords = str(ctx.get("coords") or "")
+    filtered = [p for p in pois if _poi_matches_filter(p, query)]
+    if query and not filtered:
+        filtered = pois
+
+    scored: list[tuple[float, dict, str]] = []
+    for p in filtered:
+        dist_km = _poi_distance_km(coords, str(p.get("coords") or ""))
+        dist_label = relative_bearing(coords, str(p.get("coords") or ""))
+        scored.append((dist_km if dist_km is not None else 99999.0, p, dist_label))
+    scored.sort(key=lambda row: row[0])
+
+    label = f" ({query})" if query else ""
+    header = f"Nearby places in {city}{label} — OpenStreetMap offline"
+    if coords:
+        header += f"\nFrom your location ({ctx.get('location_string', coords)})"
+    else:
+        header += "\nSet location for distance: location Kolkata (or allow IP geolocation)"
+    lines: list[str] = [header, ""]
+    for _dist, p, dist_label in scored[:limit]:
+        extra = f" — {dist_label}" if dist_label else ""
+        lines.append(f"• {p.get('name')} ({p.get('type', 'place')}){extra}")
+    if not lines[2:]:
+        lines.append("(no matching places in cached map — try: map_download " + city + ")")
+    return "\n".join(lines)
 
 
 def cleanup_response(raw: str, entity: str = "") -> str:
@@ -1637,7 +1782,7 @@ def main() -> int:
     p_map_ls.add_argument("city", nargs="?", default="")
 
     p_near = sub.add_parser("nearby", help="List nearby POIs from offline map")
-    p_near.add_argument("city", nargs="?", default="")
+    p_near.add_argument("rest", nargs="*", default=[])
 
     p_deep = sub.add_parser("deep-context", help="Scrape web context only (stdout)")
     p_deep.add_argument("question", nargs="+")
@@ -1718,11 +1863,12 @@ def main() -> int:
         return 0
 
     if args.cmd == "nearby":
-        city = args.city or get_live_location().get("city", "Unknown")
+        city_arg, query = parse_nearby_args(list(args.rest or []))
+        city = city_arg or get_live_location().get("city", "Unknown")
         if city == "Unknown":
             print("Unknown city. Set with: location Kolkata", file=sys.stderr)
             return 1
-        print(format_nearby(str(city)))
+        print(format_nearby(str(city), query=query))
         return 0
 
     if args.cmd == "deep-context":

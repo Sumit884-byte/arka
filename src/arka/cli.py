@@ -321,22 +321,49 @@ def _curl_download(url: str) -> int:
     return proc.returncode
 
 
+def _is_email_summarize_request(rest: list[str]) -> bool:
+    text = " ".join(rest).lower()
+    return bool(re.search(r"\b(emails?|gmail|gmails|mail|inbox)\b", text))
+
+
+def _cmd_gmail_summarize_nl(rest: list[str]) -> int:
+    from arka.integrations.google_workspace import build_gmail_argv_from_nl
+
+    text = " ".join(rest).strip()
+    if not text:
+        print("Usage: arka summarize unread emails [within N days]", file=sys.stderr)
+        return 1
+    try:
+        return run_script("arka_google.py", build_gmail_argv_from_nl(text, summarize=True))
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
+
 def _cmd_summarize(rest: list[str]) -> int:
     if not rest or rest[0] in ("-h", "--help", "help"):
         print(
             "Usage: arka summarize youtube <video-id|PLid|url>\n"
             "       arka summarize playlist --url <url> [--limit N]\n"
             "       arka summarize folder <directory>\n"
+            "       arka summarize unread emails [within N days]\n"
+            "       arka summarize all emails within 2 days\n"
             "\n"
             "YouTube: tries captions first. If missing, asks to download audio\n"
             "         and transcribe locally (unless --yes-transcribe / --no-transcribe).\n"
             "\n"
+            "Gmail: requires arka google login. Uses calendar-day windows by default.\n"
+            "\n"
             "Examples:\n"
             "  arka summarize youtube dQw4w9WgXcQ\n"
-            "  arka summarize youtube PLu71SKxNbfoDqgPchmvIsL4hTnJIrtige --limit 5\n"
-            "  arka summarize youtube PLxxx --yes-transcribe"
+            "  arka summarize unread emails within 2 days\n"
+            "  arka summarize all emails from last 3 days\n"
+            "  arka google gmail --summarize --unread --days 2 --all"
         )
         return 0 if rest and rest[0] in ("-h", "--help", "help") else 1
+
+    if _is_email_summarize_request(rest):
+        return _cmd_gmail_summarize_nl(rest)
 
     head = rest[0].lower()
     if head in ("youtube", "yt", "video"):

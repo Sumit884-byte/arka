@@ -9,7 +9,11 @@ import sys
 from arka.llm.fallback import (
     env,
     fetch_gemini_models_live,
+    fetch_groq_models_live,
+    fetch_ollama_models_live,
     gemini_model_ids,
+    groq_model_ids,
+    ollama_model_ids,
     llm_complete as _fallback_complete,
     llm_last_error,
     llm_stream_complete as _fallback_stream,
@@ -244,10 +248,26 @@ def cmd_models(args: argparse.Namespace) -> int:
     if args.gemini_live:
         live = fetch_gemini_models_live(force=args.refresh)
         if not live:
-            print("No live Gemini models (check GEMINI_API_KEY / ARKA_GEMINI_LIST).", file=sys.stderr)
+            print("No live Gemini models (check GEMINI_API_KEY / GEMINI_LIST).", file=sys.stderr)
             return 1
         for model_id in live:
             print(f"gemini\t{model_id}\tlive")
+        return 0
+    if getattr(args, "groq_live", False):
+        live = fetch_groq_models_live(force=args.refresh)
+        if not live:
+            print("No live Groq models (check GROQ_API_KEY / GROQ_LIST).", file=sys.stderr)
+            return 1
+        for model_id in live:
+            print(f"groq\t{model_id}\tlive")
+        return 0
+    if getattr(args, "ollama_live", False):
+        live = fetch_ollama_models_live(force=args.refresh)
+        if not live:
+            print("No live Ollama models (check OLLAMA_HOST / ollama serve / OLLAMA_LIST).", file=sys.stderr)
+            return 1
+        for model_id in live:
+            print(f"ollama\t{model_id}\tlive")
         return 0
     for provider, model_id in ordered_model_candidates(task=args.task or None):
         ok = provider_available(provider)
@@ -303,7 +323,17 @@ def main() -> int:
         action="store_true",
         help="List Gemini generateContent models from API (ListModels)",
     )
-    p_models.add_argument("--refresh", action="store_true", help="Bypass Gemini list cache")
+    p_models.add_argument(
+        "--groq-live",
+        action="store_true",
+        help="List Groq chat models from API",
+    )
+    p_models.add_argument(
+        "--ollama-live",
+        action="store_true",
+        help="List installed Ollama models from /api/tags",
+    )
+    p_models.add_argument("--refresh", action="store_true", help="Bypass live model list cache")
     p_models.set_defaults(func=cmd_models)
 
     p_active = sub.add_parser("active-model", help="Show last-used or preferred LLM model")

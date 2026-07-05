@@ -1,0 +1,28 @@
+{
+  "id": "architect",
+  "title": "Architecture & Design",
+  "description": "Example third-party profession — building design, codes, and planning",
+  "version": "1.0.0",
+  "author": "Arka",
+  "aliases": ["architect", "building designer", "urban planner"],
+  "keywords": [
+    "blueprint",
+    "floor plan",
+    "zoning",
+    "building code",
+    "structural",
+    "sustainability",
+    "site plan",
+    "permit"
+  ],
+  "disclaimer": "General design information — not licensed architectural advice. Consult a registered architect for projects.",
+  "search_bias": "architecture building design codes zoning site:architecture.com OR site:aia.org",
+  "rss": [
+    {
+      "id": "dezeen",
+      "label": "Dezeen Architecture",
+      "url": "https://www.dezeen.com/architecture/feed/",
+      "limit": 5
+    }
+  ]
+}

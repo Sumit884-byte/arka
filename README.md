@@ -67,6 +67,90 @@ Config locations (when not using `~/.config/fish`):
 
 Override with `ARKA_HOME`, `ARKA_CONFIG_DIR`, or `ARKA_CACHE_DIR`.
 
+### How defaults work
+
+Arka is **on by default** for safety, failover, and local-first routing. You only need a `.env` when you want to override something or add API keys.
+
+**1. Where settings come from (precedence)**
+
+| Layer | What it is | Wins when |
+| ----- | ---------- | --------- |
+| **Shell env** | `export GEMINI_API_KEY=…` before `arka` | Already set in the process |
+| **User `.env`** | `~/.config/arka/.env` (macOS/Linux) or `%APPDATA%\arka\.env` | Fills unset vars at startup |
+| **Dev checkout `.env`** | `arka/.env` in a git clone | Fills vars **not** already set (handy for `REMOTE_TOKEN`, local keys) |
+| **Legacy fish `.env`** | `~/.config/fish/.env` | Still read by Python `load_env()` if present |
+| **Code defaults** | Built into Python / `config.fish` | Used when a var is missing or a placeholder |
+
+Fish loads `$_ARKA_CFG/.env` first (overwrites), then repo `.env` only for keys not yet set. Python `load_env()` merges the same files in order and **never overwrites** a non-empty value already in `os.environ`.
+
+Placeholder values like `your_gemini_api_key_here` or `changeme` are **ignored** — Arka treats them as unset and falls through to the next layer.
+
+**2. Key names — short form, legacy `ARKA_` still works**
+
+Prefer short names in `.env` (no prefix):
+
+```env
+ROUTE_MODE=symbolic
+LLM_AUTO_FALLBACK=1
+AGENT_SPEAK=1
+```
+
+Legacy `ARKA_*` keys are stripped on load (`ARKA_ROUTE_MODE` → `ROUTE_MODE`). Exception: `ARKA_HOME` maps to `INSTALL_HOME` (package script directory). See `src/arka/env.example` for the canonical list.
+
+**3. Built-in defaults (no `.env` required)**
+
+| Area | Default | Override |
+| ---- | ------- | -------- |
+| **Security** | All layers on (`SECURITY=1`, web/action/sanitize/LLM checks) | Set any layer to `0` |
+| **NL routing** | Offline rules first, LLM only when needed (`ROUTE_MODE=symbolic`) | `ROUTE_MODE=ai`, `symbolic_only`, `ai_only` |
+| **LLM chain** | Preferred provider/model → live model lists → built-in chain (Gemini → Groq → Ollama) | `AI_PREFERRED_*`, `LLM_FALLBACK`, `LLM_FALLBACK_<TASK>` |
+| **Failover** | Auto try next model/provider on 429/401/timeout (`LLM_AUTO_FALLBACK=1`) | `LLM_AUTO_FALLBACK=0` |
+| **Key rotation** | Rotate backup keys before switching provider (`API_KEY_ROTATION=1`) | `API_KEY_ROTATION=0` |
+| **Local LLM servers** | Auto-start/stop Ollama or vLLM when needed | `LLM_AUTO_START_SERVERS=0`, `LLM_AUTO_STOP_SERVERS=0` |
+| **Voice TTS** | Speak replies when a TTS backend is available (`AGENT_SPEAK=1`) | `AGENT_SPEAK=0` |
+| **Wake listener** | **Off** until you run `arka listen` | `AGENT_WAKE_AUTO=1` for shell autostart |
+| **STT / listen** | Best available: AssemblyAI → Sarvam → Groq → Vosk (`STT=auto`, `LISTEN_ENGINE=auto`) | Set engine/key explicitly |
+| **Memory** | Cloud Supermemory when keyed, else local cache (`MEMORY=auto`) | `MEMORY=local` or `supermemory` |
+| **Memory autodetect** | Symbolic “remember that …” from chat/voice (`MEMORY_AUTODETECT=1`) | `MEMORY_AUTODETECT=0` |
+| **Goal agent** | Built-in goal loop for `goal` / `agent loop` (`GOAL_ENGINE=auto`) | `GOAL_ENGINE=legacy`, `butterfish`, `off` |
+| **Model label** | Show `Model: provider/name` under answers (`SHOW_MODEL=1`) | `SHOW_MODEL=0` |
+
+**4. LLM fallback chain (when you don't set `LLM_FALLBACK`)**
+
+The orchestrator builds a candidate list in order:
+
+1. `AI_PREFERRED_PROVIDER` + `AI_PREFERRED_MODEL` (if set)
+2. Live model lists from each provider API (when keys/reachability allow; `GEMINI_LIST=1`, `GROQ_LIST=1`, `OLLAMA_LIST=1` by default)
+3. Built-in chain in `arka_llm_fallback.py`: Gemini 2.5/2.0 Flash → Groq Llama 3.3/3.1 → Ollama cloud/local models
+
+Per-task overrides: `LLM_FALLBACK_ROUTE`, `LLM_FALLBACK_SUMMARIZE`, `LLM_FALLBACK_CHAT`, etc. Inspect at runtime:
+
+```fish
+python3 ~/.config/fish/arka_llm.py models
+python3 ~/.config/fish/arka_llm.py models --task summarize
+python3 ~/.config/fish/arka_llm.py active-model
+```
+
+**5. Skill-level defaults**
+
+Some skills ship their own defaults when you don't pass flags:
+
+- Gmail NL: unread requests fetch all unread (no hidden 2-day window); `--limit 100` only when a day window is set
+- YouTube research: 2 videos (`YT_RESEARCH_MAX=2`)
+- Goal agent: 25 steps (`GOAL_MAX_STEPS=25`)
+- Reminders: 1 hour when no time given (`REMIND_DEFAULT=1h`)
+- Image save: `~/Pictures/arka-generated` (`IMAGE_OUTPUT_DIR`)
+- YouTube downloads: `~/Videos/YoutubeDownloads` (`YOUTUBE_BULK_DOWNLOAD_DIR`)
+
+**6. Applying changes**
+
+```fish
+arka reload              # re-read .env + config.fish in current shell
+arka reload --listen     # also restart wake listener after Python changes
+```
+
+`arka setup` seeds `~/.config/arka/.env` from the package template on first install.
+
 ### Fish shell (Linux — full agent)
 
 ```fish
@@ -623,7 +707,7 @@ WEB_TRACK=1
 # REMOTE_PORT=8765
 ```
 
-See `.env.example` for the full list of options.
+See `.env.example` for the full list of options. Load order, built-in defaults, and override precedence are in [How defaults work](#how-defaults-work) above.
 
 ### Layout
 

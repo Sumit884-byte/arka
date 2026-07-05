@@ -34,10 +34,28 @@ DEFAULT_GEMINI_MODELS = [
     "gemini-1.5-flash",
 ]
 
+DEFAULT_GROQ_MODELS = [
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant",
+    "llama-3.3-70b-specdec",
+    "gemma2-9b-it",
+]
+
+DEFAULT_OLLAMA_MODELS = [
+    "minimax-m2.5:cloud",
+    "minimax-m2:cloud",
+    "qwen3:8b",
+    "llama3.2:1b",
+]
+
 GEMINI_LIST_SKIP_RE = re.compile(
     r"(tts|image|embedding|aqa|vision|exp-|experimental|preview-tts|nano-banana)",
     re.I,
 )
+
+GROQ_LIST_SKIP_RE = re.compile(r"(whisper|distil|guard|prompt)", re.I)
+
+OLLAMA_LIST_SKIP_RE = re.compile(r"(embed|bge-|nomic-embed|mxbai-embed)", re.I)
 
 DEFAULT_CHAIN: list[tuple[str, str]] = [
     *(( "gemini", mid) for mid in DEFAULT_GEMINI_MODELS),
@@ -59,6 +77,14 @@ GEMINI_MODEL_ALIASES = {
 _GEMINI_LIVE_CACHE: tuple[float, list[str]] | None = None
 _GEMINI_LIVE_LOCK = threading.Lock()
 _GEMINI_LIVE_TTL = 600.0
+
+_GROQ_LIVE_CACHE: tuple[float, list[str]] | None = None
+_GROQ_LIVE_LOCK = threading.Lock()
+_GROQ_LIVE_TTL = 600.0
+
+_OLLAMA_LIVE_CACHE: tuple[float, list[str]] | None = None
+_OLLAMA_LIVE_LOCK = threading.Lock()
+_OLLAMA_LIVE_TTL = 120.0
 
 TASK_ALIASES = {
     "default": "default",
@@ -128,15 +154,28 @@ class ExhaustionStore:
                 elif "perproject" in msg or "per day" in msg or "per minute" in msg:
                     for mid in gemini_model_ids(include_live=False):
                         self._exhausted.add(("gemini", mid))
+            if provider == "groq" and any(
+                x in msg for x in ("429", "rate limit", "quota", "resource_exhausted", "tokens per day")
+            ):
+                if any(x in msg for x in ("organization", "account", "org ", "daily token")):
+                    for mid in groq_model_ids(include_live=False):
+                        self._exhausted.add(("groq", mid))
+                else:
+                    self._exhausted.add(("groq", model_id))
             if provider == "groq" and "invalid api key" in msg:
-                for mid in groq_model_ids():
+                for mid in groq_model_ids(include_live=False):
                     self._exhausted.add(("groq", mid))
             if provider == "groq" and any(
                 x in msg for x in ("decommissioned", "model_decommissioned", "model_not_found")
             ):
                 self._exhausted.add(("groq", model_id))
-                for deprecated in GROQ_MODEL_ALIASES:
-                    self._exhausted.add(("groq", deprecated))
+                dep = normalize_groq_model(model_id)
+                if dep != model_id:
+                    self._exhausted.add(("groq", dep))
+            if provider == "ollama" and any(
+                x in msg for x in ("model_not_found", "not found", "404", "does not exist", "unknown model")
+            ):
+                self._exhausted.add(("ollama", model_id))
 
     def exhausted(self, provider: str, model_id: str) -> bool:
         with self._lock:
@@ -369,36 +408,216 @@ def normalize_groq_model(model_id: str) -> str:
     return GROQ_MODEL_ALIASES.get(mid, mid)
 
 
-def groq_model_ids() -> list[str]:
+def _groq_list_enabled() -> bool:
+    if env("GROQ_LIST") in {"0", "false", "no", "off"}:
+        return False
+    return bool(provider_has_keys("groq") or env("GROQ_API_KEY"))
+
+
+def _rank_groq_model(model_id: str) -> tuple[int, str]:
+    mid = model_id.lower()
+    tier = 0 if "70b" in mid or "405b" in mid else (1 if "8b" in mid or "9b" in mid else 2)
+    if "versatile" in mid or "specdec" in mid:
+        tier -= 1
+    return (tier, mid)
+
+
+def fetch_groq_models_live(*, force: bool = False) -> list[str]:
+    """List Groq chat models from OpenAI-compatible API (cached ~10 min)."""
+    global _GROQ_LIVE_CACHE
+
+    if not _groq_list_enabled():
+        return []
+
+    keys = iter_provider_keys("groq")
+    if not keys:
+        return []
+
+    now = time.time()
+    with _GROQ_LIVE_LOCK:
+        if not force and _GROQ_LIVE_CACHE and now - _GROQ_LIVE_CACHE[0] < _GROQ_LIVE_TTL:
+            return list(_GROQ_LIVE_CACHE[1])
+
+    data = None
+    for key in keys:
+        try:
+            req = urllib.request.Request(
+                "https://api.groq.com/openai/v1/models",
+                headers={"Authorization": f"Bearer {key}"},
+                method="GET",
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = json.loads(resp.read().decode())
+            break
+        except urllib.error.HTTPError as exc:
+            if is_key_retryable(str(exc)) and key != keys[-1]:
+                continue
+        except (urllib.error.URLError, OSError, TimeoutError, json.JSONDecodeError):
+            if key != keys[-1]:
+                continue
+
+    if data is None:
+        with _GROQ_LIVE_LOCK:
+            if _GROQ_LIVE_CACHE:
+                return list(_GROQ_LIVE_CACHE[1])
+        return []
+
+    models: list[str] = []
+    for item in data.get("data") or []:
+        if not isinstance(item, dict):
+            continue
+        mid = str(item.get("id") or "").strip()
+        if not mid or GROQ_LIST_SKIP_RE.search(mid):
+            continue
+        mid = normalize_groq_model(mid)
+        if mid not in models:
+            models.append(mid)
+    models.sort(key=_rank_groq_model)
+
+    with _GROQ_LIVE_LOCK:
+        _GROQ_LIVE_CACHE = (now, models)
+    return list(models)
+
+
+def groq_model_ids(*, include_live: bool = True) -> list[str]:
+    pref_provider = (env("AI_PREFERRED_PROVIDER") or env("LLM_PROVIDER")).lower()
+    explicit = [
+        normalize_groq_model(m.strip())
+        for m in env("GROQ_MODELS").split(",")
+        if m.strip()
+    ]
     raw = [
         normalize_groq_model(env("GROQ_MODEL")),
-        "llama-3.3-70b-versatile",
-        "llama-3.1-8b-instant",
+        env("AI_PREFERRED_MODEL") if pref_provider == "groq" else "",
+        env("LLM_MODEL") if pref_provider == "groq" else "",
     ]
+    raw.extend(explicit or DEFAULT_GROQ_MODELS)
+    if include_live and _groq_list_enabled():
+        raw.extend(fetch_groq_models_live())
     out: list[str] = []
     for model in raw:
-        if model and model not in out:
+        model = normalize_groq_model(model)
+        if not model or model.startswith("gemini-"):
+            continue
+        if model not in out:
             out.append(model)
-    return out
+    if not out:
+        return list(DEFAULT_GROQ_MODELS)
+    preferred = {normalize_groq_model(m) for m in raw[:4] if m}
+    head = [m for m in out if m in preferred]
+    tail = sorted([m for m in out if m not in preferred], key=_rank_groq_model)
+    merged: list[str] = []
+    for model in head + tail:
+        if model not in merged:
+            merged.append(model)
+    return merged
 
 
-def ollama_model_ids() -> list[str]:
+def _ollama_list_enabled() -> bool:
+    if env("OLLAMA_LIST") in {"0", "false", "no", "off"}:
+        return False
+    if env("OLLAMA_LIST") in {"1", "true", "yes", "on"}:
+        return _ollama_reachable()
+    return _ollama_reachable()
+
+
+def _rank_ollama_model(model_id: str) -> tuple[int, str]:
+    mid = model_id.lower()
+    tier = 0 if ":cloud" in mid else 1
+    if mid.startswith("minimax"):
+        tier = 0
+    return (tier, mid)
+
+
+def fetch_ollama_models_live(*, force: bool = False) -> list[str]:
+    """List installed Ollama models from /api/tags (cached ~2 min)."""
+    global _OLLAMA_LIVE_CACHE
+
+    if not _ollama_list_enabled():
+        return []
+
+    now = time.time()
+    with _OLLAMA_LIVE_LOCK:
+        if not force and _OLLAMA_LIVE_CACHE and now - _OLLAMA_LIVE_CACHE[0] < _OLLAMA_LIVE_TTL:
+            return list(_OLLAMA_LIVE_CACHE[1])
+
+    try:
+        req = urllib.request.Request(f"{_ollama_host()}/api/tags", method="GET")
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode())
+    except (urllib.error.URLError, OSError, TimeoutError, json.JSONDecodeError):
+        with _OLLAMA_LIVE_LOCK:
+            if _OLLAMA_LIVE_CACHE:
+                return list(_OLLAMA_LIVE_CACHE[1])
+        return []
+
+    models: list[str] = []
+    for item in data.get("models") or []:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "").strip()
+        if not name or OLLAMA_LIST_SKIP_RE.search(name):
+            continue
+        if name.startswith("gemini-"):
+            continue
+        if name not in models:
+            models.append(name)
+    models.sort(key=_rank_ollama_model)
+
+    with _OLLAMA_LIVE_LOCK:
+        _OLLAMA_LIVE_CACHE = (now, models)
+    return list(models)
+
+
+def ollama_model_ids(*, include_live: bool = True) -> list[str]:
     pref_provider = (env("AI_PREFERRED_PROVIDER") or env("LLM_PROVIDER")).lower()
     pref_model = env("AI_PREFERRED_MODEL") or env("LLM_MODEL")
+    explicit = [m.strip() for m in env("OLLAMA_MODELS").split(",") if m.strip()]
     raw = [
         env("OLLAMA_CHAT_MODEL"),
         pref_model if pref_provider == "ollama" else "",
         env("LLM_MODEL") if pref_provider == "ollama" else "",
-        "minimax-m2.5:cloud",
-        "minimax-m2:cloud",
-        "qwen3:8b",
-        "llama3.2:1b",
     ]
+    raw.extend(explicit or DEFAULT_OLLAMA_MODELS)
+    if include_live and _ollama_list_enabled():
+        raw.extend(fetch_ollama_models_live())
     out: list[str] = []
     for model in raw:
-        if model and model not in out:
+        if not model or model.startswith("gemini-"):
+            continue
+        if model not in out:
             out.append(model)
-    return out
+    if not out:
+        return list(DEFAULT_OLLAMA_MODELS)
+    preferred = {m for m in raw[:4] if m}
+    head = [m for m in out if m in preferred]
+    tail = sorted([m for m in out if m not in preferred], key=_rank_ollama_model)
+    merged: list[str] = []
+    for model in head + tail:
+        if model not in merged:
+            merged.append(model)
+    return merged
+
+
+def _has_groq() -> bool:
+    return bool(provider_has_keys("groq") or env("GROQ_API_KEY"))
+
+
+def _has_gemini() -> bool:
+    return bool(_ensure_google_key())
+
+
+def _expand_provider_models(
+    add,
+    pref_provider: str,
+    *,
+    provider: str,
+    model_ids: list[str],
+) -> None:
+    """Add full Gemini list when preferred or no preference is set."""
+    if pref_provider == provider or not pref_provider:
+        for model_id in model_ids:
+            add(provider, model_id)
 
 
 def build_default_chain(*, task: str = "default") -> list[tuple[str, str]]:
@@ -423,20 +642,23 @@ def build_default_chain(*, task: str = "default") -> list[tuple[str, str]]:
     if pref_provider and pref_model:
         if pref_provider == "gemini":
             add(pref_provider, normalize_gemini_model(pref_model))
+        elif pref_provider == "groq":
+            mid = normalize_groq_model(pref_model)
+            if mid and not mid.startswith("gemini-"):
+                add(pref_provider, mid)
+        elif pref_provider == "ollama":
+            if not pref_model.startswith("gemini-"):
+                add(pref_provider, pref_model)
         else:
             add(pref_provider, pref_model)
 
     if env("VLLM_HOST") or env("VLLM_API_URL"):
         add("vllm", env("VLLM_MODEL") or "default")
 
-    if pref_provider == "gemini" or not pref_provider:
-        for model_id in gemini_model_ids():
-            add("gemini", model_id)
-
-    if provider_has_keys("groq") or env("GROQ_API_KEY"):
+    _expand_provider_models(add, pref_provider, provider="gemini", model_ids=gemini_model_ids())
+    if _has_groq():
         for model_id in groq_model_ids():
             add("groq", model_id)
-
     for model_id in ollama_model_ids():
         add("ollama", model_id)
 

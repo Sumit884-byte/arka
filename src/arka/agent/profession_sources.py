@@ -268,9 +268,21 @@ SOURCE_REGISTRY: dict[str, DomainSources] = {
 }
 
 
+def _source_pack(domain_id: str) -> DomainSources | None:
+    pack = SOURCE_REGISTRY.get(domain_id)
+    if pack is not None:
+        return pack
+    try:
+        from arka.agent.profession_plugins import plugin_sources
+
+        return plugin_sources().get(domain_id)
+    except ImportError:
+        return None
+
+
 def list_sources(domain_id: str) -> list[tuple[str, str]]:
     """Return (source_id, human label) for a domain."""
-    pack = SOURCE_REGISTRY.get(domain_id)
+    pack = _source_pack(domain_id)
     if not pack:
         return []
     out: list[tuple[str, str]] = []
@@ -371,11 +383,20 @@ def _local_project_fallback(artifact: str, query: str) -> tuple[str, str]:
     if not m:
         return "", ""
     domain_id = m.group(1)
+    root = None
     try:
-        from arka.agent.profession_projects import profession_project_path
+        from arka.agent.profession_plugins import plugin_project_path
+
+        root = plugin_project_path(domain_id)
     except ImportError:
-        return "", ""
-    root = profession_project_path(domain_id)
+        pass
+    if not root:
+        try:
+            from arka.agent.profession_projects import profession_project_path
+
+            root = profession_project_path(domain_id)
+        except ImportError:
+            return "", ""
     if not root or not root.is_dir():
         return "", ""
     parts = [f"Project path: {root}"]
@@ -479,7 +500,7 @@ def gather_profession_context(
     deep: bool = False,
 ) -> tuple[str, list[str]]:
     """Collect all curated sources for a domain. Same inputs regardless of LLM model."""
-    pack = SOURCE_REGISTRY.get(domain_id)
+    pack = _source_pack(domain_id)
     if not pack:
         return "", []
 
@@ -531,7 +552,7 @@ def gather_profession_context(
 
 def index_domain_codebase(domain_id: str) -> tuple[bool, str]:
     """Index cloned profession project for doc_ask / TurboQuant (run during setup)."""
-    pack = SOURCE_REGISTRY.get(domain_id)
+    pack = _source_pack(domain_id)
     if not pack or not pack.codebase_artifact:
         return False, "no codebase source for domain"
     try:
@@ -541,7 +562,15 @@ def index_domain_codebase(domain_id: str) -> tuple[bool, str]:
         return False, str(exc)
     if not use_turboquant():
         return False, "TurboQuant disabled"
-    root = profession_project_path(domain_id)
+    root = None
+    try:
+        from arka.agent.profession_plugins import plugin_project_path
+
+        root = plugin_project_path(domain_id)
+    except ImportError:
+        pass
+    if not root:
+        root = profession_project_path(domain_id)
     if not root or not root.is_dir():
         return False, "project not cloned"
     name = domain_id

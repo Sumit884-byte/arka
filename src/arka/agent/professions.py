@@ -27,7 +27,6 @@ except ImportError:
 
 MEMORY_FILE = cache_dir() / "memory.json"
 
-# Role aliases → domain id (includes multi-word roles).
 ROLE_TO_DOMAIN: dict[str, str] = {
     "doctor": "health",
     "physician": "health",
@@ -78,6 +77,9 @@ ROLE_TO_DOMAIN: dict[str, str] = {
 }
 
 
+BUILTIN_ROLE_TO_DOMAIN = ROLE_TO_DOMAIN
+
+
 @dataclass(frozen=True)
 class Domain:
     id: str
@@ -88,7 +90,7 @@ class Domain:
     project_key: str | None = None
 
 
-DOMAINS: tuple[Domain, ...] = (
+BUILTIN_DOMAINS: tuple[Domain, ...] = (
     Domain(
         "health",
         "Health & Clinical",
@@ -216,26 +218,79 @@ DOMAINS: tuple[Domain, ...] = (
     ),
 )
 
-_BY_ID = {d.id: d for d in DOMAINS}
-_ALIAS_TO_DOMAIN: dict[str, str] = {}
-for d in DOMAINS:
-    _ALIAS_TO_DOMAIN[d.id] = d.id
-    for a in d.aliases:
-        _ALIAS_TO_DOMAIN[a.lower()] = d.id
-for role, dom in ROLE_TO_DOMAIN.items():
-    _ALIAS_TO_DOMAIN[role] = dom
+DOMAINS = BUILTIN_DOMAINS  # back-compat
 
-_SETUP_DOMAIN_IDS = tuple(sorted({d.id for d in DOMAINS} | {"nutritionist"}, key=len, reverse=True))
+_PATTERN_CACHE: tuple | None = None
 
-_EXPLICIT_RE = re.compile(
-    r"(?i)(?:as a|for a|i(?:'m| am) a|acting as a)\s+"
-    r"(?P<role>" + "|".join(sorted(_ALIAS_TO_DOMAIN.keys(), key=len, reverse=True)) + r")\b"
-)
-_PREFIX_RE = re.compile(
-    r"(?i)^(?:profession\s+)?(?P<role>" + "|".join(re.escape(d.id) for d in DOMAINS) + r")\s*[:\-]\s+"
-)
+
+def _load_plugins():
+    try:
+        from arka.agent import profession_plugins as pp
+
+        return pp
+    except ImportError:
+        return None
+
+
+def all_domains() -> tuple[Domain, ...]:
+    pp = _load_plugins()
+    if pp is None:
+        return BUILTIN_DOMAINS
+    return pp.all_domains()
+
+
+def _by_id() -> dict[str, Domain]:
+    return {d.id: d for d in all_domains()}
+
+
+def _alias_to_domain() -> dict[str, str]:
+    pp = _load_plugins()
+    if pp is None:
+        mapping: dict[str, str] = {}
+        for d in BUILTIN_DOMAINS:
+            mapping[d.id] = d.id
+            for a in d.aliases:
+                mapping[a.lower()] = d.id
+        for role, dom in ROLE_TO_DOMAIN.items():
+            mapping[role] = dom
+        return mapping
+    return pp.all_alias_to_domain()
+
+
+def _setup_domain_ids() -> tuple[str, ...]:
+    ids = {d.id for d in all_domains()} | {"nutritionist"}
+    return tuple(sorted(ids, key=len, reverse=True))
+
+
+def _patterns() -> tuple[re.Pattern[str], re.Pattern[str], dict[str, str], dict[str, Domain]]:
+    global _PATTERN_CACHE
+    if _PATTERN_CACHE is not None:
+        return _PATTERN_CACHE
+    alias_map = _alias_to_domain()
+    by_id = _by_id()
+    explicit_re = re.compile(
+        r"(?i)(?:as a|for a|i(?:'m| am) a|acting as a)\s+"
+        r"(?P<role>" + "|".join(re.escape(k) for k in sorted(alias_map.keys(), key=len, reverse=True)) + r")\b"
+    )
+    prefix_re = re.compile(
+        r"(?i)^(?:profession\s+)?(?P<role>"
+        + "|".join(re.escape(d.id) for d in all_domains())
+        + r")\s*[:\-]\s+"
+    )
+    _PATTERN_CACHE = (explicit_re, prefix_re, alias_map, by_id)
+    return _PATTERN_CACHE
+
+
+def invalidate_profession_cache() -> None:
+    global _PATTERN_CACHE
+    _PATTERN_CACHE = None
+    pp = _load_plugins()
+    if pp is not None:
+        pp.invalidate_cache()
+
+
 _CMD_RE = re.compile(
-    r"(?i)^profession\s+(ask|run|open|setup|status|list|combine)(?:\s+(\S+))?"
+    r"(?i)^profession\s+(ask|run|open|setup|status|list|combine|install|plugins)(?:\s+(\S+))?"
 )
 
 
@@ -245,9 +300,10 @@ def _normalize(text: str) -> str:
 
 def _role_to_domain(role: str) -> str | None:
     role = role.strip().lower()
-    if role in _BY_ID:
+    by_id = _by_id()
+    if role in by_id:
         return role
-    return _ALIAS_TO_DOMAIN.get(role)
+    return _alias_to_domain().get(role)
 
 
 def user_domain_from_memory() -> str | None:
@@ -298,6 +354,8 @@ def detect(text: str) -> tuple[str, str] | None:
     if not raw or _is_skill_command(raw):
         return None
 
+    explicit_re, prefix_re, _alias_map, by_id = _patterns()
+
     m = _CMD_RE.match(raw)
     if m and m.group(1).lower() in ("ask", "run"):
         role = (m.group(2) or "").lower()
@@ -308,20 +366,20 @@ def detect(text: str) -> tuple[str, str] | None:
         if saved:
             return saved, rest or raw
 
-    m = _PREFIX_RE.match(raw)
+    m = prefix_re.match(raw)
     if m:
         dom = _role_to_domain(m.group("role"))
         if dom:
             return dom, _normalize(raw[m.end() :]) or raw
 
-    m = _EXPLICIT_RE.search(raw)
+    m = explicit_re.search(raw)
     if m:
         dom = _role_to_domain(m.group("role").strip())
         if dom:
             q = _normalize(raw[m.end() :]) or raw
             return dom, q
 
-    for d in DOMAINS:
+    for d in all_domains():
         for alias in d.aliases:
             if re.search(rf"(?i)\b{re.escape(alias)}\b", raw):
                 if _keyword_score(raw, d) >= 1 or len(raw.split()) >= 5:
@@ -329,14 +387,14 @@ def detect(text: str) -> tuple[str, str] | None:
                     return d.id, _normalize(q) or raw
 
     saved = user_domain_from_memory()
-    if saved and _keyword_score(raw, _BY_ID[saved]) >= 2:
+    if saved and saved in by_id and _keyword_score(raw, by_id[saved]) >= 2:
         return saved, raw
 
     return None
 
 
 def profession_ask(domain_id: str, question: str, *, deep: bool = False) -> int:
-    dom = _BY_ID.get(domain_id)
+    dom = _by_id().get(domain_id)
     if not dom:
         print(f"Unknown domain: {domain_id}. Try: profession list", file=sys.stderr)
         return 1
@@ -479,7 +537,7 @@ def route_command(text: str) -> str:
     ):
         m = re.search(
             r"(?i)\b(?:setup|clone)\s+(?:profession\s+)?(?:project\s+)?"
-            r"(" + "|".join(re.escape(x) for x in _SETUP_DOMAIN_IDS) + r")\b",
+            r"(" + "|".join(re.escape(x) for x in _setup_domain_ids()) + r")\b",
             text,
         )
         return f"profession setup {m.group(1).lower()}" if m else "profession setup"
@@ -503,31 +561,43 @@ def cmd_sources(domain_id: str | None = None) -> int:
     from arka.agent.profession_sources import list_sources
 
     if domain_id:
-        dom = _BY_ID.get(domain_id)
+        dom = _by_id().get(domain_id)
         if not dom:
             print(f"Unknown domain: {domain_id}", file=sys.stderr)
             return 1
-        print(f"Sources for {dom.title} ({dom.id}):")
+        tag = " [plugin]" if _is_plugin_domain(domain_id) else ""
+        print(f"Sources for {dom.title} ({dom.id}){tag}:")
         for sid, label in list_sources(dom.id):
             print(f"  {sid:<24} {label}")
         return 0
     print("Profession domains use curated sources (not role prompts):\n")
-    for d in DOMAINS:
+    for d in all_domains():
         srcs = list_sources(d.id)
         ids = ", ".join(s[0] for s in srcs[:4])
         extra = f" +{len(srcs) - 4} more" if len(srcs) > 4 else ""
-        print(f"  {d.id:<12} {ids}{extra}")
+        tag = " [plugin]" if _is_plugin_domain(d.id) else ""
+        print(f"  {d.id:<12} {ids}{extra}{tag}")
     print("\nDetail: profession sources <domain>")
+    print("Third-party: profession install <path|git-url>  |  profession plugins list")
     return 0
+
+
+def _is_plugin_domain(domain_id: str) -> bool:
+    pp = _load_plugins()
+    if pp is None:
+        return False
+    return pp.is_plugin_domain(domain_id)
 
 
 def cmd_list() -> int:
     saved = user_domain_from_memory()
     if saved:
-        print(f"Your saved profession → domain: {saved} ({_BY_ID[saved].title})")
+        title = _by_id().get(saved)
+        label = title.title if title else saved
+        print(f"Your saved profession → domain: {saved} ({label})")
         print()
     print("Domains (each has a curated source list — profession sources <id>):\n")
-    for d in DOMAINS:
+    for d in all_domains():
         proj = ""
         if d.project_key:
             try:
@@ -538,7 +608,17 @@ def cmd_list() -> int:
                     proj = f"  ✓ {p}"
             except ImportError:
                 pass
-        print(f"  {d.id:<12} {d.title}{proj}")
+        if not proj:
+            pp = _load_plugins()
+            if pp is not None:
+                p = pp.plugin_project_path(d.id)
+                if p:
+                    proj = f"  ✓ {p}"
+        tag = "  [plugin]" if _is_plugin_domain(d.id) else ""
+        print(f"  {d.id:<12} {d.title}{proj}{tag}")
+    pp = _load_plugins()
+    if pp is not None and pp.discover_professions():
+        print(f"\nThird-party: profession plugins list  |  profession install <path|git-url>")
     print("\nUsage: profession ask <domain> <question>")
     print("       profession sources [domain]")
     print("       profession ask <question>   (uses saved profession from memory)")
@@ -560,6 +640,14 @@ def main(argv: list[str] | None = None) -> int:
     p_route.add_argument("text", nargs="+")
     p_open = sub.add_parser("open")
     p_open.add_argument("domain")
+    p_ids = sub.add_parser("list-ids")
+    p_ids.add_argument("--plugins-only", action="store_true")
+    p_install = sub.add_parser("install")
+    p_install.add_argument("source")
+    p_plugins = sub.add_parser("plugins")
+    p_plugins_sub = p_plugins.add_subparsers(dest="plugins_cmd")
+    p_plugins_sub.add_parser("list")
+    p_plugins_sub.add_parser("refresh")
 
     args = parser.parse_args(argv)
     if args.cmd is None:
@@ -594,15 +682,53 @@ def main(argv: list[str] | None = None) -> int:
         try:
             from arka.agent.profession_projects import profession_project_path
 
-            dom = _BY_ID.get(args.domain)
+            dom = _by_id().get(args.domain)
             key = dom.project_key if dom else args.domain
             path = profession_project_path(key or args.domain) if key else None
+            if not path:
+                pp = _load_plugins()
+                if pp is not None:
+                    path = pp.plugin_project_path(args.domain)
             if path:
                 print(path)
                 return 0
         except ImportError:
             pass
         print(f"No project for domain: {args.domain}", file=sys.stderr)
+        return 1
+    if args.cmd == "list-ids":
+        pp = _load_plugins()
+        if pp is None:
+            for d in BUILTIN_DOMAINS:
+                print(d.id)
+            return 0
+        if args.plugins_only:
+            for row in pp.discover_professions():
+                print(row["id"])
+        else:
+            for dom_id in pp.list_domain_ids():
+                print(dom_id)
+        return 0
+    if args.cmd == "install":
+        pp = _load_plugins()
+        if pp is None:
+            print("Profession plugins module unavailable.", file=sys.stderr)
+            return 1
+        invalidate_profession_cache()
+        return pp.install_profession(args.source)
+    if args.cmd == "plugins":
+        pp = _load_plugins()
+        if pp is None:
+            print("Profession plugins module unavailable.", file=sys.stderr)
+            return 1
+        if args.plugins_cmd == "list":
+            pp.print_plugin_list(verbose=True)
+            return 0
+        if args.plugins_cmd == "refresh":
+            invalidate_profession_cache()
+            print("Profession plugin registry refreshed.")
+            return 0
+        print("Usage: profession plugins list|refresh", file=sys.stderr)
         return 1
     return 1
 

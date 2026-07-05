@@ -5,14 +5,22 @@ from __future__ import annotations
 
 import argparse
 import base64
+import os
+import re
 import sys
 import webbrowser
+from html import unescape as html_unescape
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 from arka.integrations import google_oauth as oauth
+
+try:
+    from arka.integrations import macos_calendar
+except ImportError:
+    macos_calendar = None  # type: ignore[assignment]
 
 CONSOLE_CREDENTIALS = "https://console.cloud.google.com/apis/credentials"
 CONSOLE_LIBRARY = "https://console.cloud.google.com/apis/library"
@@ -46,6 +54,10 @@ Before Arka can open a Google sign-in URL, you need an OAuth client ID
    {CONSOLE_LIBRARY}
 
 3. OAuth consent screen → External is fine for personal use.
+   • App name: use something readable (e.g. "Arka") — not a single letter.
+   • Publishing status: leave as **Testing** (no Google verification needed for personal use).
+   • **Test users:** click Add users → add the Gmail address you sign in with.
+     (Without this you get "has not completed the Google verification process".)
 
 4. Create credentials → OAuth client ID → Web application
    Authorized redirect URI (copy exactly):
@@ -88,13 +100,16 @@ def _missing_credentials_message(*, open_console: bool = False) -> None:
 def cmd_status() -> int:
     if not oauth.credentials_configured():
         print("Google OAuth not configured in .env.")
-        print(f"Looking for GOOGLE_OAUTH_CLIENT_ID or GOOGLE_CLIENT_ID.")
+        print("Set GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET (or GOOGLE_OAUTH_* aliases).")
         print(f"Env file: {_env_path()}")
         return 1
+    id_key, sec_key = oauth.credentials_source()
+    if id_key:
+        print(f"OAuth credentials loaded from {id_key}" + (f" + {sec_key}" if sec_key else ""))
     tokens = oauth.load_tokens()
     if not tokens:
         print("Not signed in.")
-        print(f"Run: arka google login")
+        print("Run: arka google login")
         print(f"Redirect URI for Google Cloud: {oauth.redirect_uri()}")
         return 1
     email = tokens.get("email") or "unknown"
@@ -113,10 +128,30 @@ def cmd_login(args: argparse.Namespace) -> int:
     except RuntimeError as exc:
         err = str(exc)
         print(f"Sign-in failed: {err}", file=sys.stderr)
-        if "redirect_uri" in err.lower() or "invalid_client" in err.lower():
+        if "invalid_client" in err.lower() or "invalid_grant" in err.lower():
+            print(
+                "\nTip: GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be from the same\n"
+                "  Web application OAuth client (not Desktop/Android/iOS).\n",
+                file=sys.stderr,
+            )
+        if "redirect_uri" in err.lower():
             print(
                 f"\nTip: add this redirect URI to your OAuth client in Google Cloud Console:\n"
                 f"  {oauth.redirect_uri()}\n",
+                file=sys.stderr,
+            )
+        if "401" in err and "UNAUTHENTICATED" in err:
+            print(
+                "\nTip: retry after arka reload — login now requests openid+email scopes.\n"
+                "  If it persists, check GOOGLE_CLIENT_SECRET matches your Web OAuth client.\n",
+                file=sys.stderr,
+            )
+        if "verification" in err.lower() or "access blocked" in err.lower() or "access_denied" in err.lower():
+            print(
+                "\nTip: OAuth consent screen → Test users → Add your Gmail address.\n"
+                "  Leave the app in Testing mode (personal use). Full verification is only\n"
+                "  required if you publish the app to all Google users.\n"
+                "  https://console.cloud.google.com/apis/credentials/consent\n",
                 file=sys.stderr,
             )
         return 1
@@ -140,117 +175,934 @@ def _decode_header(payload: dict[str, Any], name: str) -> str:
     return ""
 
 
+def _html_to_text(html: str) -> str:
+    text = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", html)
+    text = re.sub(r"(?i)<br\s*/?>", "\n", text)
+    text = re.sub(r"(?i)</(?:p|div|tr|li|h[1-6])>", "\n", text)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = html_unescape(text)
+    text = re.sub(r"[ \t]+\n", "\n", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    text = re.sub(r"[^\S\n]+", " ", text)
+    return text.strip()
+
+
+def _decode_part_text(part: dict[str, Any]) -> tuple[str, str]:
+    mime = part.get("mimeType") or ""
+    body = part.get("body") or {}
+    data = body.get("data")
+    if not data:
+        return mime, ""
+    try:
+        raw = base64.urlsafe_b64decode(data + "==").decode("utf-8", errors="replace")
+    except Exception:
+        return mime, ""
+    return mime, raw
+
+
 def _decode_body(payload: dict[str, Any]) -> str:
-    def walk(part: dict[str, Any]) -> str:
-        mime = part.get("mimeType") or ""
-        body = part.get("body") or {}
-        data = body.get("data")
-        if data and mime.startswith("text/plain"):
-            try:
-                return base64.urlsafe_b64decode(data + "==").decode("utf-8", errors="replace")
-            except Exception:
-                return ""
+    plain_parts: list[str] = []
+    html_parts: list[str] = []
+
+    def walk(part: dict[str, Any]) -> None:
+        mime, text = _decode_part_text(part)
+        if text:
+            if mime.startswith("text/plain"):
+                plain_parts.append(text)
+            elif mime.startswith("text/html"):
+                html_parts.append(text)
         for child in part.get("parts") or []:
-            text = walk(child)
-            if text:
-                return text
-        return ""
+            walk(child)
 
-    return walk(payload.get("payload") or {})
+    walk(payload.get("payload") or {})
+    if plain_parts:
+        return re.sub(r"\n{3,}", "\n\n", "\n\n".join(plain_parts)).strip()
+    if html_parts:
+        return _html_to_text("\n\n".join(html_parts))
+    return ""
 
 
-def cmd_gmail(args: argparse.Namespace) -> int:
+def _gmail_local_now() -> datetime:
+    try:
+        from zoneinfo import ZoneInfo
+
+        tz = ZoneInfo(_google_calendar_tz())
+        return datetime.now(tz)
+    except Exception:
+        return datetime.now().astimezone()
+
+
+def _gmail_day_range(*, days: int) -> tuple[str, str, str]:
+    """Calendar-day window through today (local TZ). Returns after, before, label."""
+    now = _gmail_local_now()
+    start_today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    end = start_today + timedelta(days=1)
+    d = max(int(days), 1)
+    if d == 1:
+        start = start_today
+    else:
+        start = start_today - timedelta(days=d)
+    after = start.strftime("%Y/%m/%d")
+    before = end.strftime("%Y/%m/%d")
+    tz_name = _google_calendar_tz()
+    if start.date() == start_today.date():
+        label = f"today · {start_today.strftime('%a %b %d, %Y')} ({tz_name})"
+    else:
+        label = (
+            f"{start.strftime('%a %b %d')} – {start_today.strftime('%a %b %d, %Y')} ({tz_name})"
+        )
+    return after, before, label
+
+
+def _gmail_max_results(*, fetch_all: bool, limit: int) -> int:
+    if fetch_all or limit <= 0:
+        raw = os.environ.get("ARKA_GMAIL_MAX", "500")
+        try:
+            return max(1, int(raw))
+        except ValueError:
+            return 500
+    return max(1, limit)
+
+
+def _list_gmail_message_ids(query: str, *, max_results: int) -> tuple[list[str], int | None]:
+    """Paginate Gmail message list; return (ids, resultSizeEstimate)."""
+    ids: list[str] = []
+    page_token: str | None = None
+    estimate: int | None = None
+    page_size = min(500, max_results)
+
+    while len(ids) < max_results:
+        batch = min(page_size, max_results - len(ids))
+        params: list[tuple[str, str]] = [
+            ("maxResults", str(batch)),
+            ("q", query),
+            ("includeSpamTrash", "false"),
+        ]
+        if page_token:
+            params.append(("pageToken", page_token))
+        query_str = urlencode(params)
+        listing = oauth.api_request(
+            f"https://gmail.googleapis.com/gmail/v1/users/me/messages?{query_str}"
+        )
+        if estimate is None:
+            raw_est = listing.get("resultSizeEstimate")
+            if isinstance(raw_est, int):
+                estimate = raw_est
+        for row in listing.get("messages") or []:
+            mid = str(row.get("id") or "")
+            if mid:
+                ids.append(mid)
+        page_token = listing.get("nextPageToken")
+        if not page_token:
+            break
+
+    return ids, estimate
+
+
+def _gmail_query_from_args(args: argparse.Namespace) -> tuple[str, str]:
     q_parts: list[str] = []
+    range_label = ""
     if args.unread:
         q_parts.append("is:unread")
     if args.today:
-        q_parts.append("newer_than:1d")
+        today = _gmail_local_now().strftime("%Y/%m/%d")
+        q_parts.append(f"after:{today}")
+        range_label = f"today · {_gmail_local_now().strftime('%a %b %d, %Y')}"
+    elif args.days and args.days > 0:
+        if args.rolling:
+            q_parts.append(f"newer_than:{int(args.days)}d")
+            range_label = f"last {int(args.days)} day(s) rolling"
+        else:
+            after, before, range_label = _gmail_day_range(days=int(args.days))
+            q_parts.append(f"after:{after}")
+            q_parts.append(f"before:{before}")
+    elif args.hours and args.hours > 0:
+        q_parts.append(f"newer_than:{int(args.hours)}h")
+        range_label = f"last {int(args.hours)} hour(s)"
     if args.query:
         q_parts.append(args.query)
     query = " ".join(q_parts) or "in:inbox"
+    return query, range_label
 
-    params = f"maxResults={args.limit}&q={quote(query)}"
-    listing = oauth.api_request(f"https://gmail.googleapis.com/gmail/v1/users/me/messages?{params}")
-    messages = listing.get("messages") or []
-    if not messages:
+
+def _gmail_summarize_cap() -> int:
+    raw = os.environ.get("ARKA_GMAIL_SUMMARIZE_MAX", "40")
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        return 40
+
+
+def _gmail_summarize_chars() -> int:
+    raw = os.environ.get("ARKA_GMAIL_SUMMARIZE_CHARS", "120000")
+    try:
+        return max(8000, int(raw))
+    except ValueError:
+        return 120000
+
+
+def _gmail_fetch_row(mid: str, *, include_body: bool = False) -> dict[str, Any]:
+    fmt = "full" if include_body else "metadata"
+    params = "&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date"
+    detail = oauth.api_request(
+        f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{mid}?format={fmt}{params}"
+    )
+    labels = detail.get("labelIds") or []
+    row: dict[str, Any] = {
+        "id": mid,
+        "subject": _decode_header(detail, "Subject") or "(no subject)",
+        "sender": _decode_header(detail, "From") or "unknown",
+        "date": _decode_header(detail, "Date") or "",
+        "unread": "UNREAD" in labels,
+        "snippet": str(detail.get("snippet") or "").strip(),
+    }
+    if include_body:
+        body = _decode_body(detail).strip()
+        if body:
+            row["body"] = body
+        elif row["snippet"]:
+            row["body"] = row["snippet"]
+    return row
+
+
+def _load_gmail_rows(args: argparse.Namespace) -> tuple[list[dict[str, Any]], str, str, int | None]:
+    query, range_label = _gmail_query_from_args(args)
+    email = oauth.signed_in_email()
+    if getattr(args, "summarize", False):
+        cap = _gmail_summarize_cap()
+        if args.all:
+            max_results = _gmail_max_results(fetch_all=True, limit=0)
+            max_results = min(max_results, cap)
+        else:
+            max_results = min(max(args.limit, 1), cap)
+    else:
+        max_results = _gmail_max_results(fetch_all=bool(args.all), limit=int(args.limit))
+    message_ids, estimate = _list_gmail_message_ids(query, max_results=max_results)
+    include_body = bool(getattr(args, "summarize", False))
+    rows = [_gmail_fetch_row(mid, include_body=include_body) for mid in message_ids]
+    return rows, query, range_label, estimate
+
+
+def _format_gmail_for_summary(row: dict[str, Any]) -> str:
+    lines = [
+        f"From: {row['sender']}",
+        f"Date: {row['date']}",
+        f"Subject: {row['subject']}",
+        f"Unread: {'yes' if row.get('unread') else 'no'}",
+    ]
+    body = str(row.get("body") or row.get("body_preview") or row.get("snippet") or "").strip()
+    if body:
+        lines.append(f"Body:\n{body}")
+    return "\n".join(lines)
+
+
+_GMAIL_DIGEST_SECTIONS: tuple[tuple[str, str], ...] = (
+    ("overview", "Overview"),
+    ("worth your attention", "Worth your attention"),
+    ("needs action", "Worth your attention"),
+    ("attention", "Worth your attention"),
+    ("fyi", "FYI"),
+    ("low priority", "FYI"),
+    ("suggested next steps", "Next steps"),
+    ("next steps", "Next steps"),
+)
+
+_GMAIL_SECTION_ORDER = ("Overview", "Worth your attention", "FYI", "Next steps")
+
+
+def _normalize_gmail_section_title(raw: str) -> str | None:
+    key = re.sub(r"[*_`]", "", raw).strip().lower()
+    key = re.sub(r"\s*/\s*.*$", "", key).strip()
+    for needle, label in _GMAIL_DIGEST_SECTIONS:
+        if key == needle or key.startswith(needle):
+            return label
+    return None
+
+
+def _parse_gmail_digest_sections(text: str) -> dict[str, str]:
+    sections: dict[str, str] = {}
+    current: str | None = None
+    buf: list[str] = []
+    for line in text.splitlines():
+        header = re.match(r"^#{1,3}\s+(.+?)\s*$", line.strip())
+        if not header:
+            header = re.match(r"^\*\*(.+?)\*\*\s*$", line.strip())
+        if header:
+            if current and buf:
+                sections[current] = "\n".join(buf).strip()
+            current = _normalize_gmail_section_title(header.group(1))
+            buf = []
+            continue
+        if current is not None:
+            buf.append(line)
+    if current and buf:
+        sections[current] = "\n".join(buf).strip()
+    if not sections:
+        cleaned = re.sub(r"^You have \*\*\d+ unread messages?\*\*.*?\n+", "", text.strip(), flags=re.I | re.S)
+        sections["Overview"] = cleaned.strip()
+    return sections
+
+
+def _render_gmail_bullet_line(line: str, *, indent: str = "    ") -> list[str]:
+    raw = line.rstrip()
+    stripped = raw.strip()
+    if not stripped:
+        return [""]
+    m = re.match(r"^[-*•]\s+\*\*(.+?)\*\*[:\s—–-]+(.+)$", stripped)
+    if m:
+        return [f"{indent}• {m.group(1).strip()} — {m.group(2).strip()}"]
+    m = re.match(r"^[-*•]\s+\*\*(.+?)\*\*\s*$", stripped)
+    if m:
+        return [f"{indent}• {m.group(1).strip()}"]
+    m = re.match(r"^[-*•]\s+(.+)$", stripped)
+    if m:
+        body = re.sub(r"\*\*(.+?)\*\*", r"\1", m.group(1))
+        return [f"{indent}• {body.strip()}"]
+    body = re.sub(r"\*\*(.+?)\*\*", r"\1", stripped)
+    return [f"{indent}{body}"]
+
+
+def _render_gmail_section_body(body: str) -> list[str]:
+    out: list[str] = []
+    for line in body.splitlines():
+        if re.match(r"^[-*•]\s+", line.strip()):
+            out.extend(_render_gmail_bullet_line(line))
+        elif not line.strip():
+            if out and out[-1] != "":
+                out.append("")
+        else:
+            text = re.sub(r"\*\*(.+?)\*\*", r"\1", line.strip())
+            out.append(f"    {text}")
+    while out and out[-1] == "":
+        out.pop()
+    return out
+
+
+def _gmail_unread_total(
+    rows: list[dict[str, Any]],
+    estimate: int | None,
+    *,
+    unread_query: bool,
+) -> int:
+    if unread_query and estimate is not None:
+        return estimate
+    return sum(1 for row in rows if row.get("unread"))
+
+
+def _format_gmail_unread_header(
+    shown: int,
+    total_unread: int,
+    *,
+    unread_query: bool,
+) -> str:
+    if not unread_query:
+        return f"{shown} message{'s' if shown != 1 else ''}"
+    word = "email" if total_unread == 1 else "emails"
+    if total_unread > shown:
+        return f"{total_unread} unread {word} (showing {shown})"
+    return f"{total_unread} unread {word}"
+
+
+def _print_gmail_digest(
+    summary: str,
+    *,
+    count: int,
+    unread: int,
+    total_unread: int | None,
+    unread_query: bool,
+    range_label: str,
+    email: str,
+) -> None:
+    title = "Gmail digest"
+    if range_label:
+        title += f" · {range_label}"
+    print(f"━━━ {title} ━━━")
+    print()
+    total = total_unread if total_unread is not None else unread
+    print(f"  {_format_gmail_unread_header(count, total, unread_query=unread_query)}")
+    if email:
+        print(f"  {email}")
+    print()
+
+    sections = _parse_gmail_digest_sections(summary)
+    for label in _GMAIL_SECTION_ORDER:
+        body = sections.get(label, "").strip()
+        if not body:
+            continue
+        rule = "─" * len(label)
+        print(f"  {label}")
+        print(f"  {rule}")
+        for line in _render_gmail_section_body(body):
+            print(line or "")
+        print()
+
+    for label, body in sections.items():
+        if label in _GMAIL_SECTION_ORDER or not body.strip():
+            continue
+        rule = "─" * len(label)
+        print(f"  {label}")
+        print(f"  {rule}")
+        for line in _render_gmail_section_body(body):
+            print(line or "")
+        print()
+
+
+def _summarize_gmail_rows(
+    rows: list[dict[str, Any]],
+    *,
+    query: str,
+    range_label: str,
+    email: str,
+    focus: str,
+    total_unread: int | None = None,
+) -> str:
+    from arka.llm.cli import llm_complete
+
+    unread_n = sum(1 for row in rows if row.get("unread"))
+    total = total_unread if total_unread is not None else unread_n
+    blocks = [f"--- Email {idx} ---\n{_format_gmail_for_summary(row)}" for idx, row in enumerate(rows, 1)]
+    corpus = "\n\n".join(blocks)
+    char_cap = _gmail_summarize_chars()
+    if len(corpus) > char_cap:
+        corpus = corpus[:char_cap] + "\n\n[... truncated for model context ...]"
+
+    system = (
+        "You are a calm inbox assistant. Summarize the user's Gmail messages accurately.\n\n"
+        "Each email includes the full message body when available.\n\n"
+        "Output markdown using EXACTLY these section headers (omit any empty section):\n\n"
+        "### Overview\n"
+        "One or two sentences on what arrived. Do not repeat message counts.\n\n"
+        "### Worth your attention\n"
+        "Items worth reading or acting on soon: deadlines, replies, policy changes, schedule updates.\n"
+        "Use a calm tone — avoid words like 'urgent' unless something is literally due within hours today.\n"
+        "Each bullet: **Sender** — subject: one short line on why it matters.\n\n"
+        "### FYI\n"
+        "Newsletters, promos, automated notices, achievements, low-priority informational mail.\n\n"
+        "### Next steps\n"
+        "Two to four optional, concrete actions. Helpful, not alarmist.\n\n"
+        "Rules: use only facts from the email bodies; never invent emails or deadlines."
+    )
+    meta = f"Account: {email or 'unknown'}\nQuery: {query}"
+    if range_label:
+        meta += f"\nRange: {range_label}"
+    meta += f"\nTotal messages: {len(rows)} ({total} unread)"
+    user = f"{meta}\nFocus: {focus or 'Summarize these emails.'}\n\n{corpus}"
+    return llm_complete(system, user, temperature=0.2, task="summarize").strip()
+
+
+def _parse_gmail_days_from_text(text: str) -> int | None:
+    t = text.lower()
+    for pat in (
+        r"(?:within|last|past)\s+(\d+)\s+days?",
+        r"\b(\d+)\s+days?\b",
+        r"(?:within|last|past)\s+(\d+)\s+hours?",
+    ):
+        m = re.search(pat, t, re.I)
+        if not m:
+            continue
+        val = int(m.group(1))
+        if "hour" in pat:
+            return max(1, (val + 23) // 24)
+        return val
+    return None
+
+
+def _parse_gmail_focus(text: str) -> str:
+    focus = re.sub(
+        r"(?i)^(?:summarize|summary|tldr|digest|brief)\s+(?:my\s+)?(?:unread\s+)?(?:all\s+)?"
+        r"(?:gmail|gmails|emails|email|mail|inbox)(?:\s+messages?)?\s*",
+        "",
+        text.strip(),
+    )
+    focus = re.sub(
+        r"(?i)^(?:my\s+)?(?:unread\s+)?(?:all\s+)?"
+        r"(?:gmail|gmails|emails|email|mail|inbox)(?:\s+messages?)?\s*",
+        "",
+        focus,
+    )
+    focus = re.sub(
+        r"(?i)(?:within|in|from|during|over)\s+(?:the\s+)?(?:last\s+)?(?:past\s+)?"
+        r"\d+\s+(?:days?|hours?)\b",
+        "",
+        focus,
+    )
+    focus = re.sub(r"(?i)\b(today|unread|all)\b", "", focus)
+    focus = focus.strip(" .,-")
+    if re.fullmatch(
+        r"(?i)(?:my\s+)?(?:unread\s+)?(?:all\s+)?(?:gmail|gmails|emails|email|mail|inbox)s?",
+        focus,
+    ):
+        return ""
+    return focus
+
+
+def build_gmail_argv_from_nl(text: str, *, summarize: bool = False) -> list[str]:
+    """Turn natural language into ``gmail`` CLI args."""
+    t = text.strip()
+    lower = t.lower()
+    argv = ["gmail"]
+    if summarize:
+        argv.append("--summarize")
+    unread = bool(re.search(r"\bunread\b", lower))
+    if unread:
+        argv.append("--unread")
+    days = _parse_gmail_days_from_text(lower)
+    if days:
+        argv.extend(["--days", str(days)])
+    elif re.search(r"\btoday\b", lower):
+        argv.append("--today")
+    if re.search(r"\ball\b", lower):
+        argv.append("--all")
+    elif unread and not days and "today" not in lower:
+        argv.append("--all")
+    elif summarize:
+        argv.append("--all")
+    elif days:
+        argv.extend(["--limit", "100"])
+    focus = _parse_gmail_focus(t) if summarize else ""
+    if focus:
+        argv.extend(["--focus", focus])
+    if summarize and not days and "today" not in lower and not unread:
+        argv.extend(["--days", "2", "--all"])
+    return argv
+
+
+def cmd_gmail(args: argparse.Namespace) -> int:
+    rows, query, range_label, estimate = _load_gmail_rows(args)
+    email = oauth.signed_in_email()
+
+    if not rows:
         print("No matching emails.")
+        if email:
+            print(f"Account: {email}", file=sys.stderr)
+        if range_label:
+            print(f"Range: {range_label}", file=sys.stderr)
         return 0
 
-    print(f"Gmail ({query}) — {len(messages)} message(s)\n")
-    for row in messages:
-        mid = row.get("id")
-        if not mid:
-            continue
-        detail = oauth.api_request(
-            f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{mid}?format=metadata"
-            "&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date"
+    unread_query = bool(args.unread)
+    total_unread = _gmail_unread_total(rows, estimate, unread_query=unread_query)
+
+    if getattr(args, "summarize", False):
+        focus = str(getattr(args, "focus", None) or "").strip() or "Summarize these emails."
+        unread_n = sum(1 for row in rows if row.get("unread"))
+        if estimate is not None and estimate > len(rows):
+            print(
+                f"(Summarized first {len(rows)} of ~{estimate}; "
+                f"raise ARKA_GMAIL_SUMMARIZE_MAX for more.)",
+                file=sys.stderr,
+            )
+        summary = _summarize_gmail_rows(
+            rows,
+            query=query,
+            range_label=range_label,
+            email=email or "",
+            focus=focus,
+            total_unread=total_unread if unread_query else None,
         )
-        subject = _decode_header(detail, "Subject") or "(no subject)"
-        sender = _decode_header(detail, "From") or "unknown"
-        date = _decode_header(detail, "Date") or ""
-        labels = ", ".join(detail.get("labelIds") or [])
-        unread = "UNREAD" in labels
-        mark = "●" if unread else " "
-        print(f"{mark} {subject}")
-        print(f"    From: {sender}")
-        if date:
-            print(f"    Date: {date}")
+        _print_gmail_digest(
+            summary,
+            count=len(rows),
+            unread=unread_n,
+            total_unread=total_unread,
+            unread_query=unread_query,
+            range_label=range_label,
+            email=email or "",
+        )
+        return 0
+
+    if unread_query:
+        header = f"Gmail — {_format_gmail_unread_header(len(rows), total_unread, unread_query=True)}"
+    else:
+        header = f"Gmail — {len(rows)} message(s)"
+    if range_label:
+        header += f" · {range_label}"
+    header += f"\nQuery: {query}"
+    if email:
+        header += f"\nAccount: {email}"
+    if not unread_query and estimate is not None and estimate > len(rows):
+        header += f"\n(Gmail estimates ~{estimate}; raise ARKA_GMAIL_MAX or use --all)"
+    print(f"{header}\n")
+
+    for row in rows:
+        mark = "●" if row.get("unread") else " "
+        print(f"{mark} {row['subject']}")
+        print(f"    From: {row['sender']}")
+        if row.get("date"):
+            print(f"    Date: {row['date']}")
         if args.snippet:
-            snippet = str(detail.get("snippet") or "").strip()
+            snippet = str(row.get("snippet") or "").strip()
             if snippet:
                 print(f"    {snippet[:200]}")
         print()
     return 0
 
 
+_CALENDAR_EVENT_TYPES = (
+    "default",
+    "focusTime",
+    "outOfOffice",
+    "workingLocation",
+    "fromGmail",
+    "birthday",
+)
+
+
+def _local_iana_tz() -> str:
+    """IANA timezone fallback when Google Calendar settings are unavailable."""
+    override = os.environ.get("ARKA_TZ", "").strip() or os.environ.get("TZ", "").strip()
+    if override and override not in ("UTC", "GMT"):
+        return override
+    try:
+        link = Path("/etc/localtime").resolve()
+        parts = link.parts
+        if "zoneinfo" in parts:
+            idx = parts.index("zoneinfo")
+            return "/".join(parts[idx + 1 :])
+    except OSError:
+        pass
+    tzinfo = datetime.now().astimezone().tzinfo
+    if tzinfo is not None and getattr(tzinfo, "key", None):
+        return str(tzinfo.key)
+    return "UTC"
+
+
+def _google_calendar_tz() -> str:
+    """Prefer timezone from Google Calendar account settings."""
+    try:
+        data = oauth.api_request(
+            "https://www.googleapis.com/calendar/v3/users/me/settings/timezone"
+        )
+        tz = str(data.get("value") or "").strip()
+        if tz:
+            return tz
+    except RuntimeError:
+        pass
+    return _local_iana_tz()
+
+
+def _calendar_window(*, week: bool) -> tuple[datetime, datetime, str, str]:
+    """Local start/end for today or next 7 days, plus label and IANA tz."""
+    tz_name = _google_calendar_tz()
+    local_now = datetime.now().astimezone()
+    start_local = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    if week:
+        end_local = start_local + timedelta(days=7)
+        label = f"next 7 days · from {start_local.strftime('%a %b %d, %Y')}"
+    else:
+        end_local = start_local + timedelta(days=1)
+        label = f"today · {start_local.strftime('%a %b %d, %Y')}"
+    return start_local, end_local, label, tz_name
+
+
+def _list_calendars(*, include_unselected: bool = False) -> list[tuple[str, str]]:
+    """Return (calendar_id, summary) for readable calendars on the signed-in account."""
+    data = oauth.api_request(
+        "https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=250"
+    )
+    rows: list[tuple[str, str]] = []
+    for item in data.get("items") or []:
+        if item.get("deleted"):
+            continue
+        if item.get("hidden") and not item.get("primary"):
+            continue
+        if not include_unselected and item.get("selected") is False:
+            continue
+        cal_id = str(item.get("id") or "").strip()
+        if not cal_id:
+            continue
+        name = str(item.get("summary") or item.get("summaryOverride") or cal_id)
+        rows.append((cal_id, name))
+    if not rows:
+        rows.append(("primary", "Primary"))
+    return rows
+
+
+def _event_dedupe_key(item: dict[str, Any]) -> tuple[str, str, str]:
+    start = item.get("start") or {}
+    end = item.get("end") or {}
+    title = str(item.get("summary") or "").strip().lower()
+    start_raw = str(start.get("dateTime") or start.get("date") or "")
+    end_raw = str(end.get("dateTime") or end.get("date") or "")
+    return title, start_raw, end_raw
+
+
+def _event_start_sort_key(item: dict[str, Any]) -> str:
+    start = item.get("start") or {}
+    if start.get("dateTime"):
+        return str(start["dateTime"])
+    day = start.get("date") or "9999-12-31"
+    return f"{day}T00:00:00"
+
+
+def _fetch_calendar_events(
+    cal_id: str,
+    *,
+    time_min: datetime,
+    time_max: datetime,
+    tz_name: str,
+    limit: int,
+) -> list[dict[str, Any]]:
+    cal_enc = quote(cal_id, safe="")
+    base = {
+        "singleEvents": "true",
+        "orderBy": "startTime",
+        "timeMin": time_min.isoformat(),
+        "timeMax": time_max.isoformat(),
+        "maxResults": "250",
+        "timeZone": tz_name,
+        "showDeleted": "false",
+        "showHiddenInvitations": "true",
+    }
+    items: list[dict[str, Any]] = []
+    page_token: str | None = None
+    while len(items) < max(limit, 1):
+        params: list[tuple[str, str]] = [(k, v) for k, v in base.items()]
+        for event_type in _CALENDAR_EVENT_TYPES:
+            params.append(("eventTypes", event_type))
+        if page_token:
+            params.append(("pageToken", page_token))
+        query = urlencode(params)
+        data = oauth.api_request(
+            f"https://www.googleapis.com/calendar/v3/calendars/{cal_enc}/events?{query}"
+        )
+        items.extend(data.get("items") or [])
+        page_token = data.get("nextPageToken")
+        if not page_token:
+            break
+    return items[: max(limit, 1)]
+
+
+_CALENDAR_COHORT_PREFIX = re.compile(
+    r"^(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|"
+    r"Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|"
+    r"Dec(?:ember)?)\s+\d{4}\s*[-–—]\s*",
+    re.IGNORECASE,
+)
+
+
+def _short_calendar_label(name: str) -> str:
+    """Drop cohort prefixes like 'May 2026 - ' so July events don't look dated wrong."""
+    cleaned = _CALENDAR_COHORT_PREFIX.sub("", (name or "").strip()).strip()
+    return cleaned or (name or "").strip()
+
+
+def _event_when_label(dt: datetime, *, dt_end: datetime | None = None) -> str:
+    local = dt.astimezone()
+    label = local.strftime("%a %b %d, %Y · %I:%M %p")
+    if dt_end is not None:
+        end_local = dt_end.astimezone()
+        if end_local.date() == local.date():
+            label += " – " + end_local.strftime("%I:%M %p")
+    return label
+
+
 def _parse_event_time(item: dict[str, Any]) -> tuple[datetime | None, str]:
     start = item.get("start") or {}
-    raw = start.get("dateTime") or start.get("date") or ""
-    if not raw:
+    end = item.get("end") or {}
+    raw_start = start.get("dateTime") or start.get("date") or ""
+    raw_end = end.get("dateTime") or end.get("date") or ""
+    if not raw_start:
         return None, ""
-    if "T" in raw:
+    if "T" in raw_start:
         try:
-            dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-            return dt, dt.astimezone().strftime("%a %b %d · %I:%M %p")
+            dt = datetime.fromisoformat(raw_start.replace("Z", "+00:00"))
+            dt_end = None
+            if raw_end and "T" in raw_end:
+                dt_end = datetime.fromisoformat(raw_end.replace("Z", "+00:00"))
+            return dt, _event_when_label(dt, dt_end=dt_end)
         except ValueError:
             pass
-    return None, raw
+    # All-day event (date only)
+    try:
+        day = datetime.strptime(raw_start, "%Y-%m-%d").date()
+        label = day.strftime("%a %b %d, %Y") + " · all day"
+        return datetime.combine(day, datetime.min.time()), label
+    except ValueError:
+        return None, raw_start
+
+
+def _calendar_sources(*, macos_only: bool = False, google_only: bool = False) -> list[str]:
+    if macos_only:
+        return ["macos"]
+    if google_only:
+        return ["google"]
+    raw = os.environ.get("ARKA_CALENDAR_SOURCES", "").strip().lower()
+    if raw:
+        return [s.strip() for s in raw.split(",") if s.strip() in {"google", "macos"}]
+    if sys.platform == "darwin":
+        return ["google", "macos"]
+    return ["google"]
+
+
+def _merge_display_key(*, summary: str, when: str) -> tuple[str, str]:
+    return summary.strip().lower(), when.strip()
+
+
+def _google_events_for_window(
+    args: argparse.Namespace,
+    *,
+    start_local: datetime,
+    end_local: datetime,
+    tz_name: str,
+) -> tuple[list[dict[str, Any]], list[tuple[str, int]], list[tuple[str, str]]]:
+    calendars = _list_calendars(include_unselected=bool(args.all_calendars))
+    per_cal_limit = 250 if not args.week else max(args.limit, 1)
+    merged: dict[tuple[str, str, str], dict[str, Any]] = {}
+    debug_counts: list[tuple[str, int]] = []
+
+    for cal_id, cal_name in calendars:
+        try:
+            items = _fetch_calendar_events(
+                cal_id,
+                time_min=start_local,
+                time_max=end_local,
+                tz_name=tz_name,
+                limit=per_cal_limit,
+            )
+        except RuntimeError as exc:
+            print(f"Warning: could not read {cal_name}: {exc}", file=sys.stderr)
+            debug_counts.append((cal_name, -1))
+            continue
+        debug_counts.append((cal_name, len(items)))
+        for ev in items:
+            key = _event_dedupe_key(ev)
+            if not key[0] and not key[1]:
+                continue
+            if key in merged:
+                continue
+            _, when = _parse_event_time(ev)
+            merged[key] = {
+                "summary": ev.get("summary") or "(no title)",
+                "when": when,
+                "location": ev.get("location") or "",
+                "tag": cal_name,
+                "source": "google",
+                "sort_key": _event_start_sort_key(ev),
+            }
+
+    rows = sorted(merged.values(), key=lambda row: row["sort_key"])
+    return rows, debug_counts, calendars
+
+
+def _macos_events_for_today() -> tuple[list[dict[str, Any]], str | None]:
+    if macos_calendar is None or not macos_calendar._available():
+        return [], None
+    return macos_calendar.fetch_today_events()
 
 
 def cmd_calendar(args: argparse.Namespace) -> int:
-    now = datetime.now(timezone.utc)
-    if args.week:
-        end = now + timedelta(days=7)
-        label = "next 7 days"
-    else:
-        local = datetime.now().astimezone()
-        start_local = local.replace(hour=0, minute=0, second=0, microsecond=0)
-        end_local = start_local + timedelta(days=1)
-        now = start_local.astimezone(timezone.utc)
-        end = end_local.astimezone(timezone.utc)
-        label = "today"
+    email = oauth.signed_in_email()
+    start_local, end_local, label, tz_name = _calendar_window(week=bool(args.week))
+    sources = _calendar_sources(
+        macos_only=bool(args.macos),
+        google_only=bool(args.google_only),
+    )
 
-    params = (
-        "singleEvents=true"
-        "&orderBy=startTime"
-        f"&timeMin={quote(now.isoformat())}"
-        f"&timeMax={quote(end.isoformat())}"
-        f"&maxResults={args.limit}"
-    )
-    data = oauth.api_request(
-        f"https://www.googleapis.com/calendar/v3/calendars/primary/events?{params}"
-    )
-    events = data.get("items") or []
+    display: dict[tuple[str, str], dict[str, Any]] = {}
+    debug_counts: list[tuple[str, int]] = []
+    google_calendars: list[tuple[str, str]] = []
+    macos_err: str | None = None
+
+    if "google" in sources:
+        try:
+            oauth.get_access_token()
+        except RuntimeError as exc:
+            if sources == ["google"]:
+                print(f"Google Calendar: {exc}", file=sys.stderr)
+                return 1
+            print(f"Warning: Google Calendar unavailable: {exc}", file=sys.stderr)
+        else:
+            g_rows, debug_counts, google_calendars = _google_events_for_window(
+                args,
+                start_local=start_local,
+                end_local=end_local,
+                tz_name=tz_name,
+            )
+            for row in g_rows:
+                key = _merge_display_key(summary=row["summary"], when=row["when"])
+                if key not in display:
+                    display[key] = row
+
+    if "macos" in sources and not args.week:
+        mac_rows, macos_err = _macos_events_for_today()
+        if args.debug and macos_err:
+            print(f"macOS Calendar: {macos_err}", file=sys.stderr)
+        for row in mac_rows:
+            key = _merge_display_key(summary=row["summary"], when=row["when"])
+            if key not in display:
+                display[key] = {
+                    "summary": row["summary"],
+                    "when": row["when"],
+                    "location": "",
+                    "tag": row["calendar"],
+                    "source": "macos",
+                    "sort_key": (
+                        row["start"].isoformat()
+                        if row.get("start") is not None
+                        else row["when"]
+                    ),
+                }
+
+    events = sorted(display.values(), key=lambda row: row["sort_key"])
+    account_line = f"Google: {email}" if email else "Google: (not signed in — arka google login)"
+
+    if args.debug:
+        if "google" in sources:
+            print(account_line, file=sys.stderr)
+            print(
+                f"Window: {start_local.isoformat()} → {end_local.isoformat()} ({tz_name})",
+                file=sys.stderr,
+            )
+            for cal_name, count in debug_counts:
+                if count < 0:
+                    print(f"  ✗ {cal_name}", file=sys.stderr)
+                else:
+                    print(f"  • {cal_name}: {count} raw event(s)", file=sys.stderr)
+        if "macos" in sources and not args.week:
+            print(f"macOS Calendar: {len(events)} merged row(s)", file=sys.stderr)
+            if macos_err:
+                print(f"  {macos_err}", file=sys.stderr)
+
     if not events:
         print(f"No calendar events for {label}.")
+        if "google" in sources:
+            print(account_line, file=sys.stderr)
+        if macos_err:
+            print(f"macOS: {macos_err}", file=sys.stderr)
+        print(
+            f"(Sources: {', '.join(sources)}. Timezone: {tz_name}. "
+            f"Wrong Google account? Run: arka google login)",
+            file=sys.stderr,
+        )
         return 0
 
-    print(f"Calendar ({label}) — {len(events)} event(s)\n")
-    for ev in events:
-        _, when = _parse_event_time(ev)
-        title = ev.get("summary") or "(no title)"
-        loc = ev.get("location") or ""
-        print(f"• {when}  {title}")
+    print(f"Calendar ({label}) — {len(events)} event(s)")
+    if "google" in sources and email:
+        print(f"{account_line}")
+    if args.debug and len(sources) > 1:
+        print(f"Sources: {', '.join(sources)}", file=sys.stderr)
+    print()
+
+    contributing_tags = {_short_calendar_label(row["tag"]) for row in events}
+    show_cal_tags = bool(args.calendars) or len(contributing_tags) > 1
+    mixed_sources = (
+        len(sources) > 1
+        and any(row["source"] == "macos" for row in events)
+        and any(row["source"] == "google" for row in events)
+    )
+    for row in events:
+        title = row["summary"]
+        when = row["when"]
+        loc = row["location"]
+        tag = ""
+        if show_cal_tags:
+            cal_label = _short_calendar_label(row["tag"])
+            if mixed_sources:
+                src = "macOS" if row["source"] == "macos" else "Google"
+                tag = f"[{src}: {cal_label}] "
+            else:
+                tag = f"[{cal_label}] "
+        print(f"• {when}  {tag}{title}")
         if loc:
             print(f"    {loc}")
     return 0
@@ -263,14 +1115,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     sub = parser.add_subparsers(dest="cmd")
 
-    sub.add_parser("setup", help="Show Google Cloud OAuth setup steps")
+    p_setup = sub.add_parser("setup", help="Show Google Cloud OAuth setup steps")
+    p_setup.add_argument("--no-browser", action="store_true", help="Do not open Google Cloud Console")
 
     p_login = sub.add_parser("login", help="Sign in with Google (opens browser URL)")
     p_login.add_argument("--no-browser", action="store_true", help="Print URL only; do not open browser")
     p_login.add_argument("--timeout", type=int, default=180, help="Seconds to wait for callback")
-
-    p_setup = sub.add_parser("setup", help="Show Google Cloud OAuth setup steps")
-    p_setup.add_argument("--no-browser", action="store_true", help="Do not open Google Cloud Console")
 
     sub.add_parser("status", help="Show sign-in status")
     sub.add_parser("logout", help="Remove stored Google tokens")
@@ -278,14 +1128,56 @@ def main(argv: list[str] | None = None) -> int:
     p_gmail = sub.add_parser("gmail", help="List Gmail messages")
     p_gmail.add_argument("--unread", action="store_true", help="Unread only")
     p_gmail.add_argument("--today", action="store_true", help="From the last 24 hours")
+    p_gmail.add_argument("--days", type=int, default=0, help="Messages from the last N calendar days")
+    p_gmail.add_argument("--hours", type=int, default=0, help="Messages from the last N hours")
+    p_gmail.add_argument(
+        "--rolling",
+        action="store_true",
+        help="Use rolling newer_than window instead of calendar days",
+    )
     p_gmail.add_argument("-q", "--query", help="Extra Gmail search query")
-    p_gmail.add_argument("-n", "--limit", type=int, default=10, help="Max messages")
+    p_gmail.add_argument(
+        "--all",
+        action="store_true",
+        help="Fetch all matching messages (paginated, up to ARKA_GMAIL_MAX)",
+    )
+    p_gmail.add_argument("-n", "--limit", type=int, default=10, help="Max messages (ignored with --all)")
     p_gmail.add_argument("--snippet", action="store_true", help="Show snippet preview")
+    p_gmail.add_argument(
+        "--summarize",
+        action="store_true",
+        help="Summarize matching emails with AI (reads full message bodies)",
+    )
+    p_gmail.add_argument(
+        "--focus",
+        help="Focus for --summarize (default: general inbox summary)",
+    )
 
     p_cal = sub.add_parser("calendar", aliases=["cal"], help="List calendar events")
     p_cal.add_argument("--today", action="store_true", help="Events today (default)")
     p_cal.add_argument("--week", action="store_true", help="Events in the next 7 days")
-    p_cal.add_argument("-n", "--limit", type=int, default=20, help="Max events")
+    p_cal.add_argument(
+        "--all-calendars",
+        action="store_true",
+        help="Include calendars unchecked in Google Calendar sidebar",
+    )
+    p_cal.add_argument(
+        "--google-only",
+        action="store_true",
+        help="Only query Google Calendar (skip macOS Calendar.app)",
+    )
+    p_cal.add_argument(
+        "--macos",
+        action="store_true",
+        help="Only query macOS Calendar.app",
+    )
+    p_cal.add_argument(
+        "--calendars",
+        action="store_true",
+        help="Show which calendar each event came from",
+    )
+    p_cal.add_argument("--debug", action="store_true", help="Print calendar fetch diagnostics")
+    p_cal.add_argument("-n", "--limit", type=int, default=20, help="Max events (week mode)")
 
     args = parser.parse_args(argv)
     if not args.cmd or args.cmd == "help":

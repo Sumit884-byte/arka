@@ -434,6 +434,33 @@ def cmd_ask(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_links(args: argparse.Namespace) -> int:
+    """Search YouTube and print video URLs (no transcripts / LLM)."""
+    raw = args.query
+    query = " ".join(raw) if isinstance(raw, list) else str(raw or "").strip()
+    if not query:
+        print("Provide a YouTube search query.", file=sys.stderr)
+        return 1
+    limit = max(1, min(int(args.limit or 8), 20))
+    try:
+        hits = youtube_search(query, limit=limit)
+    except SystemExit as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    if not hits:
+        print(f"No YouTube results for: {query}", file=sys.stderr)
+        return 1
+
+    lines = [f"YouTube videos for: {query}", ""]
+    for i, (vid, title, channel) in enumerate(hits, start=1):
+        url = f"https://youtube.com/watch?v={vid}"
+        ch = f" — {channel}" if channel else ""
+        lines.append(f"{i}. {title}{ch}")
+        lines.append(f"   {url}")
+    print("\n".join(lines))
+    return 0
+
+
 def main() -> int:
     _load_fish_env()
     parser = argparse.ArgumentParser(description="YouTube search → transcript → research digest")
@@ -458,8 +485,15 @@ def main() -> int:
     p_ask.add_argument("question", nargs="+")
     p_ask.set_defaults(func=cmd_ask)
 
+    p_links = sub.add_parser("links", help="Search YouTube and list video URLs only (fast, no LLM)")
+    p_links.add_argument("query", nargs="+", help="YouTube search query")
+    p_links.add_argument("--limit", "-n", type=int, default=8, help="Max results (default 8)")
+    p_links.set_defaults(func=cmd_links)
+
     args = parser.parse_args()
     if args.cmd == "search":
+        args.query = " ".join(args.query)
+    elif args.cmd == "links":
         args.query = " ".join(args.query)
     elif args.cmd == "ask":
         args.question = " ".join(args.question)

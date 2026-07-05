@@ -570,6 +570,8 @@ if status is-interactive
         echo "clipboard       -> Copy/paste from terminal"
         echo "todo            -> Quick task list"
         echo "translate       -> Translate text via AI"
+        echo "survive_lang    -> Travel survival phrases (native → target language)"
+        echo "pr_check        -> PR diff, CI status, explain failures, babysit until green"
         echo "generate_password -> Secure password"
         echo "ip_info         -> Public IP & location"
         echo "open_project    -> Find & open projects"
@@ -1394,29 +1396,35 @@ function speak_aloud --description "Speak text aloud (Sarvam → neural edge →
     end
 
     if test $try_sarvam -eq 1; and test -n "$SARVAM_API_KEY"
-        $py (_arka_py_script sarvam_speak.py) "$text"
+        $py (_arka_py_script sarvam_speak.py) "$text" 2>/dev/null
         if test $status -eq 0
             return 0
         end
-        echo (set_color yellow)"Sarvam TTS failed — trying neural voice"(set_color normal) >&2
+        if not set -q ARKA_TTS_QUIET
+            echo (set_color yellow)"Sarvam TTS failed — trying neural voice"(set_color normal) >&2
+        end
         set try_edge 1
     end
 
     if test $try_edge -eq 1
-        $py (_arka_py_script edge_speak.py) speak "$text"
+        $py (_arka_py_script edge_speak.py) speak "$text" 2>/dev/null
         if test $status -eq 0
             return 0
         end
-        echo (set_color yellow)"Neural TTS failed — trying Indic Parler"(set_color normal) >&2
+        if not set -q ARKA_TTS_QUIET
+            echo (set_color yellow)"Neural TTS failed — trying Indic Parler"(set_color normal) >&2
+        end
         set try_parler 1
     end
 
     if test $try_parler -eq 1
-        $py (_arka_py_script indic_tts.py) speak "$text"
+        $py (_arka_py_script indic_tts.py) speak "$text" 2>/dev/null
         if test $status -eq 0
             return 0
         end
-        echo (set_color yellow)"Indic Parler-TTS failed — falling back to system voice"(set_color normal) >&2
+        if not set -q ARKA_TTS_QUIET
+            echo (set_color yellow)"Indic Parler-TTS failed — falling back to system voice"(set_color normal) >&2
+        end
     end
 
     if _arka_is_macos; and command -v say >/dev/null
@@ -1430,6 +1438,18 @@ function speak_aloud --description "Speak text aloud (Sarvam → neural edge →
                     set voice Veena
                 case bn bn-IN
                     set voice Rishi
+                case zh-CN zh zh-cn chinese
+                    set voice Ting-Ting
+                case ja ja-JP japanese
+                    set voice Kyoko
+                case ko ko-KR korean
+                    set voice Yuna
+                case fr fr-FR french
+                    set voice Amelie
+                case de de-DE german
+                    set voice Anna
+                case es es-ES spanish
+                    set voice Monica
             end
         end
         if test -n "$voice"
@@ -1686,9 +1706,12 @@ function _agent_dispatch_one --description "Run one skill by name or shell via _
     set -l tokens (string split " " -- "$cmd_trim")
     set -l cleaned
     for t in $tokens
-        set -a cleaned (_agent_strip_quotes "$t")
+        set -a cleaned -- (_agent_strip_quotes "$t")
     end
-    set tokens $cleaned
+    set -l tokens
+    for t in $cleaned
+        set -a tokens -- $t
+    end
     set -l first $tokens[1]
     if _arka_is_builtin_skill "$first"
         if test "$first" = pdf_ask
@@ -1698,7 +1721,7 @@ function _agent_dispatch_one --description "Run one skill by name or shell via _
         end
         set -e tokens[1]
         if test (count $tokens) -gt 0
-            $first $tokens
+            $first -- $tokens
         else
             $first
         end
@@ -1742,7 +1765,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         play_spotify spotify_control play_song stop_music play_youtube play_movie \
         weather hyperlocal_weather timer screenshot set_wallpaper system_info \
         search_web open_urls open_finance open_news git_summary disk_usage disk_breakdown \
-        pdf_ask pdf_ingest pdf_ingest_dir pdf_list doc_ask doc_ingest doc_list port_scan speedtest clipboard todo translate \
+        pdf_ask pdf_ingest pdf_ingest_dir pdf_list doc_ask doc_ingest doc_list port_scan speedtest clipboard todo translate survive_lang \
         generate_password ip_info open_project create_folder list_folders show_folder \
         store_password pass \
         open_file list_files search_files find_files_by_size browse_web activate_venv create_venv fix_venv \
@@ -1753,11 +1776,11 @@ function _agent_all_skills --description "Canonical registered agent skill names
         install_snap install_package install_uv stock_analysis stock macro emotion \
         auto_click auto_copy decrypt_pdf classify_files cleanup_downloads watch_zip monitor_x \
         generate_image generate_video youtube_transcript youtube_download yt_download media_transcript transcribe_media summarize_url daily_brief wifi_info \
-        folder_summarize playlist_summarize youtube_research yt_research codebase_ingest \
+        folder_summarize playlist_summarize youtube_research yt_research find_videos codebase_ingest \
         agent_remember agent_recall agent_memory agent_trace agent_why agent_last \
         agent_resume agent_research agent_nudge agent_watch agent_routine agent_fanout \
         agent_code agent_handoff agent_browser transcript_ask media_ask \
-        meeting_agent study_agent inbox_agent compare_agent profession \
+        meeting_agent study_agent inbox_agent compare_agent profession pr_check \
         arka_ask semantic_memory supermemory speak_research voice_session handoff_notify remind predictions stock \
         rag_setup rag_status voice_agent wake_control \
         agent_ask web_answer deep_web_answer web_essay calc chat_reset set_location files_preference_help google \
@@ -2117,6 +2140,12 @@ function skills --description "Show what commands the agent can auto-run"
                 echo (set_color green)"  playlist_summarize"(set_color normal)" --url URL | --folder DIR — digest a playlist"
             case youtube_research yt_research
                 echo (set_color green)"  youtube_research "(set_color normal)"<query> [--limit N] [--focus Q] [--index] — default 2 videos; partial results on errors"
+            case find_videos
+                echo (set_color green)"  find_videos      "(set_color normal)"<topic> — YouTube video links (fast, no LLM)"
+            case survive_lang
+                echo (set_color green)"  survive_lang     "(set_color normal)"<language> [phrase] — travel survival phrases"
+            case pr_check pr-check pr
+                echo (set_color green)"  pr_check         "(set_color normal)"diff|summary|ci|explain|babysit — PR until merge-ready"
             case codebase_ingest
                 echo (set_color green)"  codebase_ingest  "(set_color normal)"<project-dir> [-n name] — index repo for doc_ask Q&A"
             case agent_remember agent_recall agent_memory
@@ -5622,6 +5651,24 @@ function yt_research --description "Alias for youtube_research"
     youtube_research $argv
 end
 
+function find_videos --description "Search YouTube and list video links (fast, no LLM)"
+    if test (count $argv) -eq 0
+        echo "Usage: find_videos <topic>"
+        echo "Example: find_videos swimming tutorial"
+        echo "NL: arka videos to learn swimming"
+        return 1
+    end
+    set -l py (_arka_python)
+    set -l out (_arka_capture_output $py (_arka_py_script arka_youtube_research.py) links $argv)
+    if test -z "$out"
+        echo (set_color red)"No videos found (install yt-dlp: brew install yt-dlp)"(set_color normal)
+        return 1
+    end
+    _arka_ui_header "YouTube videos" query
+    echo ""
+    _arka_print_answer "$out"
+end
+
 function summarize_url --description "Summarize a web page or article URL"
     if test (count $argv) -lt 1
         echo "Usage: summarize_url <url> [-q question]"
@@ -5863,6 +5910,60 @@ function git_summary --description "Show a quick git project overview"
         echo (set_color --bold red)"  ⚠ $modified uncommitted change(s)"(set_color normal)
     else
         echo (set_color --bold green)"  ✓ Working tree clean"(set_color normal)
+    end
+end
+
+function pr_check --description "PR diff, CI status, explain failures, babysit until merge-ready"
+    set -l py (_arka_python)
+    set -l script (_arka_py_script arka_pr_check.py)
+    if test (count $argv) -eq 0
+        echo "Usage: pr_check <diff|summary|ci|explain|babysit> [options]"
+        echo ""
+        echo "  pr_check diff [--base main]     — changes vs base branch"
+        echo "  pr_check summary                — LLM summary + test plan"
+        echo "  pr_check ci                     — GitHub PR checks & workflow runs"
+        echo "  pr_check explain                — diagnose latest CI failure"
+        echo "  pr_check babysit [--fix] [--wait] — loop until merge-ready"
+        echo ""
+        echo "Requires: git repo + gh auth login (for ci/explain/babysit)"
+        echo "NL: arka why did ci fail  |  arka babysit my pr"
+        return 0
+    end
+    switch $argv[1]
+        case diff
+            $py $script diff $argv[2..-1]
+            return $status
+        case summary sum
+            $py $script summary $argv[2..-1]
+            return $status
+        case ci checks status
+            $py $script ci $argv[2..-1]
+            return $status
+        case explain why diagnose
+            set -l answer (_arka_capture_output $py $script explain $argv[2..-1])
+            set -l st $status
+            if test $st -ne 0
+                return $st
+            end
+            if test -z "$answer"
+                return 1
+            end
+            _arka_print_answer_block "$answer" "CI diagnosis"
+            return 0
+        case babysit babysitter merge-ready mergeready
+            $py $script babysit $argv[2..-1]
+            return $status
+        case route match
+            $py $script $argv[1] $argv[2..-1]
+            return $status
+        case '*'
+            set -l route ($py $script route (string join " " $argv) 2>/dev/null | string trim)
+            if test -n "$route"
+                _agent_run_skill_line "$route"
+                return $status
+            end
+            $py $script $argv
+            return $status
     end
 end
 
@@ -6721,7 +6822,7 @@ lang_map = {
     'afrikaans': 'af', 'albanian': 'sq', 'amharic': 'am', 'arabic': 'ar', 'armenian': 'hy', 'assamese': 'as',
     'aymara': 'ay', 'azerbaijani': 'az', 'bambara': 'bm', 'basque': 'eu', 'belarusian': 'be', 'bengali': 'bn',
     'bhojpuri': 'bho', 'bosnian': 'bs', 'bulgarian': 'bg', 'catalan': 'ca', 'cebuano': 'ceb', 'chichewa': 'ny',
-    'chinese': 'zh-CN', 'corsican': 'co', 'croatian': 'hr', 'czech': 'cs', 'danish': 'da', 'dhivehi': 'dv',
+    'chinese': 'zh-CN', 'mandarin': 'zh-CN', 'cantonese': 'zh-HK', 'corsican': 'co', 'croatian': 'hr', 'czech': 'cs', 'danish': 'da', 'dhivehi': 'dv',
     'dogri': 'doi', 'dutch': 'nl', 'english': 'en', 'esperanto': 'eo', 'estonian': 'et', 'ewe': 'ee',
     'filipino': 'tl', 'finnish': 'fi', 'french': 'fr', 'frisian': 'fy', 'galician': 'gl', 'georgian': 'ka',
     'german': 'de', 'greek': 'el', 'guarani': 'gn', 'gujarati': 'gu', 'haitian creole': 'ht', 'hausa': 'ha',
@@ -6746,21 +6847,36 @@ lang_map = {
 # Clean up quotes from all arguments
 args = [a.strip().strip(chr(39) + chr(34)) for a in args if a.strip()]
 
-first_word = args[0].lower()
-last_word = args[-1].lower()
+import re
 
-if last_word in lang_map or last_word in lang_map.values():
-    # Language is the last argument
-    lang = args[-1]
-    text = ' '.join(args[:-1])
-elif first_word in lang_map or first_word in lang_map.values():
-    # Language is the first argument
-    lang = args[0]
-    text = ' '.join(args[1:])
-else:
-    # Default fallback
-    lang = args[0]
-    text = ' '.join(args[1:])
+raw = ' '.join(args)
+if raw.lower().startswith('translate '):
+    raw = raw[len('translate '):].strip()
+
+lang = None
+text = None
+for lang_name in sorted(lang_map.keys(), key=len, reverse=True):
+    m = re.match(rf'(?i)^(.+?)\s+to\s+{re.escape(lang_name)}\s*\$', raw)
+    if m:
+        text = m.group(1).strip()
+        lang = lang_name
+        break
+
+if lang is None:
+    first_word = args[0].lower() if args else ''
+    last_word = args[-1].lower() if args else ''
+    if last_word in lang_map or last_word in lang_map.values():
+        lang = args[-1]
+        text = ' '.join(args[:-1])
+    elif first_word in lang_map or first_word in lang_map.values():
+        lang = args[0]
+        text = ' '.join(args[1:])
+    else:
+        lang = args[0] if args else 'english'
+        text = ' '.join(args[1:]) if len(args) > 1 else raw
+
+# Drop trailing \" to\" when language was parsed from last token only
+text = re.sub(r'(?i)\s+to\s*\$', '', text).strip()
 
 target_lang = lang_map.get(lang.lower(), lang)
 
@@ -6785,6 +6901,32 @@ except Exception as e:
     else
         echo (set_color red) "✗ Failed to translate"
     end
+end
+
+function survive_lang --description "Travel survival phrases — translate basics to another language"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        $py (_arka_py_script arka_survival_lang.py) --list
+        echo ""
+        echo "Usage: survive_lang <language> [phrase]"
+        echo "Example: survive_lang japanese"
+        echo "Example: survive_lang spanish \"I want to buy this\""
+        echo "NL: arka teach me how to survive in french"
+        echo "Set native language: ARKA_NATIVE_LANG=hindi (default: English or ARKA_SPEAK_LANG)"
+        return 0
+    end
+    if test "$argv[1]" = list -o "$argv[1]" = --list -o "$argv[1]" = -l
+        $py (_arka_py_script arka_survival_lang.py) --list
+        return $status
+    end
+    set -l out (_arka_capture_output $py (_arka_py_script arka_survival_lang.py) $argv)
+    if test -z "$out"
+        echo (set_color red)"Could not build survival phrase list"(set_color normal)
+        return 1
+    end
+    _arka_ui_header "Survival phrases" query
+    echo ""
+    _arka_print_answer "$out"
 end
 
 function generate_password --description "Generate secure passwords; store/retrieve by name (encrypted vault)"
@@ -8159,6 +8301,229 @@ function _agent_is_youtube_research_request --description "True if user wants Yo
     or string match -qr '(?i)\b(\d+|one|two|three|four|five)\s+(youtube\s+)?videos?\s+(on|about|for|of)\b' "$cmd"
 end
 
+function _agent_is_video_search_request --description "True if user wants YouTube video links (not full research digest)"
+    if _agent_is_youtube_research_request "$argv[1]"
+        return 1
+    end
+    set -l clean (string lower "$argv[1]")
+    if string match -qr '(?i)\b(videos?\s+(?:to\s+learn|for\s+learning|on|about|for|to)|video\s+tutorials?|tutorial\s+videos?|watch\s+videos?|find\s+videos?|show\s+(?:me\s+)?videos?)\b' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)\blearn\s+\S+(\s+\S+){0,4}\s+(?:from|with)\s+videos?\b' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)\b(youtube\s+)?videos?\s+(?:to|for)\s+(learn|study|understand)\b' "$clean"
+        return 0
+    end
+    return 1
+end
+
+function _agent_parse_video_search_query --description "Extract YouTube search query from NL video request (internal)"
+    set -l q (string trim -- "$argv[1]")
+    set q (string replace -r -i '^(?:please\s+)?(?:find|show|get|give me|search for|search)\s+' '' "$q")
+    set q (string replace -r -i '^(?:\d+\s+)?(?:youtube\s+)?videos?\s+(?:to\s+learn|for\s+learning|on|about|for|to)\s+' '' "$q")
+    set q (string replace -r -i '^(?:video\s+)?tutorials?\s+(?:to\s+learn|for|on|about|to)\s+' '' "$q")
+    set q (string replace -r -i '^watch\s+videos?\s+(?:to\s+learn|on|about|for|to)\s+' '' "$q")
+    set q (string replace -r -i '\s+(?:from|with|on)\s+youtube\s*$' '' "$q")
+    set q (string replace -r -i '\s+videos?\s*$' '' "$q")
+    set q (string trim -- "$q")
+    if test -z "$q"
+        echo ""
+        return
+    end
+    if string match -qr '(?i)\btutorial\b' "$q"
+        echo $q
+    else
+        echo "$q tutorial"
+    end
+end
+
+function _agent_build_video_search_cmd --description "Build find_videos skill invocation (internal)"
+    set -l q (_agent_parse_video_search_query "$argv[1]")
+    if test -z "$q"
+        echo "find_videos"
+    else
+        echo "find_videos $q"
+    end
+end
+
+function _agent_is_translate_request --description "True if user wants text translated to another language"
+    set -l clean (string lower (string trim -- "$argv[1]"))
+    if string match -qr '(?i)^translate\b' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)\btranslate\s+.+\s+to\s+\w' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)^(what|how|why|when|where|who|is|are|can|could|does|do)\b' "$clean"
+        return 1
+    end
+    if string match -qr '(?i)\s+to\s+(chinese|mandarin|cantonese|spanish|french|german|japanese|korean|thai|hindi|bengali|tamil|telugu|arabic|russian|portuguese|italian|vietnamese|urdu|marathi|gujarati|punjabi|dutch|polish|turkish|greek|hebrew|nepali|swedish|norwegian|danish|finnish|czech|hungarian|romanian|ukrainian|persian|farsi|indonesian|filipino|tagalog|malay|kannada|malayalam)\s*$' "$clean"
+        return 0
+    end
+    return 1
+end
+
+function _agent_parse_translate_nl --description "Parse NL translate → lang\\ttext (internal)"
+    set -l cmd (string trim -- "$argv[1]")
+
+    set -l m (string match -r '(?i)^translate\s+(.+?)\s+to\s+(.+)\s*$' -- "$cmd")
+    if test (count $m) -ge 3
+        printf "%s\t%s\n" $m[3] $m[2]
+        return
+    end
+
+    set -l m (string match -r '(?i)^translate\s+to\s+(\S+)\s+(.+)$' -- "$cmd")
+    if test (count $m) -ge 3
+        printf "%s\t%s\n" $m[2] $m[3]
+        return
+    end
+
+    set -l langs chinese mandarin cantonese spanish french german japanese korean thai vietnamese italian portuguese russian arabic hindi bengali tamil telugu urdu marathi gujarati punjabi kannada malay dutch polish turkish greek hebrew nepali swedish norwegian danish finnish czech hungarian romanian ukrainian persian farsi indonesian filipino tagalog malayalam
+    for lang in $langs
+        set -l m (string match -r -i "(.+?)\\s+to\\s+$lang\$" -- "$cmd")
+        if test (count $m) -ge 2
+            set -l text (string trim -- $m[2])
+            test -n "$text"; and printf "%s\t%s\n" $lang $text; and return
+        end
+    end
+    echo ""
+end
+
+function _agent_build_translate_cmd --description "Build translate skill invocation (internal)"
+    set -l parsed (_agent_parse_translate_nl "$argv[1]")
+    if test -z "$parsed"
+        echo "translate"
+        return
+    end
+    set -l parts (string split \t "$parsed" --max 2)
+    echo "translate $parts[1] $parts[2]"
+end
+
+function _agent_speak_lang_for_target --description "Best-effort TTS locale for translation target (internal)"
+    set -l lang (string lower (string trim -- "$argv[1]"))
+    switch $lang
+        case chinese mandarin
+            echo zh-CN
+        case cantonese
+            echo zh-HK
+        case japanese
+            echo ja-JP
+        case korean
+            echo ko-KR
+        case spanish
+            echo es-ES
+        case french
+            echo fr-FR
+        case german
+            echo de-DE
+        case hindi hi
+            echo hi-IN
+        case bengali bn
+            echo bn-IN
+        case tamil ta
+            echo ta-IN
+        case telugu te
+            echo te-IN
+        case arabic
+            echo ar
+        case russian
+            echo ru-RU
+        case '*'
+            echo ""
+    end
+end
+
+function _agent_is_survival_lang_request --description "True if user wants travel survival phrases in another language"
+    set -l clean (string lower "$argv[1]")
+    if string match -qr '(?i)\bsurvive_lang\b' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)\b(survival phrases|travel phrases|basic phrases|tourist phrases|phrases to survive)\b' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)\bteach me (?:how to )?survive\b' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)\bhow to (?:get by|survive) in\b' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)\bsurvive in\b' "$clean"
+        return 0
+    end
+    return 1
+end
+
+function _agent_parse_survival_lang_target --description "Extract target language from survival phrase request (internal)"
+    set -l clean (string lower "$argv[1]")
+    set -l langs afrikaans arabic bengali burmese chinese cantonese mandarin czech danish dutch english filipino tagalog finnish french german greek gujarati hebrew hindi hungarian indonesian italian japanese kannada korean malay marathi nepali norwegian persian farsi polish portuguese punjabi romanian russian spanish swahili swedish tamil telugu thai turkish ukrainian urdu vietnamese
+    for lang in $langs
+        if string match -qr "(?:in|for|to|into)\s+$lang\\b" "$clean"
+            echo $lang
+            return
+        end
+        if string match -qr "\b$lang\s+(?:phrases|survival|language|for travel)\b" "$clean"
+            echo $lang
+            return
+        end
+        if string match -qr "\bsurvive_lang\s+$lang\\b" "$clean"
+            echo $lang
+            return
+        end
+    end
+    for lang in $langs
+        if string match -qr "\b$lang\\b" "$clean"
+            echo $lang
+            return
+        end
+    end
+    echo ""
+end
+
+function _agent_build_survival_lang_cmd --description "Build survive_lang skill invocation (internal)"
+    set -l lang (_agent_parse_survival_lang_target "$argv[1]")
+    if test -z "$lang"
+        echo "survive_lang"
+    else
+        echo "survive_lang $lang"
+    end
+end
+
+function _agent_is_pr_check_request --description "True if user wants PR diff / CI / babysit (internal)"
+    set -l clean (string lower (string trim -- "$argv[1]"))
+    if string match -qr '(?i)^pr_check\b' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)\b(pr_check|pr check)\b' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)\b(babysit|baby.?sit)\b.*\b(pr|pull request)\b' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)\b(pr|pull request)\b.*\b(babysit|merge.?ready|merge ready)\b' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)\b(why did (the )?ci fail|explain (the )?ci|ci failed|github actions failed|workflow failed|failed checks)\b' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)\b(pr diff|diff vs main|what changed vs|my changes vs)\b' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)\b(pr checks|ci status|github actions status)\b' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)\b(summarize (my )?(pr|changes|diff)|pr summary|summary of (my )?changes)\b' "$clean"
+        return 0
+    end
+    return 1
+end
+
+function _agent_route_pr_check --description "Build pr_check invocation from NL (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_pr_check.py) route "$argv[1]" 2>/dev/null | string trim)
+    echo "$route"
+end
+
 function _agent_youtube_limit_digit --description "Convert limit token to number for --limit (internal)"
     set -l tok (string lower (string trim -- "$argv[1]"))
     switch $tok
@@ -8400,7 +8765,41 @@ function _agent_normalize_knowledge_q --description "Strip tell/explain prefixes
     echo (string trim -- "$q")
 end
 
+function _agent_is_nearby_places_question --description "True if user wants local POIs near them (offline OSM map)"
+    set -l clean (string lower "$argv[1]")
+    if string match -qr '(?i)\b(nearby|near me|places near|what.s near|around me|close to me|closest to me)\b' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)\b(restaurant|restaurants|food|cafe|coffee|hospital|pharmacy|atm|bank|hotel|grocery|supermarket|mall|eat)\b.*\b(near|nearby|around|close)\b' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)\b(near|nearby|around|close)\b.*\b(restaurant|restaurants|food|cafe|coffee|hospital|pharmacy|atm|bank|hotel|grocery|supermarket|mall|places|place)\b' "$clean"
+        return 0
+    end
+    return 1
+end
+
+function _agent_build_nearby_cmd --description "Build nearby_places skill with optional category filter (internal)"
+    set -l cmd $argv[1]
+    set -l clean (string lower "$cmd")
+    set -l filter ""
+    for token in food restaurant restaurants cafe coffee hospital pharmacy atm bank hotel grocery supermarket mall eat
+        if string match -qr "(^|[[:space:]])$token(\$|[[:space:]])" "$clean"
+            set filter $token
+            break
+        end
+    end
+    if test -n "$filter"
+        echo "nearby_places $filter"
+    else
+        echo "nearby_places"
+    end
+end
+
 function _agent_is_places_question --description "True if user asks about tourist places / attractions in a city (internal)"
+    if _agent_is_nearby_places_question "$argv[1]"
+        return 1
+    end
     set -l clean (string lower "$argv[1]")
     if string match -qr '(?i)\b(top\s+\d+|best|famous|must[\s-]visit|tourist|popular|iconic)\b.*\b(in|at|near|around)\b' "$clean"
         return 0
@@ -8509,6 +8908,25 @@ function _agent_is_knowledge_question --description "True if user wants a factua
         return 1
     end
     if _agent_is_pdf_question "$argv[1]"; or _agent_is_pdf_ingest_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_nearby_places_question "$argv[1]"
+        return 1
+    end
+    if _agent_is_video_search_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_translate_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_pr_check_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_survival_lang_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_google_calendar_request "$argv[1]"
+        or _agent_is_google_gmail_request "$argv[1]"
         return 1
     end
     set -l clean (string lower "$argv[1]")
@@ -8651,7 +9069,7 @@ function _agent_is_general_chat --description "True if plain conversational inpu
     if _agent_is_youtube_download_request "$argv[1]"
         return 1
     end
-    if string match -qr '(?i)^(install|play|open|run|create|download|search|list|show|fix|set|take|timer|remind|weather|pdf|ingest|screenshot|spotify|whatsapp|send|loop|agent_|generate_image|generate_video|generate_password|predictions|stock|translate|cheat|excuse|bored)\b' "$clean"
+    if string match -qr '(?i)^(install|play|open|run|create|download|search|list|show|fix|set|take|timer|remind|weather|pdf|ingest|screenshot|spotify|whatsapp|send|loop|agent_|generate_image|generate_video|generate_password|predictions|stock|translate|survive_lang|pr_check|cheat|excuse|bored)\b' "$clean"
         return 1
     end
     if string match -qr '(?i)^(generate|create|make)\s+(?:a |an |the |me )?(?:new )?(password|passcode)\b' "$clean"
@@ -8714,10 +9132,88 @@ function _agent_is_google_login_request --description "True if user wants Google
     string match -qr '(?i)(google\s+(?:login|sign[\s-]?in|connect|auth|setup|status|logout)|connect\s+(?:my\s+)?(?:google|gmail|calendar)|sign[\s-]?in\s+(?:to\s+)?(?:google|gmail|calendar)|link\s+(?:my\s+)?google|oauth\s+google)' "$argv[1]"
 end
 
+function _agent_is_gmail_summarize_request --description "True if user wants AI summary of Gmail (internal)"
+    string match -qr '(?i)(summarize|summary|tldr|digest|brief).*(email|emails|gmail|gmails|mail|inbox)' "$argv[1]"
+    or string match -qr '(?i)(email|emails|gmail|gmails|mail|inbox).*(summarize|summary|tldr|digest|brief)' "$argv[1]"
+end
+
+function _agent_build_gmail_cmd --description "Build google gmail args from NL (internal)"
+    set -l cmd "$argv[1]"
+    set -l summarize 0
+    if test (count $argv) -ge 2; and test "$argv[2]" = summarize
+        set summarize 1
+    end
+    set -l out
+    if test $summarize -eq 1
+        set out "google gmail --summarize"
+    else
+        set out "google gmail"
+    end
+    if string match -qr '(?i)\bunread\b' "$cmd"
+        set out "$out --unread"
+    end
+    set -l days (_agent_parse_gmail_days "$cmd")
+    if test -n "$days"
+        set out "$out --days $days"
+    else if string match -qr '(?i)\btoday\b' "$cmd"
+        set out "$out --today"
+    end
+    set -l unread_only 0
+    if string match -qr '(?i)\bunread\b' "$cmd"
+        set unread_only 1
+    end
+    if string match -qr '(?i)\ball\b' "$cmd"
+        set out "$out --all"
+    else if test $unread_only -eq 1; and test -z "$days"; and not string match -qr '(?i)\btoday\b' "$cmd"
+        set out "$out --all"
+    else if test $summarize -eq 1
+        set out "$out --all"
+    else if test -n "$days"
+        set out "$out --limit 100"
+    end
+    if test $summarize -eq 1
+        if test -z "$days"; and not string match -qr '(?i)\btoday\b' "$cmd"; and test $unread_only -eq 0
+            set out "$out --days 2 --all"
+        end
+    else if string match -qr '(?i)\b(snippet|preview|body)\b' "$cmd"
+        set out "$out --snippet"
+    end
+    echo $out
+end
+
 function _agent_is_google_gmail_request --description "True if user wants Gmail via Google integration (internal)"
-    string match -qr '(?i)(gmail|google\s+mail|google\s+email|\bemail\b|\bemails\b|\binbox\b)' "$argv[1]"
-    and string match -qr '(?i)(unread|check|read|show|list|recent|today|inbox|my\s+mail|my\s+email|any\s+mail|any\s+email)' "$argv[1]"
-    and not string match -qr '(?i)(send\s+email|compose|write\s+email|draft)' "$argv[1]"
+    set -l cmd "$argv[1]"
+    if string match -qr '(?i)(send\s+email|compose|write\s+email|draft|voice\s+mail|voicemail)' "$cmd"
+        return 1
+    end
+    if not string match -qr '(?i)(\bgmails?\b|google\s+mail|google\s+email|\bemails?\b|\bmail\b)' "$cmd"
+        return 1
+    end
+    if _agent_is_gmail_summarize_request "$cmd"
+        return 1
+    end
+    string match -qr '(?i)(unread|check|read|show|list|recent|today|inbox|all|within|last|past|from|get|fetch|see|view|any|my\s+(?:gmail|mail|email)|how\s+many|count|\d+\s+days?|\d+\s+hours?)' "$cmd"
+end
+
+function _agent_parse_gmail_days --description "Extract day window from NL gmail request (internal)"
+    set -l cmd "$argv[1]"
+    set -l m (string match -r '(?i)(?:within|last|past)\s+(\d+)\s+days?' "$cmd")
+    if test (count $m) -ge 2
+        echo $m[2]
+        return 0
+    end
+    set m (string match -r '(?i)\b(\d+)\s+days?\b' "$cmd")
+    if test (count $m) -ge 2
+        echo $m[2]
+        return 0
+    end
+    set m (string match -r '(?i)(?:within|last|past)\s+(\d+)\s+hours?' "$cmd")
+    if test (count $m) -ge 2
+        set -l hrs $m[2]
+        echo (python3 -c "import math; print(max(1, math.ceil($hrs/24)))")
+        return 0
+    end
+    return 1
 end
 
 function _agent_is_google_calendar_request --description "True if user wants Google Calendar (internal)"
@@ -8739,13 +9235,11 @@ function _agent_route_google --description "Map NL to google subcommand (interna
         return 0
     end
     if _agent_is_google_gmail_request "$cmd"
-        if string match -qr '(?i)\bunread\b' "$cmd"
-            echo "google gmail --unread"
-        else if string match -qr '(?i)\btoday\b' "$cmd"
-            echo "google gmail --today"
-        else
-            echo "google gmail --unread --snippet"
-        end
+        echo (_agent_build_gmail_cmd "$cmd")
+        return 0
+    end
+    if _agent_is_gmail_summarize_request "$cmd"
+        echo (_agent_build_gmail_cmd "$cmd" summarize)
         return 0
     end
     if _agent_is_google_calendar_request "$cmd"
@@ -8910,6 +9404,11 @@ function _agent_chat_intent_route --description "Map question to chat skill via 
     test -z "$cmd"; and return 1
     if string match -qr '(?i)(password|passcode)' "$cmd"
         and not string match -qr '(?i)(decrypt|protected|pdf)' "$cmd"
+        return 1
+    end
+    if _agent_is_google_login_request "$cmd"
+        or _agent_is_google_gmail_request "$cmd"
+        or _agent_is_google_calendar_request "$cmd"
         return 1
     end
     if string match -qr '^/' "$cmd"
@@ -9242,12 +9741,15 @@ function set_location --description "Set or refresh location/PIN for grounded se
     python3 (_arka_py_script arka_chat.py) location $argv[1]
 end
 
-function nearby_places --description "Offline nearby POIs from cached city map"
-    if test (count $argv) -gt 0
-        python3 (_arka_py_script arka_chat.py) nearby $argv[1]
-    else
-        python3 (_arka_py_script arka_chat.py) nearby
+function nearby_places --description "Offline nearby POIs from cached city map (OpenStreetMap + distance)"
+    set -l out (_arka_capture_output python3 (_arka_py_script arka_chat.py) nearby $argv)
+    if test -z "$out"
+        echo (set_color red)"No nearby data — try: map_download <city>"(set_color normal)
+        return 1
     end
+    _arka_ui_header "Nearby (offline map)" places
+    echo ""
+    _arka_print_answer "$out"
 end
 
 function map_download --description "Download offline POI map for a city (Overpass/OSM)"
@@ -9944,7 +10446,7 @@ function profession --description "Profession domains: curated sources (RSS, web
             $py $script list
         case ask run
             if test (count $argv) -ge 2
-                set -l domains health nutrition startup investor teacher legal engineer journalism marketing finance counselor chef
+                set -l domains ($py $script list-ids 2>/dev/null)
                 set -l title "Answer"
                 if contains -- $argv[2] $domains
                     set title (_arka_profession_title $argv[2])
@@ -9991,6 +10493,36 @@ function profession --description "Profession domains: curated sources (RSS, web
             end
         case route match
             $py $script $argv[1] $argv[2..-1]
+            return $status
+        case install
+            if test (count $argv) -lt 2
+                echo "Usage: profession install <git-url|path>"
+                echo "Example: profession install ~/my-profession-plugin"
+                return 1
+            end
+            $py $script install $argv[2]
+            return $status
+        case plugins
+            if test (count $argv) -lt 2
+                $py $script plugins list
+                return $status
+            end
+            switch $argv[2]
+                case list ls
+                    $py $script plugins list
+                case refresh
+                    $py $script plugins refresh
+                case info
+                    if test (count $argv) -ge 3
+                        $py (_arka_py_script arka_profession_plugins.py) info $argv[3]
+                    else
+                        echo "Usage: profession plugins info <id>"
+                        return 1
+                    end
+                case '*'
+                    echo "Usage: profession plugins list|refresh|info <id>"
+                    return 1
+            end
             return $status
         case '*'
             set -l route ($py $script route (string join " " $argv) 2>/dev/null | string trim)
@@ -10322,6 +10854,15 @@ function _agent_skill_matches_request --description "True if skill fits the user
             string match -qr '(?i)(predict|prediction|forecast|opportunit|outlook).*(antique|stock|market|strategy|invest|collectible|portfolio)|^(predict|forecast)\s+|(where\s+(to|should\s+i)\s+invest|how\s+(to|can\s+i)\s+invest|make\s+(?:a\s+)?profit)' "$cmd"
         case remind
             string match -qr '(?i)\bremind(?:\s+me)?\b' "$cmd"
+        case inbox_agent
+            if _agent_is_gmail_summarize_request "$cmd"
+                return 1
+            else if _agent_is_google_gmail_request "$cmd"
+                return 1
+            else if _agent_is_google_calendar_request "$cmd"
+                return 1
+            end
+            string match -qr '(?i)(inbox|unread|email|mail|message)' "$cmd"
         case stock stock_analysis
             string match -qr '(?i)^(macro|emotion|fundamentals|funding|competition)(\s+\d+|\s+[A-Z][A-Z0-9.-]+)*$' "$cmd"
             or string match -qr '(?i)^(stock|market)\s+(news|prices|policy|strategy|volatility|dashboard|context|invest|macro|emotion|fundamentals|funding|competition)\b|^(analyze|check)\s+(?:stock\s+)?[A-Z][A-Z0-9.-]{1,12}\b|(where\s+(to|should\s+i)\s+invest|how\s+(to|can\s+i)\s+invest|invest\s+\d|make\s+(?:a\s+)?profit)' "$cmd"
@@ -10532,6 +11073,33 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         echo "skill|deep_web_answer $forced|Forced deep web search"
         return
     end
+    if _agent_is_nearby_places_question "$cmd"
+        set -l nb (_agent_build_nearby_cmd "$cmd")
+        echo "skill|$nb|Offline nearby POIs (OpenStreetMap)"
+        return
+    end
+    if _agent_is_video_search_request "$cmd"
+        set -l vf (_agent_build_video_search_cmd "$cmd")
+        echo "skill|$vf|YouTube video links"
+        return
+    end
+    if _agent_is_translate_request "$cmd"
+        set -l tr (_agent_build_translate_cmd "$cmd")
+        echo "skill|$tr|Google Translate"
+        return
+    end
+    if _agent_is_pr_check_request "$cmd"
+        set -l prr (_agent_route_pr_check "$cmd")
+        if test -n "$prr"
+            echo "skill|$prr|PR diff / CI / babysit"
+            return
+        end
+    end
+    if _agent_is_survival_lang_request "$cmd"
+        set -l sl (_agent_build_survival_lang_cmd "$cmd")
+        echo "skill|$sl|Travel survival phrases"
+        return
+    end
     if _agent_is_knowledge_question "$cmd"
         set -l kq (_agent_normalize_knowledge_q "$cmd")
         test -z "$kq"; and set kq $cmd
@@ -10567,10 +11135,6 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
     if _agent_is_pdf_question "$cmd"
         set -l pq (_agent_pdf_ask_cmd "$cmd")
         echo "skill|$pq|Ask/summarize ingested documents (optional --doc)"
-        return
-    end
-    if string match -qr '(?i)\b(nearby|near me|places near|what.s near)\b' "$cmd"
-        echo "skill|nearby_places|Offline nearby POIs"
         return
     end
     if string match -qr '(?i)^(reset|clear)\s+(chat|session|memory)\b' "$clean"
@@ -10681,6 +11245,10 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
             return
         end
     end
+    if set -l g_route (_agent_route_google "$cmd")
+        echo "skill|$g_route|Google Calendar or Gmail"
+        return
+    end
     if set -l chat_route (_agent_chat_intent_route "$cmd")
         echo "skill|$chat_route|Chat engine ($chat_route)"
         return
@@ -10787,6 +11355,49 @@ function _agent_correct_interpretation --description "Fix bad LLM skill picks us
     set -l interpreted $argv[2]
     set -l clean (string lower "$cmd")
 
+    if _agent_is_nearby_places_question "$cmd"
+        echo (_agent_build_nearby_cmd "$cmd")
+        return
+    end
+
+    if _agent_is_video_search_request "$cmd"
+        echo (_agent_build_video_search_cmd "$cmd")
+        return
+    end
+
+    if _agent_is_translate_request "$cmd"
+        echo (_agent_build_translate_cmd "$cmd")
+        return
+    end
+
+    if _agent_is_pr_check_request "$cmd"
+        set -l prr (_agent_route_pr_check "$cmd")
+        test -n "$prr"; and echo "$prr"
+        return
+    end
+
+    if _agent_is_survival_lang_request "$cmd"
+        echo (_agent_build_survival_lang_cmd "$cmd")
+        return
+    end
+
+    if set -l g_route (_agent_route_google "$cmd")
+        echo $g_route
+        return
+    end
+
+    if _agent_is_gmail_summarize_request "$cmd"
+        echo (_agent_build_gmail_cmd "$cmd" summarize)
+        return
+    end
+
+    if string match -qr '(?i)^inbox_agent\b' "$interpreted"
+        if set -l g_route (_agent_route_google "$cmd")
+            echo $g_route
+            return
+        end
+    end
+
     if _agent_is_investment_question "$cmd"
         set -l topic (_agent_strip_query_prefix "$cmd")
         echo "predictions --domain stocks --deep "(string escape --style=script -- $topic)
@@ -10842,6 +11453,10 @@ function _agent_correct_interpretation --description "Fix bad LLM skill picks us
     end
 
     if string match -qr '(?i)^web_answer\b' "$interpreted"
+        if set -l g_route (_agent_route_google "$cmd")
+            echo $g_route
+            return
+        end
         if _agent_is_investment_question "$cmd"
             set -l topic (_agent_strip_query_prefix "$cmd")
             echo "predictions --domain stocks --deep "(string escape --style=script -- $topic)
@@ -11705,6 +12320,12 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                     end
                     return $status
                 case summarize summary
+                    set -l sum_text (string join " " $argv[2..-1] | string trim)
+                    if test (count $argv) -ge 2; and string match -qr '(?i)\b(emails?|gmail|gmails|mail|inbox)\b' "$sum_text"
+                        set -l gcmd (_agent_build_gmail_cmd "$sum_text" summarize)
+                        _agent_dispatch_one $gcmd
+                        return $status
+                    end
                     if test (count $argv) -ge 3
                         switch $argv[2]
                             case folder dir directory
@@ -12015,7 +12636,42 @@ function _arka_speak_ask --description "Answer a question via agent and read the
         return 1
     end
     set -l q (string join " " $argv)
-    set -l out (agent $q)
+
+    if _agent_is_translate_request "$q"
+        set -l parsed (_agent_parse_translate_nl "$q")
+        if test -n "$parsed"
+            set -l parts (string split \t "$parsed" --max 2)
+            set -l lang $parts[1]
+            set -l text $parts[2]
+            set -l py (_arka_python)
+            set -l translated ($py (_arka_py_script arka_survival_lang.py) --quiet $lang $text 2>/dev/null)
+            if test -z "$translated"
+                return 1
+            end
+            echo "$text → $translated"
+            if _agent_speak_enabled
+                set -l prev_speak_lang ""
+                if set -q SPEAK_LANG
+                    set prev_speak_lang $SPEAK_LANG
+                end
+                set -l tts_lang (_agent_speak_lang_for_target $lang)
+                if test -n "$tts_lang"
+                    set -gx SPEAK_LANG $tts_lang
+                end
+                set -gx ARKA_TTS_QUIET 1
+                speak_aloud "$translated" 2>/dev/null
+                if test -n "$prev_speak_lang"
+                    set -gx SPEAK_LANG $prev_speak_lang
+                else
+                    set -e SPEAK_LANG
+                end
+                set -e ARKA_TTS_QUIET
+            end
+            return 0
+        end
+    end
+
+    set -l out (agent $argv)
     set -l st $status
     printf '%s\n' "$out"
     if test -n "$out"
@@ -12096,9 +12752,10 @@ function _agent_extract_speech_text --description "Pull speakable answer body fr
         test -z "$t"; and continue
         set t (string replace -r '^\[(FROM SEARCH|FROM MEMORY)\]\s*' '' "$t")
         set t (string replace -r '^🔎\s*' '' "$t")
+        set t (string replace -r '(?i)^model:\s*' '' "$t")
         set t (string trim -- "$t")
         test -z "$t"; and continue
-        if string match -qr '(?i)^(offline routing|running skill|interpreted:)' "$t"
+        if string match -qr '(?i)^(offline routing|running skill|interpreted:|model:)' "$t"
             continue
         end
         if string match -q '*━━━*' "$t"
@@ -12575,6 +13232,7 @@ function agent --description "Run commands safely: executes safe commands automa
         
         echo (set_color --bold yellow)"🐙 Development & AI:"(set_color normal)
         echo "  git_summary            - Beautiful git repository overview (status, branches, commits)"
+        echo "  pr_check diff|ci|explain|babysit - PR diff, CI status, failure diagnosis, merge-ready loop"
         echo "  open_project [query]   - Search and launch VS Code on a local project repo"
         echo "  crypto_price [coins]   - Get real-time crypto prices (BTC, ETH, etc.) beautifully"
         echo "  sports_score [league]  - Live scores: IPL, cricket, NFL, NBA, EPL, F1, …"
@@ -12647,6 +13305,8 @@ function agent --description "Run commands safely: executes safe commands automa
         echo "  rag_setup / rag_status    - TurboQuant RAG backend"
         echo "  predictions [--domain antiques|stocks|strategy] [--deep] <topic> - Opportunity analysis talent"
         echo "  profession ask <domain> <q>       - Domain-aware answer (health, nutrition, startup, …)"
+        echo "  profession install <path|git>     - Add third-party profession domain (profession.json)"
+        echo "  profession plugins list           - Installed profession plugins"
         echo "  profession setup [domain]       - Clone repos: investor, nutrition, startup, engineer"
         echo "  stock news|prices|analyze TICKER|dashboard - stock_analysis project bridge"
         echo "  arka_ask / speak_research / semantic_memory / supermemory - Unified brain & memory"
@@ -12694,6 +13354,16 @@ function agent --description "Run commands safely: executes safe commands automa
     if _agent_is_investment_question "$cmd"
         set -l topic (_agent_strip_query_prefix "$cmd")
         set interpreted "predictions --domain stocks --deep "(string escape --style=script -- $topic)
+        set route_source offline
+    end
+
+    if test -z "$interpreted"; and set -l g_route (_agent_route_google "$cmd")
+        set interpreted $g_route
+        set route_source offline
+    end
+
+    if test -z "$interpreted"; and _agent_is_gmail_summarize_request "$cmd"
+        set interpreted (_agent_build_gmail_cmd "$cmd" summarize)
         set route_source offline
     end
 
@@ -13022,6 +13692,21 @@ function agent --description "Run commands safely: executes safe commands automa
         test -z "$forced"; and set forced $cmd
         set interpreted "deep_web_answer $forced"
         set route_source offline
+    else if _agent_is_nearby_places_question "$cmd"
+        set interpreted (_agent_build_nearby_cmd "$cmd")
+        set route_source offline
+    else if _agent_is_video_search_request "$cmd"
+        set interpreted (_agent_build_video_search_cmd "$cmd")
+        set route_source offline
+    else if _agent_is_translate_request "$cmd"
+        set interpreted (_agent_build_translate_cmd "$cmd")
+        set route_source offline
+    else if _agent_is_pr_check_request "$cmd"
+        set interpreted (_agent_route_pr_check "$cmd")
+        set route_source offline
+    else if _agent_is_survival_lang_request "$cmd"
+        set interpreted (_agent_build_survival_lang_cmd "$cmd")
+        set route_source offline
     else if _agent_is_knowledge_question "$cmd"
         set -l kq (_agent_normalize_knowledge_q "$cmd")
         if test -z "$kq"
@@ -13047,15 +13732,15 @@ function agent --description "Run commands safely: executes safe commands automa
         set -l pq (_agent_pdf_ask_cmd "$cmd")
         set interpreted $pq
         set route_source offline
-    else if string match -qr '(?i)\b(nearby|near me|places near|what.s near)\b' "$cmd"
-        set interpreted "nearby_places"
-        set route_source offline
     else if string match -qr '(?i)^(reset|clear)\s+(chat|session|memory)\b' "$clean_cmd"
         set interpreted "chat_reset"
         set route_source offline
     else if string match -qr '(?i)^deep\s+queue\s+(add|list|run|results)\b' "$clean_cmd"
         set -l qparts (string split " " "$cmd")
         set interpreted "deep_queue $qparts[3..-1]"
+        set route_source offline
+    else if set -l g_route (_agent_route_google "$cmd")
+        set interpreted $g_route
         set route_source offline
     else if set -l chat_route (_agent_chat_intent_route "$cmd")
         set interpreted $chat_route
@@ -13078,9 +13763,6 @@ function agent --description "Run commands safely: executes safe commands automa
         set -l kq (_agent_normalize_knowledge_q "$cmd")
         test -z "$kq"; and set kq $cmd
         set interpreted "web_answer $kq"
-        set route_source offline
-    else if set -l g_route (_agent_route_google "$cmd")
-        set interpreted $g_route
         set route_source offline
     else if _agent_is_files_preference_question "$cmd"
         set interpreted "files_preference_help $cmd"
@@ -13110,6 +13792,9 @@ function agent --description "Run commands safely: executes safe commands automa
         set interpreted "crypto_price $args"
     else if string match -qr '(pomodoro|tomato)' "$clean_cmd"
         set interpreted "pomodoro $args"
+    else if _agent_is_pr_check_request "$cmd"
+        set interpreted (_agent_route_pr_check "$cmd")
+        set route_source offline
     else if string match -qr '(git|branch|commit)' "$clean_cmd"
         set interpreted "git_summary"
     else if set -l prof_route (_agent_route_profession "$cmd")

@@ -202,6 +202,8 @@ def voice_progress(skill: str) -> str:
         "find_files_by_size": "Finding files by size.",
         "calc": "Calculating.",
         "nearby_places": "Finding nearby places.",
+        "find_videos": "Searching YouTube for videos.",
+        "survive_lang": "Building survival phrases.",
     }
     return table.get(key, voice_ack(key.replace("_", " ")))
 
