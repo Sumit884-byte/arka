@@ -46,6 +46,9 @@ voice = [
 pdf = [
     "requests",
 ]
+charts = [
+    "matplotlib>=3.8",
+]
 whatsapp = [
     "selenium>=4.0",
     "pywhatkit>=5.4",
@@ -55,7 +58,7 @@ dev = [
     "pytest",
 ]
 all = [
-    "arka-agent[chat,voice,pdf,whatsapp]",
+    "arka-agent[chat,voice,pdf,whatsapp,charts]",
 ]
 
 [project.scripts]

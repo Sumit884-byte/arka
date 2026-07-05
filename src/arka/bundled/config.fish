@@ -1775,7 +1775,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         create_desktop_app fix_graphics_driver install_app install_apt install_flatpak \
         install_snap install_package install_uv stock_analysis stock macro emotion \
         auto_click auto_copy decrypt_pdf classify_files cleanup_downloads watch_zip monitor_x \
-        generate_image generate_video youtube_transcript youtube_download yt_download media_transcript transcribe_media summarize_url daily_brief wifi_info \
+        generate_image generate_video chart youtube_transcript youtube_download yt_download media_transcript transcribe_media summarize_url daily_brief wifi_info \
         folder_summarize playlist_summarize youtube_research yt_research find_videos codebase_ingest \
         agent_remember agent_recall agent_memory agent_trace agent_why agent_last \
         agent_resume agent_research agent_nudge agent_watch agent_routine agent_fanout \
@@ -2196,6 +2196,8 @@ function skills --description "Show what commands the agent can auto-run"
                 echo (set_color green)"  wifi_info      "(set_color normal)"Current Wi-Fi network + signal"
             case generate_image
                 echo (set_color green)"  generate_image "(set_color normal)"<prompt> — Nano Banana (Gemini) + Pollinations nanobanana fallback"
+            case chart
+                echo (set_color green)"  chart          "(set_color normal)"line | bar | pie | scatter — matplotlib PNG charts"
             case generate_video
                 echo (set_color green)"  generate_video "(set_color normal)"<prompt> — real AI video (Pollinations/Gemini; needs API key or billing)"
             case agent_ask
@@ -5473,6 +5475,26 @@ function generate_image --description "Generate images via Google Nano Banana (G
     set -l prompt (string join ' ' -- $prompt_parts)
     set -l py (_arka_python)
     $py (_arka_py_script arka_generate_image.py) $flags -- "$prompt"
+end
+
+function chart --description "Draw line, bar, pie, or scatter charts (matplotlib → PNG)"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        echo "Usage: chart line TICKER [TICKER...] [--range 3mo]"
+        echo "       chart bar --data 'Apple:230,Samsung:210' [--title 'Phone sales']"
+        echo "       chart pie --data 'Organic:400,Direct:300' [--title 'Traffic sources']"
+        echo "       chart scatter --data '100:200,120:190' [--xlabel Spend --ylabel Revenue]"
+        echo ""
+        echo "NL: arka chart TSLA and NVDA last 3 months"
+        echo "    arka pie chart market share Apple 40 Samsung 30"
+        echo "    arka scatter ad spend vs revenue 100 200 120 190 170 280"
+        echo ""
+        echo "Requires: pip install matplotlib"
+        echo "  Saves to ~/Pictures/arka-generated/ (or CHART_OUTPUT_DIR / IMAGE_OUTPUT_DIR)"
+        return 1
+    end
+    $py (_arka_py_script arka_chart.py) $argv
+    return $status
 end
 
 function generate_video --description "Generate real AI video (Pollinations or Gemini Veo — no fake slideshows)"
@@ -9069,7 +9091,7 @@ function _agent_is_general_chat --description "True if plain conversational inpu
     if _agent_is_youtube_download_request "$argv[1]"
         return 1
     end
-    if string match -qr '(?i)^(install|play|open|run|create|download|search|list|show|fix|set|take|timer|remind|weather|pdf|ingest|screenshot|spotify|whatsapp|send|loop|agent_|generate_image|generate_video|generate_password|predictions|stock|translate|survive_lang|pr_check|cheat|excuse|bored)\b' "$clean"
+    if string match -qr '(?i)^(install|play|open|run|create|download|search|list|show|fix|set|take|timer|remind|weather|pdf|ingest|screenshot|spotify|whatsapp|send|loop|agent_|generate_image|generate_video|generate_password|chart|graph|plot|predictions|stock|translate|survive_lang|pr_check|cheat|excuse|bored)\b' "$clean"
         return 1
     end
     if string match -qr '(?i)^(generate|create|make)\s+(?:a |an |the |me )?(?:new )?(password|passcode)\b' "$clean"
@@ -9179,6 +9201,19 @@ function _agent_build_gmail_cmd --description "Build google gmail args from NL (
         set out "$out --snippet"
     end
     echo $out
+end
+
+function _agent_is_chart_request --description "True if user wants a data chart (internal)"
+    test -n "$(_agent_build_chart_cmd "$argv[1]")"
+end
+
+function _agent_build_chart_cmd --description "Build chart args from NL (internal)"
+    set -l cmd "$argv[1]"
+    set -l py (_arka_python)
+    set -l rest ($py (_arka_py_script arka_chart.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
+    if test (count $rest) -gt 0
+        echo "chart $rest"
+    end
 end
 
 function _agent_is_google_gmail_request --description "True if user wants Gmail via Google integration (internal)"
@@ -10845,6 +10880,8 @@ function _agent_skill_matches_request --description "True if skill fits the user
             string match -qr '(?i)(wifi|wi-fi|wireless).*(info|network|signal|ssid)|what wifi|am i on wifi' "$cmd"
         case generate_image
             string match -qr '(?i)(generate|create|draw|make|paint|sketch).*(image|picture|photo|art)' "$cmd"
+        case chart
+            _agent_is_chart_request "$cmd"
         case generate_video
             string match -qr '(?i)(generate|create|make|render|produce|animate|film).*(video|clip|animation|movie)|^(animate|film)\s+' "$cmd"
         case generate_password store_password pass
@@ -11005,6 +11042,13 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
     if string match -qr '(?i)(weather|forecast|temp|rain|sunny|cloudy|snow|storm|umbrella|will it rain|is it going to rain|is it raining)' "$clean"
         echo "skill|hyperlocal_weather $cmd|Weather via Open-Meteo + IP"
         return
+    end
+    if _agent_is_chart_request "$cmd"
+        set -l parts (_agent_build_chart_cmd "$cmd")
+        if test -n "$parts"
+            echo "skill|$parts|Line, bar, pie, or scatter chart (matplotlib PNG)"
+            return
+        end
     end
     if string match -qr '(?i)^(generate|create|make|render|produce|animate|film)\s+(?:an?\s+)?(?:video|clip|animation|movie|animated\s+video)\b|^(animate|film)\s+' "$clean"
         echo "skill|generate_video|Generate real AI video (Pollinations key or Gemini billing required)"
@@ -11328,6 +11372,11 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         echo "skill|$g_route|Google Calendar or Gmail"
         return
     end
+    if _agent_is_chart_request "$cmd"
+        set -l parts (_agent_build_chart_cmd "$cmd")
+        test -n "$parts"; and echo "skill|$parts|Line, bar, pie, or scatter chart (matplotlib PNG)"
+        return
+    end
     if _agent_is_desktop_organize_request "$cmd"
         echo "skill|classify_files|Auto-sort files in Downloads by type"
         return
@@ -11383,6 +11432,11 @@ function _agent_correct_interpretation --description "Fix bad LLM skill picks us
 
     if set -l g_route (_agent_route_google "$cmd")
         echo $g_route
+        return
+    end
+
+    if _agent_is_chart_request "$cmd"
+        echo (_agent_build_chart_cmd "$cmd")
         return
     end
 
@@ -13285,6 +13339,8 @@ function agent --description "Run commands safely: executes safe commands automa
         echo "  daily_brief            - Weather + top news headlines"
         echo "  wifi_info              - Current Wi-Fi network and signal"
         echo "  generate_image <prompt> - Generate images with Gemini"
+        echo "  chart line AAPL MSFT --range 3mo  - Stock price chart (matplotlib PNG)"
+        echo "  chart bar --data 'Apple:230,Samsung:210' - Bar graph from numbers"
         echo "  generate_video <prompt> - Real AI video (POLLINATIONS_API_KEY or Gemini billing required)"
         echo ""
         echo (set_color cyan)"  arka aie|yt-bulk|queue|brief|wifi|agent — same via subcommands"(set_color normal)
@@ -13364,6 +13420,11 @@ function agent --description "Run commands safely: executes safe commands automa
 
     if test -z "$interpreted"; and _agent_is_gmail_summarize_request "$cmd"
         set interpreted (_agent_build_gmail_cmd "$cmd" summarize)
+        set route_source offline
+    end
+
+    if test -z "$interpreted"; and _agent_is_chart_request "$cmd"
+        set interpreted (_agent_build_chart_cmd "$cmd")
         set route_source offline
     end
 
@@ -13552,6 +13613,11 @@ function agent --description "Run commands safely: executes safe commands automa
     else if string match -qr '(?i)^(stock|market)\s+(news|prices|policy|strategy|volatility|dashboard|context|invest|macro|emotion|fundamentals|funding|competition)\b' "$clean_cmd"
         set -l stock_rest (string replace -r -i '^(?:stock|market)\s+' '' "$cmd" | string trim)
         set interpreted "stock $stock_rest"
+    else if _agent_is_chart_request "$cmd"
+        set interpreted (_agent_build_chart_cmd "$cmd")
+        if test -n "$interpreted"
+            set route_source offline
+        end
     else if string match -qr '(?i)^(analyze|check)\s+(?:stock\s+)?[A-Z][A-Z0-9.-]{1,12}\b' "$clean_cmd"
         set -l stock_ticker (string upper (string match -r '(?i)([A-Z][A-Z0-9.-]{1,12})\s*$' "$cmd")[2])
         set interpreted "stock analyze $stock_ticker"
@@ -14101,6 +14167,10 @@ function agent --description "Run commands safely: executes safe commands automa
     else if set -l g_route (_agent_route_google "$cmd")
         echo (set_color yellow)"💡 [Google → $g_route]"(set_color normal)
         _agent_dispatch_one "$g_route"
+    else if _agent_is_chart_request "$cmd"
+        set -l chart_cmd (_agent_build_chart_cmd "$cmd")
+        echo (set_color yellow)"💡 [Chart → $chart_cmd]"(set_color normal)
+        _agent_dispatch_one "$chart_cmd"
     else if _agent_is_files_preference_question "$cmd"
         echo (set_color yellow)"💡 [Image save locations]"(set_color normal)
         files_preference_help $argv

@@ -68,6 +68,7 @@ LEGACY_MODULES: dict[str, str] = {
     "arka_pdf_rag": "arka.pdf.rag",
     "arka_generate_image": "arka.generate.image",
     "arka_generate_video": "arka.generate.video",
+    "arka_chart": "arka.charts.plot",
     "arka_aie": "arka.aie.cli",
     "web_answer": "arka.agent.web_answer",
     "edge_speak": "arka.voice.edge_speak",

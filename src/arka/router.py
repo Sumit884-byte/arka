@@ -129,6 +129,17 @@ def _parse_password_name(cmd: str) -> str:
     return name
 
 
+def _route_chart(cmd: str) -> Route | None:
+    try:
+        from arka.charts.plot import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return Route("chart " + " ".join(shlex.quote(a) for a in argv), source="offline")
+
+
 def _route_offline(cmd: str) -> Route | None:
     clean = cmd.lower()
 
@@ -196,6 +207,10 @@ def _route_offline(cmd: str) -> Route | None:
     if re.match(r"^/", cmd):
         forced = cmd.lstrip("/").strip() or cmd
         return Route(f"deep_web_answer {forced}")
+
+    chart_route = _route_chart(cmd)
+    if chart_route:
+        return chart_route
 
     if re.search(r"(weather|forecast|temp|rain|will it rain)", clean):
         return Route(f"hyperlocal_weather {cmd}")

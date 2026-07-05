@@ -136,6 +136,7 @@ python3 ~/.config/fish/arka_llm.py active-model
 Some skills ship their own defaults when you don't pass flags:
 
 - Gmail NL: **unread** requests fetch **all** unread mail (`--all`); header shows total unread (e.g. `10 unread emails`), not just the fetched batch. Summarize without “unread” still defaults to the last 2 days; day-window queries use `--limit 100`. Caps: `ARKA_GMAIL_MAX`, `ARKA_GMAIL_SUMMARIZE_MAX`.
+- Charts: `chart line` pulls Yahoo Finance prices; `chart bar` / `chart pie` / `chart scatter` for comparisons. Saves PNG to `~/Pictures/arka-generated/`.
 - YouTube research: 2 videos (`YT_RESEARCH_MAX=2`)
 - Goal agent: 25 steps (`GOAL_MAX_STEPS=25`)
 - Reminders: 1 hour when no time given (`REMIND_DEFAULT=1h`)
@@ -569,6 +570,55 @@ GOOGLE_OAUTH_CLIENT_SECRET=...
 # ARKA_GMAIL_MAX=500                  # max messages when --all
 # ARKA_GMAIL_SUMMARIZE_MAX=40         # max emails in one AI digest
 # ARKA_GMAIL_SUMMARIZE_CHARS=120000   # model context budget for bodies
+```
+
+
+
+### Charts & graphs (`chart`)
+
+Turn numbers into PNG charts (matplotlib). Supports line (stocks), bar, pie, and scatter — inspired by the [charts demo app](https://github.com/Sumit884-byte/charts).
+
+```fish
+pip install matplotlib   # once
+
+chart line AAPL TSLA --range 3mo
+chart line RELIANCE.NS --range 6mo
+chart bar --data "Apple:230,Samsung:210,Xiaomi:140" --title "Phone sales (M units)"
+chart pie --data "Organic:400,Direct:300,Referral:300,Social:200" --title "Traffic sources"
+chart scatter --data "100:200,120:190,170:280" --xlabel "Ad spend" --ylabel "Revenue"
+```
+
+**Natural language (offline routing — same path as Gmail):**
+
+Phrases are parsed by `arka_chart.py parse` (no LLM). You do **not** need the word “chart” if the request has clear numbers or stock names:
+
+```fish
+arka chart TSLA and NVDA last 3 months
+arka graph apple microsoft stock prices
+arka compare apple and tesla stock last year
+arka phone sales Apple 230 Samsung 210 Xiaomi 140    # bar chart
+arka pie chart traffic sources organic 400 direct 300 referral 300 social 200
+arka scatter ad spend vs revenue 100 200 120 190 170 280 140 240
+arka market share pie Apple 40 Samsung 30 Xiaomi 20
+```
+
+Preview routing without running:
+
+```fish
+agent_route "pie chart traffic sources organic 400 direct 300"
+# → skill|chart pie --data Organic:400,Direct:300 …
+
+agent_route "scatter ad spend vs revenue 100 200 120 190 170 280"
+# → skill|chart scatter --data 100:200,120:190,170:280 …
+```
+
+Flow: your words → `_agent_build_chart_cmd` → `chart line|bar|pie|scatter …` → matplotlib PNG.
+
+Charts save to `~/Pictures/arka-generated/` (or `CHART_OUTPUT_DIR` / `IMAGE_OUTPUT_DIR`) and open automatically on macOS/Linux.
+
+```env
+# CHART_OUTPUT_DIR=~/Pictures/arka-generated
+# OPEN_CHART=1    # open PNG after save (default on)
 ```
 
 
