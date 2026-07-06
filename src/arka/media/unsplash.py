@@ -37,7 +37,9 @@ def setup_hint() -> str:
     )
 
 
-def search_photos(query: str, *, count: int = 1, orientation: str = "landscape") -> list[UnsplashPhoto]:
+def search_photos(
+    query: str, *, count: int = 1, orientation: str = "landscape", size: str = "regular"
+) -> list[UnsplashPhoto]:
     key = access_key()
     if not key:
         raise SystemExit(setup_hint())
@@ -70,7 +72,10 @@ def search_photos(query: str, *, count: int = 1, orientation: str = "landscape")
         urls = row.get("urls") or {}
         user = row.get("user") or {}
         links = row.get("links") or {}
-        photo_url = urls.get("regular") or urls.get("full") or ""
+        if size == "full":
+            photo_url = urls.get("full") or urls.get("regular") or ""
+        else:
+            photo_url = urls.get("regular") or urls.get("full") or ""
         if not photo_url:
             continue
         results.append(

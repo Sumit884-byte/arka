@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 import sys
 import urllib.parse
 import urllib.request
@@ -251,21 +252,46 @@ def generate(
     return generate_pollinations(prompt, output, aspect, "flux")
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Generate images with Google Nano Banana (Gemini) or Pollinations"
-    )
-    parser.add_argument("prompt", help="Image description")
-    parser.add_argument("-o", "--output", help="Output file path")
-    parser.add_argument("-a", "--aspect", default="1:1", help="Aspect ratio")
-    parser.add_argument(
-        "-m",
-        "--model",
-        default="",
-        help=f"Nano Banana model (default: try {', '.join(NANO_BANANA_MODELS[:3])}…)",
-    )
-    args = parser.parse_args()
+def _extract_image_prompt(text: str) -> str:
+    return re.sub(
+        r"(?i)^(?:generate|create|draw|paint|make|sketch|design|show)\s+"
+        r"(?:an?\s+)?(?:image|picture|photo|art|drawing|painting|sketch|illustration|portrait|landscape)?\s*(?:of)?\s*",
+        "",
+        text.strip(),
+    ).strip()
 
+
+def nl_to_argv(text: str) -> list[str]:
+    t = text.strip()
+    if not t:
+        return []
+
+    if re.search(
+        r"(?i)(?:^|\b)(?:generate|create|make|draw|design)\s+(?:an?\s+)?(?:youtube\s+)?thumbnail\b",
+        t,
+    ):
+        return []
+
+    if re.search(
+        r"(?i)(?:^|\b)(?:generate|create|make|draw|paint|sketch|design)\s+(?:an?\s+)?"
+        r"(?:image|picture|photo|art|drawing|sketch|painting|illustration|portrait|landscape)\b",
+        t,
+    ) or re.match(r"(?i)^(draw|paint|sketch)\s+", t):
+        prompt = _extract_image_prompt(t)
+        return [prompt] if prompt else []
+
+    return []
+
+
+def cmd_parse(args: argparse.Namespace) -> int:
+    argv = nl_to_argv(" ".join(args.text))
+    if not argv:
+        return 1
+    print(" ".join(shlex.quote(a) for a in argv))
+    return 0
+
+
+def cmd_generate(args: argparse.Namespace) -> int:
     aspect = args.aspect
     if aspect not in ALLOWED_RATIOS:
         print(f"Invalid aspect '{aspect}'. Choose: {', '.join(sorted(ALLOWED_RATIOS))}", file=sys.stderr)
@@ -286,7 +312,6 @@ def main() -> int:
     if os.environ.get("OPEN_IMAGE", "1") not in ("0", "false"):
         try:
             import subprocess
-            import sys
 
             if sys.platform == "darwin":
                 opener = ["open", str(saved)]
@@ -299,6 +324,62 @@ def main() -> int:
         except OSError:
             pass
     return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        description="Generate images with Google Nano Banana (Gemini) or Pollinations"
+    )
+    sub = p.add_subparsers(dest="cmd")
+
+    p_gen = sub.add_parser("generate", help="Generate image from prompt")
+    p_gen.add_argument("prompt", help="Image description")
+    p_gen.add_argument("-o", "--output", help="Output file path")
+    p_gen.add_argument("-a", "--aspect", default="1:1", help="Aspect ratio")
+    p_gen.add_argument(
+        "-m",
+        "--model",
+        default="",
+        help=f"Nano Banana model (default: try {', '.join(NANO_BANANA_MODELS[:3])}…)",
+    )
+    p_gen.set_defaults(func=cmd_generate)
+
+    p_parse = sub.add_parser("parse", help="Parse natural language → generate_image args")
+    p_parse.add_argument("text", nargs="+")
+    p_parse.set_defaults(func=cmd_parse)
+
+    return p
+
+
+def main(argv: list[str] | None = None) -> int:
+    argv = list(argv if argv is not None else sys.argv[1:])
+    if not argv:
+        build_parser().print_help()
+        return 0
+
+    if argv[0] == "parse":
+        args = build_parser().parse_args(argv)
+        return args.func(args)
+
+    if argv[0] not in {"generate", "-h", "--help"}:
+        nl = nl_to_argv(" ".join(argv))
+        if nl:
+            argv = nl
+
+    parser = argparse.ArgumentParser(
+        description="Generate images with Google Nano Banana (Gemini) or Pollinations"
+    )
+    parser.add_argument("prompt", help="Image description")
+    parser.add_argument("-o", "--output", help="Output file path")
+    parser.add_argument("-a", "--aspect", default="1:1", help="Aspect ratio")
+    parser.add_argument(
+        "-m",
+        "--model",
+        default="",
+        help=f"Nano Banana model (default: try {', '.join(NANO_BANANA_MODELS[:3])}…)",
+    )
+    args = parser.parse_args(argv)
+    return cmd_generate(args)
 
 
 if __name__ == "__main__":

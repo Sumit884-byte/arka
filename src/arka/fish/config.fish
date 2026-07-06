@@ -1782,7 +1782,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         create_desktop_app fix_graphics_driver install_app install_apt install_flatpak \
         install_snap install_package install_uv stock_analysis stock macro emotion \
         auto_click auto_copy decrypt_pdf classify_files cleanup_downloads watch_zip monitor_x \
-        generate_image generate_video compose_video chart youtube_transcript youtube_download yt_download media_transcript transcribe_media summarize_url daily_brief wifi_info \
+        generate_image generate_thumbnail generate_video compose_video chart youtube_transcript youtube_download yt_download media_transcript transcribe_media summarize_url daily_brief wifi_info \
         folder_summarize playlist_summarize youtube_research yt_research find_videos codebase_ingest \
         agent_remember agent_recall agent_memory agent_trace agent_why agent_last \
         agent_resume agent_research agent_nudge agent_watch agent_routine agent_fanout \
@@ -2209,6 +2209,8 @@ function skills --description "Show what commands the agent can auto-run"
                 echo (set_color green)"  wifi_info      "(set_color normal)"Current Wi-Fi network + signal"
             case generate_image
                 echo (set_color green)"  generate_image "(set_color normal)"<prompt> — Nano Banana (Gemini) + Pollinations nanobanana fallback"
+            case generate_thumbnail
+                echo (set_color green)"  generate_thumbnail "(set_color normal)"--topic 'ai' — YouTube thumbnail (Unsplash + title overlay)"
             case chart
                 echo (set_color green)"  chart          "(set_color normal)"line | bar | pie | scatter — matplotlib PNG charts"
             case generate_video
@@ -5490,6 +5492,20 @@ function generate_image --description "Generate images via Google Nano Banana (G
     set -l prompt (string join ' ' -- $prompt_parts)
     set -l py (_arka_python)
     $py (_arka_py_script arka_generate_image.py) $flags -- "$prompt"
+end
+
+function generate_thumbnail --description "YouTube thumbnail — Unsplash photo + title overlay"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        echo "Usage: generate_thumbnail generate --topic 'ai' [--title 'What is AI?'] [-o out.png]"
+        echo "       generate_thumbnail check"
+        echo ""
+        echo "NL: arka generate thumbnail for ai video"
+        echo ""
+        echo "Requires: UNSPLASH_ACCESS_KEY + Pillow"
+        return 1
+    end
+    $py (_arka_py_script arka_generate_thumbnail.py) $argv
 end
 
 function chart --description "Draw line, bar, pie, scatter, histogram, or pareto charts (matplotlib → PNG)"
@@ -9363,6 +9379,14 @@ function _agent_offline_route_cmd --description "Full symbolic NL to skill comma
         echo (_agent_build_describe_image_cmd "$cmd")
         return 0
     end
+    if _agent_is_generate_thumbnail_request "$cmd"
+        echo (_agent_build_generate_thumbnail_cmd "$cmd")
+        return 0
+    end
+    if _agent_is_generate_image_request "$cmd"
+        echo (_agent_build_generate_image_cmd "$cmd")
+        return 0
+    end
     if _agent_is_compose_video_request "$cmd"
         echo (_agent_build_compose_video_cmd "$cmd")
         return 0
@@ -9423,6 +9447,32 @@ end
 
 function _agent_is_describe_image_request --description "True if user wants vLLM image description (internal)"
     test -n "$(_agent_build_describe_image_cmd "$argv[1]")"
+end
+
+function _agent_build_generate_image_cmd --description "Build generate_image args from NL (internal)"
+    set -l cmd "$argv[1]"
+    set -l py (_arka_python)
+    set -l rest ($py (_arka_py_script arka_generate_image.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
+    if test (count $rest) -gt 0
+        echo "generate_image $rest"
+    end
+end
+
+function _agent_is_generate_image_request --description "True if user wants AI image generation (internal)"
+    test -n "$(_agent_build_generate_image_cmd "$argv[1]")"
+end
+
+function _agent_build_generate_thumbnail_cmd --description "Build generate_thumbnail args from NL (internal)"
+    set -l cmd "$argv[1]"
+    set -l py (_arka_python)
+    set -l rest ($py (_arka_py_script arka_generate_thumbnail.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
+    if test (count $rest) -gt 0
+        echo "generate_thumbnail generate $rest"
+    end
+end
+
+function _agent_is_generate_thumbnail_request --description "True if user wants YouTube thumbnail (internal)"
+    test -n "$(_agent_build_generate_thumbnail_cmd "$argv[1]")"
 end
 
 function _agent_build_compose_video_cmd --description "Build compose_video args from NL (internal)"
@@ -11165,8 +11215,10 @@ function _agent_skill_matches_request --description "True if skill fits the user
             string match -qr '(?i)(daily brief|morning brief|news brief|today.s brief)' "$cmd"
         case wifi_info
             string match -qr '(?i)(wifi|wi-fi|wireless).*(info|network|signal|ssid)|what wifi|am i on wifi' "$cmd"
+        case generate_thumbnail
+            _agent_is_generate_thumbnail_request "$cmd"
         case generate_image
-            string match -qr '(?i)(generate|create|draw|make|paint|sketch).*(image|picture|photo|art)' "$cmd"
+            _agent_is_generate_image_request "$cmd"
         case chart
             _agent_is_chart_request "$cmd"
         case drawing_ask
@@ -11467,6 +11519,10 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
     if string match -qr '(?i)^(analyze|check)\s+(?:stock\s+)?([A-Z][A-Z0-9.-]{1,12})\b' "$clean"
         set -l ticker (string upper (string match -r '(?i)([A-Z][A-Z0-9.-]{1,12})\s*$' "$cmd")[2])
         echo "skill|stock analyze $ticker|AI stock strategy backtest"
+        return
+    end
+    if string match -qr '(?i)(?:^|\b)(?:generate|create|make|design)\s+(?:an?\s+)?(?:youtube\s+)?thumbnail\b' "$clean"
+        echo "skill|generate_thumbnail|YouTube thumbnail — Unsplash photo + title overlay"
         return
     end
     if string match -qr '(?i)^(generate|create|make|draw|paint|sketch|show)\s+(?:an?\s+)?(?:image|picture|photo|art|drawing|sketch|painting|illustration|portrait|landscape)\b|^(draw|paint|sketch)\s+' "$clean"
@@ -14146,6 +14202,12 @@ function agent --description "Run commands safely: executes safe commands automa
         else
             set interpreted "predictions $pred_flags"
         end
+    else if _agent_is_generate_thumbnail_request "$clean_cmd"
+        set interpreted (_agent_build_generate_thumbnail_cmd "$cmd")
+        set route_source offline
+    else if _agent_is_generate_image_request "$clean_cmd"
+        set interpreted (_agent_build_generate_image_cmd "$cmd")
+        set route_source offline
     else if _agent_is_compose_video_request "$clean_cmd"
         set interpreted (_agent_build_compose_video_cmd "$cmd")
         set route_source offline

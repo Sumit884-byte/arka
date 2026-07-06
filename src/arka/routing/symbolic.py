@@ -155,6 +155,28 @@ def route_compose_video(cmd: str) -> str | None:
     return "compose_video " + " ".join(shlex.quote(a) for a in argv)
 
 
+def route_generate_image(cmd: str) -> str | None:
+    try:
+        from arka.generate.image import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "generate_image " + " ".join(shlex.quote(a) for a in argv)
+
+
+def route_generate_thumbnail(cmd: str) -> str | None:
+    try:
+        from arka.media.thumbnail import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "generate_thumbnail generate " + " ".join(shlex.quote(a) for a in argv)
+
+
 def route_offline_extras(cmd: str) -> str | None:
     """Try supplemental NL routes not always available via fish bridge."""
     for fn in (
@@ -163,6 +185,8 @@ def route_offline_extras(cmd: str) -> str | None:
         route_chart,
         route_drawing,
         route_describe_image,
+        route_generate_thumbnail,
+        route_generate_image,
         route_download,
         route_compose_video,
         route_timer,
