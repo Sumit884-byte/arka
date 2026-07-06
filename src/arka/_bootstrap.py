@@ -60,6 +60,7 @@ LEGACY_MODULES: dict[str, str] = {
     "arka_remote_server": "arka.integrations.remote_server",
     "arka_phone": "arka.integrations.phone",
     "arka_remind": "arka.integrations.remind",
+    "arka_routines": "arka.integrations.routines",
     "arka_sports": "arka.integrations.sports",
     "arka_password_vault": "arka.integrations.password_vault",
     "arka_google": "arka.integrations.google_workspace",

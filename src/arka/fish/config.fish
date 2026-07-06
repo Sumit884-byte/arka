@@ -1781,7 +1781,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         agent_resume agent_research agent_nudge agent_watch agent_routine agent_fanout \
         agent_code agent_handoff agent_browser transcript_ask media_ask \
         meeting_agent study_agent inbox_agent compare_agent profession pr_check \
-        arka_ask semantic_memory supermemory speak_research voice_session handoff_notify remind predictions stock \
+        arka_ask semantic_memory supermemory speak_research voice_session handoff_notify remind routines predictions stock \
         rag_setup rag_status voice_agent wake_control \
         agent_ask web_answer deep_web_answer web_essay calc chat_reset set_location files_preference_help google \
         nearby_places map_download error_helper deep_queue app_usage internet_enhance aie \
@@ -2180,6 +2180,8 @@ function skills --description "Show what commands the agent can auto-run"
                 echo (set_color green)"  handoff_notify   "(set_color normal)"list|run — phone handoff alerts"
             case remind
                 echo (set_color green)"  remind           "(set_color normal)"in 30m msg | at 5pm msg | list | cancel ID"
+            case routines
+                echo (set_color green)"  routines         "(set_color normal)"add daily 9am \"task\" | list | install | remove"
             case predictions
                 echo (set_color green)"  predictions      "(set_color normal)"[--domain antiques|stocks|strategy] [--deep] <topic>"
             case stock stock_analysis
@@ -9094,6 +9096,9 @@ function _agent_is_general_chat --description "True if plain conversational inpu
     if string match -qr '(?i)^(install|play|open|run|create|download|search|list|show|fix|set|take|timer|remind|weather|pdf|ingest|screenshot|spotify|whatsapp|send|loop|agent_|generate_image|generate_video|generate_password|chart|graph|plot|predictions|stock|translate|survive_lang|pr_check|cheat|excuse|bored)\b' "$clean"
         return 1
     end
+    if string match -qr '(?i)^(routines?\b|every\s+day|each\s+day|daily\s+at|every\s+morning|every\s+evening|every\s+hour|schedule\s+daily)\b' "$clean"
+        return 1
+    end
     if string match -qr '(?i)^(generate|create|make)\s+(?:a |an |the |me )?(?:new )?(password|passcode)\b' "$clean"
         return 1
     end
@@ -9201,6 +9206,89 @@ function _agent_build_gmail_cmd --description "Build google gmail args from NL (
         set out "$out --snippet"
     end
     echo $out
+end
+
+function _agent_is_routines_request --description "True if user wants a daily/hourly routine (internal)"
+    test -n "$(_agent_build_routines_cmd "$argv[1]")"
+end
+
+function _agent_build_routines_cmd --description "Build routines args from NL (internal)"
+    set -l cmd "$argv[1]"
+    set -l py (_arka_python)
+    set -l rest ($py (_arka_py_script arka_routines.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
+    if test (count $rest) -gt 0
+        echo "routines $rest"
+    end
+end
+
+function _agent_is_remind_request --description "True if user wants a reminder (internal)"
+    test -n "$(_agent_build_remind_cmd "$argv[1]")"
+end
+
+function _agent_build_remind_cmd --description "Build remind args from NL (internal)"
+    set -l cmd "$argv[1]"
+    set -l py (_arka_python)
+    set -l rest ($py (_arka_py_script arka_remind.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
+    if test (count $rest) -gt 0
+        echo "remind $rest"
+    end
+end
+
+function _agent_parse_guess_route --description "Extract skill command from guess_route line (internal)"
+    set -l line "$argv[1]"
+    set -l parts (string split "|" "$line")
+    if test (count $parts) -lt 2
+        return 1
+    end
+    switch $parts[1]
+        case skill shell llm_codegen
+            echo $parts[2]
+            return 0
+        case listen
+            echo "listen $parts[2]"
+            return 0
+        case none llm
+            return 1
+    end
+    return 1
+end
+
+function _agent_offline_route_cmd --description "Full symbolic NL to skill command (internal)"
+    set -l cmd "$argv[1]"
+    if _agent_is_remind_request "$cmd"
+        echo (_agent_build_remind_cmd "$cmd")
+        return 0
+    end
+    if _agent_is_routines_request "$cmd"
+        echo (_agent_build_routines_cmd "$cmd")
+        return 0
+    end
+    if _agent_is_chart_request "$cmd"
+        echo (_agent_build_chart_cmd "$cmd")
+        return 0
+    end
+    if set -l g (_agent_route_google "$cmd")
+        echo $g
+        return 0
+    end
+    if _agent_is_gmail_summarize_request "$cmd"
+        echo (_agent_build_gmail_cmd "$cmd" summarize)
+        return 0
+    end
+    if _agent_is_investment_question "$cmd"
+        set -l topic (_agent_strip_query_prefix "$cmd")
+        echo "predictions --domain stocks --deep "(string escape --style=script -- $topic)
+        return 0
+    end
+    set -l prev $ROUTE_MODE
+    set -gx ROUTE_MODE symbolic_only
+    set -l guess (_agent_guess_route "$cmd")
+    if set -q prev
+        set -gx ROUTE_MODE $prev
+    else
+        set -e ROUTE_MODE
+    end
+    _agent_parse_guess_route "$guess"
 end
 
 function _agent_is_chart_request --description "True if user wants a data chart (internal)"
@@ -10353,6 +10441,23 @@ function handoff_notify --description "Handoff notifications for phone (list/rea
     end
 end
 
+function routines --description "Schedule daily or hourly tasks (launchd/systemd timers)"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        echo "Usage: routines add daily|hourly|HH:MM \"task\""
+        echo "       routines list | install | remove ID | run ID"
+        echo ""
+        echo "NL: arka every day at 9am check unread emails"
+        echo "    arka routine daily brief at 8am"
+        echo "    arka every morning summarize my gmail"
+        echo ""
+        echo "Tasks run via agent (natural language OK). Install timers: routines install"
+        return 1
+    end
+    $py (_arka_py_script arka_routines.py) $argv
+    return $status
+end
+
 function remind --description "Schedule a reminder (fires at time; again when you're back if idle/off)"
     set -l py (_arka_python)
     if test (count $argv) -eq 0
@@ -10891,6 +10996,9 @@ function _agent_skill_matches_request --description "True if skill fits the user
             string match -qr '(?i)(predict|prediction|forecast|opportunit|outlook).*(antique|stock|market|strategy|invest|collectible|portfolio)|^(predict|forecast)\s+|(where\s+(to|should\s+i)\s+invest|how\s+(to|can\s+i)\s+invest|make\s+(?:a\s+)?profit)' "$cmd"
         case remind
             string match -qr '(?i)\bremind(?:\s+me)?\b' "$cmd"
+            and not string match -qr '(?i)\b(?:every\s+day|each\s+day|daily\s+at|routine)\b' "$cmd"
+        case routines
+            _agent_is_routines_request "$cmd"
         case inbox_agent
             if _agent_is_gmail_summarize_request "$cmd"
                 return 1
@@ -11049,6 +11157,76 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
             echo "skill|$parts|Line, bar, pie, or scatter chart (matplotlib PNG)"
             return
         end
+    end
+    if _agent_is_routines_request "$cmd"
+        set -l parts (_agent_build_routines_cmd "$cmd")
+        if test -n "$parts"
+            echo "skill|$parts|Daily or hourly scheduled task"
+            return
+        end
+    end
+    if _agent_is_remind_request "$cmd"
+        set -l parts (_agent_build_remind_cmd "$cmd")
+        if test -n "$parts"
+            echo "skill|$parts|Reminder (idle/shutdown aware)"
+            return
+        end
+    end
+    if string match -qr '(?i)\b(timer|countdown)\b' "$clean"
+        set -l trest (string replace -r -i '^(?:please\s+)?(?:set\s+a\s+)?(?:timer|countdown)\s+(?:for\s+)?' '' "$cmd" | string trim)
+        if test -n "$trest"
+            echo "skill|timer $trest|Countdown timer"
+        else
+            echo "skill|timer|Countdown timer"
+        end
+        return
+    end
+    if string match -qr '(?i)(search\s+(?:the\s+)?(?:web|internet)(?:\s+for)?|google\s+(?:search\s+)?(?:for\s+)?)' "$clean"
+        set -l q (string replace -r -i '^(?:search\s+(?:the\s+)?(?:web|internet)(?:\s+for)?|google\s+(?:search\s+)?(?:for\s+)?)' '' "$cmd" | string trim)
+        test -n "$q"; and echo "skill|search_web $q|Web search"
+        test -n "$q"; and return
+    end
+    if string match -qr '(?i)\b(?:code\s+agent|agent\s+code)\b' "$clean"
+        set -l goal (string replace -r -i '.*(?:code\s+agent|agent\s+code)\s*' '' "$cmd" | string trim)
+        test -n "$goal"; and echo "skill|agent_code $goal|Code agent"
+        test -n "$goal"; and return
+        echo "skill|agent_code|Code agent"
+        return
+    end
+    if string match -qr '(?i)\b(?:browser\s+agent|agent\s+browser)\b' "$clean"
+        set -l goal (string replace -r -i '.*(?:browser\s+agent|agent\s+browser)\s*' '' "$cmd" | string trim)
+        test -n "$goal"; and echo "skill|agent_browser $goal|Browser automation agent"
+        test -n "$goal"; and return
+        echo "skill|agent_browser|Browser automation agent"
+        return
+    end
+    if string match -qr '(?i)\b(?:meeting\s+agent|summarize\s+(?:these\s+)?meeting\s+notes)\b' "$clean"
+        set -l notes (string replace -r -i '^(?:meeting\s+agent|summarize\s+(?:these\s+)?meeting\s+notes)\s*' '' "$cmd" | string trim)
+        test -n "$notes"; and echo "skill|meeting_agent $notes|Meeting notes agent"
+        test -n "$notes"; and return
+        echo "skill|meeting_agent|Meeting notes agent"
+        return
+    end
+    if string match -qr '(?i)\b(?:study\s+agent|help\s+me\s+study)\b' "$clean"
+        set -l topic (string replace -r -i '^(?:study\s+agent|help\s+me\s+study)\s*' '' "$cmd" | string trim)
+        test -n "$topic"; and echo "skill|study_agent $topic|Study agent"
+        test -n "$topic"; and return
+        echo "skill|study_agent|Study agent"
+        return
+    end
+    if string match -qr '(?i)\bsupermemory\b' "$clean"
+        set -l q (string replace -r -i '^.*supermemory\s*' '' "$cmd" | string trim)
+        test -n "$q"; and echo "skill|supermemory $q|Supermemory recall/store"
+        test -n "$q"; and return
+        echo "skill|supermemory|Supermemory"
+        return
+    end
+    if string match -qr '(?i)\b(?:set\s+my\s+location|my\s+location\s+is|i\s+am\s+in)\b' "$clean"
+        set -l loc (string replace -r -i '^(?:please\s+)?(?:set\s+my\s+location\s+(?:to\s+)?|my\s+location\s+is\s+|i\s+am\s+in\s+)' '' "$cmd" | string trim)
+        test -n "$loc"; and echo "skill|set_location $loc|Save location for weather/nearby"
+        test -n "$loc"; and return
+        echo "skill|set_location|Save location"
+        return
     end
     if string match -qr '(?i)^(generate|create|make|render|produce|animate|film)\s+(?:an?\s+)?(?:video|clip|animation|movie|animated\s+video)\b|^(animate|film)\s+' "$clean"
         echo "skill|generate_video|Generate real AI video (Pollinations key or Gemini billing required)"
@@ -11377,6 +11555,11 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         test -n "$parts"; and echo "skill|$parts|Line, bar, pie, or scatter chart (matplotlib PNG)"
         return
     end
+    if _agent_is_routines_request "$cmd"
+        set -l parts (_agent_build_routines_cmd "$cmd")
+        test -n "$parts"; and echo "skill|$parts|Daily or hourly scheduled task"
+        return
+    end
     if _agent_is_desktop_organize_request "$cmd"
         echo "skill|classify_files|Auto-sort files in Downloads by type"
         return
@@ -11437,6 +11620,16 @@ function _agent_correct_interpretation --description "Fix bad LLM skill picks us
 
     if _agent_is_chart_request "$cmd"
         echo (_agent_build_chart_cmd "$cmd")
+        return
+    end
+
+    if _agent_is_routines_request "$cmd"
+        echo (_agent_build_routines_cmd "$cmd")
+        return
+    end
+
+    if _agent_is_remind_request "$cmd"
+        echo (_agent_build_remind_cmd "$cmd")
         return
     end
 
@@ -12366,6 +12559,13 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                         remind status
                     end
                     return $status
+                case routines routine schedule
+                    if test (count $argv) -ge 2
+                        routines $argv[2..-1]
+                    else
+                        routines list
+                    end
+                    return $status
                 case yt-bulk ytbulk youtube-bulk youtube_bulk yt_bulk
                     if test (count $argv) -ge 2
                         youtube_bulk $argv[2..-1]
@@ -13246,6 +13446,7 @@ function agent --description "Run commands safely: executes safe commands automa
         echo "  pomodoro [f] [b]       - Timer with visual progress bar, alerts, notifications"
         echo "  timer <duration>       - Countdown timer (e.g. 5m, 30s, 1h)"
         echo "  remind <when> <msg>    - Reminder (idle/shutdown aware; list|cancel|status)"
+        echo "  routines add daily 9am \"task\" - Schedule daily/hourly tasks (list|install|remove)"
         echo "  todo [action] [task]   - Quick terminal Todo list manager"
         echo "  clipboard [text]       - Read from or write to the system clipboard"
         echo "  translate <lang> <txt> - Translate text to target language via LLM"
@@ -13423,9 +13624,27 @@ function agent --description "Run commands safely: executes safe commands automa
         set route_source offline
     end
 
+    if test -z "$interpreted"; and _agent_is_remind_request "$cmd"
+        set interpreted (_agent_build_remind_cmd "$cmd")
+        set route_source offline
+    end
+
+    if test -z "$interpreted"; and _agent_is_routines_request "$cmd"
+        set interpreted (_agent_build_routines_cmd "$cmd")
+        set route_source offline
+    end
+
     if test -z "$interpreted"; and _agent_is_chart_request "$cmd"
         set interpreted (_agent_build_chart_cmd "$cmd")
         set route_source offline
+    end
+
+    if test -z "$interpreted"
+        set -l offline (_agent_offline_route_cmd "$cmd")
+        if test -n "$offline"
+            set interpreted $offline
+            set route_source offline
+        end
     end
 
     if test -z "$interpreted"; and test "$route_mode" = ai -o "$route_mode" = ai_only
@@ -13613,6 +13832,16 @@ function agent --description "Run commands safely: executes safe commands automa
     else if string match -qr '(?i)^(stock|market)\s+(news|prices|policy|strategy|volatility|dashboard|context|invest|macro|emotion|fundamentals|funding|competition)\b' "$clean_cmd"
         set -l stock_rest (string replace -r -i '^(?:stock|market)\s+' '' "$cmd" | string trim)
         set interpreted "stock $stock_rest"
+    else if _agent_is_remind_request "$cmd"
+        set interpreted (_agent_build_remind_cmd "$cmd")
+        if test -n "$interpreted"
+            set route_source offline
+        end
+    else if _agent_is_routines_request "$cmd"
+        set interpreted (_agent_build_routines_cmd "$cmd")
+        if test -n "$interpreted"
+            set route_source offline
+        end
     else if _agent_is_chart_request "$cmd"
         set interpreted (_agent_build_chart_cmd "$cmd")
         if test -n "$interpreted"
@@ -13711,15 +13940,14 @@ function agent --description "Run commands safely: executes safe commands automa
             set route_source offline
         end
     else if string match -qr '(weather|forecast|temp|rain|rainy|sunny|cloudy|snow|snowing|storm|hurricane|umbrella|will it rain|is it going to rain|is it raining)' "$clean_cmd"
-        set interpreted "weather $cmd"
+        set interpreted "hyperlocal_weather $cmd"
         set route_source offline
-    else if string match -qr '(?i)\bremind(?:\s+me)?\b' "$clean_cmd"
-        set -l rem_text (string replace -r -i '^(?:please\s+)?remind(?:\s+me)?\s+' '' "$cmd" | string trim)
-        if test -z "$rem_text"
-            set interpreted "remind status"
-        else
-            set interpreted "remind $rem_text"
-        end
+    else if _agent_is_remind_request "$cmd"
+        set interpreted (_agent_build_remind_cmd "$cmd")
+        set route_source offline
+    else if _agent_is_routines_request "$cmd"
+        set -l routine_cmd (_agent_build_routines_cmd "$cmd")
+        set interpreted $routine_cmd
         set route_source offline
     else if string match -qr '(timer|countdown)' "$clean_cmd"
         set interpreted "timer $args"
@@ -14167,6 +14395,14 @@ function agent --description "Run commands safely: executes safe commands automa
     else if set -l g_route (_agent_route_google "$cmd")
         echo (set_color yellow)"💡 [Google → $g_route]"(set_color normal)
         _agent_dispatch_one "$g_route"
+    else if _agent_is_remind_request "$cmd"
+        set -l rem_cmd (_agent_build_remind_cmd "$cmd")
+        echo (set_color yellow)"💡 [Remind → $rem_cmd]"(set_color normal)
+        _agent_dispatch_one "$rem_cmd"
+    else if _agent_is_routines_request "$cmd"
+        set -l routine_cmd (_agent_build_routines_cmd "$cmd")
+        echo (set_color yellow)"💡 [Routine → $routine_cmd]"(set_color normal)
+        _agent_dispatch_one "$routine_cmd"
     else if _agent_is_chart_request "$cmd"
         set -l chart_cmd (_agent_build_chart_cmd "$cmd")
         echo (set_color yellow)"💡 [Chart → $chart_cmd]"(set_color normal)

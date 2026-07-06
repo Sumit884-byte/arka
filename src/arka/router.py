@@ -131,13 +131,38 @@ def _parse_password_name(cmd: str) -> str:
 
 def _route_chart(cmd: str) -> Route | None:
     try:
-        from arka.charts.plot import nl_to_argv
+        from arka.routing.symbolic import route_chart
+
+        skill = route_chart(cmd)
+        if skill:
+            return Route(skill, source="offline")
     except ImportError:
-        return None
-    argv = nl_to_argv(cmd.strip())
-    if not argv:
-        return None
-    return Route("chart " + " ".join(shlex.quote(a) for a in argv), source="offline")
+        pass
+    return None
+
+
+def _route_routines(cmd: str) -> Route | None:
+    try:
+        from arka.routing.symbolic import route_routines
+
+        skill = route_routines(cmd)
+        if skill:
+            return Route(skill, source="offline")
+    except ImportError:
+        pass
+    return None
+
+
+def _route_remind(cmd: str) -> Route | None:
+    try:
+        from arka.routing.symbolic import route_remind
+
+        skill = route_remind(cmd)
+        if skill:
+            return Route(skill, source="offline")
+    except ImportError:
+        pass
+    return None
 
 
 def _route_offline(cmd: str) -> Route | None:
@@ -208,9 +233,22 @@ def _route_offline(cmd: str) -> Route | None:
         forced = cmd.lstrip("/").strip() or cmd
         return Route(f"deep_web_answer {forced}")
 
-    chart_route = _route_chart(cmd)
-    if chart_route:
-        return chart_route
+    try:
+        from arka.routing.symbolic import route_offline_extras
+
+        extra = route_offline_extras(cmd)
+        if extra:
+            return Route(extra, source="offline")
+    except ImportError:
+        chart_route = _route_chart(cmd)
+        if chart_route:
+            return chart_route
+        routines_route = _route_routines(cmd)
+        if routines_route:
+            return routines_route
+        remind_route = _route_remind(cmd)
+        if remind_route:
+            return remind_route
 
     if re.search(r"(weather|forecast|temp|rain|will it rain)", clean):
         return Route(f"hyperlocal_weather {cmd}")

@@ -32,7 +32,36 @@ GAP_SEC = float(os.environ.get("REMIND_GAP_SEC", "120"))
 IDLE_SEC = float(os.environ.get("REMIND_IDLE_SEC", "300"))
 ACTIVE_SEC = float(os.environ.get("REMIND_ACTIVE_SEC", "60"))
 
-_KNOWN_CMDS = frozenset({"daemon", "add", "list", "status", "start", "stop", "check", "cancel"})
+_KNOWN_CMDS = frozenset({"daemon", "add", "list", "status", "start", "stop", "check", "cancel", "parse"})
+
+
+def nl_to_argv(text: str) -> list[str]:
+    """Parse natural language into remind subcommand args."""
+    import shlex
+
+    t = text.strip()
+    if not t:
+        return []
+    low = t.lower()
+    if re.search(r"\b(?:list|show)\s+(?:my\s+)?reminders?\b", low) or low in {
+        "remind list",
+        "list reminders",
+        "my reminders",
+    }:
+        return ["list"]
+    if re.search(r"\bremind(?:\s+me)?\s+status\b", low) or low == "remind status":
+        return ["status"]
+    m = re.search(r"\b(?:cancel|delete|remove)\s+(?:reminder\s+)?(\S+)", t, re.I)
+    if m:
+        return ["cancel", m.group(1)]
+    if not re.search(r"(?i)\bremind(?:\s+me)?\b", t):
+        return []
+    if re.search(r"(?i)\b(?:every\s+day|each\s+day|daily\s+at|routine)\b", t):
+        return []
+    rest = _normalize_add_argv(t.split())
+    if not rest:
+        return []
+    return shlex.split(rest, posix=True) if rest else []
 
 
 def _load_json(path: Path, default: object) -> object:
@@ -500,6 +529,16 @@ def cmd_cancel(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_parse(args: argparse.Namespace) -> int:
+    import shlex
+
+    argv = nl_to_argv(" ".join(args.text))
+    if not argv:
+        return 1
+    print(" ".join(shlex.quote(a) for a in argv))
+    return 0
+
+
 def main() -> int:
     argv = sys.argv[1:]
     if argv and argv[0] not in _KNOWN_CMDS and argv[0] not in ("-h", "--help"):
@@ -530,6 +569,10 @@ def main() -> int:
     p_cancel = sub.add_parser("cancel", help="Cancel reminder by id prefix")
     p_cancel.add_argument("id")
     p_cancel.set_defaults(func=cmd_cancel)
+
+    p_parse = sub.add_parser("parse", help="Parse natural language → remind args (internal)")
+    p_parse.add_argument("text", nargs="+")
+    p_parse.set_defaults(func=cmd_parse)
 
     args = parser.parse_args()
     if args.cmd is None:

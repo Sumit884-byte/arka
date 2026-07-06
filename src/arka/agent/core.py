@@ -551,90 +551,13 @@ def watch_remove(wid: str) -> None:
 
 # ── Routine (scheduled tasks) ─────────────────────────────────────────────────
 
-def routine_add(cron_hint: str, action: str, *, name: str = "") -> None:
-    routines = load_json(ROUTINE_FILE, [])
-    if not isinstance(routines, list):
-        routines = []
-    rid = name or hashlib.sha256(f"{cron_hint}{action}".encode()).hexdigest()[:8]
-    routines.append({
-        "id": rid,
-        "schedule": cron_hint,
-        "action": action,
-        "enabled": True,
-        "created": time.time(),
-    })
-    save_json(ROUTINE_FILE, routines)
-    print(f"Routine {rid}: {cron_hint} → {action}")
-    print("Install timers: agent_routine install")
-
-
-def routine_list() -> None:
-    routines = load_json(ROUTINE_FILE, [])
-    if not isinstance(routines, list) or not routines:
-        print("No routines.")
-        return
-    for r in routines:
-        en = "on" if r.get("enabled", True) else "off"
-        print(f"[{en}] {r.get('id', '?')}  {r.get('schedule', '')} → {r.get('action', '')}")
-
-
-def _systemctl(*args: str) -> None:
-    if not shutil.which("systemctl"):
-        return
-    subprocess.run(["systemctl", *args], check=False)
-
-
-def routine_install() -> None:
-    """Generate systemd user timer units for daily/hourly routines."""
-    routines = load_json(ROUTINE_FILE, [])
-    if not isinstance(routines, list):
-        print("No routines to install.")
-        return
-    if not shutil.which("systemctl"):
-        print("systemctl not found — routines saved but timers not installed (Linux systemd only).")
-        return
-    unit_dir = Path.home() / ".config/systemd/user"
-    unit_dir.mkdir(parents=True, exist_ok=True)
-    fish_dir = FISH_DIR
-    for r in routines:
-        if not r.get("enabled", True):
-            continue
-        rid = r.get("id", "routine")
-        sched = (r.get("schedule") or "daily").lower()
-        action = r.get("action", "")
-        service = unit_dir / f"arka-routine-{rid}.service"
-        timer = unit_dir / f"arka-routine-{rid}.timer"
-        service.write_text(
-            f"[Unit]\nDescription=Arka routine {rid}\n\n"
-            f"[Service]\nType=oneshot\n"
-            f"ExecStart=/usr/bin/fish -ic '{action.replace(chr(39), chr(39)+chr(39))}'\n"
-            f"Environment=FISH_DIR={fish_dir}\n",
-            encoding="utf-8",
-        )
-        on_calendar = "daily"
-        if "hour" in sched:
-            on_calendar = "hourly"
-        elif re.search(r"\d{1,2}:\d{2}", sched):
-            on_calendar = f"*-*-* {sched.strip()}:00"
-        timer.write_text(
-            f"[Unit]\nDescription=Arka routine timer {rid}\n\n"
-            f"[Timer]\nOnCalendar={on_calendar}\nPersistent=true\n\n"
-            f"[Install]\nWantedBy=timers.target\n",
-            encoding="utf-8",
-        )
-        _systemctl("--user", "daemon-reload")
-        _systemctl("--user", "enable", "--now", f"arka-routine-{rid}.timer")
-        print(f"Installed arka-routine-{rid}.timer ({on_calendar})")
-
-
-def routine_remove(rid: str) -> None:
-    routines = load_json(ROUTINE_FILE, [])
-    if isinstance(routines, list):
-        save_json(ROUTINE_FILE, [r for r in routines if r.get("id") != rid])
-    _systemctl("--user", "disable", "--now", f"arka-routine-{rid}.timer")
-    for p in (Path.home() / ".config/systemd/user").glob(f"arka-routine-{rid}.*"):
-        p.unlink(missing_ok=True)
-    print(f"Removed routine {rid}.")
+from arka.integrations.routines import (  # noqa: E402
+    routine_add,
+    routine_install,
+    routine_list,
+    routine_remove,
+    routine_run,
+)
 
 
 # ── Fanout (parallel jobs) ────────────────────────────────────────────────────

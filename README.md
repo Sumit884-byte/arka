@@ -102,7 +102,7 @@ Legacy `ARKA_*` keys are stripped on load (`ARKA_ROUTE_MODE` → `ROUTE_MODE`). 
 | Area | Default | Override |
 | ---- | ------- | -------- |
 | **Security** | All layers on (`SECURITY=1`, web/action/sanitize/LLM checks) | Set any layer to `0` |
-| **NL routing** | Offline rules first, LLM only when needed (`ROUTE_MODE=symbolic`) | `ROUTE_MODE=ai`, `symbolic_only`, `ai_only` |
+| **NL routing** | Offline rules first via `_agent_guess_route` + `_agent_offline_route_cmd` (120+ skills); LLM only when needed (`ROUTE_MODE=symbolic`) | `ROUTE_MODE=ai`, `symbolic_only`, `ai_only` |
 | **LLM chain** | Preferred provider/model → live model lists → built-in chain (Gemini → Groq → Ollama) | `AI_PREFERRED_*`, `LLM_FALLBACK`, `LLM_FALLBACK_<TASK>` |
 | **Failover** | Auto try next model/provider on 429/401/timeout (`LLM_AUTO_FALLBACK=1`) | `LLM_AUTO_FALLBACK=0` |
 | **Key rotation** | Rotate backup keys before switching provider (`API_KEY_ROTATION=1`) | `API_KEY_ROTATION=0` |
@@ -137,6 +137,7 @@ Some skills ship their own defaults when you don't pass flags:
 
 - Gmail NL: **unread** requests fetch **all** unread mail (`--all`); header shows total unread (e.g. `10 unread emails`), not just the fetched batch. Summarize without “unread” still defaults to the last 2 days; day-window queries use `--limit 100`. Caps: `ARKA_GMAIL_MAX`, `ARKA_GMAIL_SUMMARIZE_MAX`.
 - Charts: `chart line` pulls Yahoo Finance prices; `chart bar` / `chart pie` / `chart scatter` for comparisons. Saves PNG to `~/Pictures/arka-generated/`.
+- Routines: `routines add daily 9am "task"` schedules recurring tasks (launchd on macOS, systemd on Linux). Run `routines install` after adding.
 - YouTube research: 2 videos (`YT_RESEARCH_MAX=2`)
 - Goal agent: 25 steps (`GOAL_MAX_STEPS=25`)
 - Reminders: 1 hour when no time given (`REMIND_DEFAULT=1h`)
@@ -229,9 +230,9 @@ flowchart TD
    ```
 
 2. **Natural language** — `arka "what's the weather"` or `arka install torch for cpu`:
-   - **Offline routing** (fast, no LLM): hundreds of regex/symbolic rules in `config.fish` map phrases to skills (`play_spotify …`, `pdf_ask …`, `agent_remember …`, etc.). You'll see `💡 [Offline routing]` and `→ Interpreted: …` when this fires.
+   - **Offline routing** (fast, no LLM): `_agent_guess_route` maps 120+ skills via regex + Python parsers (`arka_chart.py parse`, `arka_routines.py parse`, `arka_remind.py parse`, Gmail helpers, etc.). `_agent_offline_route_cmd` runs the full symbolic router before the LLM. You'll see `💡 [Offline routing]` and `→ Interpreted: …` when this fires.
    - **LLM routing** (fallback): when offline rules don't match, `arka_llm.py route` asks the **AI fallback orchestrator** (task=`route`) to pick a skill or safe shell command.
-   - **Correction layer**: weak LLM picks are fixed (e.g. `search_web` → `web_answer` for factual questions, advisory → `agent_ask`).
+   - **Correction layer**: weak LLM picks are fixed (e.g. `search_web` → `web_answer` for factual questions, advisory → `agent_ask`, Gmail → `google gmail`).
 
 The **skill router** (symbolic rules + optional LLM route + correction) decides *which skill runs*. The **orchestrator** is separate: it powers every LLM completion inside skills (summarize, chat, research, PDF, predictions, …) with provider/model failover.
 
@@ -251,7 +252,7 @@ arka help            # full skill list
 arka tell your skills   # short voice-friendly summary + active LLM model
 ```
 
-**Without Fish** (pip-only): `arka ask`, `arka route`, passwords, calc, weather, sports, and plugins use the Python router in `src/arka/router.py` — a smaller subset. Install [fish](https://fishshell.com) for the full 70+ skill table.
+**Without Fish** (pip-only): `arka ask`, `arka route`, passwords, calc, weather, sports, remind, routines, charts, timer, search, agent skills, and plugins use the Python router in `src/arka/router.py` + `src/arka/routing/symbolic.py`. Install [fish](https://fishshell.com) for the full skill table and voice router.
 
 ### AI fallback orchestrator
 
@@ -619,6 +620,39 @@ Charts save to `~/Pictures/arka-generated/` (or `CHART_OUTPUT_DIR` / `IMAGE_OUTP
 ```env
 # CHART_OUTPUT_DIR=~/Pictures/arka-generated
 # OPEN_CHART=1    # open PNG after save (default on)
+```
+
+
+
+### Daily routines (`routines`)
+
+Schedule any task to run **every day** (or hourly) — weather checks, Gmail summaries, daily brief, etc. Tasks run through `agent` so natural language works.
+
+```fish
+routines add daily 9am "check unread emails"
+routines add 08:30 "daily brief"
+routines add hourly "system monitor"
+routines list
+routines install          # launchd (macOS) or systemd user timers (Linux)
+routines remove ROUTINE_ID
+routines run ROUTINE_ID   # test once now
+```
+
+**Natural language:**
+
+```fish
+arka every day at 9am summarize my gmail
+arka every morning daily brief
+arka routine check unread emails at 8:30
+list my routines
+```
+
+After adding routines, run `routines install` once so timers are registered. Set `ROUTINES_AUTO_INSTALL=1` to install immediately on add.
+
+```env
+# ROUTINES_DAILY=09:00       # default time when you say "every day"
+# ROUTINES_MORNING=09:00
+# ROUTINES_AUTO_INSTALL=1
 ```
 
 
