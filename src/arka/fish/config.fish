@@ -1765,7 +1765,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         play_spotify spotify_control play_song stop_music play_youtube play_movie \
         weather hyperlocal_weather timer screenshot set_wallpaper system_info \
         search_web open_urls open_finance open_news git_summary disk_usage disk_breakdown \
-        pdf_ask pdf_ingest pdf_ingest_dir pdf_list doc_ask doc_ingest doc_list port_scan speedtest clipboard todo translate survive_lang \
+        pdf_ask pdf_ingest pdf_ingest_dir pdf_list doc_ask doc_ingest doc_list drawing_ask port_scan speedtest clipboard todo translate survive_lang \
         generate_password ip_info open_project create_folder list_folders show_folder \
         store_password pass \
         open_file list_files search_files find_files_by_size browse_web activate_venv create_venv fix_venv \
@@ -2098,6 +2098,8 @@ function skills --description "Show what commands the agent can auto-run"
                 echo (set_color green)"  pdf_ingest / doc_ingest"(set_color normal)" <path> — ingest PDF/Office/text/code"
             case pdf_ask doc_ask
                 echo (set_color green)"  pdf_ask / doc_ask   "(set_color normal)"[--doc DOC] <question> — Q&A / summarize"
+            case drawing_ask
+                echo (set_color green)"  drawing_ask     "(set_color normal)"<file.pdf|image> <question> — vision analysis (Gemini)"
             case pdf_list doc_list
                 echo (set_color green)"  pdf_list / doc_list  "(set_color normal)"List ingested documents"
             case disk_breakdown
@@ -5496,6 +5498,28 @@ function chart --description "Draw line, bar, pie, or scatter charts (matplotlib
         return 1
     end
     $py (_arka_py_script arka_chart.py) $argv
+    return $status
+end
+
+function drawing_ask --description "Vision analysis for blueprints, drawings, scanned specs (Gemini)"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        echo "Usage: drawing_ask ask <file.pdf|image> <question>"
+        echo "       drawing_ask <file> <question>   # shorthand"
+        echo ""
+        echo "Examples:"
+        echo "  drawing_ask plan.pdf extract door schedule and room dimensions"
+        echo "  drawing_ask --pages 1-3 specs.pdf summarize payment terms"
+        echo "  drawing_ask floor-plan.png list all room names and areas"
+        echo ""
+        echo "NL: arka analyze blueprint.pdf extract grid lines and dimensions"
+        echo "    arka review scanned contract.pdf payment terms and parties"
+        echo ""
+        echo "Requires: GEMINI_API_KEY + pip install Pillow pymupdf"
+        echo "  PDF pages: --pages 1,3,5 or 1-4 (default first 8 pages)"
+        return 1
+    end
+    $py (_arka_py_script arka_drawing.py) $argv
     return $status
 end
 
@@ -9267,6 +9291,10 @@ function _agent_offline_route_cmd --description "Full symbolic NL to skill comma
         echo (_agent_build_chart_cmd "$cmd")
         return 0
     end
+    if _agent_is_drawing_ask_request "$cmd"
+        echo (_agent_build_drawing_ask_cmd "$cmd")
+        return 0
+    end
     if set -l g (_agent_route_google "$cmd")
         echo $g
         return 0
@@ -9301,6 +9329,19 @@ function _agent_build_chart_cmd --description "Build chart args from NL (interna
     set -l rest ($py (_arka_py_script arka_chart.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
     if test (count $rest) -gt 0
         echo "chart $rest"
+    end
+end
+
+function _agent_is_drawing_ask_request --description "True if user wants drawing/blueprint vision analysis (internal)"
+    test -n "$(_agent_build_drawing_ask_cmd "$argv[1]")"
+end
+
+function _agent_build_drawing_ask_cmd --description "Build drawing_ask args from NL (internal)"
+    set -l cmd "$argv[1]"
+    set -l py (_arka_python)
+    set -l rest ($py (_arka_py_script arka_drawing.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
+    if test (count $rest) -gt 0
+        echo "drawing_ask $rest"
     end
 end
 
@@ -10987,6 +11028,8 @@ function _agent_skill_matches_request --description "True if skill fits the user
             string match -qr '(?i)(generate|create|draw|make|paint|sketch).*(image|picture|photo|art)' "$cmd"
         case chart
             _agent_is_chart_request "$cmd"
+        case drawing_ask
+            _agent_is_drawing_ask_request "$cmd"
         case generate_video
             string match -qr '(?i)(generate|create|make|render|produce|animate|film).*(video|clip|animation|movie)|^(animate|film)\s+' "$cmd"
         case generate_password store_password pass
@@ -11155,6 +11198,13 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         set -l parts (_agent_build_chart_cmd "$cmd")
         if test -n "$parts"
             echo "skill|$parts|Line, bar, pie, or scatter chart (matplotlib PNG)"
+            return
+        end
+    end
+    if _agent_is_drawing_ask_request "$cmd"
+        set -l parts (_agent_build_drawing_ask_cmd "$cmd")
+        if test -n "$parts"
+            echo "skill|$parts|Vision analysis of blueprints, drawings, and scanned specs"
             return
         end
     end
@@ -11555,6 +11605,11 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         test -n "$parts"; and echo "skill|$parts|Line, bar, pie, or scatter chart (matplotlib PNG)"
         return
     end
+    if _agent_is_drawing_ask_request "$cmd"
+        set -l parts (_agent_build_drawing_ask_cmd "$cmd")
+        test -n "$parts"; and echo "skill|$parts|Vision analysis of blueprints, drawings, and scanned specs"
+        return
+    end
     if _agent_is_routines_request "$cmd"
         set -l parts (_agent_build_routines_cmd "$cmd")
         test -n "$parts"; and echo "skill|$parts|Daily or hourly scheduled task"
@@ -11620,6 +11675,11 @@ function _agent_correct_interpretation --description "Fix bad LLM skill picks us
 
     if _agent_is_chart_request "$cmd"
         echo (_agent_build_chart_cmd "$cmd")
+        return
+    end
+
+    if _agent_is_drawing_ask_request "$cmd"
+        echo (_agent_build_drawing_ask_cmd "$cmd")
         return
     end
 
@@ -13469,6 +13529,7 @@ function agent --description "Run commands safely: executes safe commands automa
         echo "  doc_ingest / pdf_ingest <file>  - Ingest PDF, Office, text, code, …"
         echo "  doc_list / pdf_list               - List ingested documents"
         echo "  doc_ask / pdf_ask [--doc DOC] <q> - Ask or summarize any ingested file"
+        echo "  drawing_ask <file> <q>           - Vision analysis of blueprints, drawings, scans"
         echo "  arka pdf status|list|ingest|ask|formats"
         echo "  NL: ingest readme.md  |  summarize notes.docx  |  ask config.fish about routing"
         echo ""
@@ -13542,6 +13603,7 @@ function agent --description "Run commands safely: executes safe commands automa
         echo "  generate_image <prompt> - Generate images with Gemini"
         echo "  chart line AAPL MSFT --range 3mo  - Stock price chart (matplotlib PNG)"
         echo "  chart bar --data 'Apple:230,Samsung:210' - Bar graph from numbers"
+        echo "  drawing_ask plan.pdf <question>   - Blueprint/drawing vision (Gemini)"
         echo "  generate_video <prompt> - Real AI video (POLLINATIONS_API_KEY or Gemini billing required)"
         echo ""
         echo (set_color cyan)"  arka aie|yt-bulk|queue|brief|wifi|agent — same via subcommands"(set_color normal)
@@ -13636,6 +13698,11 @@ function agent --description "Run commands safely: executes safe commands automa
 
     if test -z "$interpreted"; and _agent_is_chart_request "$cmd"
         set interpreted (_agent_build_chart_cmd "$cmd")
+        set route_source offline
+    end
+
+    if test -z "$interpreted"; and _agent_is_drawing_ask_request "$cmd"
+        set interpreted (_agent_build_drawing_ask_cmd "$cmd")
         set route_source offline
     end
 
@@ -13844,6 +13911,11 @@ function agent --description "Run commands safely: executes safe commands automa
         end
     else if _agent_is_chart_request "$cmd"
         set interpreted (_agent_build_chart_cmd "$cmd")
+        if test -n "$interpreted"
+            set route_source offline
+        end
+    else if _agent_is_drawing_ask_request "$cmd"
+        set interpreted (_agent_build_drawing_ask_cmd "$cmd")
         if test -n "$interpreted"
             set route_source offline
         end
@@ -14407,6 +14479,10 @@ function agent --description "Run commands safely: executes safe commands automa
         set -l chart_cmd (_agent_build_chart_cmd "$cmd")
         echo (set_color yellow)"💡 [Chart → $chart_cmd]"(set_color normal)
         _agent_dispatch_one "$chart_cmd"
+    else if _agent_is_drawing_ask_request "$cmd"
+        set -l drawing_cmd (_agent_build_drawing_ask_cmd "$cmd")
+        echo (set_color yellow)"💡 [Drawing → $drawing_cmd]"(set_color normal)
+        _agent_dispatch_one "$drawing_cmd"
     else if _agent_is_files_preference_question "$cmd"
         echo (set_color yellow)"💡 [Image save locations]"(set_color normal)
         files_preference_help $argv

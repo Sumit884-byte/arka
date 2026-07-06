@@ -39,6 +39,17 @@ def route_chart(cmd: str) -> str | None:
     return "chart " + " ".join(shlex.quote(a) for a in argv)
 
 
+def route_drawing(cmd: str) -> str | None:
+    try:
+        from arka.documents.drawing import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "drawing_ask " + " ".join(shlex.quote(a) for a in argv)
+
+
 def route_timer(cmd: str) -> str | None:
     clean = cmd.lower().strip()
     if not re.search(r"\b(timer|countdown)\b", clean):
@@ -107,6 +118,7 @@ def route_offline_extras(cmd: str) -> str | None:
         route_remind,
         route_routines,
         route_chart,
+        route_drawing,
         route_timer,
         route_search_web,
         route_agent_skills,

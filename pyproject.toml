@@ -49,6 +49,10 @@ pdf = [
 charts = [
     "matplotlib>=3.8",
 ]
+drawings = [
+    "Pillow>=10.0",
+    "pymupdf>=1.24",
+]
 whatsapp = [
     "selenium>=4.0",
     "pywhatkit>=5.4",
@@ -58,7 +62,7 @@ dev = [
     "pytest",
 ]
 all = [
-    "arka-agent[chat,voice,pdf,whatsapp,charts]",
+    "arka-agent[chat,voice,pdf,whatsapp,charts,drawings]",
 ]
 
 [project.scripts]

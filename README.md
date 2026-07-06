@@ -137,6 +137,7 @@ Some skills ship their own defaults when you don't pass flags:
 
 - Gmail NL: **unread** requests fetch **all** unread mail (`--all`); header shows total unread (e.g. `10 unread emails`), not just the fetched batch. Summarize without “unread” still defaults to the last 2 days; day-window queries use `--limit 100`. Caps: `ARKA_GMAIL_MAX`, `ARKA_GMAIL_SUMMARIZE_MAX`.
 - Charts: `chart line` pulls Yahoo Finance prices; `chart bar` / `chart pie` / `chart scatter` for comparisons. Saves PNG to `~/Pictures/arka-generated/`.
+- Drawings: `drawing_ask plan.pdf "extract door schedule"` uses Gemini vision on blueprints, scans, and schedules (beyond text OCR).
 - Routines: `routines add daily 9am "task"` schedules recurring tasks (launchd on macOS, systemd on Linux). Run `routines install` after adding.
 - YouTube research: 2 videos (`YT_RESEARCH_MAX=2`)
 - Goal agent: 25 steps (`GOAL_MAX_STEPS=25`)
@@ -230,7 +231,7 @@ flowchart TD
    ```
 
 2. **Natural language** — `arka "what's the weather"` or `arka install torch for cpu`:
-   - **Offline routing** (fast, no LLM): `_agent_guess_route` maps 120+ skills via regex + Python parsers (`arka_chart.py parse`, `arka_routines.py parse`, `arka_remind.py parse`, Gmail helpers, etc.). `_agent_offline_route_cmd` runs the full symbolic router before the LLM. You'll see `💡 [Offline routing]` and `→ Interpreted: …` when this fires.
+   - **Offline routing** (fast, no LLM): `_agent_guess_route` maps 120+ skills via regex + Python parsers (`arka_chart.py parse`, `arka_drawing.py parse`, `arka_routines.py parse`, `arka_remind.py parse`, Gmail helpers, etc.). `_agent_offline_route_cmd` runs the full symbolic router before the LLM. You'll see `💡 [Offline routing]` and `→ Interpreted: …` when this fires.
    - **LLM routing** (fallback): when offline rules don't match, `arka_llm.py route` asks the **AI fallback orchestrator** (task=`route`) to pick a skill or safe shell command.
    - **Correction layer**: weak LLM picks are fixed (e.g. `search_web` → `web_answer` for factual questions, advisory → `agent_ask`, Gmail → `google gmail`).
 
@@ -252,7 +253,7 @@ arka help            # full skill list
 arka tell your skills   # short voice-friendly summary + active LLM model
 ```
 
-**Without Fish** (pip-only): `arka ask`, `arka route`, passwords, calc, weather, sports, remind, routines, charts, timer, search, agent skills, and plugins use the Python router in `src/arka/router.py` + `src/arka/routing/symbolic.py`. Install [fish](https://fishshell.com) for the full skill table and voice router.
+**Without Fish** (pip-only): `arka ask`, `arka route`, passwords, calc, weather, sports, remind, routines, charts, drawings, timer, search, agent skills, and plugins use the Python router in `src/arka/router.py` + `src/arka/routing/symbolic.py`. Install [fish](https://fishshell.com) for the full skill table and voice router.
 
 ### AI fallback orchestrator
 
@@ -620,6 +621,45 @@ Charts save to `~/Pictures/arka-generated/` (or `CHART_OUTPUT_DIR` / `IMAGE_OUTP
 ```env
 # CHART_OUTPUT_DIR=~/Pictures/arka-generated
 # OPEN_CHART=1    # open PNG after save (default on)
+```
+
+
+
+### Drawings & blueprints (`drawing_ask`)
+
+Analyze **visual** documents — floor plans, elevations, MEP schematics, door/window schedules, scanned contracts — using Gemini vision (not just text OCR from `pdf_ask`).
+
+```fish
+pip install Pillow pymupdf   # once, or: pip install 'arka-agent[drawings]'
+
+drawing_ask plan.pdf extract door schedule and room dimensions
+drawing_ask --pages 1-3 specs.pdf summarize payment terms and parties
+drawing_ask floor-plan.png list all room names and areas
+```
+
+**Natural language (offline routing):**
+
+Phrases are parsed by `arka_drawing.py parse` (no LLM). Include a file path and drawing-related words, or any `.pdf`/image path with an analysis question:
+
+```fish
+arka analyze blueprint.pdf extract grid lines and dimensions
+arka review scanned contract.pdf payment terms and obligations
+arka inspect floor plan.png room sizes and annotations
+```
+
+Preview routing:
+
+```fish
+agent_route "analyze plan.pdf door schedule and dimensions"
+# → skill|drawing_ask ask plan.pdf door schedule and dimensions|Vision analysis …
+```
+
+Requires `GEMINI_API_KEY` or `GOOGLE_API_KEY`. PDFs render to images via PyMuPDF (first 8 pages by default).
+
+```env
+# DRAWING_MODEL=gemini-2.5-flash
+# DRAWING_MAX_PAGES=8
+# DRAWING_MAX_EDGE=2048
 ```
 
 
