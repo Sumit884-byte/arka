@@ -198,6 +198,7 @@ arka reload --listen   # also restart wake listener after Python changes
 | `arka google login`        | Sign in to Gmail + Google Calendar (OAuth)         |
 | `arka google gmail`        | List or summarize mail (see below)                 |
 
+See [Arka aliases](#arka-aliases) for alternate command names, subcommand synonyms, and skill equivalents.
 
 Voice flow: say **"hey arka, …"** → STT → skill router → optional TTS reply (`AGENT_SPEAK=1` default). In voice mode, Arka speaks short acks while skills run and plain-language answers when done — usable without looking at the screen.
 
@@ -1129,12 +1130,97 @@ agent_recall meeting
 
 ---
 
-## Modern CLI aliases
+## Arka aliases
 
-- `ls`**,** `ll`**,** `la`**,** `lt` — `eza`
-- `cat`**,** `bat` — `batcat`
+Arka uses aliases at several levels: the main command name, helper functions, subcommand synonyms, skill-name equivalents, and optional shell aliases.
+
+### Main command (same router)
+
+| Command | What it is |
+| ------- | ---------- |
+| `arka` | Default entry point (`AGENT_NAME=arka` in `.env`) |
+| `agent` | Always available; same NL router as `arka` |
+| Custom name | Set `AGENT_NAME=mybot` in `~/.config/arka/.env` — fish registers a function with that name |
+
+`_agent_call_name` reads `AGENT_NAME` (defaults to `arka`). `_agent_register_call_name` creates a fish function named after `AGENT_NAME` that mirrors all `arka` subcommands. Wake phrases include the agent name (e.g. **"hey arka, …"**).
+
+`agent` and `arka` are interchangeable for natural-language routing.
+
+### Top-level helper functions
+
+| Function | Equivalent |
+| -------- | ---------- |
+| `arka_listen` | `arka listen` |
+| `arka_start` | `arka start` |
+| `arka_stop` | `arka stop` |
+| `arka_status` | `arka status` |
+| `arka_serve` | `arka serve` / remote server |
+| `arka_speak_lang` | `arka speak-lang` |
+| `arka_remote_stop` / `arka_remote_status` | Remote server control |
+
+### Subcommand synonyms (`arka …`)
+
+The main `arka` switch accepts many alternate spellings:
+
+**Lifecycle / setup:** `reload` / `refresh` / `relink` · `start` / `up` · `stop` / `down` · `setup` / `init` · `refetch` / `update` / `sync`
+
+**Skills & memory:** `supermemory` / `sm` / `memory-cloud` · `skills` / `plugins` / `extensions` · `pdf` / `document` / `docs` · `rag` / `turboquant` · `aie` / `internet-enhance` / `internet_enhance`
+
+**Media & web:** `download` / `dl` · `youtube` / `yt` · `youtube_bulk` / `yt_bulk` · `youtube_download` / `yt_download` · `media_transcript` / `transcribe_media` · `youtube_research` / `yt_research`
+
+**Docs & RAG:** `pdf_ingest` / `doc_ingest` · `pdf_ask` / `doc_ask` · `pdf_list` / `doc_list`
+
+**Agent features:** `pr_check` / `pr-check` / `pr` · `agent_remember` / `agent_recall` / `agent_memory` · `agent_trace` / `agent_why` / `agent_last` · `predict` / `predictions` / `forecast` · `stock` / `stocks` / `market` · `brief` / `morning` / `daily` · `tell` / `explain` / `describe` · `write` / `draft` / `compose` / `essay` · `speak` / `say` / `read aloud`
+
+**Password vault:** `generate_password` / `pass` / `store_password` (with `save` / `get` / `list` sub-synonyms)
+
+**Routing mode** (env values, not commands): `ROUTE_MODE=hybrid|auto|symbolic|offline|ai|ai_only` etc.
+
+### Skill-name equivalents
+
+| Names | Notes |
+| ----- | ----- |
+| `stock` / `stock_analysis` | Market bridge |
+| `internet_enhance` / `aie` | AIE CLI |
+| `doc_*` / `pdf_*` | Document RAG |
+| `pass` / `generate_password` | Password vault |
+| `github_repo` | Recent commits and modified files for a GitHub URL |
+
+Full built-in skill list: `_agent_all_skills` in `src/arka/fish/config.fish` (~70+ names). Third-party plugins under `~/.config/arka/skills/` add separate skill names (not built-in aliases).
+
+### Shell aliases (terminal, not Arka skills)
+
+Bundled fish config also defines shell aliases for daily CLI use. Arka injects these into LLM routing via `ROUTE_ALIASES` so the agent respects your local setup:
+
+- `ls`, `ll`, `la`, `lt` — `eza`
+- `cat`, `bat` — `batcat`
 - `z` — `zoxide`
-- `i` — `uv pip install` (⚠️ only use as a command, not NL — Arka routes chat away from this)
+- `i` — `uv pip install` (⚠️ command only — do not use for NL; router avoids it)
+
+Plus Linux/apt shortcuts (`update`, `upgrade`, `install`, …) and helpers `mkalias`, `noalias`, `realias`.
+
+### What is not an alias
+
+- **`web_answer`** — fallback Q&A skill, not a synonym for repo activity (GitHub file/commit questions route to `github_repo`)
+- **Third-party plugins** — separate installs under `~/.config/arka/skills/`
+- **`i` shell alias** — not an Arka command
+
+### Discover aliases on your machine
+
+```fish
+arka help                              # skill overview
+arka skills list                       # third-party plugins
+alias                                  # shell aliases (also fed to router)
+grep AGENT_NAME ~/.config/arka/.env    # custom command name
+```
+
+```mermaid
+flowchart LR
+  user[User input] --> entry[arka or agent or AGENT_NAME]
+  entry --> subcmds[Subcommand synonyms]
+  subcmds --> skills[Skill names and aliases]
+  skills --> shell[Shell aliases via ROUTE_ALIASES]
+```
 
 ---
 
