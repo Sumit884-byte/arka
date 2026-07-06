@@ -1716,6 +1716,13 @@ function _agent_dispatch_one --description "Run one skill by name or shell via _
     if _arka_is_builtin_skill "$first"
         if test "$first" = pdf_ask
             echo (set_color brblack)"▶ "(set_color --bold cyan)"PDF ask"(set_color brblack)" — "(set_color normal)"$cmd_trim"
+        else if test "$first" = describe_image
+            set -l args $tokens[2..-1]
+            if test (count $args) -ge 1; and test "$args[1]" = describe
+                set -e args[1]
+            end
+            set -l src (string join " " $args | string replace -r " 'Summarize this chart\.'\$" "" | string trim)
+            echo (set_color cyan)"▶ describe_image "(set_color --bold)"$src"(set_color normal)
         else
             echo (set_color cyan)"▶ Running skill: $cmd_trim"(set_color normal)
         end
@@ -1765,7 +1772,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         play_spotify spotify_control play_song stop_music play_youtube play_movie \
         weather hyperlocal_weather timer screenshot set_wallpaper system_info \
         search_web open_urls open_finance open_news git_summary disk_usage disk_breakdown \
-        pdf_ask pdf_ingest pdf_ingest_dir pdf_list doc_ask doc_ingest doc_list drawing_ask port_scan speedtest clipboard todo translate survive_lang \
+        pdf_ask pdf_ingest pdf_ingest_dir pdf_list doc_ask doc_ingest doc_list drawing_ask describe_image port_scan speedtest clipboard todo translate survive_lang \
         generate_password ip_info open_project create_folder list_folders show_folder \
         store_password pass \
         open_file list_files search_files find_files_by_size browse_web activate_venv create_venv fix_venv \
@@ -1775,7 +1782,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         create_desktop_app fix_graphics_driver install_app install_apt install_flatpak \
         install_snap install_package install_uv stock_analysis stock macro emotion \
         auto_click auto_copy decrypt_pdf classify_files cleanup_downloads watch_zip monitor_x \
-        generate_image generate_video chart youtube_transcript youtube_download yt_download media_transcript transcribe_media summarize_url daily_brief wifi_info \
+        generate_image generate_video compose_video chart youtube_transcript youtube_download yt_download media_transcript transcribe_media summarize_url daily_brief wifi_info \
         folder_summarize playlist_summarize youtube_research yt_research find_videos codebase_ingest \
         agent_remember agent_recall agent_memory agent_trace agent_why agent_last \
         agent_resume agent_research agent_nudge agent_watch agent_routine agent_fanout \
@@ -2100,6 +2107,8 @@ function skills --description "Show what commands the agent can auto-run"
                 echo (set_color green)"  pdf_ask / doc_ask   "(set_color normal)"[--doc DOC] <question> — Q&A / summarize"
             case drawing_ask
                 echo (set_color green)"  drawing_ask     "(set_color normal)"<file.pdf|image> <question> — vision analysis (Gemini)"
+            case describe_image
+                echo (set_color green)"  describe_image  "(set_color normal)"<path|url> [question] — photo caption (vLLM)"
             case pdf_list doc_list
                 echo (set_color green)"  pdf_list / doc_list  "(set_color normal)"List ingested documents"
             case disk_breakdown
@@ -2204,6 +2213,8 @@ function skills --description "Show what commands the agent can auto-run"
                 echo (set_color green)"  chart          "(set_color normal)"line | bar | pie | scatter — matplotlib PNG charts"
             case generate_video
                 echo (set_color green)"  generate_video "(set_color normal)"<prompt> — real AI video (Pollinations/Gemini; needs API key or billing)"
+            case compose_video
+                echo (set_color green)"  compose_video   "(set_color normal)"--topic '…' [--llm] — YouTube info video (Unsplash + ffmpeg + TTS)"
             case agent_ask
                 echo (set_color green)"  agent_ask      "(set_color normal)"<question> — advisory Q&A via shell context"
         end
@@ -5481,17 +5492,21 @@ function generate_image --description "Generate images via Google Nano Banana (G
     $py (_arka_py_script arka_generate_image.py) $flags -- "$prompt"
 end
 
-function chart --description "Draw line, bar, pie, or scatter charts (matplotlib → PNG)"
+function chart --description "Draw line, bar, pie, scatter, histogram, or pareto charts (matplotlib → PNG)"
     set -l py (_arka_python)
     if test (count $argv) -eq 0
         echo "Usage: chart line TICKER [TICKER...] [--range 3mo]"
         echo "       chart bar --data 'Apple:230,Samsung:210' [--title 'Phone sales']"
         echo "       chart pie --data 'Organic:400,Direct:300' [--title 'Traffic sources']"
         echo "       chart scatter --data '100:200,120:190' [--xlabel Spend --ylabel Revenue]"
+        echo "       chart histogram --data '12,15,18,22,25' [--title 'Response times']"
+        echo "       chart pareto --data 'Scratches:45,Dents:28' [--title 'Defect causes']"
         echo ""
         echo "NL: arka chart TSLA and NVDA last 3 months"
         echo "    arka pie chart market share Apple 40 Samsung 30"
         echo "    arka scatter ad spend vs revenue 100 200 120 190 170 280"
+        echo "    arka histogram response times 12 15 18 22 25 28 30"
+        echo "    arka pareto defects Scratches:45 Dents:28 Cracks:15"
         echo ""
         echo "Requires: pip install matplotlib"
         echo "  Saves to ~/Pictures/arka-generated/ (or CHART_OUTPUT_DIR / IMAGE_OUTPUT_DIR)"
@@ -5520,6 +5535,28 @@ function drawing_ask --description "Vision analysis for blueprints, drawings, sc
         return 1
     end
     $py (_arka_py_script arka_drawing.py) $argv
+    return $status
+end
+
+function describe_image --description "Describe a photo/image via local vLLM vision model"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        echo "Usage: describe_image <path|url> [question]"
+        echo ""
+        echo "Examples:"
+        echo "  describe_image photo.jpg"
+        echo "  describe_image https://example.com/cat.png what breed is this"
+        echo "  describe_image ~/Pictures/screenshot.png describe visible text"
+        echo ""
+        echo "NL: arka describe photo.jpg"
+        echo "    arka what's in ~/Downloads/image.png"
+        echo ""
+        echo "Requires: pip install Pillow; OCR: brew install tesseract"
+        echo "Charts: .json sidecar + structured visual (exact colors, no LLM guess)"
+        echo "  Auto-starts vLLM when needed, stops when done (LLM_AUTO_START/STOP_SERVERS)"
+        return 1
+    end
+    $py (_arka_py_script arka_describe_image.py) $argv
     return $status
 end
 
@@ -5559,6 +5596,23 @@ function generate_video --description "Generate real AI video (Pollinations or G
     set -l prompt (string join ' ' -- $prompt_parts)
     set -l py (_arka_python)
     $py (_arka_py_script arka_generate_video.py) $flags -- "$prompt"
+end
+
+function compose_video --description "Compose YouTube/info videos — Unsplash images, ffmpeg, edge-tts narration"
+    if test (count $argv) -eq 0
+        echo "Usage: compose_video compose --topic 'Python asyncio' [--llm]"
+        echo "       compose_video compose --script scenes.json [-o out.mp4]"
+        echo "       compose_video check"
+        echo ""
+        echo "NL: arka make youtube video about Rust memory safety"
+        echo "    arka compose video on Kubernetes with llm"
+        echo ""
+        echo "Requires: ffmpeg, Pillow, UNSPLASH_ACCESS_KEY, edge-tts (optional TTS)"
+        echo "Fonts: VIDEO_FONT / VIDEO_FONT_PATH in ~/.config/arka/.env"
+        return 1
+    end
+    set -l py (_arka_python)
+    $py (_arka_py_script arka_compose_video.py) $argv
 end
 
 function youtube_transcript --description "Fetch or summarize a YouTube video transcript"
@@ -9277,6 +9331,16 @@ function _agent_parse_guess_route --description "Extract skill command from gues
     return 1
 end
 
+function _agent_parse_video_prompt --description "Extract AI video prompt from NL (internal)"
+    set -l cmd "$argv[1]"
+    set -l rest (string replace -r -i '^(?:generate|create|make|render|produce|animate|film)\s+(?:an?\s+)?(?:video|clip|animation|movie|animated\s+video)\s*' '' "$cmd" | string trim)
+    if test -z "$rest"
+        set rest (string replace -r -i '^(?:generate|create|make|render|produce|animate|film)\s+(?:an?\s+)?' '' "$cmd" | string trim)
+    end
+    set rest (string replace -r -i '^(?:of|about|on|for|showing)\s+' '' "$rest" | string trim)
+    echo $rest
+end
+
 function _agent_offline_route_cmd --description "Full symbolic NL to skill command (internal)"
     set -l cmd "$argv[1]"
     if _agent_is_remind_request "$cmd"
@@ -9293,6 +9357,18 @@ function _agent_offline_route_cmd --description "Full symbolic NL to skill comma
     end
     if _agent_is_drawing_ask_request "$cmd"
         echo (_agent_build_drawing_ask_cmd "$cmd")
+        return 0
+    end
+    if _agent_is_describe_image_request "$cmd"
+        echo (_agent_build_describe_image_cmd "$cmd")
+        return 0
+    end
+    if _agent_is_compose_video_request "$cmd"
+        echo (_agent_build_compose_video_cmd "$cmd")
+        return 0
+    end
+    if _agent_is_download_request "$cmd"
+        echo (_agent_build_download_cmd "$cmd")
         return 0
     end
     if set -l g (_agent_route_google "$cmd")
@@ -9343,6 +9419,71 @@ function _agent_build_drawing_ask_cmd --description "Build drawing_ask args from
     if test (count $rest) -gt 0
         echo "drawing_ask $rest"
     end
+end
+
+function _agent_is_describe_image_request --description "True if user wants vLLM image description (internal)"
+    test -n "$(_agent_build_describe_image_cmd "$argv[1]")"
+end
+
+function _agent_build_compose_video_cmd --description "Build compose_video args from NL (internal)"
+    set -l cmd "$argv[1]"
+    set -l name (_agent_call_name)
+    set cmd (string replace -r -i "^$name\\s+" '' "$cmd" | string trim)
+    set -l py (_arka_python)
+    set -l rest ($py (_arka_py_script arka_compose_video.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
+    if test (count $rest) -gt 0
+        echo "compose_video $rest"
+    end
+end
+
+function _agent_is_compose_video_request --description "True if user wants info/YouTube video compose (internal)"
+    test -n "$(_agent_build_compose_video_cmd "$argv[1]")"
+end
+
+function _agent_build_describe_image_cmd --description "Build describe_image args from NL (internal)"
+    set -l cmd "$argv[1]"
+    set -l py (_arka_python)
+    set -l rest ($py (_arka_py_script arka_describe_image.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
+    if test (count $rest) -gt 0
+        echo "describe_image $rest"
+    end
+end
+
+function _agent_build_download_cmd --description "Build download_file args from NL (internal)"
+    set -l cmd "$argv[1]"
+    set -l clean (string lower "$cmd")
+    if string match -qr '(?i)download\s+and\s+install' "$clean"
+        return 1
+    end
+    if _agent_is_youtube_bulk_request "$cmd"
+        return 1
+    end
+    if _agent_is_youtube_download_request "$cmd"
+        return 1
+    end
+    set -l url (string match -r '(https?://[^\s"\']+)' "$cmd")[1]
+    if test -n "$url"
+        if string match -qr '(?i)\b(download|save|fetch|grab|wget|curl)\b' "$clean"
+            echo "download_file $url"
+            return 0
+        else if test (string trim "$cmd") = "$url"
+            echo "download_file $url"
+            return 0
+        end
+    end
+    set -l target ""
+    if string match -qr '(?i)^(?:download\s+|wget\s+|curl\s+-o\s+)' "$clean"
+        set target (string replace -r -i '^(?:download\s+|wget\s+|curl\s+-o\s+)' '' "$cmd" | string trim)
+    else if string match -qr '(?i)^download\s+(?:this|the)\s+' "$clean"
+        set target (string replace -r -i '^download\s+(?:this|the)\s+' '' "$cmd" | string trim)
+    end
+    if test -n "$target"
+        echo "download_file $target"
+    end
+end
+
+function _agent_is_download_request --description "True if user wants to download a file (internal)"
+    test -n "$(_agent_build_download_cmd "$argv[1]")"
 end
 
 function _agent_is_google_gmail_request --description "True if user wants Gmail via Google integration (internal)"
@@ -11030,6 +11171,10 @@ function _agent_skill_matches_request --description "True if skill fits the user
             _agent_is_chart_request "$cmd"
         case drawing_ask
             _agent_is_drawing_ask_request "$cmd"
+        case describe_image
+            _agent_is_describe_image_request "$cmd"
+        case compose_video
+            _agent_is_compose_video_request "$cmd"
         case generate_video
             string match -qr '(?i)(generate|create|make|render|produce|animate|film).*(video|clip|animation|movie)|^(animate|film)\s+' "$cmd"
         case generate_password store_password pass
@@ -11208,6 +11353,20 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
             return
         end
     end
+    if _agent_is_describe_image_request "$cmd"
+        set -l parts (_agent_build_describe_image_cmd "$cmd")
+        if test -n "$parts"
+            echo "skill|$parts|Describe a photo or image via local vLLM"
+            return
+        end
+    end
+    if _agent_is_download_request "$cmd"
+        set -l parts (_agent_build_download_cmd "$cmd")
+        if test -n "$parts"
+            echo "skill|$parts|Download file via curl (resume)"
+            return
+        end
+    end
     if _agent_is_routines_request "$cmd"
         set -l parts (_agent_build_routines_cmd "$cmd")
         if test -n "$parts"
@@ -11278,8 +11437,17 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         echo "skill|set_location|Save location"
         return
     end
+    if _agent_is_compose_video_request "$cmd"
+        echo "skill|"(_agent_build_compose_video_cmd "$cmd")"|YouTube info video (Unsplash + ffmpeg)"
+        return
+    end
     if string match -qr '(?i)^(generate|create|make|render|produce|animate|film)\s+(?:an?\s+)?(?:video|clip|animation|movie|animated\s+video)\b|^(animate|film)\s+' "$clean"
-        echo "skill|generate_video|Generate real AI video (Pollinations key or Gemini billing required)"
+        set -l vid_prompt (_agent_parse_video_prompt "$cmd")
+        if test -n "$vid_prompt"
+            echo "skill|generate_video "(string escape --style=script -- $vid_prompt)"|Generate real AI video (Pollinations/Gemini)"
+        else
+            echo "skill|generate_video|Generate real AI video (Pollinations/Gemini)"
+        end
         return
     end
     if string match -qr '(?i)(where\s+(to|should\s+i)\s+invest|how\s+(to|can\s+i)\s+invest|invest\s+\d|make\s+(?:a\s+)?profit|best\s+(?:place|option|way)\s+to\s+(?:invest|put))' "$clean"
@@ -11321,6 +11489,10 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         return
     end
     if string match -qr '(?i)^https?://' "$clean"
+        if set -l dl (_agent_build_download_cmd "$cmd")
+            echo "skill|$dl|Download file via curl (resume)"
+            return
+        end
         echo "shell|curl/wget|Direct URL download"
         return
     end
@@ -11610,6 +11782,11 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         test -n "$parts"; and echo "skill|$parts|Vision analysis of blueprints, drawings, and scanned specs"
         return
     end
+    if _agent_is_describe_image_request "$cmd"
+        set -l parts (_agent_build_describe_image_cmd "$cmd")
+        test -n "$parts"; and echo "skill|$parts|Describe a photo or image via local vLLM"
+        return
+    end
     if _agent_is_routines_request "$cmd"
         set -l parts (_agent_build_routines_cmd "$cmd")
         test -n "$parts"; and echo "skill|$parts|Daily or hourly scheduled task"
@@ -11680,6 +11857,11 @@ function _agent_correct_interpretation --description "Fix bad LLM skill picks us
 
     if _agent_is_drawing_ask_request "$cmd"
         echo (_agent_build_drawing_ask_cmd "$cmd")
+        return
+    end
+
+    if _agent_is_describe_image_request "$cmd"
+        echo (_agent_build_describe_image_cmd "$cmd")
         return
     end
 
@@ -12902,7 +13084,16 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                     return $status
                 case tell explain describe
                     if test (count $argv) -ge 2
-                        set -l q (string join " " $argv[2..-1])
+                        set -l raw (string join " " $argv[2..-1])
+                        set -l nl "describe $raw"
+                        if _agent_is_describe_image_request "$nl"
+                            set -l dcmd (_agent_build_describe_image_cmd "$nl")
+                            set -l show $raw
+                            echo (set_color yellow)"💡 [Image → describe_image $show]"(set_color normal)
+                            _agent_dispatch_one "$dcmd"
+                            return $status
+                        end
+                        set -l q $raw
                         set q (string replace -r -i '^me\s+about\s+' '' "$q")
                         set q (string replace -r -i '^me\s+' '' "$q")
                         set q (string replace -r -i '^about\s+' '' "$q")
@@ -13530,6 +13721,7 @@ function agent --description "Run commands safely: executes safe commands automa
         echo "  doc_list / pdf_list               - List ingested documents"
         echo "  doc_ask / pdf_ask [--doc DOC] <q> - Ask or summarize any ingested file"
         echo "  drawing_ask <file> <q>           - Vision analysis of blueprints, drawings, scans"
+        echo "  describe_image <path|url> [q]    - Describe photos via local vLLM vision"
         echo "  arka pdf status|list|ingest|ask|formats"
         echo "  NL: ingest readme.md  |  summarize notes.docx  |  ask config.fish about routing"
         echo ""
@@ -13557,6 +13749,7 @@ function agent --description "Run commands safely: executes safe commands automa
         echo "  browse_web <task>      - Automate browser navigation and action using AI"
         echo "  generate_image <prompt> - Generate images using Gemini API (gemini-2.5-flash-image)"
         echo "  generate_video <prompt> - Real AI video (needs POLLINATIONS_API_KEY or Gemini billing)"
+        echo "  compose_video --topic '…' [--llm] - YouTube info video (Unsplash + ffmpeg + TTS)"
         echo "  excuse                 - Get a hilarious offline programmer excuse"
         echo "  bored                  - Suggest a quick developer break task or exercise"
         echo "  create_skill <name> <desc> - Dynamically generate a new skill using AI"
@@ -13604,6 +13797,7 @@ function agent --description "Run commands safely: executes safe commands automa
         echo "  chart line AAPL MSFT --range 3mo  - Stock price chart (matplotlib PNG)"
         echo "  chart bar --data 'Apple:230,Samsung:210' - Bar graph from numbers"
         echo "  drawing_ask plan.pdf <question>   - Blueprint/drawing vision (Gemini)"
+        echo "  describe_image photo.jpg          - Photo caption via vLLM vision"
         echo "  generate_video <prompt> - Real AI video (POLLINATIONS_API_KEY or Gemini billing required)"
         echo ""
         echo (set_color cyan)"  arka aie|yt-bulk|queue|brief|wifi|agent — same via subcommands"(set_color normal)
@@ -13703,6 +13897,16 @@ function agent --description "Run commands safely: executes safe commands automa
 
     if test -z "$interpreted"; and _agent_is_drawing_ask_request "$cmd"
         set interpreted (_agent_build_drawing_ask_cmd "$cmd")
+        set route_source offline
+    end
+
+    if test -z "$interpreted"; and _agent_is_describe_image_request "$cmd"
+        set interpreted (_agent_build_describe_image_cmd "$cmd")
+        set route_source offline
+    end
+
+    if test -z "$interpreted"; and _agent_is_download_request "$cmd"
+        set interpreted (_agent_build_download_cmd "$cmd")
         set route_source offline
     end
 
@@ -13919,6 +14123,11 @@ function agent --description "Run commands safely: executes safe commands automa
         if test -n "$interpreted"
             set route_source offline
         end
+    else if _agent_is_describe_image_request "$cmd"
+        set interpreted (_agent_build_describe_image_cmd "$cmd")
+        if test -n "$interpreted"
+            set route_source offline
+        end
     else if string match -qr '(?i)^(analyze|check)\s+(?:stock\s+)?[A-Z][A-Z0-9.-]{1,12}\b' "$clean_cmd"
         set -l stock_ticker (string upper (string match -r '(?i)([A-Z][A-Z0-9.-]{1,12})\s*$' "$cmd")[2])
         set interpreted "stock analyze $stock_ticker"
@@ -13937,8 +14146,11 @@ function agent --description "Run commands safely: executes safe commands automa
         else
             set interpreted "predictions $pred_flags"
         end
+    else if _agent_is_compose_video_request "$clean_cmd"
+        set interpreted (_agent_build_compose_video_cmd "$cmd")
+        set route_source offline
     else if string match -qr '(?i)^(generate|create|make|render|produce|animate|film)\s+(?:an?\s+)?(?:video|clip|animation|movie|animated\s+video)\b|^(animate|film)\s+' "$clean_cmd"
-        set -l vid_prompt (string replace -r -i '^(?:generate|create|make|render|produce|animate|film)\s+(?:an?\s+)?(?:video|clip|animation|movie|animated\s+video)?\s*(?:of|about|showing)?\s*' '' "$cmd" | string trim)
+        set -l vid_prompt (_agent_parse_video_prompt "$cmd")
         if test -n "$vid_prompt"
             set interpreted "generate_video "(string escape --style=script -- $vid_prompt)
         else
@@ -14313,17 +14525,12 @@ function agent --description "Run commands safely: executes safe commands automa
         else
             set interpreted "extract_and_run"
         end
-    else if string match -qr '(?i)^(?:download\s+|wget\s+|curl\s+-o\s+)' "$clean_cmd"
+    else if string match -qr '(?i)^(?:download\s+|wget\s+|curl\s+-o\s+|download\s+(?:this|the)\s+)' "$clean_cmd"
         and not string match -qr 'download\s+and\s+install' "$clean_cmd"
-        set -l dl_target (string replace -r -i '^(?:download\s+|wget\s+|curl\s+-o\s+)' '' "$cmd")
-    else if string match -qr '(?i)^download\s+(?:this|the)\s+' "$clean_cmd"
-        and not string match -qr 'download\s+and\s+install' "$clean_cmd"
-        set -l dl_target (string replace -r -i '^download\s+(?:this|the)\s+' '' "$cmd")
-        set dl_target (string trim -- "$dl_target")
-        if test -n "$dl_target"
-            set interpreted "download_file $dl_target"
-        else
-            set interpreted "download_file"
+        set -l dl_cmd (_agent_build_download_cmd "$cmd")
+        if test -n "$dl_cmd"
+            set interpreted $dl_cmd
+            set route_source offline
         end
     else if string match -qr '(install|setup|download\s+and\s+install)' "$clean_cmd"
         and not string match -qr '(?i)(flatpak|flathub|snap|with\s+apt|via\s+apt)' "$clean_cmd"
@@ -14483,6 +14690,10 @@ function agent --description "Run commands safely: executes safe commands automa
         set -l drawing_cmd (_agent_build_drawing_ask_cmd "$cmd")
         echo (set_color yellow)"💡 [Drawing → $drawing_cmd]"(set_color normal)
         _agent_dispatch_one "$drawing_cmd"
+    else if _agent_is_describe_image_request "$cmd"
+        set -l image_cmd (_agent_build_describe_image_cmd "$cmd")
+        echo (set_color yellow)"💡 [Image → $image_cmd]"(set_color normal)
+        _agent_dispatch_one "$image_cmd"
     else if _agent_is_files_preference_question "$cmd"
         echo (set_color yellow)"💡 [Image save locations]"(set_color normal)
         files_preference_help $argv

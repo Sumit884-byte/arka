@@ -53,6 +53,13 @@ drawings = [
     "Pillow>=10.0",
     "pymupdf>=1.24",
 ]
+video = [
+    "Pillow>=10.0",
+    "edge-tts>=6.1",
+]
+vision = [
+    "Pillow>=10.0",
+]
 whatsapp = [
     "selenium>=4.0",
     "pywhatkit>=5.4",
@@ -62,7 +69,7 @@ dev = [
     "pytest",
 ]
 all = [
-    "arka-agent[chat,voice,pdf,whatsapp,charts,drawings]",
+    "arka-agent[chat,voice,pdf,whatsapp,charts,drawings,video]",
 ]
 
 [project.scripts]

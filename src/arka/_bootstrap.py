@@ -71,6 +71,7 @@ LEGACY_MODULES: dict[str, str] = {
     "arka_generate_video": "arka.generate.video",
     "arka_chart": "arka.charts.plot",
     "arka_drawing": "arka.documents.drawing",
+    "arka_describe_image": "arka.vision.describe",
     "arka_aie": "arka.aie.cli",
     "web_answer": "arka.agent.web_answer",
     "edge_speak": "arka.voice.edge_speak",

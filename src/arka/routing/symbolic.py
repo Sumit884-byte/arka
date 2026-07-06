@@ -50,6 +50,38 @@ def route_drawing(cmd: str) -> str | None:
     return "drawing_ask " + " ".join(shlex.quote(a) for a in argv)
 
 
+def route_describe_image(cmd: str) -> str | None:
+    try:
+        from arka.vision.describe import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "describe_image " + " ".join(shlex.quote(a) for a in argv)
+
+
+def route_download(cmd: str) -> str | None:
+    clean = cmd.lower()
+    if re.search(r"(?i)download\s+and\s+install", clean):
+        return None
+    if re.search(r"(?i)(youtube\s+bulk|playlist\?list=|youtu\.be/|youtube\.com/watch)", clean):
+        return None
+    url_m = re.search(r"https?://[^\s\"']+", cmd)
+    if url_m:
+        url = url_m.group(0).rstrip(".,)")
+        if re.search(r"(?i)\b(download|save|fetch|grab|wget|curl)\b", clean):
+            return f"download_file {shlex.quote(url)}"
+        if cmd.strip() == url:
+            return f"download_file {shlex.quote(url)}"
+    m = re.match(r"(?i)^(?:download\s+|wget\s+|curl\s+-o\s+|download\s+(?:this|the)\s+)(.+)$", cmd.strip())
+    if m:
+        target = m.group(1).strip()
+        if target:
+            return "download_file " + shlex.quote(target)
+    return None
+
+
 def route_timer(cmd: str) -> str | None:
     clean = cmd.lower().strip()
     if not re.search(r"\b(timer|countdown)\b", clean):
@@ -112,6 +144,17 @@ def route_agent_skills(cmd: str) -> str | None:
     return None
 
 
+def route_compose_video(cmd: str) -> str | None:
+    try:
+        from arka.media.compose_video import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "compose_video " + " ".join(shlex.quote(a) for a in argv)
+
+
 def route_offline_extras(cmd: str) -> str | None:
     """Try supplemental NL routes not always available via fish bridge."""
     for fn in (
@@ -119,6 +162,9 @@ def route_offline_extras(cmd: str) -> str | None:
         route_routines,
         route_chart,
         route_drawing,
+        route_describe_image,
+        route_download,
+        route_compose_video,
         route_timer,
         route_search_web,
         route_agent_skills,

@@ -68,8 +68,14 @@ COMPANY_TICKERS = {
 
 # Palette aligned with https://github.com/Sumit884-byte/charts (recharts demo)
 PIE_COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884d8", "#82ca9d"]
+BAR_COLOR = "#2563eb"
+BAR_EDGE = "#1e3a8a"
 SCATTER_COLOR = "#F97316"
 SCATTER_EDGE = "#ea580c"
+HIST_COLOR = "#7c3aed"
+HIST_EDGE = "#5b21b6"
+PARETO_BAR = "#2563eb"
+PARETO_LINE = "#dc2626"
 
 
 @dataclass
@@ -288,6 +294,25 @@ def parse_scatter_pairs(text: str) -> tuple[list[float], list[float], str, str, 
     return xs, ys, title, xlabel, ylabel
 
 
+def parse_labeled_pairs(text: str) -> tuple[list[str], list[float]]:
+    labels: list[str] = []
+    values: list[float] = []
+    for m in re.finditer(r"\b([A-Za-z][A-Za-z0-9-]{0,16})\s*:\s*(\d+(?:\.\d+)?)\b", text):
+        labels.append(m.group(1).strip().title())
+        values.append(float(m.group(2)))
+    return labels, values
+
+
+def _chart_title(text: str, *, drop: tuple[str, ...] = ()) -> str:
+    title = text
+    for pattern in drop:
+        title = re.sub(pattern, " ", title, flags=re.I)
+    title = re.sub(r"\b[A-Za-z][A-Za-z0-9-]{0,16}\s*:\s*\d+(?:\.\d+)?\b", " ", title)
+    title = re.sub(r"\d+(?:\.\d+)?(?:\s+\d+(?:\.\d+)?)*\s*$", " ", title)
+    title = re.sub(r"\s+", " ", title).strip()[:80]
+    return title
+
+
 def nl_to_argv(text: str) -> list[str]:
     t = text.strip()
     if not t:
@@ -295,17 +320,53 @@ def nl_to_argv(text: str) -> list[str]:
 
     chart_words = r"(?i)\b(chart|graph|plot|visuali[sz]e|diagram)\b"
     stock_words = r"(?i)\b(stock|stocks|share|shares|price|prices|market|ticker|equity)\b"
-    bar_words = r"(?i)\b(bar|bars|column|histogram|sales|sold|units|phones|mobiles|devices)\b"
-    pie_words = r"(?i)\b(pie|donut|doughnut|breakdown|distribution|proportion|percentage|percent|traffic\s+sources?|market\s+share)\b"
+    bar_words = r"(?i)\b(bar|bars|column|sales|sold|units|phones|mobiles|devices)\b"
+    pie_words = r"(?i)\b(pie|donut|doughnut|breakdown|proportion|percentage|percent|traffic\s+sources?|market\s+share)\b"
     scatter_words = r"(?i)\b(scatter|correlation|correlate|xy\s+plot|x-y)\b"
+    histogram_words = r"(?i)\b(histogram|frequency|freq|bin|bins)\b"
+    pareto_words = r"(?i)\b(pareto|80/20|80-20|eighty.twenty)\b"
     compare_words = r"(?i)\b(compare|comparison|versus|vs\.?|against)\b"
+
+    if re.search(pareto_words, t):
+        labels, values = parse_labeled_pairs(t)
+        if len(labels) >= 2:
+            data = ",".join(
+                f"{lbl}:{int(val) if val == int(val) else val:g}" for lbl, val in zip(labels, values)
+            )
+            title = _chart_title(t, drop=(pareto_words, r"\bchart\b", r"\bgraph\b", r"\bplot\b", r"\bdefects?\b"))
+            argv = ["pareto", "--data", data]
+            if title:
+                argv.extend(["--title", title.title()])
+            return argv
+
+    if re.search(histogram_words, t):
+        labels, values = parse_labeled_pairs(t)
+        if len(labels) >= 2:
+            data = ",".join(
+                f"{lbl}:{int(val) if val == int(val) else val:g}" for lbl, val in zip(labels, values)
+            )
+            title = _chart_title(t, drop=(histogram_words, r"\bchart\b", r"\bgraph\b", r"\bplot\b"))
+            argv = ["histogram", "--data", data, "--binned"]
+            if title:
+                argv.extend(["--title", title.title()])
+            return argv
+        nums = [float(n) for n in re.findall(r"\d+(?:\.\d+)?", t)]
+        if len(nums) >= 5:
+            data = ",".join(f"{n:g}" for n in nums)
+            title = _chart_title(t, drop=(histogram_words, r"\bchart\b", r"\bgraph\b", r"\bplot\b", r"\bof\b", r"\bfor\b"))
+            argv = ["histogram", "--data", data]
+            if title:
+                argv.extend(["--title", title.title()])
+            return argv
 
     labels, values, bar_title = parse_bar_pairs(t)
     if len(labels) >= 2:
         data = ",".join(
             f"{lbl}:{int(val) if val == int(val) else val:g}" for lbl, val in zip(labels, values)
         )
-        if re.search(pie_words, t):
+        if re.search(pie_words, t) or (
+            re.search(r"(?i)\bdistribution\b", t) and not re.search(histogram_words, t)
+        ):
             argv = ["pie", "--data", data]
             if bar_title:
                 argv.extend(["--title", bar_title])
@@ -440,7 +501,7 @@ def plot_bar(
     plt = _require_matplotlib()
 
     fig, ax = plt.subplots(figsize=(max(6, len(labels) * 1.2), 5.5))
-    bars = ax.bar(labels, values, color="#2563eb", edgecolor="#1e3a8a")
+    bars = ax.bar(labels, values, color=BAR_COLOR, edgecolor=BAR_EDGE)
     ax.set_title(title or "Comparison")
     ax.set_ylabel(ylabel or "Value")
     ax.grid(axis="y", alpha=0.3)
@@ -457,6 +518,18 @@ def plot_bar(
     output.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output, dpi=150)
     plt.close(fig)
+    _write_chart_sidecar(
+        output,
+        {
+            "type": "bar",
+            "title": title or "Comparison",
+            "labels": labels,
+            "values": values,
+            "ylabel": ylabel or "Value",
+            "colors": {lbl: BAR_COLOR for lbl in labels},
+            "source": "arka-chart",
+        },
+    )
     return output
 
 
@@ -489,7 +562,29 @@ def plot_pie(
     output.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output, dpi=150)
     plt.close(fig)
+    _write_chart_sidecar(
+        output,
+        {
+            "type": "pie",
+            "title": title or "Distribution",
+            "labels": labels,
+            "values": values,
+            "percentages": _percentages(labels, values),
+            "colors": {lbl: PIE_COLORS[i % len(PIE_COLORS)] for i, lbl in enumerate(labels)},
+            "source": "arka-chart",
+        },
+    )
     return output
+
+
+def _percentages(labels: list[str], values: list[float]) -> dict[str, int]:
+    total = sum(values) or 1.0
+    return {lbl: round(100 * val / total) for lbl, val in zip(labels, values)}
+
+
+def _write_chart_sidecar(output: Path, payload: dict) -> None:
+    sidecar = output.with_suffix(".json")
+    sidecar.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
 def plot_scatter(
@@ -513,6 +608,137 @@ def plot_scatter(
     output.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output, dpi=150)
     plt.close(fig)
+    points = [{"x": x, "y": y} for x, y in zip(xs, ys)]
+    _write_chart_sidecar(
+        output,
+        {
+            "type": "scatter",
+            "title": title or "Scatter plot",
+            "xlabel": xlabel or "X",
+            "ylabel": ylabel or "Y",
+            "points": points,
+            "color": SCATTER_COLOR,
+            "source": "arka-chart",
+        },
+    )
+    return output
+
+
+def plot_histogram(
+    *,
+    raw_values: list[float] | None = None,
+    bin_labels: list[str] | None = None,
+    counts: list[float] | None = None,
+    title: str,
+    xlabel: str,
+    bins: int | None,
+    output: Path,
+) -> Path:
+    plt = _require_matplotlib()
+
+    if bin_labels and counts:
+        fig, ax = plt.subplots(figsize=(max(6, len(bin_labels) * 1.2), 5.5))
+        ax.bar(bin_labels, counts, color=HIST_COLOR, edgecolor=HIST_EDGE)
+        ax.set_ylabel("Count")
+        sidecar_bins = [{"label": lbl, "count": cnt} for lbl, cnt in zip(bin_labels, counts)]
+        total = sum(counts)
+        peak_i = max(range(len(counts)), key=lambda i: counts[i])
+    else:
+        values = raw_values or []
+        fig, ax = plt.subplots(figsize=(8, 5.5))
+        n, edges, _patches = ax.hist(
+            values,
+            bins=bins or "auto",
+            color=HIST_COLOR,
+            edgecolor=HIST_EDGE,
+        )
+        counts_list = [float(c) for c in n]
+        edge_list = [float(e) for e in edges]
+        bin_labels = [f"{edge_list[i]:g}–{edge_list[i + 1]:g}" for i in range(len(counts_list))]
+        sidecar_bins = [
+            {"start": edge_list[i], "end": edge_list[i + 1], "count": counts_list[i]}
+            for i in range(len(counts_list))
+        ]
+        total = sum(counts_list)
+        peak_i = max(range(len(counts_list)), key=lambda i: counts_list[i]) if counts_list else 0
+        counts = counts_list
+
+    ax.set_title(title or "Histogram")
+    ax.set_xlabel(xlabel or "Value")
+    ax.grid(axis="y", alpha=0.3)
+    fig.tight_layout()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output, dpi=150)
+    plt.close(fig)
+    _write_chart_sidecar(
+        output,
+        {
+            "type": "histogram",
+            "title": title or "Histogram",
+            "xlabel": xlabel or "Value",
+            "bins": sidecar_bins,
+            "total": total,
+            "peak_bin": bin_labels[peak_i] if bin_labels else "",
+            "peak_count": counts[peak_i] if counts else 0,
+            "source": "arka-chart",
+        },
+    )
+    return output
+
+
+def plot_pareto(
+    labels: list[str],
+    values: list[float],
+    *,
+    title: str,
+    output: Path,
+) -> Path:
+    plt = _require_matplotlib()
+
+    pairs = sorted(zip(labels, values), key=lambda row: row[1], reverse=True)
+    sorted_labels = [p[0] for p in pairs]
+    sorted_values = [p[1] for p in pairs]
+    total = sum(sorted_values) or 1.0
+    cumulative: list[float] = []
+    running = 0.0
+    for val in sorted_values:
+        running += val
+        cumulative.append(round(100 * running / total, 1))
+
+    fig, ax1 = plt.subplots(figsize=(max(7, len(sorted_labels) * 1.3), 5.5))
+    ax1.bar(sorted_labels, sorted_values, color=PARETO_BAR, edgecolor=BAR_EDGE)
+    ax1.set_ylabel("Count")
+    ax1.set_title(title or "Pareto chart")
+    ax1.grid(axis="y", alpha=0.3)
+    for bar, val in zip(ax1.patches, sorted_values):
+        ax1.text(
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height(),
+            f"{val:g}",
+            ha="center",
+            va="bottom",
+            fontsize=9,
+        )
+
+    ax2 = ax1.twinx()
+    ax2.plot(sorted_labels, cumulative, color=PARETO_LINE, marker="o", linewidth=2)
+    ax2.set_ylabel("Cumulative %")
+    ax2.set_ylim(0, 105)
+    fig.tight_layout()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output, dpi=150)
+    plt.close(fig)
+    _write_chart_sidecar(
+        output,
+        {
+            "type": "pareto",
+            "title": title or "Pareto chart",
+            "labels": sorted_labels,
+            "values": sorted_values,
+            "cumulative_pct": {lbl: pct for lbl, pct in zip(sorted_labels, cumulative)},
+            "source": "arka-chart",
+        },
+    )
     return output
 
 
@@ -544,6 +770,51 @@ def parse_xy_data(raw: str) -> tuple[list[float], list[float]]:
     if len(xs) < 3:
         raise SystemExit("Need at least three x:y pairs in --data (e.g. 100:200,120:190,170:280)")
     return xs, ys
+
+
+def parse_histogram_data(raw: str, *, binned: bool) -> tuple[list[float] | None, list[str] | None, list[float] | None]:
+    if binned or ":" in raw:
+        labels, values = parse_data_arg(raw)
+        return None, labels, values
+    values: list[float] = []
+    for part in raw.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        values.append(float(part.replace(",", "")))
+    if len(values) < 5:
+        raise SystemExit("Need at least five numeric values (e.g. 12,15,18,22,25) or binned label:count pairs")
+    return values, None, None
+
+
+def cmd_histogram(args: argparse.Namespace) -> int:
+    raw, bin_labels, counts = parse_histogram_data(args.data, binned=getattr(args, "binned", False))
+    title = args.title or "Histogram"
+    slug = re.sub(r"[^a-z0-9]+", "-", title.lower())[:40] or "histogram"
+    out = Path(args.output).expanduser() if args.output else default_output(slug)
+    saved = plot_histogram(
+        raw_values=raw,
+        bin_labels=bin_labels,
+        counts=counts,
+        title=title,
+        xlabel=args.xlabel,
+        bins=args.bins,
+        output=out,
+    )
+    print(f"Saved chart: {saved}")
+    open_image(saved)
+    return 0
+
+
+def cmd_pareto(args: argparse.Namespace) -> int:
+    labels, values = parse_data_arg(args.data)
+    title = args.title or "Pareto chart"
+    slug = re.sub(r"[^a-z0-9]+", "-", title.lower())[:40] or "pareto-chart"
+    out = Path(args.output).expanduser() if args.output else default_output(slug)
+    saved = plot_pareto(labels, values, title=title, output=out)
+    print(f"Saved chart: {saved}")
+    open_image(saved)
+    return 0
 
 
 def cmd_line(args: argparse.Namespace) -> int:
@@ -663,6 +934,29 @@ def build_parser() -> argparse.ArgumentParser:
     p_scatter.add_argument("--ylabel", default="", help="Y-axis label")
     p_scatter.set_defaults(func=cmd_scatter)
 
+    p_hist = sub.add_parser("histogram", help="Histogram from numeric values or binned label:count pairs")
+    p_hist.add_argument(
+        "--data",
+        required=True,
+        help='Raw values "12,15,18,..." or binned "0-10:5,10-20:12"',
+    )
+    p_hist.add_argument("--binned", action="store_true", help="Treat --data as label:count pairs")
+    p_hist.add_argument("--bins", type=int, default=None, help="Number of bins for raw values")
+    p_hist.add_argument("-o", "--output", help="Output PNG path")
+    p_hist.add_argument("--title", default="", help="Chart title")
+    p_hist.add_argument("--xlabel", default="", help="X-axis label")
+    p_hist.set_defaults(func=cmd_histogram)
+
+    p_pareto = sub.add_parser("pareto", help="Pareto chart from label:value pairs")
+    p_pareto.add_argument(
+        "--data",
+        required=True,
+        help='Comma-separated pairs, e.g. "Scratches:45,Dents:28,Cracks:15"',
+    )
+    p_pareto.add_argument("-o", "--output", help="Output PNG path")
+    p_pareto.add_argument("--title", default="", help="Chart title")
+    p_pareto.set_defaults(func=cmd_pareto)
+
     p_parse = sub.add_parser("parse", help="Parse natural language → chart args (internal)")
     p_parse.add_argument("text", nargs="+", help="Natural language request")
     p_parse.set_defaults(func=cmd_parse)
@@ -675,7 +969,7 @@ def main(argv: list[str] | None = None) -> int:
     if not argv:
         build_parser().print_help()
         return 0
-    if argv[0] not in {"line", "bar", "pie", "scatter", "parse", "-h", "--help"}:
+    if argv[0] not in {"line", "bar", "pie", "scatter", "histogram", "pareto", "parse", "-h", "--help"}:
         nl = nl_to_argv(" ".join(argv))
         if nl:
             argv = nl
@@ -685,6 +979,8 @@ def main(argv: list[str] | None = None) -> int:
             print('  chart bar --data "Apple:230,Samsung:210" --title "Phone sales"', file=sys.stderr)
             print('  chart pie --data "Organic:400,Direct:300,Referral:300"', file=sys.stderr)
             print('  chart scatter --data "100:200,120:190,170:280" --xlabel "Spend" --ylabel "Revenue"', file=sys.stderr)
+            print('  chart histogram --data "12,15,18,22,25,28,30,35,38,42"', file=sys.stderr)
+            print('  chart pareto --data "Scratches:45,Dents:28,Cracks:15"', file=sys.stderr)
             return 1
     parser = build_parser()
     args = parser.parse_args(argv)

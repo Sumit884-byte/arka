@@ -138,6 +138,7 @@ Some skills ship their own defaults when you don't pass flags:
 - Gmail NL: **unread** requests fetch **all** unread mail (`--all`); header shows total unread (e.g. `10 unread emails`), not just the fetched batch. Summarize without “unread” still defaults to the last 2 days; day-window queries use `--limit 100`. Caps: `ARKA_GMAIL_MAX`, `ARKA_GMAIL_SUMMARIZE_MAX`.
 - Charts: `chart line` pulls Yahoo Finance prices; `chart bar` / `chart pie` / `chart scatter` for comparisons. Saves PNG to `~/Pictures/arka-generated/`.
 - Drawings: `drawing_ask plan.pdf "extract door schedule"` uses Gemini vision on blueprints, scans, and schedules (beyond text OCR).
+- Images: `describe_image photo.jpg` / `arka describe …` — vision caption (Gemini, Ollama, or vLLM; auto on Mac).
 - Routines: `routines add daily 9am "task"` schedules recurring tasks (launchd on macOS, systemd on Linux). Run `routines install` after adding.
 - YouTube research: 2 videos (`YT_RESEARCH_MAX=2`)
 - Goal agent: 25 steps (`GOAL_MAX_STEPS=25`)
@@ -231,7 +232,7 @@ flowchart TD
    ```
 
 2. **Natural language** — `arka "what's the weather"` or `arka install torch for cpu`:
-   - **Offline routing** (fast, no LLM): `_agent_guess_route` maps 120+ skills via regex + Python parsers (`arka_chart.py parse`, `arka_drawing.py parse`, `arka_routines.py parse`, `arka_remind.py parse`, Gmail helpers, etc.). `_agent_offline_route_cmd` runs the full symbolic router before the LLM. You'll see `💡 [Offline routing]` and `→ Interpreted: …` when this fires.
+   - **Offline routing** (fast, no LLM): `_agent_guess_route` maps 120+ skills via regex + Python parsers (`arka_chart.py parse`, `arka_drawing.py parse`, `arka_describe_image.py parse`, `arka_routines.py parse`, `arka_remind.py parse`, Gmail helpers, etc.). `_agent_offline_route_cmd` runs the full symbolic router before the LLM. You'll see `💡 [Offline routing]` and `→ Interpreted: …` when this fires.
    - **LLM routing** (fallback): when offline rules don't match, `arka_llm.py route` asks the **AI fallback orchestrator** (task=`route`) to pick a skill or safe shell command.
    - **Correction layer**: weak LLM picks are fixed (e.g. `search_web` → `web_answer` for factual questions, advisory → `agent_ask`, Gmail → `google gmail`).
 
@@ -660,6 +661,60 @@ Requires `GEMINI_API_KEY` or `GOOGLE_API_KEY`. PDFs render to images via PyMuPDF
 # DRAWING_MODEL=gemini-2.5-flash
 # DRAWING_MAX_PAGES=8
 # DRAWING_MAX_EDGE=2048
+```
+
+
+
+### Image description (`describe_image`)
+
+Describe **photos, screenshots, and charts** with a **two-layer analysis**: OCR extracts exact text/numbers; vision describes layout and colors (Ollama, vLLM, or Gemini).
+
+```fish
+pip install Pillow   # once
+brew install tesseract   # OCR layer — or: pip install ocrmac (macOS)
+
+# Two layers: OCR (exact labels/%) + vision (colors/layout)
+arka describe pie-chart-traffic-sources-organic-400-d-20260705-234731
+describe_image photo.jpg
+
+# Explicit vision backends:
+export DESCRIBE_IMAGE_BACKEND=gemini   # needs GEMINI_API_KEY
+export DESCRIBE_IMAGE_BACKEND=ollama   # ollama pull llava
+export DESCRIBE_IMAGE_BACKEND=vllm     # Linux, or vLLM-Metal on Mac
+```
+
+**macOS options (pick one):**
+
+```fish
+# 1) Gemini (easiest)
+export GEMINI_API_KEY=your-key
+
+# 2) Ollama vision (local)
+brew install ollama && ollama pull llava
+
+# 3) vLLM-Metal (Apple Silicon GPU)
+curl -fsSL https://raw.githubusercontent.com/vllm-project/vllm-metal/main/install.sh | bash
+source ~/.venv-vllm-metal/bin/activate
+export VLLM_START_CMD='vllm serve mlx-community/Qwen2-VL-2B-Instruct-4bit --port 8000'
+export DESCRIBE_IMAGE_BACKEND=vllm
+```
+
+**Linux:** `pip install vllm` + auto-start (default). Use `drawing_ask` for blueprints/PDFs via Gemini.
+
+```fish
+arka describe photo.jpg
+arka what's in ~/Downloads/image.png
+agent_route "describe ~/Pictures/sunset.jpg"
+```
+
+```env
+# DESCRIBE_IMAGE_TWO_LAYER=1
+# DESCRIBE_IMAGE_OCR=1
+# DESCRIBE_IMAGE_BACKEND=auto|gemini|ollama|vllm
+# DESCRIBE_IMAGE_OLLAMA_MODEL=llava
+# VLLM_HOST=127.0.0.1:8000
+# VLLM_START_CMD='vllm serve Qwen/Qwen2-VL-2B-Instruct --port 8000'
+# DESCRIBE_IMAGE_MAX_EDGE=2048
 ```
 
 
