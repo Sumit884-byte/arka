@@ -641,11 +641,54 @@ def build_price_search_queries(product: str, *, region: str) -> list[PriceSearch
     return out
 
 
-def _model_from_title(title: str, product: str) -> str:
-    cleaned = re.sub(r"(?i)\s*[-–|:].*$", "", title or "").strip()
+_RETAILER_TITLE_SUFFIX_RE = re.compile(
+    r"(?i)\s+(?:[-–|]\s*|\s*:\s*)"
+    r"(?:amazon(?:\s+india)?|flipkart|nykaa|croma|best\s+buy|"
+    r"buy\s+online|online\s+shopping|price(?:\s+in\s+india)?|"
+    r"free\s+delivery|prime)\b.*$"
+)
+
+
+def _slug_to_title(slug: str) -> str:
+    text = re.sub(r"[^\w\s-]", " ", slug.replace("-", " "))
+    return _normalize_label(text)
+
+
+def _model_from_url(url: str) -> str | None:
+    """Derive a readable product name from a retailer product URL slug."""
+    if not url:
+        return None
+    parsed = urlparse(url)
+    path = (parsed.path or "").strip("/")
+    if not path:
+        return None
+
+    segments = path.split("/")
+    product_slug = ""
+    for idx, segment in enumerate(segments):
+        lower = segment.lower()
+        if lower in {"dp", "gp", "product", "p", "site"} or re.fullmatch(r"[A-Z0-9]{8,}", segment):
+            if idx > 0:
+                product_slug = segments[idx - 1]
+            break
+
+    if not product_slug:
+        return None
+    title = _slug_to_title(product_slug)
+    return title if len(title) > 3 else None
+
+
+def _model_from_title(title: str, product: str, *, url: str = "") -> str:
+    cleaned = _RETAILER_TITLE_SUFFIX_RE.sub("", title or "").strip()
     cleaned = re.sub(r"(?i)\s+(?:price|buy|shop).*$", "", cleaned).strip()
+    from_url = _model_from_url(url)
+
     if cleaned and len(cleaned) > 3:
+        if from_url and len(from_url) > len(cleaned) + 8:
+            return from_url[:120]
         return cleaned[:120]
+    if from_url:
+        return from_url[:120]
     return product.strip().title() or product
 
 
@@ -829,10 +872,11 @@ def fetch_price_listings(
                 continue
 
             # Capture multiple prices from listing pages for range display.
+            model = _model_from_title(title, product, url=link)
             for price in prices[:4]:
                 listings.append(
                     PriceListing(
-                        model=_model_from_title(title, product),
+                        model=model,
                         price=price,
                         source=label,
                         url=link,
@@ -913,10 +957,14 @@ def format_price_check_output(
                 else items[0].price
             )
             lines.append(f" • {source} — {price_text}")
-            lines.append(f"   {items[0].url}")
-            if len(items) > 1:
-                for item in items[1:4]:
-                    lines.append(f"   • {item.model} — {item.price}")
+            sid = _source_id_for_label(source, region=region)
+            browse_url = _retailer_browse_url(sid, product, region=region) if sid else None
+            if browse_url:
+                lines.append(f"   {browse_url}")
+            for item in items[:4]:
+                lines.append(f"   • {item.model} — {item.price}")
+                if item.url:
+                    lines.append(f"     {item.url}")
             lines.append("")
 
         browse_labels = searched_labels or [
@@ -960,6 +1008,8 @@ def format_price_check_output(
                 lines.append(" Popular configurations:")
                 for item in apple_listings[:5]:
                     lines.append(f" • {item.model} — {item.price}")
+                    if item.url:
+                        lines.append(f"   {item.url}")
                 lines.append("")
         else:
             for item in apple_listings:

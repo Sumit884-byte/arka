@@ -9,6 +9,7 @@ from unittest import mock
 from arka.agent.core import price_check
 from arka.agent.price_sources import (
     PriceListing,
+    _model_from_title,
     build_price_search_queries,
     check_url_reachable,
     detect_price_product_category,
@@ -409,6 +410,7 @@ class PriceCheckCoreTests(unittest.TestCase):
         self.assertIn("Popular configurations:", output)
         self.assertIn("14-inch MacBook Pro M5 (Space Black) — ₹2,39,900", output)
         self.assertIn("14-inch MacBook Pro M5 Pro (Space Black) — ₹2,99,900", output)
+        self.assertIn(f"   {APPLE_MBP_LINE_URL}", output)
         self.assertIn("Date retrieved: 2026-07-09", output)
 
     def test_format_price_check_output_includes_other_retailers(self) -> None:
@@ -470,9 +472,69 @@ class PriceCheckCoreTests(unittest.TestCase):
         self.assertIn("Prices vary by brand and model.", output)
         self.assertIn("Amazon India — ₹499 – ₹1,299", output)
         self.assertIn("Flipkart — ₹799", output)
+        self.assertIn("https://www.amazon.in/dp/B0EXAMPLE1", output)
+        self.assertIn("https://www.amazon.in/dp/B0EXAMPLE2", output)
+        self.assertIn("https://www.flipkart.com/agaro-electric-brush/p/itmexample", output)
         self.assertIn("Browse more options:", output)
         self.assertIn("amazon.in/s?k=electric+brush", output)
         self.assertIn("flipkart.com/search?q=electric+brush", output)
+
+    def test_format_price_check_output_generic_per_item_urls(self) -> None:
+        listings = [
+            PriceListing(
+                model="Oral B Vitality Electric Rechargeable Toothbrush",
+                price="₹1,325",
+                source="Amazon India",
+                url="https://www.amazon.in/Oral-Vitality-Electric-Rechargeable-Toothbrush/dp/B07JL3W3KG",
+            ),
+            PriceListing(
+                model="Oral B Pro 3 Electric Toothbrush",
+                price="₹6,499",
+                source="Amazon India",
+                url="https://www.amazon.in/Oral-B-Pro-3-Electric-Toothbrush/dp/B08YYYY",
+            ),
+            PriceListing(
+                model="Oral B Cross Action Replacement Brush Heads",
+                price="₹1,126.25",
+                source="Amazon India",
+                url="https://www.amazon.in/Oral-B-Cross-Action-Brush-Heads/dp/B09ZZZZ",
+            ),
+        ]
+        output = format_price_check_output(
+            listings,
+            product="oral b electric toothbrush",
+            region="india",
+            searched_labels=["Amazon India"],
+            retrieved_on="2026-07-09",
+        )
+        self.assertIn("Amazon India — ₹1,126 – ₹6,499", output)
+        self.assertIn("amazon.in/s?k=oral+b+electric+toothbrush", output)
+        self.assertIn("Oral B Vitality Electric Rechargeable Toothbrush — ₹1,325", output)
+        self.assertIn("https://www.amazon.in/Oral-Vitality-Electric-Rechargeable-Toothbrush/dp/B07JL3W3KG", output)
+        self.assertIn("Oral B Pro 3 Electric Toothbrush — ₹6,499", output)
+        self.assertIn("https://www.amazon.in/Oral-B-Pro-3-Electric-Toothbrush/dp/B08YYYY", output)
+        self.assertIn("Oral B Cross Action Replacement Brush Heads — ₹1,126.25", output)
+        self.assertIn("https://www.amazon.in/Oral-B-Cross-Action-Brush-Heads/dp/B09ZZZZ", output)
+
+    def test_model_from_title_preserves_oral_b_brand(self) -> None:
+        title = "Oral-B Vitality Electric Rechargeable Toothbrush - Amazon.in"
+        model = _model_from_title(
+            title,
+            "electric toothbrush",
+            url="https://www.amazon.in/Oral-Vitality-Electric-Rechargeable-Toothbrush/dp/B07JL3W3KG",
+        )
+        self.assertIn("Oral", model)
+        self.assertIn("Vitality", model)
+        self.assertNotEqual(model, "Oral")
+
+    def test_model_from_title_uses_url_slug_when_title_is_short(self) -> None:
+        model = _model_from_title(
+            "Oral",
+            "electric toothbrush",
+            url="https://www.amazon.in/Oral-Vitality-Electric-Rechargeable-Toothbrush/dp/B07JL3W3KG",
+        )
+        self.assertIn("Vitality", model)
+        self.assertIn("Toothbrush", model)
 
     def test_fetch_price_listings_skips_apple_for_generic(self) -> None:
         search_results = [
