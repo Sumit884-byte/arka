@@ -273,7 +273,17 @@ def fetch_page_html(url: str, *, timeout: int = 12) -> str:
 def _format_retail_price(amount: float | int, *, region: str) -> str:
     value = int(round(float(amount)))
     if region == "india":
-        return f"₹{value:,}"
+        text = str(value)
+        if len(text) <= 3:
+            grouped = text
+        else:
+            head, tail = text[:-3], text[-3:]
+            parts: list[str] = []
+            while head:
+                parts.insert(0, head[-2:])
+                head = head[:-2]
+            grouped = ",".join(parts + [tail])
+        return f"₹{grouped}"
     return f"${value:,}"
 
 
@@ -565,6 +575,30 @@ def _price_to_int(amount: str) -> int | None:
         return None
 
 
+def _parse_formatted_price(price: str) -> int | None:
+    """Extract integer value from a formatted retail price like ₹239,900."""
+    match = re.search(r"[\d,]+(?:\.\d{2})?", price.replace(" ", ""))
+    if match is None:
+        return None
+    return _price_to_int(match.group(0))
+
+
+def _region_label(region: str) -> str:
+    return "India" if region == "india" else "US"
+
+
+def _format_price_range(amounts: list[int], *, region: str) -> str:
+    if not amounts:
+        return ""
+    low, high = min(amounts), max(amounts)
+    if low == high:
+        return _format_retail_price(low, region=region)
+    return f"{_format_retail_price(low, region=region)} – {_format_retail_price(high, region=region)}"
+
+
+_CONFIG_NOTE = "Prices depend on chip, RAM, and storage configuration."
+
+
 def _dedupe_listings(listings: list[PriceListing]) -> list[PriceListing]:
     seen_keys: set[tuple[str, str, str]] = set()
     out: list[PriceListing] = []
@@ -706,7 +740,71 @@ def format_price_check_output(
             f"Date retrieved: {today}\n"
             "Try a more specific model name or check retailer sites directly."
         )
-    lines = [f"  {item.model} | {item.price} | {item.source} | {item.url}" for item in listings]
+
+    lines: list[str] = []
+    region_name = _region_label(region)
+    apple_line = resolve_apple_product_line(product)
+    apple_shop_url = resolve_apple_shop_url(product, region=region)
+    apple_source = "Apple India" if region == "india" else "Apple US"
+
+    apple_listings: list[PriceListing] = []
+    other_listings: list[PriceListing] = []
+    for item in listings:
+        url_match = (
+            apple_shop_url is not None
+            and item.url.rstrip("/") == apple_shop_url.rstrip("/")
+        )
+        if url_match or (apple_line is not None and item.source == apple_source):
+            apple_listings.append(item)
+        else:
+            other_listings.append(item)
+
+    if apple_listings:
+        display_name = apple_line[1] if apple_line else product.strip().title()
+        amounts = [
+            value
+            for item in apple_listings
+            if (value := _parse_formatted_price(item.price)) is not None
+        ]
+        if amounts:
+            lines.append(
+                f" {display_name} ({region_name}): "
+                f"{_format_price_range(amounts, region=region)}"
+            )
+            lines.append("")
+            if apple_line is not None:
+                lines.append(f" {_CONFIG_NOTE}")
+                lines.append("")
+                if apple_shop_url:
+                    lines.append(" Configure & see all options:")
+                    lines.append(f" {apple_shop_url}")
+                    lines.append("")
+            if len(apple_listings) >= 2:
+                lines.append(" Popular configurations:")
+                for item in apple_listings[:5]:
+                    lines.append(f" • {item.model} — {item.price}")
+                lines.append("")
+        else:
+            for item in apple_listings:
+                lines.append(f" • {item.model} — {item.price} — {item.source}")
+                lines.append(f"   {item.url}")
+            lines.append("")
+
+    if other_listings:
+        if apple_listings:
+            lines.append(" Also listed at other retailers:")
+            lines.append("")
+        for item in other_listings:
+            lines.append(f" • {item.model} — {item.price} — {item.source}")
+            lines.append(f"   {item.url}")
+        lines.append("")
+
+    if not apple_listings and not other_listings:
+        for item in listings:
+            lines.append(f" • {item.model} — {item.price} — {item.source}")
+            lines.append(f"   {item.url}")
+        lines.append("")
+
     lines.append(f"Date retrieved: {today}")
     return "\n".join(lines)
 

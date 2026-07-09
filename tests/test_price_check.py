@@ -206,7 +206,7 @@ class PriceCheckCoreTests(unittest.TestCase):
                 model="MacBook Air M3 13-inch",
                 price="₹1,14,900",
                 source="Apple India",
-                url=APPLE_SHOP_URL,
+                url="https://www.apple.com/in/shop/buy-mac/macbook-air",
             )
         ]
         with mock.patch(
@@ -220,7 +220,10 @@ class PriceCheckCoreTests(unittest.TestCase):
         args, _ = print_block.call_args
         self.assertEqual(args[0], "Price check")
         self.assertIn("₹1,14,900", args[1])
-        self.assertIn("/shop/", args[1])
+        self.assertIn("MacBook Air (India)", args[1])
+        self.assertIn("Prices depend on chip, RAM, and storage configuration.", args[1])
+        self.assertIn("Configure & see all options:", args[1])
+        self.assertIn("/shop/buy-mac/macbook-air", args[1])
         self.assertNotIn("newsroom", args[1])
 
     def test_price_check_honest_when_no_prices(self) -> None:
@@ -309,9 +312,76 @@ class PriceCheckCoreTests(unittest.TestCase):
             searched_labels=["Apple India", "Flipkart"],
             retrieved_on="2026-07-09",
         )
-        self.assertIn(APPLE_SHOP_URL, output)
+        self.assertIn("MacBook Pro (India)", output)
         self.assertIn("₹1,69,900", output)
+        self.assertIn("Prices depend on chip, RAM, and storage configuration.", output)
+        self.assertIn("Configure & see all options:", output)
+        self.assertIn(APPLE_MBP_LINE_URL, output)
         self.assertIn("Date retrieved: 2026-07-09", output)
+
+    def test_format_price_check_output_shows_range_for_multiple_configs(self) -> None:
+        listings = [
+            PriceListing(
+                model="14-inch MacBook Pro M5 (Space Black)",
+                price="₹2,39,900",
+                source="Apple India",
+                url=APPLE_MBP_LINE_URL,
+            ),
+            PriceListing(
+                model="14-inch MacBook Pro M5 Pro (Space Black)",
+                price="₹2,99,900",
+                source="Apple India",
+                url=APPLE_MBP_LINE_URL,
+            ),
+            PriceListing(
+                model="16-inch MacBook Pro M5 Pro (Silver)",
+                price="₹3,49,900",
+                source="Apple India",
+                url=APPLE_MBP_LINE_URL,
+            ),
+        ]
+        output = format_price_check_output(
+            listings,
+            product="macbook pro",
+            region="india",
+            searched_labels=["Apple India"],
+            retrieved_on="2026-07-09",
+        )
+        self.assertIn("MacBook Pro (India): ₹2,39,900 – ₹3,49,900", output)
+        self.assertIn("Prices depend on chip, RAM, and storage configuration.", output)
+        self.assertIn("Configure & see all options:", output)
+        self.assertIn(APPLE_MBP_LINE_URL, output)
+        self.assertIn("Popular configurations:", output)
+        self.assertIn("14-inch MacBook Pro M5 (Space Black) — ₹2,39,900", output)
+        self.assertIn("14-inch MacBook Pro M5 Pro (Space Black) — ₹2,99,900", output)
+        self.assertIn("Date retrieved: 2026-07-09", output)
+
+    def test_format_price_check_output_includes_other_retailers(self) -> None:
+        listings = [
+            PriceListing(
+                model="14-inch MacBook Pro M5 (Space Black)",
+                price="₹2,39,900",
+                source="Apple India",
+                url=APPLE_MBP_LINE_URL,
+            ),
+            PriceListing(
+                model="Apple MacBook Pro M4",
+                price="₹1,69,900",
+                source="Flipkart",
+                url=FLIPKART_URL,
+            ),
+        ]
+        output = format_price_check_output(
+            listings,
+            product="macbook pro",
+            region="india",
+            searched_labels=["Apple India", "Flipkart"],
+            retrieved_on="2026-07-09",
+        )
+        self.assertIn("MacBook Pro (India): ₹2,39,900", output)
+        self.assertIn("Also listed at other retailers:", output)
+        self.assertIn("Flipkart", output)
+        self.assertIn(FLIPKART_URL, output)
 
 
 APPLE_MBP_HTML = """
