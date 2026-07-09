@@ -169,7 +169,26 @@ def _parse_amount(token: str) -> Decimal | None:
         return None
 
 
-def _format_amount(amount: Decimal) -> str:
+# ISO 4217 codes typically quoted with 0 decimal minor units.
+_ZERO_DECIMAL = frozenset({"JPY", "KRW", "VND", "CLP", "PYG", "UGX", "RWF", "BIF", "DJF", "GNF", "KMF", "XAF", "XOF", "XPF"})
+
+
+def _decimal_places(ccy: str) -> int:
+    return 0 if ccy in _ZERO_DECIMAL else 2
+
+
+def _format_amount(amount: Decimal, *, ccy: str | None = None) -> str:
+    """Format a monetary amount with sensible precision and thousand separators."""
+    if ccy is not None:
+        places = _decimal_places(ccy)
+        q = Decimal(10) ** -places
+        rounded = amount.quantize(q, rounding=ROUND_HALF_UP)
+        if places == 0:
+            return format(rounded, ",.0f")
+        text = format(rounded, ",.2f")
+        if rounded == rounded.to_integral_value():
+            return format(rounded.to_integral_value(), ",.0f")
+        return text
     text = format(amount.normalize(), "f")
     if "." in text:
         text = text.rstrip("0").rstrip(".")
@@ -241,6 +260,17 @@ def parse_convert(text: str) -> tuple[Decimal, str, str] | None:
         to_ccy = normalize_currency(m.group(3))
         if amount is not None and from_ccy and to_ccy:
             return amount, from_ccy, to_ccy
+
+    # "$250 to ₹" after preprocess, or "250 to ₹" when shell ate the leading $
+    m = re.search(
+        rf"(?i){_AMOUNT}\s*{_CONVERT_CONNECTOR}\s*{_CURRENCY_TOKEN}\s*$",
+        t,
+    )
+    if m:
+        amount = _parse_amount(m.group(1))
+        to_ccy = normalize_currency(m.group(2))
+        if amount is not None and to_ccy:
+            return amount, "USD", to_ccy
 
     # "USD to INR" with default amount 1 (exchange rate query)
     m = re.search(
@@ -367,15 +397,19 @@ def convert(amount: Decimal, from_ccy: str, to_ccy: str) -> ConversionResult:
 
 def format_result(conv: ConversionResult) -> str:
     """Pretty terminal output for a conversion."""
-    amt = _format_amount(conv.amount)
-    res = _format_amount(conv.result)
-    rate = format(conv.rate.normalize(), ",.6f").rstrip("0").rstrip(".")
+    amt = _format_amount(conv.amount, ccy=conv.from_ccy)
+    res = _format_amount(conv.result, ccy=conv.to_ccy)
+    rate_places = 2 if _decimal_places(conv.to_ccy) > 0 else 4
+    rate_q = Decimal(10) ** -rate_places
+    rate = format(conv.rate.quantize(rate_q, rounding=ROUND_HALF_UP), f",.{rate_places}f")
     lines = [
         "━━━ Currency Conversion ━━━",
-        f"  {amt} {conv.from_ccy}  →  {res} {conv.to_ccy}",
-        f"  Rate:     1 {conv.from_ccy} = {rate} {conv.to_ccy}",
-        f"  Source:   {conv.source}",
-        f"  As of:    {conv.date}",
+        "",
+        f"  {amt} {conv.from_ccy} → {res} {conv.to_ccy}",
+        "",
+        f"  Rate:   1 {conv.from_ccy} = {rate} {conv.to_ccy}",
+        f"  Source: {conv.source}",
+        f"  As of:  {conv.date}",
     ]
     return "\n".join(lines)
 

@@ -130,6 +130,22 @@ class CurrencyParseTests(unittest.TestCase):
         self.assertEqual(parsed[1], "USD")
         self.assertEqual(parsed[2], "INR")
 
+    def test_amount_to_symbol_only_target(self) -> None:
+        parsed = parse_convert("250 to ₹")
+        self.assertIsNotNone(parsed)
+        assert parsed is not None
+        self.assertEqual(parsed[0], Decimal("250"))
+        self.assertEqual(parsed[1], "USD")
+        self.assertEqual(parsed[2], "INR")
+
+    def test_dollar_prefix_to_rupee_symbol(self) -> None:
+        parsed = parse_convert("$250 to ₹")
+        self.assertIsNotNone(parsed)
+        assert parsed is not None
+        self.assertEqual(parsed[0], Decimal("250"))
+        self.assertEqual(parsed[1], "USD")
+        self.assertEqual(parsed[2], "INR")
+
     def test_symbol_after_amount(self) -> None:
         parsed = parse_convert("convert 250 $ to rs")
         self.assertIsNotNone(parsed)
@@ -222,18 +238,43 @@ class CurrencyFetchTests(unittest.TestCase):
     def test_format_result(self) -> None:
         text = format_result(
             ConversionResult(
-                amount=Decimal("100"),
+                amount=Decimal("250"),
                 from_ccy="USD",
                 to_ccy="INR",
-                rate=Decimal("83.5"),
-                result=Decimal("8350"),
-                date="2026-07-09",
-                source="Frankfurter (ECB)",
+                rate=Decimal("95.604562"),
+                result=Decimal("23901.1405"),
+                date="Thu, Jul 9, 2026",
+                source="open.er-api.com",
             )
         )
-        self.assertIn("100 USD", text)
-        self.assertIn("8350 INR", text)
-        self.assertIn("Frankfurter", text)
+        self.assertIn("250 USD", text)
+        self.assertIn("23,901.14 INR", text)
+        self.assertIn("95.60 INR", text)
+        self.assertIn("open.er-api.com", text)
+        self.assertIn("Thu, Jul 9, 2026", text)
+        self.assertIn("━━━ Currency Conversion ━━━", text)
+        self.assertIn("\n\n", text)
+
+    def test_format_result_dollars_ot_rs(self) -> None:
+        text = format_result(
+            ConversionResult(
+                amount=Decimal("250"),
+                from_ccy="USD",
+                to_ccy="INR",
+                rate=Decimal("95.604562"),
+                result=Decimal("23901.1405"),
+                date="Thu, Jul 9, 2026",
+                source="open.er-api.com",
+            )
+        )
+        lines = text.splitlines()
+        self.assertEqual(lines[0], "━━━ Currency Conversion ━━━")
+        self.assertEqual(lines[1], "")
+        self.assertIn("→", lines[2])
+        self.assertEqual(lines[3], "")
+        self.assertTrue(lines[4].startswith("  Rate:"))
+        self.assertTrue(lines[5].startswith("  Source:"))
+        self.assertTrue(lines[6].startswith("  As of:"))
 
 
 class CurrencyRoutingTests(unittest.TestCase):

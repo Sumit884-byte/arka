@@ -6590,6 +6590,17 @@ function _arka_pretty_python_output --description "Format Python ━━━ block
                 set -a body_lines "$ln"
                 set i (math $i + 1)
             end
+            if test "$title" = "Currency Conversion"
+                printf '%s%s%s\n' (set_color --bold green) "━━━ $title ━━━" (set_color normal)
+                for ln in $body_lines
+                    if test -z "$ln"
+                        echo ""
+                    else
+                        echo "  $ln"
+                    end
+                end
+                continue
+            end
             set -l joined (string join \n -- $body_lines)
             _arka_print_answer_block "$joined" "$title"
             continue
@@ -7579,6 +7590,38 @@ except Exception as e:
 " "$coins"
 end
 
+function _arka_currency_text_from_argv --description "Build currency NL text; recover shell-eaten \$amount (internal)"
+    set -l text (string join " " $argv)
+    set -l py (_arka_python)
+    if test (count ($py (_arka_py_script arka_currency.py) parse (string escape --style=script -- $text) 2>/dev/null)) -gt 0
+        echo $text
+        return 0
+    end
+    if not string match -qr '^(?i)(to|in|into|ot)\s' -- "$text"
+        echo $text
+        return 0
+    end
+    for entry in (history --prefix arka --max 12 2>/dev/null)
+        if string match -qr '(?i)convert\s+\$[0-9].*\b(to|in|into|ot)\s' -- "$entry"
+            set -l stripped (string replace -r '^(?i).*?\bconvert\s+' '' -- "$entry" | string trim)
+            if test (count ($py (_arka_py_script arka_currency.py) parse (string escape --style=script -- $stripped) 2>/dev/null)) -gt 0
+                echo $stripped
+                return 0
+            end
+        end
+    end
+    for entry in (history --prefix convert --max 8 2>/dev/null)
+        if string match -qr '\$[0-9]' -- "$entry"
+            set -l stripped (string replace -r '^(?i).*\b(convert|currency)\s+' '' -- "$entry" | string trim)
+            if test (count ($py (_arka_py_script arka_currency.py) parse (string escape --style=script -- $stripped) 2>/dev/null)) -gt 0
+                echo $stripped
+                return 0
+            end
+        end
+    end
+    echo $text
+end
+
 function currency_convert --description "Convert amounts between currencies using live exchange rates"
     set -l py (_arka_python)
     if test (count $argv) -eq 0
@@ -7587,11 +7630,12 @@ function currency_convert --description "Convert amounts between currencies usin
         echo "       arka 'what is 500 EUR in GBP'"
         return 1
     end
-    set -l out ($py (_arka_py_script arka_currency.py) $argv 2>&1)
-    set -l status $status
-    if test $status -ne 0
+    set -l text (_arka_currency_text_from_argv $argv)
+    set -l out (_arka_capture_output $py (_arka_py_script arka_currency.py) convert (string escape --style=script -- $text))
+    set -l st $status
+    if test $st -ne 0
         echo $out >&2
-        return $status
+        return $st
     end
     _arka_pretty_python_output "$out"
     return 0
