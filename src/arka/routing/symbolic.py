@@ -50,6 +50,17 @@ def route_drawing(cmd: str) -> str | None:
     return "drawing_ask " + " ".join(shlex.quote(a) for a in argv)
 
 
+def route_describe_screen(cmd: str) -> str | None:
+    try:
+        from arka.vision.screen import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "describe_screen " + " ".join(shlex.quote(a) for a in argv)
+
+
 def route_describe_image(cmd: str) -> str | None:
     try:
         from arka.vision.describe import nl_to_argv
@@ -210,6 +221,7 @@ def route_offline_extras(cmd: str) -> str | None:
         route_routines,
         route_chart,
         route_drawing,
+        route_describe_screen,
         route_describe_image,
         route_generate_thumbnail,
         route_generate_image,
