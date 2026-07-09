@@ -236,9 +236,32 @@ def route_generate_thumbnail(cmd: str) -> str | None:
     return "generate_thumbnail generate " + " ".join(shlex.quote(a) for a in argv)
 
 
+_SIZE_THRESHOLD_RE = re.compile(
+    r"(?i)(?:less|more|greater|larger|smaller|lesser|under|over|above|below|bigger)(?:\s+than)?|\d+\s*(?:kb|mb|gb)\b"
+)
+_FILE_SIZE_SUBJECT_RE = re.compile(
+    r"(?i)(?:"
+    r"\b(?:find|search|list|show)\s+.*\bfiles?\b|"
+    r"\b(?:find|search|list|show)\s+.*\bdownloads?\b|"
+    r"\bfiles?\s+in\s+(?:my\s+)?(?:the\s+)?(?:downloads?|desktop|documents?|pictures?|photos?|videos?|music)\b|"
+    r"\blarge\s+files?\s+in\s+(?:my\s+)?(?:the\s+)?(?:downloads?|desktop|documents?|pictures?|photos?|videos?|music)\b|"
+    r"\b(?:big|large|huge)\s+files?\b.*\b(?:downloads?|desktop|documents?|pictures?|photos?|videos?|music)\b"
+    r")"
+)
+
+
+def route_find_files_by_size(cmd: str) -> str | None:
+    if not _FILE_SIZE_SUBJECT_RE.search(cmd):
+        return None
+    if not _SIZE_THRESHOLD_RE.search(cmd) and not re.search(r"(?i)\b(?:large|big|huge)\s+files?\b", cmd):
+        return None
+    return f"find_files_by_size {cmd}"
+
+
 def route_offline_extras(cmd: str) -> str | None:
     """Try supplemental NL routes not always available via fish bridge."""
     for fn in (
+        route_find_files_by_size,
         route_currency_convert,
         route_remind,
         route_routines,

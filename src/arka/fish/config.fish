@@ -3072,11 +3072,43 @@ function create_folder --description "Create one or more directories"
     end
 end
 
+function _arka_downloads_dir --description "Platform Downloads folder (internal)"
+    if set -q AIE_DOWNLOADS_DIR; and test -n "$AIE_DOWNLOADS_DIR"; and test -d "$AIE_DOWNLOADS_DIR"
+        echo (realpath "$AIE_DOWNLOADS_DIR" 2>/dev/null; or echo "$AIE_DOWNLOADS_DIR")
+        return 0
+    end
+    if test -d "$HOME/Downloads"
+        echo (realpath "$HOME/Downloads" 2>/dev/null; or echo "$HOME/Downloads")
+        return 0
+    end
+    if set -q USERPROFILE; and test -d "$USERPROFILE/Downloads"
+        echo (realpath "$USERPROFILE/Downloads" 2>/dev/null; or echo "$USERPROFILE/Downloads")
+        return 0
+    end
+    echo "$HOME/Downloads"
+end
+
 function _resolve_folder_path --description "Expand ~ and common folder names from a path fragment (internal)"
     set -l path (string trim -- $argv[1])
     if test -z "$path"
         echo "."
         return 0
+    end
+    set -l lower (string lower "$path")
+    switch $lower
+        case downloads download
+            _arka_downloads_dir
+            return 0
+        case desktop
+            set path Desktop
+        case documents document
+            set path Documents
+        case pictures picture photos photo
+            set path Pictures
+        case videos video
+            set path Videos
+        case music
+            set path Music
     end
     set path (string replace -a '~' "$HOME" -- $path)
     if test -d "$path"
@@ -3092,6 +3124,32 @@ function _resolve_folder_path --description "Expand ~ and common folder names fr
         return 0
     end
     echo "$path"
+end
+
+function _parse_file_size_root --description "Extract search root from NL file-size query (internal)"
+    set -l text "$argv[1]"
+    set -l lower (string lower "$text")
+
+    set -l in_m (string match -r '(?i)\s+in\s+(.+)$' "$text")
+    if test (count $in_m) -ge 2
+        _resolve_folder_path (string trim -- $in_m[2])
+        return 0
+    end
+
+    set -l fi_m (string match -r '(?i)\b(?:large\s+)?files?\s+in\s+(?:my\s+)?(?:the\s+)?(\S+)' "$text")
+    if test (count $fi_m) -ge 2
+        _resolve_folder_path $fi_m[2]
+        return 0
+    end
+
+    for name in downloads download desktop documents document pictures picture photos photo videos video music
+        if string match -qr "(?i)\b$name\b" "$lower"
+            _resolve_folder_path $name
+            return 0
+        end
+    end
+
+    echo "."
 end
 
 function list_folders --description "List folder names in a directory (directories only)"
@@ -3207,14 +3265,19 @@ function find_files_by_size --description "Find files smaller or larger than a s
     end
 
     set -l sm (string match -r '(?i)(\d+(?:\.\d+)?)\s*(kb|mb|gb|bytes?|b|k|m|g)\b' "$text")
-    if test (count $sm) -lt 2
+    set -l num 0
+    set -l raw_unit mb
+    if test (count $sm) -ge 2
+        set num (math -s0 $sm[2])
+        set raw_unit (string lower "$sm[3]")
+    else if string match -qr '(?i)\b(large|big|huge)\b' "$clean"
+        set num 100
+        set raw_unit mb
+    else
         echo (set_color red)"Could not parse size from: $text"(set_color normal)
         echo "Example: find files less than 100mb"
         return 1
     end
-
-    set -l num (math -s0 $sm[2])
-    set -l raw_unit (string lower "$sm[3]")
     set -l unit M
     switch $raw_unit
         case b byte bytes
@@ -3227,11 +3290,7 @@ function find_files_by_size --description "Find files smaller or larger than a s
             set unit G
     end
 
-    set -l root "."
-    set -l in_m (string match -r '(?i)\s+in\s+(.+)$' "$text")
-    if test (count $in_m) -ge 2
-        set root (_resolve_folder_path (string trim -- $in_m[2]))
-    end
+    set -l root (_parse_file_size_root "$text")
 
     if not test -d "$root"
         printf '%s\n' (set_color red)"Not a directory: $root"(set_color normal)
@@ -8457,10 +8516,23 @@ end
 
 function _agent_is_file_size_find --description "True if NL is find-files-by-size (internal)"
     set -l clean (string lower "$argv[1]")
-    if not string match -qr '(?i)(find|search|list|show)\s+.*\bfiles?\b' "$clean"
-        return 1
+    set -l has_subject 0
+    if string match -qr '(?i)(find|search|list|show)\s+.*\bfiles?\b' "$clean"
+        set has_subject 1
+    else if string match -qr '(?i)(find|search|list|show)\s+.*\bdownloads?\b' "$clean"
+        set has_subject 1
+    else if string match -qr '(?i)\bfiles?\s+in\s+(?:my\s+)?(?:the\s+)?(?:downloads?|desktop|documents?|pictures?|photos?|videos?|music)\b' "$clean"
+        set has_subject 1
+    else if string match -qr '(?i)\blarge\s+files?\s+in\s+(?:my\s+)?(?:the\s+)?(?:downloads?|desktop|documents?|pictures?|photos?|videos?|music)\b' "$clean"
+        set has_subject 1
+    else if string match -qr '(?i)\b(big|large|huge)\s+files?\b.*\b(downloads?|desktop|documents?|pictures?|photos?|videos?|music)\b' "$clean"
+        set has_subject 1
     end
-    string match -qr '(?i)(less|more|greater|larger|smaller|lesser|under|over|above|below|bigger)(\s+than)?|\d+\s*(kb|mb|gb)\b' "$clean"
+    test $has_subject -eq 0; and return 1
+    if string match -qr '(?i)(less|more|greater|larger|smaller|lesser|under|over|above|below|bigger)(\s+than)?|\d+\s*(kb|mb|gb)\b' "$clean"
+        return 0
+    end
+    string match -qr '(?i)\b(large|big|huge)\s+files?\b' "$clean"
 end
 
 function _agent_route_file_size_find --description "Map NL to find_files_by_size (internal)"

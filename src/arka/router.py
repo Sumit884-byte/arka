@@ -355,9 +355,22 @@ def _route_offline(cmd: str) -> Route | None:
                 return Route(f"youtube_download {qurl}", source="offline")
             return Route(f"download_file {qurl}", source="offline")
 
-    if re.search(r"(find|search|list|show).*\bfiles?\b", clean) and re.search(
-        r"(less|more|greater|larger|smaller|lesser|under|over|above|below|bigger)|\d+\s*(kb|mb|gb)\b",
+    file_size_subject = re.search(
+        r"(?i)(?:"
+        r"\b(?:find|search|list|show)\s+.*\bfiles?\b|"
+        r"\b(?:find|search|list|show)\s+.*\bdownloads?\b|"
+        r"\bfiles?\s+in\s+(?:my\s+)?(?:the\s+)?(?:downloads?|desktop|documents?|pictures?|photos?|videos?|music)\b|"
+        r"\blarge\s+files?\s+in\s+(?:my\s+)?(?:the\s+)?(?:downloads?|desktop|documents?|pictures?|photos?|videos?|music)\b|"
+        r"\b(?:big|large|huge)\s+files?\b.*\b(?:downloads?|desktop|documents?|pictures?|photos?|videos?|music)\b"
+        r")",
         clean,
+    )
+    file_size_threshold = re.search(
+        r"(?i)(?:less|more|greater|larger|smaller|lesser|under|over|above|below|bigger)(?:\s+than)?|\d+\s*(?:kb|mb|gb)\b",
+        clean,
+    )
+    if file_size_subject and (
+        file_size_threshold or re.search(r"(?i)\b(?:large|big|huge)\s+files?\b", clean)
     ):
         return Route(f"find_files_by_size {cmd}", source="offline")
 
