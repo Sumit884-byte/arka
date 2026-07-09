@@ -387,6 +387,49 @@ def cmd_reset(_args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_vllm_status(_args: argparse.Namespace) -> int:
+    from arka.llm.providers import get_provider, provider_base_url, vllm_cloud_configured
+    from arka.llm.servers import (
+        _vllm_health_url,
+        apply_vllm_defaults,
+        is_reachable,
+        provider_available_with_servers,
+        vllm_explicitly_configured,
+    )
+
+    explicit = vllm_explicitly_configured()
+    apply_vllm_defaults()
+    local_reachable = is_reachable("vllm")
+    local_configured = provider_available_with_servers("vllm")
+    host = __import__("os").environ.get("VLLM_HOST", "127.0.0.1:8000")
+    model = __import__("os").environ.get("VLLM_MODEL", "default")
+    start_cmd = __import__("os").environ.get("VLLM_START_CMD", "")
+
+    print("backend\tvllm")
+    print(f"explicit_config\t{str(explicit).lower()}")
+    print(f"reachable\t{local_reachable}")
+    print(f"configured\t{local_configured}")
+    print(f"host\t{host}")
+    print(f"health_url\t{_vllm_health_url()}")
+    print(f"model\t{model}")
+    print(f"start_cmd\t{start_cmd or '(unset)'}")
+
+    cloud_configured = vllm_cloud_configured()
+    cloud_reachable = is_reachable("vllm-cloud") if cloud_configured else False
+    print("")
+    print("backend\tvllm-cloud")
+    print(f"configured\t{str(cloud_configured).lower()}")
+    print(f"reachable\t{cloud_reachable}")
+    if cloud_configured:
+        spec = get_provider("vllm-cloud")
+        print(f"url\t{provider_base_url(spec) if spec else ''}")
+        print(f"model\t{__import__('os').environ.get('VLLM_CLOUD_MODEL', 'default')}")
+
+    if not local_reachable and not local_configured and not cloud_configured:
+        return 1
+    return 0
+
+
 def cmd_route(args: argparse.Namespace) -> int:
     text = llm_route(args.cmd, args.skills, env("ROUTE_ALIASES"))
     if not text:
@@ -448,6 +491,12 @@ def main() -> int:
 
     p_providers = sub.add_parser("providers", help="List supported LLM providers and env keys")
     p_providers.set_defaults(func=cmd_providers)
+
+    p_vllm = sub.add_parser("vllm", help="Local vLLM status (reachability, env, fallback chain)")
+    p_vllm_sub = p_vllm.add_subparsers(dest="vllm_cmd")
+    p_vllm_status = p_vllm_sub.add_parser("status", help="Show vLLM / vLLM Cloud configuration")
+    p_vllm_status.set_defaults(func=cmd_vllm_status)
+    p_vllm.set_defaults(func=cmd_vllm_status, vllm_cmd="status")
 
     p_trace = sub.add_parser("trace-status", help="Show OpenTelemetry / SigNoz tracing status")
     p_trace.set_defaults(func=cmd_trace_status)

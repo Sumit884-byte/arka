@@ -20,6 +20,9 @@ from typing import Callable
 
 LOCAL_PROVIDERS = frozenset({"ollama", "vllm"})
 
+DEFAULT_VLLM_VISION_MODEL = "Qwen/Qwen2-VL-2B-Instruct"
+DEFAULT_VLLM_METAL_MODEL = "mlx-community/Qwen2-VL-2B-Instruct-4bit"
+
 
 def _env(name: str, default: str = "") -> str:
     return (os.environ.get(name) or default).strip()
@@ -49,6 +52,72 @@ def _ollama_base_url() -> str:
     if not host.startswith("http"):
         host = f"http://{host}"
     return host.rstrip("/")
+
+
+def host_os() -> str:
+    """Return macos, linux, windows, or a lower-case system name."""
+    sysname = platform.system()
+    if sysname == "Darwin":
+        return "macos"
+    if sysname == "Windows":
+        return "windows"
+    if sysname.startswith("Linux"):
+        return "linux"
+    return sysname.lower()
+
+
+def vllm_explicitly_configured() -> bool:
+    """True when env indicates the user wants local vLLM in the fallback chain."""
+    return bool(
+        _env("VLLM_API_URL")
+        or _env("VLLM_START_CMD")
+        or _env("DESCRIBE_IMAGE_VLLM_START_CMD")
+        or _env("VLLM_HOST")
+    )
+
+
+def _vllm_port() -> str:
+    host = _env("VLLM_HOST", "127.0.0.1:8000")
+    if ":" in host.rsplit("/", 1)[-1]:
+        return host.rsplit(":", 1)[-1]
+    return "8000"
+
+
+def _default_vllm_start_cmd(*, vision: bool = False) -> str:
+    """Platform-aware default `vllm serve` when binary is available."""
+    plat = host_os()
+    if plat == "windows" and not shutil.which("vllm"):
+        return ""
+    model = _env("VLLM_MODEL") or _env("DESCRIBE_IMAGE_MODEL") or "default"
+    if model == "default":
+        if plat == "macos":
+            model = DEFAULT_VLLM_METAL_MODEL if vision else DEFAULT_VLLM_VISION_MODEL
+        else:
+            model = DEFAULT_VLLM_VISION_MODEL
+    port = _vllm_port()
+    return f"vllm serve {model} --host 127.0.0.1 --port {port} --max-model-len 4096"
+
+
+def apply_vllm_defaults(*, vision: bool = False) -> None:
+    """Default host/start cmd so local vLLM can auto-start when configured."""
+    if not _env("VLLM_HOST") and not _env("VLLM_API_URL"):
+        os.environ.setdefault("VLLM_HOST", "127.0.0.1:8000")
+    if _env("DESCRIBE_IMAGE_VLLM_START_CMD") and not _env("VLLM_START_CMD"):
+        os.environ.setdefault("VLLM_START_CMD", _env("DESCRIBE_IMAGE_VLLM_START_CMD"))
+    if not _env("VLLM_START_CMD"):
+        cmd = _default_vllm_start_cmd(vision=vision)
+        if cmd and (vision or shutil.which("vllm")):
+            os.environ.setdefault("VLLM_START_CMD", cmd)
+    if vision:
+        os.environ.setdefault("LLM_SERVER_START_TIMEOUT", "600")
+    if not _env("VLLM_MODEL") and not _env("DESCRIBE_IMAGE_MODEL"):
+        cmd = _env("VLLM_START_CMD")
+        if cmd:
+            import re
+
+            m = re.search(r"vllm serve\s+(\S+)", cmd)
+            if m:
+                os.environ.setdefault("VLLM_MODEL", m.group(1))
 
 
 def _vllm_health_url() -> str:
@@ -407,7 +476,8 @@ def _start_vllm() -> subprocess.Popen[bytes] | None:
         return None
     vllm_bin = shutil.which(cmd[0])
     if not vllm_bin:
-        if platform.system() == "Darwin":
+        plat = host_os()
+        if plat == "macos":
             print(
                 "vLLM not found on macOS — plain `pip install vllm` usually fails.\n"
                 "Options:\n"
@@ -416,10 +486,20 @@ def _start_vllm() -> subprocess.Popen[bytes] | None:
                 "  • vLLM-Metal: curl -fsSL https://raw.githubusercontent.com/vllm-project/vllm-metal/main/install.sh | bash",
                 file=sys.stderr,
             )
+        elif plat == "windows":
+            print(
+                "vLLM not found on Windows.\n"
+                "Options:\n"
+                "  • export DESCRIBE_IMAGE_BACKEND=gemini  (needs GEMINI_API_KEY)\n"
+                "  • ollama pull llava && export DESCRIBE_IMAGE_BACKEND=ollama\n"
+                "  • WSL2: pip install vllm, then set VLLM_HOST=127.0.0.1:8000 and VLLM_START_CMD\n"
+                "  • Native Windows: install vLLM if supported, or point VLLM_API_URL at a remote server",
+                file=sys.stderr,
+            )
         else:
             print(
                 "vLLM not found — install: pip install vllm\n"
-                "Then retry describe_image (Arka auto-starts/stops the server).",
+                "Then retry (Arka auto-starts/stops the server when VLLM_START_CMD is set).",
                 file=sys.stderr,
             )
         return None
@@ -467,6 +547,10 @@ def provider_available_with_servers(provider: str) -> bool:
                 return bool(_env("AWS_ACCESS_KEY_ID") and _env("AWS_SECRET_ACCESS_KEY"))
             if spec.slug == "azure":
                 return bool(provider_has_keys("azure") and provider_base_url(spec))
+            if spec.slug == "vllm":
+                if is_reachable("vllm"):
+                    return True
+                return auto_start_enabled() and bool(_env("VLLM_START_CMD"))
             if spec.kind == "local_openai":
                 return is_reachable(provider) or provider_has_keys(provider)
             if spec.kind == "openai_compatible":

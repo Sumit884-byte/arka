@@ -33,7 +33,14 @@ from arka.llm.providers import (
     provider_model_ids,
     provider_specs,
 )
-from arka.llm.servers import LOCAL_PROVIDERS, LlmServerSession, provider_available_with_servers
+from arka.llm.servers import (
+    LOCAL_PROVIDERS,
+    LlmServerSession,
+    apply_vllm_defaults,
+    is_reachable,
+    provider_available_with_servers,
+    vllm_explicitly_configured,
+)
 
 DEFAULT_GEMINI_MODELS = [
     "gemini-2.5-flash",
@@ -888,7 +895,9 @@ def build_default_chain(*, task: str = "default") -> list[tuple[str, str]]:
         cloud_model = env("VLLM_CLOUD_MODEL") or "default"
         add("vllm-cloud", cloud_model)
 
-    if env("VLLM_HOST") or env("VLLM_API_URL"):
+    explicit_vllm = vllm_explicitly_configured()
+    apply_vllm_defaults()
+    if explicit_vllm or is_reachable("vllm"):
         add("vllm", env("VLLM_MODEL") or "default")
 
     _expand_provider_models(add, pref_provider, provider="gemini", model_ids=gemini_model_ids())
@@ -899,7 +908,7 @@ def build_default_chain(*, task: str = "default") -> list[tuple[str, str]]:
         add("ollama", model_id)
 
     for spec in provider_specs():
-        if spec.slug in {"gemini", "groq", "ollama"}:
+        if spec.slug in {"gemini", "groq", "ollama", "vllm", "vllm-cloud"}:
             continue
         if not provider_available(spec.slug):
             continue

@@ -8,7 +8,6 @@ import base64
 import io
 import json
 import os
-import platform
 import re
 import shlex
 import shutil
@@ -102,10 +101,13 @@ def _vllm_unavailable_message() -> str:
 
 
 def _describe_unavailable_message() -> str:
+    from arka.llm.servers import host_os
+
+    plat = host_os()
     lines = [
         "Image description is not available for describe_image.",
     ]
-    if platform.system() == "Darwin":
+    if plat == "macos":
         lines.extend(
             [
                 "",
@@ -125,6 +127,24 @@ def _describe_unavailable_message() -> str:
                 "   curl -fsSL https://raw.githubusercontent.com/vllm-project/vllm-metal/main/install.sh | bash",
                 "   source ~/.venv-vllm-metal/bin/activate",
                 "   export VLLM_START_CMD='vllm serve mlx-community/Qwen2-VL-2B-Instruct-4bit --port 8000'",
+            ]
+        )
+    elif plat == "windows":
+        lines.extend(
+            [
+                "",
+                "On Windows, use one of these:",
+                "",
+                "1) Gemini (easiest if you have a key):",
+                "   set GEMINI_API_KEY=your-key",
+                "",
+                "2) Ollama vision (local):",
+                "   ollama pull llava",
+                "   set DESCRIBE_IMAGE_BACKEND=ollama",
+                "",
+                "3) vLLM via WSL2 or remote server:",
+                "   set VLLM_HOST=127.0.0.1:8000",
+                "   set VLLM_START_CMD=vllm serve Qwen/Qwen2-VL-2B-Instruct --port 8000",
             ]
         )
     else:
@@ -246,10 +266,31 @@ def _backend_ready(name: str) -> bool:
 
 
 def _auto_backend_order() -> list[str]:
-    if platform.system() == "Darwin":
-        if _api_key():
+    from arka.llm.servers import host_os
+
+    plat = host_os()
+    has_gemini = bool(_api_key())
+    has_ollama = bool(shutil.which("ollama"))
+    has_vllm = bool(shutil.which("vllm") or _env("VLLM_START_CMD"))
+
+    if plat == "macos":
+        if has_gemini:
             return ["gemini", "ollama", "vllm"]
         return ["ollama", "vllm", "gemini"]
+    if plat == "windows":
+        order: list[str] = []
+        if has_gemini:
+            order.append("gemini")
+        if has_ollama:
+            order.append("ollama")
+        if has_vllm:
+            order.append("vllm")
+        for backend in ("gemini", "ollama", "vllm"):
+            if backend not in order:
+                order.append(backend)
+        return order
+    if has_vllm:
+        return ["vllm", "ollama", "gemini"]
     return ["vllm", "ollama", "gemini"]
 
 
@@ -270,36 +311,6 @@ def _is_auth_error(code: int, detail: str) -> bool:
     return code in {400, 401, 403} and (
         "api key" in low or "api_key" in low or "unauthenticated" in low or "permission denied" in low
     )
-
-
-def _vllm_port() -> str:
-    host = _env("VLLM_HOST", "127.0.0.1:8000")
-    if ":" in host.rsplit("/", 1)[-1]:
-        return host.rsplit(":", 1)[-1]
-    return "8000"
-
-
-def _apply_vllm_defaults() -> None:
-    """Default host/start cmd so describe_image can auto-start/stop vLLM."""
-    if not _env("VLLM_HOST") and not _env("VLLM_API_URL"):
-        os.environ.setdefault("VLLM_HOST", "127.0.0.1:8000")
-    if _env("DESCRIBE_IMAGE_VLLM_START_CMD") and not _env("VLLM_START_CMD"):
-        os.environ.setdefault("VLLM_START_CMD", _env("DESCRIBE_IMAGE_VLLM_START_CMD"))
-    if not _env("VLLM_START_CMD"):
-        model = _model_id()
-        if model == "default":
-            model = DEFAULT_VISION_MODEL
-        port = _vllm_port()
-        os.environ.setdefault(
-            "VLLM_START_CMD",
-            f"vllm serve {model} --host 127.0.0.1 --port {port} --max-model-len 4096",
-        )
-    os.environ.setdefault("LLM_SERVER_START_TIMEOUT", "600")
-    if not _env("VLLM_MODEL") and not _env("DESCRIBE_IMAGE_MODEL"):
-        cmd = _env("VLLM_START_CMD")
-        m = re.search(r"vllm serve\s+(\S+)", cmd)
-        if m:
-            os.environ.setdefault("VLLM_MODEL", m.group(1))
 
 
 def _max_edge() -> int:
@@ -687,9 +698,9 @@ def _ollama_describe(data: bytes, mime: str, prompt: str, *, max_tokens: int | N
 
 
 def _vllm_describe_bytes(data: bytes, mime: str, prompt: str, *, max_tokens: int | None = None) -> str:
-    from arka.llm.servers import LlmServerSession
+    from arka.llm.servers import LlmServerSession, apply_vllm_defaults
 
-    _apply_vllm_defaults()
+    apply_vllm_defaults(vision=True)
     session = LlmServerSession()
     try:
         if not session.prepare("vllm"):

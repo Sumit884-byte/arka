@@ -45,8 +45,14 @@ def provider_base_url(spec: ProviderSpec) -> str:
         url = _env(spec.base_url_env)
         if not url and spec.slug == "vllm-cloud":
             url = _env("VLLM_CLOUD_API_URL")
+        if not url and spec.slug == "vllm":
+            host = _env("VLLM_HOST", "127.0.0.1:8000")
+            url = f"http://{host}" if not host.startswith("http") else host
         if url:
-            return url.rstrip("/")
+            base = url.rstrip("/")
+            if spec.slug == "vllm" and not base.endswith("/v1"):
+                base = f"{base}/v1"
+            return base
     return (spec.default_base_url or "").rstrip("/")
 
 
@@ -263,6 +269,18 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
         default_base_url="http://127.0.0.1:1234/v1",
         models_env="LMSTUDIO_MODELS",
         default_models=("local-model",),
+    ),
+    ProviderSpec(
+        slug="vllm",
+        display_name="vLLM (local OpenAI-compatible)",
+        env_keys=("VLLM_API_KEY", "VLLM_API_KEYS"),
+        api_key_env="VLLM_API_KEY",
+        default_model="default",
+        kind="local_openai",
+        base_url_env="VLLM_API_URL",
+        default_base_url="http://127.0.0.1:8000/v1",
+        models_env="VLLM_MODELS",
+        default_models=(),
     ),
     ProviderSpec(
         slug="vllm-cloud",

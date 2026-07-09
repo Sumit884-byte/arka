@@ -86,17 +86,29 @@ class ResizeTests(unittest.TestCase):
 class BackendOrderTests(unittest.TestCase):
     def test_macos_prefers_gemini_when_key_set(self) -> None:
         with (
-            mock.patch("arka.vision.describe.platform.system", return_value="Darwin"),
             mock.patch("arka.vision.describe._api_key", return_value="test-key"),
+            mock.patch("arka.llm.servers.host_os", return_value="macos"),
         ):
             self.assertEqual(_auto_backend_order(), ["gemini", "ollama", "vllm"])
 
     def test_macos_defaults_ollama_without_key(self) -> None:
         with (
-            mock.patch("arka.vision.describe.platform.system", return_value="Darwin"),
             mock.patch("arka.vision.describe._api_key", return_value=""),
+            mock.patch("arka.llm.servers.host_os", return_value="macos"),
         ):
             self.assertEqual(_auto_backend_order(), ["ollama", "vllm", "gemini"])
+
+    def test_linux_prefers_vllm(self) -> None:
+        with mock.patch("arka.llm.servers.host_os", return_value="linux"):
+            self.assertEqual(_auto_backend_order()[0], "vllm")
+
+    def test_windows_prefers_gemini_when_key_set(self) -> None:
+        with (
+            mock.patch("arka.vision.describe._api_key", return_value="test-key"),
+            mock.patch("arka.llm.servers.host_os", return_value="windows"),
+            mock.patch("arka.vision.describe.shutil.which", return_value=None),
+        ):
+            self.assertEqual(_auto_backend_order()[0], "gemini")
 
 
 class OllamaContextErrorTests(unittest.TestCase):

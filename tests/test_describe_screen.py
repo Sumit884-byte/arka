@@ -25,6 +25,7 @@ class ScreenParseTests(unittest.TestCase):
             "what is on my screen",
             "what's on my screen",
             "tell me what is on my screen",
+            "tell what is on my screen",
             "describe screen",
             "describe my screen",
             "screen",
@@ -53,7 +54,7 @@ class ScreenParseTests(unittest.TestCase):
                 self.assertEqual(nl_to_argv(query), [])
 
     def test_route_describe_screen(self) -> None:
-        for query in ("what's on my screen", "describe screen"):
+        for query in ("what's on my screen", "describe screen", "tell what is on my screen"):
             with self.subTest(query=query):
                 hit = route_describe_screen(query)
                 self.assertIsNotNone(hit)
@@ -96,8 +97,43 @@ class CaptureTests(unittest.TestCase):
             return mock.Mock(returncode=0)
 
         with (
-            mock.patch("arka.vision.screen.sys.platform", "darwin"),
+            mock.patch("arka.vision.screen._host_platform", return_value="macos"),
             mock.patch("arka.vision.screen.shutil.which", return_value="/usr/sbin/screencapture"),
+            mock.patch("arka.vision.screen.subprocess.run", side_effect=fake_run),
+        ):
+            path = capture_screen(dest)
+        self.assertEqual(path, dest)
+        dest.unlink(missing_ok=True)
+
+    def test_capture_screen_linux(self) -> None:
+        dest = Path("/tmp/arka-test-screen-linux.png")
+
+        def fake_run(cmd, **kwargs):
+            dest.write_bytes(b"png")
+            return mock.Mock(returncode=0)
+
+        with (
+            mock.patch("arka.vision.screen._host_platform", return_value="linux"),
+            mock.patch("arka.vision.screen.shutil.which", side_effect=lambda name: name),
+            mock.patch("arka.vision.screen.subprocess.run", side_effect=fake_run),
+        ):
+            path = capture_screen(dest)
+        self.assertEqual(path, dest)
+        dest.unlink(missing_ok=True)
+
+    def test_capture_screen_windows(self) -> None:
+        dest = Path("/tmp/arka-test-screen-win.png")
+
+        def fake_run(cmd, **kwargs):
+            dest.write_bytes(b"png")
+            return mock.Mock(returncode=0)
+
+        with (
+            mock.patch("arka.vision.screen._host_platform", return_value="windows"),
+            mock.patch(
+                "arka.vision.screen.shutil.which",
+                side_effect=lambda name: "powershell.exe" if name == "powershell" else None,
+            ),
             mock.patch("arka.vision.screen.subprocess.run", side_effect=fake_run),
         ):
             path = capture_screen(dest)

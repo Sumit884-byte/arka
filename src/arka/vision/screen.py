@@ -27,10 +27,10 @@ DEFAULT_PROMPT = (
 _KNOWN_CMDS = frozenset({"capture", "parse", "help"})
 _SCREEN_PATTERNS = (
     re.compile(
-        r"(?i)^(?:please\s+)?(?:tell\s+me\s+)?what(?:'|\s+)s\s+on\s+(?:my\s+)?(?:the\s+)?screen\b(?:\s+(.*))?$"
+        r"(?i)^(?:please\s+)?(?:tell(?:\s+me)?\s+)?what(?:'|\s+)s\s+on\s+(?:my\s+)?(?:the\s+)?screen\b(?:\s+(.*))?$"
     ),
     re.compile(
-        r"(?i)^(?:please\s+)?what\s+is\s+on\s+(?:my\s+)?(?:the\s+)?screen\b(?:\s+(.*))?$"
+        r"(?i)^(?:please\s+)?(?:tell(?:\s+me)?\s+)?what\s+is\s+on\s+(?:my\s+)?(?:the\s+)?screen\b(?:\s+(.*))?$"
     ),
     re.compile(
         r"(?i)^(?:please\s+)?(?:describe|analyze|explain)\s+"
@@ -40,9 +40,25 @@ _SCREEN_PATTERNS = (
         r"(?i)^(?:please\s+)?(?:look\s+at|see)\s+(?:my\s+)?(?:the\s+)?screen\b(?:\s+(.*))?$"
     ),
     re.compile(r"(?i)^(?:please\s+)?(?:describe|analyze)\s+screen\b(?:\s+(.*))?$"),
-    re.compile(r"(?i)^screen(?:\s+describe)?$"),
-    re.compile(r"(?i)^describe\s+screen$"),
+    re.compile(r"(?i)^(?:please\s+)?screen(?:\s+describe)?$"),
+    re.compile(r"(?i)^(?:please\s+)?describe\s+screen$"),
 )
+
+
+def _host_platform() -> str:
+    try:
+        from arka.llm.servers import host_os
+
+        return host_os()
+    except ImportError:
+        pass
+    if sys.platform == "darwin":
+        return "macos"
+    if sys.platform.startswith("linux"):
+        return "linux"
+    if sys.platform == "win32":
+        return "windows"
+    return sys.platform
 
 
 def _normalize(text: str) -> str:
@@ -127,25 +143,84 @@ def _capture_linux(path: Path) -> bool:
     return False
 
 
+def _capture_windows(path: Path) -> bool:
+    nircmd = shutil.which("nircmd")
+    if nircmd:
+        try:
+            proc = subprocess.run(
+                [nircmd, "savescreenshot", str(path)],
+                capture_output=True,
+                timeout=30,
+            )
+        except (subprocess.TimeoutExpired, OSError):
+            proc = None
+        if proc is not None and proc.returncode == 0 and path.is_file():
+            return True
+
+    powershell = shutil.which("powershell") or shutil.which("pwsh")
+    if not powershell:
+        return False
+
+    dest = str(path.resolve()).replace("'", "''")
+    script = (
+        "Add-Type -AssemblyName System.Windows.Forms,System.Drawing; "
+        "$screen = [System.Windows.Forms.Screen]::PrimaryScreen; "
+        "$bitmap = New-Object System.Drawing.Bitmap $screen.Bounds.Width, $screen.Bounds.Height; "
+        "$graphics = [System.Drawing.Graphics]::FromImage($bitmap); "
+        "$graphics.CopyFromScreen($screen.Bounds.Location, [System.Drawing.Point]::Empty, $screen.Bounds.Size); "
+        f"$bitmap.Save('{dest}', [System.Drawing.Imaging.ImageFormat]::Png); "
+        "$graphics.Dispose(); $bitmap.Dispose()"
+    )
+    try:
+        proc = subprocess.run(
+            [powershell, "-NoProfile", "-Command", script],
+            capture_output=True,
+            timeout=30,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return False
+    return proc.returncode == 0 and path.is_file()
+
+
+def _capture_failure_message() -> str:
+    plat = _host_platform()
+    if plat == "macos":
+        return (
+            "Screen capture failed. On macOS use screencapture (built-in). "
+            "Grant Screen Recording permission to your terminal if prompted."
+        )
+    if plat == "linux":
+        return (
+            "Screen capture failed. On Linux install one of: "
+            "gnome-screenshot, scrot, imagemagick (import), or maim."
+        )
+    if plat == "windows":
+        return (
+            "Screen capture failed. On Windows ensure PowerShell is available, "
+            "or install nircmd (nircmd savescreenshot PATH)."
+        )
+    return "Screen capture failed on this platform."
+
+
 def capture_screen(path: Path | None = None) -> Path:
     cache = cache_dir()
     cache.mkdir(parents=True, exist_ok=True)
     dest = path or cache / f"screen_capture_{datetime.now():%Y%m%d_%H%M%S}.png"
     dest.parent.mkdir(parents=True, exist_ok=True)
 
+    plat = _host_platform()
     ok = False
-    if sys.platform == "darwin":
+    if plat == "macos":
         ok = _capture_darwin(dest)
-    elif sys.platform.startswith("linux"):
+    elif plat == "linux":
         ok = _capture_linux(dest)
+    elif plat == "windows":
+        ok = _capture_windows(dest)
     else:
-        ok = _capture_darwin(dest) or _capture_linux(dest)
+        ok = _capture_darwin(dest) or _capture_linux(dest) or _capture_windows(dest)
 
     if not ok or not dest.is_file():
-        raise SystemExit(
-            "Screen capture failed. On macOS install screencapture (built-in); "
-            "on Linux install gnome-screenshot, scrot, or imagemagick."
-        )
+        raise SystemExit(_capture_failure_message())
     return dest
 
 
