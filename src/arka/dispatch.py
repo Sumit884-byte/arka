@@ -64,6 +64,11 @@ def run_skill(skill_line: str) -> int:
             code = run_chat_calc(" ".join(rest))
         elif head in ("hyperlocal_weather", "weather"):
             code = run_chat_weather(" ".join(rest))
+        elif head == "price_check":
+            from arka.agent.core import price_check
+
+            price_check(" ".join(rest))
+            code = 0
         elif head.endswith(".py") and script_path(head).is_file():
             code = run_script(head, rest)
         else:

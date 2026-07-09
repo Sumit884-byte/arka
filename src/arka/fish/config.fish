@@ -1806,7 +1806,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         agent_remember agent_recall agent_memory agent_trace agent_why agent_last \
         agent_resume agent_research agent_nudge agent_watch agent_routine agent_fanout \
         agent_code agent_handoff agent_browser transcript_ask media_ask \
-        meeting_agent study_agent inbox_agent compare_agent product_reviewer profession pr_check github_repo \
+        meeting_agent study_agent inbox_agent compare_agent product_reviewer price_check profession pr_check github_repo \
         arka_ask semantic_memory supermemory speak_research voice_session handoff_notify remind routines predictions stock \
         rag_setup rag_status voice_agent wake_control \
         agent_ask web_answer deep_web_answer web_essay calc chat_reset set_location files_preference_help google \
@@ -9151,6 +9151,9 @@ function _agent_route_system_info --description "Route to system_info or system_
 end
 
 function _agent_is_knowledge_question --description "True if user wants a factual answer, not a browser search"
+    if _agent_is_price_check_request "$argv[1]"
+        return 1
+    end
     if _agent_is_investment_question "$argv[1]"
         return 1
     end
@@ -9478,6 +9481,42 @@ function _agent_build_currency_cmd --description "Build currency_convert args fr
     if test (count $rest) -gt 0
         echo "currency_convert $rest"
     end
+end
+
+function _agent_is_price_check_request --description "True if user wants retail product prices (internal)"
+    set -l clean (string lower "$argv[1]")
+    if string match -qr '(?i)^price_check\b' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)\b(?:stock|crypto|bitcoin|ethereum|btc|eth|solana|share|ticker|house\s+price|rent|gas\s+price|oil\s+price|gold\s+price|silver\s+price)\b' "$clean"
+        return 1
+    end
+    if string match -qr '(?i)\b(?:price\s+of|cost\s+of|what(?:''s| is) the price of)\s+' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)\bhow\s+much\s+(?:is|are|does|for)\s+(?:the\s+)?(?:a\s+)?' "$clean"
+        and not string match -qr '(?i)\b(?:disk|space|memory|ram|cpu|gpu|battery)\b' "$clean"
+        return 0
+    end
+    if string match -qr '(?i).+\s+price\s+(?:right\s+now|in\s+(?:india|us|usa))' "$clean"
+        return 0
+    end
+    if string match -qr '(?i).+\s+price\s*$' "$clean"
+        and not string match -qr '(?i)\b(?:stock|crypto|bitcoin|ethereum)\b' "$clean"
+        return 0
+    end
+    return 1
+end
+
+function _agent_parse_price_check_query --description "Extract product query for price_check (internal)"
+    set -l cmd "$argv[1]"
+    set -l py (_arka_python)
+    set -l out ($py -c "
+from arka.agent.price_sources import extract_product_name
+import sys
+print(extract_product_name(sys.argv[1]))
+" (string escape --style=script -- $cmd) 2>/dev/null)
+    string trim -- $out
 end
 
 function _agent_build_remind_cmd --description "Build remind args from NL (internal)"
@@ -10648,6 +10687,14 @@ function product_reviewer --description "Review product ingredients with web res
         return 1
     end
     _arka_agent product-reviewer (string join " " $argv)
+end
+
+function price_check --description "Look up current retail product prices"
+    if test (count $argv) -eq 0
+        echo "Usage: price_check <product> [e.g. macbook air m3 | iphone 16 price in india]"
+        return 1
+    end
+    _arka_agent price-check (string join " " $argv)
 end
 
 function rag_setup --description "Install Firmamento TurboQuant for unified RAG"
@@ -11911,6 +11958,12 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
             return
         end
     end
+    if _agent_is_price_check_request "$cmd"
+        set -l pq (string replace -r -i '^price_check\s+' '' "$cmd" | string trim)
+        test -z "$pq"; and set pq $cmd
+        echo "skill|price_check $pq|Product price lookup"
+        return
+    end
     if _agent_is_knowledge_question "$cmd"
         set -l kq (_agent_normalize_knowledge_q "$cmd")
         test -z "$kq"; and set kq $cmd
@@ -13165,6 +13218,8 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                                 compare_agent $argv[3..-1]
                             case product product-reviewer product_reviewer
                                 product_reviewer $argv[3..-1]
+                            case price-check price_check
+                                price_check $argv[3..-1]
                             case ask
                                 arka_ask $argv[3..-1]
                             case speak-research speak_research yt-speak
@@ -14807,6 +14862,11 @@ function agent --description "Run commands safely: executes safe commands automa
     else if _agent_is_currency_request "$cmd"
         set interpreted (_agent_build_currency_cmd "$cmd")
         set route_source offline
+    else if _agent_is_price_check_request "$cmd"
+        set -l pq (string replace -r -i '^price_check\s+' '' "$cmd" | string trim)
+        test -z "$pq"; and set pq $cmd
+        set interpreted "price_check $pq"
+        set route_source offline
     else if _agent_is_knowledge_question "$cmd"
         set -l kq (_agent_normalize_knowledge_q "$cmd")
         if test -z "$kq"
@@ -15046,6 +15106,10 @@ function agent --description "Run commands safely: executes safe commands automa
         if test (count $cm) -ge 3
             set interpreted "compare_agent $cm[2] $cm[3]"
         end
+    else if _agent_is_price_check_request "$cmd"
+        set -l pq (string replace -r -i '^price_check\s+' '' "$cmd" | string trim)
+        test -z "$pq"; and set pq $cmd
+        set interpreted "price_check $pq"
     else if string match -qr '(?i)\b(?:product\s+reviewer|review\s+this\s+product|check\s+(?:the\s+)?ingredients|ingredient\s+check|analyze\s+ingredients|ingredients?\s+review)\b' "$clean_cmd"
         set -l pq (string replace -r -i '^(?:product\s+reviewer|review\s+this\s+product|check\s+(?:the\s+)?ingredients|ingredient\s+check|analyze\s+ingredients|ingredients?\s+review)\s*' '' "$cmd" | string trim)
         if test -n "$pq"

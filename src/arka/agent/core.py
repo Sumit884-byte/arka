@@ -15,7 +15,7 @@ import subprocess
 import sys
 import time
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 CACHE = Path.home() / ".cache" / "fish-agent"
@@ -877,6 +877,48 @@ def product_reviewer(query: str) -> None:
     research(text, deep=True, force_mode="product")
 
 
+def price_check(query: str) -> None:
+    """Look up current retail prices from scraped store listings."""
+    text = query.strip()
+    if not text:
+        print("Usage: price_check <product> [e.g. macbook air m3 | iphone 16 price in india]")
+        return
+
+    from arka.agent.price_sources import (
+        fetch_price_web_context,
+        parse_price_query,
+        price_check_prompt,
+    )
+    from arka.output import print_block
+
+    product, region = parse_price_query(text)
+    if not product:
+        print("Usage: price_check <product> [e.g. macbook air m3 | iphone 16 price in india]")
+        return
+
+    web_ctx, source_labels = fetch_price_web_context(product, region=region, deep=True)
+    today = date.today().isoformat()
+    if not web_ctx:
+        searched = ", ".join(source_labels) if source_labels else "Apple, Amazon, Flipkart/Best Buy"
+        print_block(
+            "Price check",
+            (
+                f"No live prices found for {product} ({region}).\n"
+                f"Searched: {searched}\n"
+                f"Date retrieved: {today}\n"
+                "Try a more specific model name or check retailer sites directly."
+            ),
+        )
+        return
+
+    system, user_q = price_check_prompt(product, region, web_ctx, source_labels, retrieved_on=today)
+    answer = _llm(system, user_q, temperature=0.1, task="agent")
+    if not answer:
+        print("Price check failed — check LLM / network.")
+        return
+    print_block("Price check", answer)
+
+
 # ── Code agent ────────────────────────────────────────────────────────────────
 
 def code_agent(goal: str, *, repo: str | None = None, ingest: bool = False) -> int:
@@ -1124,6 +1166,9 @@ def main() -> int:
     p = sub.add_parser("product-reviewer")
     p.add_argument("query", nargs="+")
 
+    p = sub.add_parser("price-check")
+    p.add_argument("query", nargs="+")
+
     p = sub.add_parser("goal")
     p.add_argument("goal", nargs="*")
     p.add_argument("-n", "--max", type=int, default=None)
@@ -1231,6 +1276,8 @@ def main() -> int:
         research("inbox triage: " + " ".join(args.text), deep=False)
     elif args.cmd == "product-reviewer":
         product_reviewer(" ".join(args.query))
+    elif args.cmd == "price-check":
+        price_check(" ".join(args.query))
     elif args.cmd == "goal":
         from arka.agent.goal import DEFAULT_MAX, run_goal
         from arka.integrations.butterfish import launch_shell

@@ -192,6 +192,7 @@ def voice_progress(skill: str) -> str:
         "install_apt": "Installing with apt.",
         "generate_password": "Generating a password.",
         "crypto_price": "Checking crypto prices.",
+        "price_check": "Looking up product prices.",
         "sports_score": "Checking live sports scores.",
         "live_scores": "Checking live sports scores.",
         "predictions": "Analyzing that.",

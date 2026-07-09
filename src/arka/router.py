@@ -474,6 +474,13 @@ _SHOW_ME_IMAGE_HINT = re.compile(
 
 
 def _is_knowledge_question(clean: str) -> bool:
+    try:
+        from arka.agent.price_sources import is_price_check_query
+
+        if is_price_check_query(clean):
+            return False
+    except ImportError:
+        pass
     if _is_investment_question(clean):
         return False
     if re.search(r"\b(my|this pc|my computer|my mac|my macbook|my machine|should i)\b", clean):

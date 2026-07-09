@@ -117,6 +117,17 @@ def route_search_web(cmd: str) -> str | None:
     return None
 
 
+def route_price_check(cmd: str) -> str | None:
+    try:
+        from arka.agent.price_sources import is_price_check_query
+    except ImportError:
+        return None
+    if not is_price_check_query(cmd):
+        return None
+    rest = re.sub(r"(?i)^price_check\s+", "", cmd).strip() or cmd.strip()
+    return f"price_check {shlex.quote(rest)}"
+
+
 def route_product_reviewer(cmd: str) -> str | None:
     clean = cmd.lower().strip()
     triggers = [
@@ -241,6 +252,7 @@ def route_offline_extras(cmd: str) -> str | None:
         route_compose_video,
         route_timer,
         route_search_web,
+        route_price_check,
         route_product_reviewer,
         route_agent_skills,
     ):
