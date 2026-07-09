@@ -9,13 +9,18 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from datetime import date
-from urllib.parse import urlparse
+from typing import Literal
+from urllib.parse import quote_plus, urlparse
+
+PriceProductCategory = Literal["apple", "personal_care", "generic"]
 
 # (id, label, site bias fragment)
 INDIA_SOURCES: tuple[tuple[str, str, str], ...] = (
     ("apple_in", "Apple India", "site:apple.com/in/shop OR site:apple.com/in/buy-"),
-    ("amazon_in", "Amazon India", "site:amazon.in inurl:/dp/"),
-    ("flipkart", "Flipkart", "site:flipkart.com inurl:/p/"),
+    ("amazon_in", "Amazon India", "site:amazon.in"),
+    ("flipkart", "Flipkart", "site:flipkart.com"),
+    ("nykaa", "Nykaa", "site:nykaa.com"),
+    ("croma", "Croma", "site:croma.com"),
 )
 
 US_SOURCES: tuple[tuple[str, str, str], ...] = (
@@ -72,6 +77,8 @@ _RETAILER_URL_PATTERNS: dict[str, re.Pattern[str]] = {
     "amazon_in": re.compile(r"(?i)amazon\.in/(?:.*/)?(?:dp|gp/product|gp/aw/d)/[A-Z0-9]{8,}"),
     "amazon_us": re.compile(r"(?i)amazon\.com/(?:.*/)?(?:dp|gp/product|gp/aw/d)/[A-Z0-9]{8,}"),
     "flipkart": re.compile(r"(?i)flipkart\.com/[\w\-]+/p/[\w\-]+"),
+    "nykaa": re.compile(r"(?i)nykaa\.com/[\w\-/]+/p/\d+"),
+    "croma": re.compile(r"(?i)croma\.com/[\w\-/]+/p/\d+"),
     "bestbuy": re.compile(r"(?i)bestbuy\.com/site/[\w\-]+/[\w\-]+\.p"),
 }
 
@@ -87,6 +94,44 @@ _USD_PRICE_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
 )
 
 _MIN_PRICE: dict[str, int] = {"india": 1000, "us": 50}
+_MIN_PRICE_BY_CATEGORY: dict[PriceProductCategory, dict[str, int]] = {
+    "apple": {"india": 1000, "us": 50},
+    "generic": {"india": 100, "us": 10},
+    "personal_care": {"india": 100, "us": 10},
+}
+
+_CATEGORY_SOURCES: dict[PriceProductCategory, dict[str, tuple[str, ...]]] = {
+    "apple": {
+        "india": ("apple_in", "amazon_in", "flipkart"),
+        "us": ("apple_us", "amazon_us", "bestbuy"),
+    },
+    "generic": {
+        "india": ("amazon_in", "flipkart"),
+        "us": ("amazon_us", "bestbuy"),
+    },
+    "personal_care": {
+        "india": ("nykaa", "amazon_in", "flipkart"),
+        "us": ("amazon_us", "bestbuy"),
+    },
+}
+
+_PERSONAL_CARE_RE = re.compile(
+    r"(?i)\b(?:skincare|shampoo|conditioner|moisturiz(?:er|e|ing)?|serum|lotion|cleanser|"
+    r"toothpaste|deodorant|face wash|toner|sunscreen|body wash|hair oil|"
+    r"makeup|lipstick|cosmetic|face cream|body lotion|hair mask|face mask)\b"
+)
+
+_GENERIC_CONSUMER_RE = re.compile(
+    r"(?i)\b(?:electric brush|toothbrush|blender|vacuum|mixer|grinder|kettle|"
+    r"iron|fan|heater|purifier|microwave|refrigerator|washing machine|"
+    r"dryer|trimmer|shaver|hair dryer|straightener|pressure cooker|air fryer|"
+    r"coffee maker|juicer|water purifier)\b"
+)
+
+_APPLE_HINT_RE = re.compile(
+    r"(?i)\b(?:macbook|iphone|ipad|airpods|apple watch|homepod|imac|mac mini|"
+    r"mac studio|mac pro|apple tv)\b"
+)
 
 _USER_AGENT = "Mozilla/5.0 (compatible; arka-price-check/1.0)"
 
@@ -221,8 +266,33 @@ def sources_for_region(region: str) -> list[tuple[str, str, str]]:
     return list(_REGION_SOURCES.get(region, INDIA_SOURCES))
 
 
-def list_price_sources(region: str | None = None) -> list[tuple[str, str]]:
+def detect_price_product_category(product: str) -> PriceProductCategory:
+    """Classify a product for retailer routing: apple, personal_care, or generic."""
+    text = product.strip()
+    if not text:
+        return "generic"
+    if resolve_apple_product_line(text) is not None or _APPLE_HINT_RE.search(text):
+        return "apple"
+    if _PERSONAL_CARE_RE.search(text):
+        return "personal_care"
+    if _GENERIC_CONSUMER_RE.search(text):
+        return "generic"
+    return "generic"
+
+
+def sources_for_product(product: str, *, region: str) -> list[tuple[str, str, str]]:
+    """Return retailer sources appropriate for the product category."""
+    category = detect_price_product_category(product)
+    allowed = _CATEGORY_SOURCES.get(category, _CATEGORY_SOURCES["generic"]).get(
+        region, _CATEGORY_SOURCES["generic"]["india"]
+    )
+    return [s for s in sources_for_region(region) if s[0] in allowed]
+
+
+def list_price_sources(region: str | None = None, product: str | None = None) -> list[tuple[str, str]]:
     reg = region or "india"
+    if product:
+        return [(s[0], s[1]) for s in sources_for_product(product, region=reg)]
     return [(s[0], s[1]) for s in sources_for_region(reg)]
 
 
@@ -499,13 +569,19 @@ def check_url_reachable(url: str, *, timeout: int = 10) -> bool:
 _MONTHLY_CONTEXT_RE = re.compile(r"(?i)^\s*(?:/|per)\s*(?:month|mo)\b")
 
 
-def extract_prices_from_content(text: str, *, region: str) -> list[str]:
+def extract_prices_from_content(
+    text: str,
+    *,
+    region: str,
+    category: PriceProductCategory | None = None,
+) -> list[str]:
     """Extract normalized retail prices from scraped page text."""
     if not text:
         return []
     patterns = _INR_PRICE_PATTERNS if region == "india" else _USD_PRICE_PATTERNS
     fallback = _USD_PRICE_PATTERNS if region == "india" else _INR_PRICE_PATTERNS
-    min_value = _MIN_PRICE.get(region, 50)
+    cat = category or "apple"
+    min_value = _MIN_PRICE_BY_CATEGORY.get(cat, _MIN_PRICE).get(region, _MIN_PRICE.get(region, 50))
 
     candidates: list[tuple[int, str]] = []
     seen_values: set[int] = set()
@@ -538,19 +614,29 @@ def build_price_search_queries(product: str, *, region: str) -> list[PriceSearch
     text = product.strip()
     if not text:
         return []
-    sources = sources_for_region(region)
+    category = detect_price_product_category(text)
+    sources = sources_for_product(text, region=region)
     out: list[PriceSearchQuery] = []
 
-    # Simple retailer queries work more reliably than complex site: OR combinations.
-    out.append(PriceSearchQuery("combined", f"Retail ({region})", f"{text} price buy"))
-
-    for sid, label, bias in sources:
-        if sid.startswith("apple_"):
-            # Apple is fetched directly when possible; keep a lightweight fallback.
-            out.append(PriceSearchQuery(sid, label, f"{text} {bias.split()[0].replace('site:', '')} price"))
-        else:
+    if category == "apple":
+        out.append(PriceSearchQuery("combined", f"Retail ({region})", f"{text} price buy"))
+        for sid, label, bias in sources:
+            if sid.startswith("apple_"):
+                out.append(
+                    PriceSearchQuery(sid, label, f"{text} {bias.split()[0].replace('site:', '')} price")
+                )
+            else:
+                site = bias.split()[0].replace("site:", "")
+                out.append(PriceSearchQuery(sid, label, f"{text} price {site}"))
+    else:
+        for sid, label, bias in sources:
             site = bias.split()[0].replace("site:", "")
-            out.append(PriceSearchQuery(sid, label, f"{text} price {site}"))
+            if sid in ("amazon_in", "amazon_us"):
+                out.append(PriceSearchQuery(sid, label, f"{text} price site:{site}"))
+            elif sid == "flipkart":
+                out.append(PriceSearchQuery(sid, label, f"{text} {site}"))
+            else:
+                out.append(PriceSearchQuery(sid, label, f"{text} price {site}"))
 
     return out
 
@@ -597,6 +683,36 @@ def _format_price_range(amounts: list[int], *, region: str) -> str:
 
 
 _CONFIG_NOTE = "Prices depend on chip, RAM, and storage configuration."
+_GENERIC_CONFIG_NOTE = "Prices vary by brand and model."
+
+
+def _retailer_browse_url(source_id: str, product: str, *, region: str) -> str | None:
+    """Build a retailer search/browse URL for more options."""
+    query = quote_plus(product.strip())
+    if not query:
+        return None
+    if source_id == "amazon_in":
+        return f"https://www.amazon.in/s?k={query}"
+    if source_id == "amazon_us":
+        return f"https://www.amazon.com/s?k={query}"
+    if source_id == "flipkart":
+        return f"https://www.flipkart.com/search?q={query}"
+    if source_id == "nykaa":
+        return f"https://www.nykaa.com/search/result/?q={query}"
+    if source_id == "croma":
+        return f"https://www.croma.com/search/?text={query}"
+    if source_id == "bestbuy":
+        return f"https://www.bestbuy.com/site/searchpage.jsp?st={query}"
+    if source_id in ("apple_in", "apple_us"):
+        return resolve_apple_shop_url(product, region=region)
+    return None
+
+
+def _source_id_for_label(label: str, *, region: str) -> str | None:
+    for sid, src_label in list_price_sources(region):
+        if src_label == label:
+            return sid
+    return None
 
 
 def _dedupe_listings(listings: list[PriceListing]) -> list[PriceListing]:
@@ -631,11 +747,12 @@ def fetch_price_listings(
     except ImportError:
         return [], []
 
+    category = detect_price_product_category(product)
     searches = build_price_search_queries(product, region=region)
     if not searches:
         return [], []
 
-    allowed_sources = {s[0] for s in sources_for_region(region)}
+    allowed_sources = {s[0] for s in sources_for_product(product, region=region)}
     max_results = 8 if deep else 5
     max_queries = len(searches) if deep else min(3, len(searches))
 
@@ -644,21 +761,22 @@ def fetch_price_listings(
     seen_labels: set[str] = set()
     seen_urls: set[str] = set()
 
-    # 1. Direct Apple shop fetch for known product lines (most reliable for Apple).
+    # 1. Direct Apple shop fetch for known Apple product lines only.
     apple_label = "Apple India" if region == "india" else "Apple US"
-    apple_listings = fetch_apple_shop_listings(product, region=region)
     apple_direct_urls: set[str] = set()
-    if apple_listings:
-        if apple_label not in seen_labels:
-            searched_labels.append(apple_label)
-            seen_labels.add(apple_label)
-        for listing in apple_listings:
-            apple_direct_urls.add(listing.url.rstrip("/"))
-            if listing.url not in seen_urls:
-                seen_urls.add(listing.url)
-                listings.append(listing)
+    if category == "apple":
+        apple_listings = fetch_apple_shop_listings(product, region=region)
+        if apple_listings:
+            if apple_label not in seen_labels:
+                searched_labels.append(apple_label)
+                seen_labels.add(apple_label)
+            for listing in apple_listings:
+                apple_direct_urls.add(listing.url.rstrip("/"))
+                if listing.url not in seen_urls:
+                    seen_urls.add(listing.url)
+                    listings.append(listing)
 
-    # 2. Web search fallback for Flipkart, Amazon, and gaps.
+    # 2. Web search for marketplace retailers (and Apple fallback when applicable).
     for item in searches[:max_queries]:
         if item.label not in seen_labels:
             searched_labels.append(item.label)
@@ -687,7 +805,8 @@ def fetch_price_listings(
 
             # Prefer structured Apple parsing when we land on a product-line page.
             if (
-                retailer[0] in ("apple_in", "apple_us")
+                category == "apple"
+                and retailer[0] in ("apple_in", "apple_us")
                 and resolve_apple_product_line(product)
                 and link.rstrip("/") not in apple_direct_urls
             ):
@@ -705,18 +824,20 @@ def fetch_price_listings(
 
             page = scrape_url(link)
             content = "\n".join(part for part in (title, snippet, page) if part)
-            prices = extract_prices_from_content(content, region=region)
+            prices = extract_prices_from_content(content, region=region, category=category)
             if not prices:
                 continue
 
-            listings.append(
-                PriceListing(
-                    model=_model_from_title(title, product),
-                    price=prices[0],
-                    source=label,
-                    url=link,
+            # Capture multiple prices from listing pages for range display.
+            for price in prices[:4]:
+                listings.append(
+                    PriceListing(
+                        model=_model_from_title(title, product),
+                        price=price,
+                        source=label,
+                        url=link,
+                    )
                 )
-            )
 
     return _dedupe_listings(listings), searched_labels
 
@@ -731,8 +852,9 @@ def format_price_check_output(
 ) -> str:
     """Format deterministic price-check output from validated listings."""
     today = retrieved_on or date.today().isoformat()
+    category = detect_price_product_category(product)
     if not listings:
-        default_labels = ", ".join(label for _, label in list_price_sources(region))
+        default_labels = ", ".join(label for _, label in list_price_sources(region, product))
         searched = ", ".join(searched_labels) if searched_labels else default_labels
         return (
             f"No live prices found for {product} ({region}).\n"
@@ -758,6 +880,61 @@ def format_price_check_output(
             apple_listings.append(item)
         else:
             other_listings.append(item)
+
+    if category != "apple":
+        display_name = product.strip().title()
+        all_amounts = [
+            value
+            for item in listings
+            if (value := _parse_formatted_price(item.price)) is not None
+        ]
+        if all_amounts:
+            lines.append(
+                f" {display_name} ({region_name}): "
+                f"{_format_price_range(all_amounts, region=region)}"
+            )
+            lines.append("")
+            lines.append(f" {_GENERIC_CONFIG_NOTE}")
+            lines.append("")
+
+        by_source: dict[str, list[PriceListing]] = {}
+        for item in other_listings or listings:
+            by_source.setdefault(item.source, []).append(item)
+
+        for source, items in by_source.items():
+            amounts = [
+                value
+                for item in items
+                if (value := _parse_formatted_price(item.price)) is not None
+            ]
+            price_text = (
+                _format_price_range(amounts, region=region)
+                if amounts
+                else items[0].price
+            )
+            lines.append(f" • {source} — {price_text}")
+            lines.append(f"   {items[0].url}")
+            if len(items) > 1:
+                for item in items[1:4]:
+                    lines.append(f"   • {item.model} — {item.price}")
+            lines.append("")
+
+        browse_labels = searched_labels or [
+            label for _, label in list_price_sources(region, product)
+        ]
+        if browse_labels:
+            lines.append(" Browse more options:")
+            for label in browse_labels:
+                sid = _source_id_for_label(label, region=region)
+                if sid is None:
+                    continue
+                browse_url = _retailer_browse_url(sid, product, region=region)
+                if browse_url:
+                    lines.append(f" • {label}: {browse_url}")
+            lines.append("")
+
+        lines.append(f"Date retrieved: {today}")
+        return "\n".join(lines)
 
     if apple_listings:
         display_name = apple_line[1] if apple_line else product.strip().title()

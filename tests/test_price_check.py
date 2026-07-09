@@ -11,6 +11,7 @@ from arka.agent.price_sources import (
     PriceListing,
     build_price_search_queries,
     check_url_reachable,
+    detect_price_product_category,
     detect_price_region,
     extract_apple_shop_listings,
     extract_prices_from_content,
@@ -23,9 +24,11 @@ from arka.agent.price_sources import (
     is_excluded_retail_url,
     is_price_check_query,
     is_shop_product_url,
+    list_price_sources,
     parse_price_query,
     resolve_apple_shop_url,
     retailer_for_url,
+    sources_for_product,
 )
 from arka.router import route
 from arka.routing.symbolic import route_price_check
@@ -108,8 +111,10 @@ class PriceCheckParseTests(unittest.TestCase):
 
     def test_build_queries_target_india_shop_domains(self) -> None:
         queries = build_price_search_queries("macbook air m3", region="india")
-        combined = queries[0].query
-        self.assertIn("macbook air m3 price buy", combined)
+        combined = next((q for q in queries if q.source_id == "combined"), None)
+        self.assertIsNotNone(combined)
+        assert combined is not None
+        self.assertIn("macbook air m3 price buy", combined.query)
         ids = {q.source_id for q in queries}
         self.assertIn("apple_in", ids)
         self.assertIn("flipkart", ids)
@@ -118,10 +123,59 @@ class PriceCheckParseTests(unittest.TestCase):
         flipkart_q = next(q for q in queries if q.source_id == "flipkart")
         self.assertIn("flipkart.com", flipkart_q.query)
 
+    def test_build_queries_generic_skips_apple(self) -> None:
+        queries = build_price_search_queries("electric brush", region="india")
+        ids = {q.source_id for q in queries}
+        self.assertNotIn("apple_in", ids)
+        self.assertIn("amazon_in", ids)
+        self.assertIn("flipkart", ids)
+        amazon_q = next(q for q in queries if q.source_id == "amazon_in")
+        self.assertIn("site:amazon.in", amazon_q.query)
+        flipkart_q = next(q for q in queries if q.source_id == "flipkart")
+        self.assertIn("flipkart", flipkart_q.query)
+
+    def test_build_queries_personal_care_includes_nykaa(self) -> None:
+        queries = build_price_search_queries("shampoo", region="india")
+        ids = {q.source_id for q in queries}
+        self.assertNotIn("apple_in", ids)
+        self.assertIn("nykaa", ids)
+        self.assertIn("amazon_in", ids)
+        self.assertIn("flipkart", ids)
+
+    def test_detect_price_product_category(self) -> None:
+        self.assertEqual(detect_price_product_category("macbook air m3"), "apple")
+        self.assertEqual(detect_price_product_category("iphone 16 pro"), "apple")
+        self.assertEqual(detect_price_product_category("electric brush"), "generic")
+        self.assertEqual(detect_price_product_category("electric toothbrush"), "generic")
+        self.assertEqual(detect_price_product_category("shampoo"), "personal_care")
+        self.assertEqual(detect_price_product_category("moisturizer"), "personal_care")
+
+    def test_sources_for_product_routes_by_category(self) -> None:
+        apple_ids = {s[0] for s in sources_for_product("macbook pro", region="india")}
+        self.assertIn("apple_in", apple_ids)
+        self.assertIn("amazon_in", apple_ids)
+        self.assertIn("flipkart", apple_ids)
+
+        generic_ids = {s[0] for s in sources_for_product("electric brush", region="india")}
+        self.assertNotIn("apple_in", generic_ids)
+        self.assertEqual(generic_ids, {"amazon_in", "flipkart"})
+
+        care_ids = {s[0] for s in sources_for_product("shampoo", region="india")}
+        self.assertNotIn("apple_in", care_ids)
+        self.assertIn("nykaa", care_ids)
+
+    def test_list_price_sources_excludes_apple_for_generic(self) -> None:
+        labels = [label for _, label in list_price_sources("india", "electric brush")]
+        self.assertNotIn("Apple India", labels)
+        self.assertIn("Amazon India", labels)
+        self.assertIn("Flipkart", labels)
+
     def test_build_queries_target_us_shop_domains(self) -> None:
         queries = build_price_search_queries("macbook air m3", region="us")
-        combined = queries[0].query
-        self.assertIn("macbook air m3 price buy", combined)
+        combined = next((q for q in queries if q.source_id == "combined"), None)
+        self.assertIsNotNone(combined)
+        assert combined is not None
+        self.assertIn("macbook air m3 price buy", combined.query)
         ids = {q.source_id for q in queries}
         self.assertIn("apple_us", ids)
         self.assertIn("bestbuy", ids)
@@ -229,7 +283,7 @@ class PriceCheckCoreTests(unittest.TestCase):
     def test_price_check_honest_when_no_prices(self) -> None:
         with mock.patch(
             "arka.agent.price_sources.fetch_price_listings",
-            return_value=([], ["Apple India", "Flipkart"]),
+            return_value=([], ["Amazon India", "Flipkart"]),
         ):
             with mock.patch("arka.agent.core._llm") as llm:
                 with mock.patch("arka.output.print_block") as print_block:
@@ -237,7 +291,8 @@ class PriceCheckCoreTests(unittest.TestCase):
         llm.assert_not_called()
         args, _ = print_block.call_args
         self.assertIn("No live prices found", args[1])
-        self.assertIn("Apple India", args[1])
+        self.assertNotIn("Apple India", args[1])
+        self.assertIn("Amazon India", args[1])
 
     def test_price_check_empty_query_prints_usage(self) -> None:
         with mock.patch("arka.agent.price_sources.fetch_price_listings") as fetch:
@@ -382,6 +437,75 @@ class PriceCheckCoreTests(unittest.TestCase):
         self.assertIn("Also listed at other retailers:", output)
         self.assertIn("Flipkart", output)
         self.assertIn(FLIPKART_URL, output)
+
+    def test_format_price_check_output_generic_shows_range_and_browse_links(self) -> None:
+        listings = [
+            PriceListing(
+                model="Oral-B Electric Toothbrush",
+                price="₹499",
+                source="Amazon India",
+                url="https://www.amazon.in/dp/B0EXAMPLE1",
+            ),
+            PriceListing(
+                model="Philips Electric Brush",
+                price="₹1,299",
+                source="Amazon India",
+                url="https://www.amazon.in/dp/B0EXAMPLE2",
+            ),
+            PriceListing(
+                model="AGARO Electric Brush",
+                price="₹799",
+                source="Flipkart",
+                url="https://www.flipkart.com/agaro-electric-brush/p/itmexample",
+            ),
+        ]
+        output = format_price_check_output(
+            listings,
+            product="electric brush",
+            region="india",
+            searched_labels=["Amazon India", "Flipkart"],
+            retrieved_on="2026-07-09",
+        )
+        self.assertIn("Electric Brush (India): ₹499 – ₹1,299", output)
+        self.assertIn("Prices vary by brand and model.", output)
+        self.assertIn("Amazon India — ₹499 – ₹1,299", output)
+        self.assertIn("Flipkart — ₹799", output)
+        self.assertIn("Browse more options:", output)
+        self.assertIn("amazon.in/s?k=electric+brush", output)
+        self.assertIn("flipkart.com/search?q=electric+brush", output)
+
+    def test_fetch_price_listings_skips_apple_for_generic(self) -> None:
+        search_results = [
+            {
+                "link": "https://www.amazon.in/dp/B0EXAMPLE1",
+                "title": "Electric Brush Rechargeable",
+                "snippet": "₹499",
+            },
+            {
+                "link": FLIPKART_URL,
+                "title": "AGARO Electric Brush",
+                "snippet": "₹799",
+            },
+        ]
+        with mock.patch(
+            "arka.agent.price_sources.fetch_apple_shop_listings",
+            return_value=[],
+        ) as apple_fetch:
+            with mock.patch("arka.agent.chat.duckduckgo_search", return_value=search_results):
+                with mock.patch("arka.agent.price_sources.check_url_reachable", return_value=True):
+                    with mock.patch(
+                        "arka.agent.chat.scrape_url",
+                        return_value="₹499",
+                    ):
+                        listings, labels = fetch_price_listings(
+                            "electric brush", region="india", deep=True
+                        )
+        apple_fetch.assert_not_called()
+        self.assertTrue(labels)
+        self.assertNotIn("Apple India", labels)
+        self.assertIn("Amazon India", labels)
+        self.assertIn("Flipkart", labels)
+        self.assertGreaterEqual(len(listings), 1)
 
 
 APPLE_MBP_HTML = """
