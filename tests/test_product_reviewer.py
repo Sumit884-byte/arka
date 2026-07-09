@@ -8,6 +8,11 @@ from contextlib import ExitStack
 from unittest import mock
 
 from arka.agent.core import product_reviewer
+from arka.agent.product_sources import (
+    build_product_search_queries,
+    detect_product_category,
+    list_product_sources,
+)
 from arka.agent.professions import detect, profession_ask
 from arka.router import route
 from arka.routing.symbolic import route_product_reviewer
@@ -66,6 +71,59 @@ class ProductReviewerCoreTests(unittest.TestCase):
         research.assert_not_called()
         print_mock.assert_called_once()
         self.assertIn("Usage", print_mock.call_args[0][0])
+
+    def test_research_product_mode_uses_authoritative_sources(self) -> None:
+        from arka.agent.core import research
+
+        with mock.patch(
+            "arka.agent.product_sources.fetch_product_web_context",
+            return_value=("incidecoder page", ["INCIDecoder", "EWG Skin Deep"]),
+        ) as fetch:
+            with mock.patch("arka.agent.core._llm", return_value="review"):
+                with mock.patch("arka.output.print_block"):
+                    research("niacinamide serum safety", force_mode="product")
+        fetch.assert_called_once_with("niacinamide serum safety", deep=True)
+
+
+class ProductSourceQueryTests(unittest.TestCase):
+    def test_detect_cosmetics_category(self) -> None:
+        self.assertEqual(detect_product_category("CeraVe cleanser for sensitive skin"), "cosmetics")
+        self.assertEqual(detect_product_category("niacinamide serum SPF 30"), "cosmetics")
+
+    def test_detect_food_category(self) -> None:
+        self.assertEqual(detect_product_category("Kind bar nutrition label calories"), "food")
+
+    def test_detect_supplement_category(self) -> None:
+        self.assertEqual(detect_product_category("vitamin D3 supplement 5000 IU"), "supplement")
+
+    def test_build_queries_target_cosmetic_domains(self) -> None:
+        queries = build_product_search_queries("CeraVe Hydrating Cleanser ingredients")
+        combined = queries[0].query
+        self.assertIn("site:incidecoder.com", combined)
+        self.assertIn("site:ewg.org", combined)
+        self.assertIn("site:paulaschoice.com", combined)
+        self.assertIn("CeraVe Hydrating Cleanser ingredients", combined)
+        ids = {q.source_id for q in queries}
+        self.assertIn("incidecoder", ids)
+        self.assertIn("brand", ids)
+
+    def test_build_queries_target_food_domains(self) -> None:
+        queries = build_product_search_queries("Clif Bar chocolate chip food label")
+        combined = queries[0].query
+        self.assertIn("site:fdc.nal.usda.gov", combined)
+        self.assertIn("site:openfoodfacts.org", combined)
+        self.assertIn("site:fda.gov/food", combined)
+
+    def test_build_queries_include_pubmed_for_safety(self) -> None:
+        queries = build_product_search_queries("retinol serum pregnancy safe")
+        combined = queries[0].query
+        self.assertIn("site:pubmed.ncbi.nlm.nih.gov", combined)
+
+    def test_list_product_sources_cosmetics(self) -> None:
+        labels = [label for _, label in list_product_sources("cosmetics")]
+        self.assertIn("INCIDecoder", labels)
+        self.assertIn("EWG Skin Deep", labels)
+        self.assertIn("PubMed", labels)
 
 
 class ProductProfessionTests(unittest.TestCase):

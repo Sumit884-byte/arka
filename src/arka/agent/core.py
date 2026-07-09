@@ -701,10 +701,15 @@ def _specialist_prompt(mode: str, question: str) -> tuple[str, str]:
             question,
         ),
         "product": (
-            "You are a product reviewer. The user gave product ingredients and/or a product name "
-            "and what they want to know (safety, vegan status, allergens, efficacy, alternatives). "
-            "Analyze using web sources: explain key ingredients, flag concerns, answer their goals, "
-            "and suggest alternatives when relevant. Be factual; cite sources when given.",
+            "You are a product reviewer analyzing ingredients and product claims. "
+            "Use only the provided authoritative sources (INCIDecoder, EWG Skin Deep, "
+            "Paula's Choice Ingredient Dictionary, EU CosIng, USDA FoodData Central, "
+            "Open Food Facts, FDA, PubMed, and brand ingredient lists as available). "
+            "Structure: Summary, Key Ingredients, Concerns/Allergens, Answer to User's Question, "
+            "Alternatives (if relevant). Flag uncertainty when sources disagree or data is incomplete. "
+            "End with a Sources: section listing each source you relied on "
+            "(e.g. Sources: INCIDecoder; EWG Skin Deep; PubMed). "
+            "Not medical or dermatological advice — recommend patch-testing new products.",
             question,
         ),
         "dev": (
@@ -786,12 +791,23 @@ def research(
         except Exception as exc:
             contexts.append(f"[Media error: {exc}]")
 
-    # Web — always try; shallow mode falls back from snippet to full scrape
+    # Web — product mode targets authoritative ingredient databases
     try:
-        web_ctx = _research_web_context(question, deep=deep)
-        if web_ctx:
-            label = "[Web search]" if deep or len(web_ctx) > 400 else "[Web snippet]"
-            contexts.append(f"{label}\n{web_ctx[:8000]}")
+        if mode == "product":
+            from arka.agent.product_sources import fetch_product_web_context
+
+            web_ctx, source_labels = fetch_product_web_context(question, deep=deep)
+            if web_ctx:
+                label = "[Product sources"
+                if source_labels:
+                    label += ": " + ", ".join(source_labels)
+                label += "]"
+                contexts.append(f"{label}\n{web_ctx[:8000]}")
+        else:
+            web_ctx = _research_web_context(question, deep=deep)
+            if web_ctx:
+                label = "[Web search]" if deep or len(web_ctx) > 400 else "[Web snippet]"
+                contexts.append(f"{label}\n{web_ctx[:8000]}")
     except Exception:
         pass
 
@@ -821,6 +837,13 @@ def research(
             "never claim memories are the only sources when the question is factual."
         )
         user_q += _research_length_hint()
+    elif mode == "product":
+        user_q += (
+            "\nWrite a thorough product review (400–700 words). "
+            "Cite which authoritative sources support each claim. "
+            "If evidence is thin or conflicting, say so explicitly. "
+            "End with a Sources: section naming every source used."
+        )
     if contexts:
         user_q = f"Sources:\n\n" + "\n\n---\n\n".join(contexts) + f"\n\nQuestion: {user_q}"
     task = "research" if mode == "research" else "agent"
