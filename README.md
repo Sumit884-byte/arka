@@ -1,4 +1,4 @@
-# Fish Shell Configuration (Arka)
+# An ai agent for your terminal that can do anything(Arka)
 
 A modern, AI-powered Fish shell setup with **Arka** — a voice-capable natural-language agent that routes requests to 70+ built-in skills, third-party plugins, cloud memory, deep web search, PDF RAG, and system automation.
 
