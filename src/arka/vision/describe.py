@@ -910,9 +910,17 @@ def _build_vision_prompt(
     )
 
 
+def _ocr_detail_debug_enabled() -> bool:
+    """Raw OCR text map is debug-only unless explicitly enabled."""
+    for name in ("DESCRIBE_IMAGE_DEBUG", "ARKA_DEBUG", "DESCRIBE_IMAGE_SHOW_OCR"):
+        if _env(name, "0").lower() not in {"0", "false", "no", "off", ""}:
+            return True
+    return False
+
+
 def _show_ocr_detail(*, structured: bool) -> bool:
-    default = "0" if structured else "1"
-    return _env("DESCRIBE_IMAGE_SHOW_OCR", default) not in {"0", "false", "no", "off"}
+    del structured  # same default for structured and human-readable output
+    return _ocr_detail_debug_enabled()
 
 
 def _format_two_layer_output(
@@ -1307,7 +1315,8 @@ def cmd_parse(args: argparse.Namespace) -> int:
 def cmd_formats(_args: argparse.Namespace) -> int:
     print("Sources: local path or http(s) URL (extensionless chart names OK)")
     print("Images:", ", ".join(sorted(IMAGE_EXTENSIONS)))
-    print("Analysis: two-layer — OCR text map (x%,y%) + vision (layout/colors)")
+    print("Analysis: two-layer — OCR (internal) + vision (layout/colors)")
+    print("OCR debug map: DESCRIBE_IMAGE_DEBUG=1 or ARKA_DEBUG=1 or DESCRIBE_IMAGE_SHOW_OCR=1")
     print("OCR coords: tesseract TSV — DESCRIBE_IMAGE_OCR_COORDS=1")
     print("Chart PNGs: .json sidecar + structured visual (colors from palette, not LLM)")
     print("Env: DESCRIBE_IMAGE_CHART_VISUAL=auto|structured|vision")
