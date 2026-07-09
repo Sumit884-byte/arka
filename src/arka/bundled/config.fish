@@ -45,7 +45,7 @@ if status is-interactive
     _setup_auto_copy_abbreviations
 end
 
-# --- Fish Configuration & AI Agent System ---
+# --- Arka: Fish shell agent configuration ---
 # This file manages the environment, aliases, and an advanced AI Agent system.
 # 
 # How it works:

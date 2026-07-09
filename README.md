@@ -1,6 +1,6 @@
-# An ai agent for your terminal that can do anything(Arka)
+# Arka — AI agent for your terminal
 
-A modern, AI-powered Fish shell setup with **Arka** — a voice-capable natural-language agent that routes requests to 70+ built-in skills, third-party plugins, cloud memory, deep web search, PDF RAG, and system automation.
+A cross-platform, AI-powered agent for Fish shell (and a portable Python CLI) that routes natural language to **70+ built-in skills** — voice, web search, charts, PDF RAG, Google Workspace, currency, video compose, plugins, stock intelligence, and system automation.
 
 > [!IMPORTANT]
 > **Security (on by default)** — symbolic checks in `arka_security.py` before web search and risky actions:
@@ -63,6 +63,8 @@ Config locations (when not using `~/.config/fish`):
 | Linux   | `~/.config/arka/`                     | `~/.cache/arka/`         |
 | macOS   | `~/Library/Application Support/arka/` | `~/Library/Caches/arka/` |
 | Windows | `%APPDATA%\arka\`                     | `%LOCALAPPDATA%\arka\`   |
+
+User config includes `.env`, `charts.yaml` (chart defaults), and `skills/` (plugins).
 
 
 Override with `ARKA_HOME`, `ARKA_CONFIG_DIR`, or `ARKA_CACHE_DIR`.
@@ -136,7 +138,7 @@ python3 ~/.config/fish/arka_llm.py active-model
 Some skills ship their own defaults when you don't pass flags:
 
 - Gmail NL: **unread** requests fetch **all** unread mail (`--all`); header shows total unread (e.g. `10 unread emails`), not just the fetched batch. Summarize without “unread” still defaults to the last 2 days; day-window queries use `--limit 100`. Caps: `ARKA_GMAIL_MAX`, `ARKA_GMAIL_SUMMARIZE_MAX`.
-- Charts: `chart line` pulls Yahoo Finance prices; `chart bar` / `chart pie` / `chart scatter` for comparisons. Saves PNG to `~/Pictures/arka-generated/`.
+- Charts: `chart line|bar|pie|scatter|histogram|pareto` — matplotlib PNG to `~/Pictures/arka-generated/`. Per-kind defaults in `~/.config/arka/charts.yaml` (`ARKA_CHARTS_CONFIG`). External-data fetch (World Bank, market share, SEC scatter) lives in `src/arka/charts/data.py`; NL `chart fetch` wiring is in progress.
 - Drawings: `drawing_ask plan.pdf "extract door schedule"` uses Gemini vision on blueprints, scans, and schedules (beyond text OCR).
 - Images: `describe_image photo.jpg` / `arka describe …` — vision caption (Gemini, Ollama, or vLLM; auto on Mac).
 - Routines: `routines add daily 9am "task"` schedules recurring tasks (launchd on macOS, systemd on Linux). Run `routines install` after adding.
@@ -197,6 +199,7 @@ arka reload --listen   # also restart wake listener after Python changes
 | `profession ask <d> <q>`   | Source-backed answer with citations                |
 | `arka google login`        | Sign in to Gmail + Google Calendar (OAuth)         |
 | `arka google gmail`        | List or summarize mail (see below)                 |
+| `python3 bin/arka_signoz.py status` | SigNoz / OpenTelemetry status (opt-in)    |
 
 See [Arka aliases](#arka-aliases) for alternate command names, subcommand synonyms, and skill equivalents.
 
@@ -233,7 +236,7 @@ flowchart TD
    ```
 
 2. **Natural language** — `arka "what's the weather"` or `arka install torch for cpu`:
-   - **Offline routing** (fast, no LLM): `_agent_guess_route` maps 120+ skills via regex + Python parsers (`arka_chart.py parse`, `arka_drawing.py parse`, `arka_describe_image.py parse`, `arka_routines.py parse`, `arka_remind.py parse`, Gmail helpers, etc.). `_agent_offline_route_cmd` runs the full symbolic router before the LLM. You'll see `💡 [Offline routing]` and `→ Interpreted: …` when this fires.
+   - **Offline routing** (fast, no LLM): `_agent_guess_route` maps 120+ skills via regex + Python parsers (`arka_chart.py parse`, `arka_currency.py parse`, `arka_compose_video.py parse`, `arka_drawing.py parse`, `arka_describe_image.py parse`, `arka_routines.py parse`, `arka_remind.py parse`, Gmail helpers, etc.). `_agent_offline_route_cmd` runs the full symbolic router before the LLM. You'll see `💡 [Offline routing]` and `→ Interpreted: …` when this fires.
    - **LLM routing** (fallback): when offline rules don't match, `arka_llm.py route` asks the **AI fallback orchestrator** (task=`route`) to pick a skill or safe shell command.
    - **Correction layer**: weak LLM picks are fixed (e.g. `search_web` → `web_answer` for factual questions, advisory → `agent_ask`, Gmail → `google gmail`).
 
@@ -580,49 +583,106 @@ GOOGLE_OAUTH_CLIENT_SECRET=...
 
 ### Charts & graphs (`chart`)
 
-Turn numbers into PNG charts (matplotlib). Supports line (stocks), bar, pie, and scatter — inspired by the [charts demo app](https://github.com/Sumit884-byte/charts).
+Turn numbers into PNG charts (matplotlib). Seven chart kinds are supported at the CLI; NL routing uses offline parsers in `arka.charts.plot` (no LLM). Inspired by the [charts demo app](https://github.com/Sumit884-byte/charts).
 
 ```fish
-pip install matplotlib   # once
+pip install matplotlib   # once, or: pip install 'arka-agent[charts]'
+```
 
-chart line AAPL TSLA --range 3mo
+#### Supported chart types
+
+| Kind | CLI | NL with inline data | Data source |
+| ---- | --- | ------------------- | ----------- |
+| **line** | `chart line TICKER…` | Stock names + range (`compare Apple and Tesla last year`) | Yahoo Finance |
+| **bar** | `chart bar --data 'A:1,B:2'` | Label + number pairs (`phone sales Apple 230 Samsung 210`) | Inline |
+| **pie** | `chart pie --data 'A:40,B:30'` | Share/breakdown phrasing + pairs | Inline |
+| **scatter** | `chart scatter --data 'x:y,…'` | 3+ numeric pairs + axis hints | Inline |
+| **histogram** | `chart histogram --data '12,15,18,…'` | 5+ raw values or binned `label:count` pairs | Inline |
+| **pareto** | `chart pareto --data 'A:45,B:28'` | Pareto/80-20 phrasing + ranked pairs | Inline |
+| **grouped_bar** | — | — | Not in `chart` CLI yet (used by `compose_video` slides; multi-year data logic in `charts/data.py`) |
+
+**Not supported:** area, bubble, heatmap, box plot, candlestick/OHLC, geographic maps, interactive HTML charts.
+
+#### Direct CLI
+
+```fish
+chart line AAPL TSLA --range 1y
 chart line RELIANCE.NS --range 6mo
-chart bar --data "Apple:230,Samsung:210,Xiaomi:140" --title "Phone sales (M units)"
+chart bar --data "Apple:230,Samsung:210,Xiaomi:140" --title "Phone sales"
 chart pie --data "Organic:400,Direct:300,Referral:300,Social:200" --title "Traffic sources"
 chart scatter --data "100:200,120:190,170:280" --xlabel "Ad spend" --ylabel "Revenue"
+chart histogram --data "12,15,18,22,25,28,30,35" --title "Response times"
+chart pareto --data "Scratches:45,Dents:28,Cracks:15" --title "Defect causes"
 ```
 
-**Natural language (offline routing — same path as Gmail):**
+#### Natural language (offline routing)
 
-Phrases are parsed by `arka_chart.py parse` (no LLM). You do **not** need the word “chart” if the request has clear numbers or stock names:
+Phrases are parsed by `arka_chart.py parse` → `nl_to_argv`. You do **not** need the word “chart” when numbers or tickers are present:
 
 ```fish
+# Stocks (line)
+arka compare Apple and Tesla stock last year
 arka chart TSLA and NVDA last 3 months
-arka graph apple microsoft stock prices
-arka compare apple and tesla stock last year
-arka phone sales Apple 230 Samsung 210 Xiaomi 140    # bar chart
+
+# Inline data (bar / pie / scatter / histogram / pareto)
+arka phone sales Apple 230 Samsung 210 Xiaomi 140
 arka pie chart traffic sources organic 400 direct 300 referral 300 social 200
-arka scatter ad spend vs revenue 100 200 120 190 170 280 140 240
-arka market share pie Apple 40 Samsung 30 Xiaomi 20
+arka scatter ad spend vs revenue 100 200 120 190 170 280
+arka histogram response times 12 15 18 22 25 28 30
+arka pareto defects Scratches 45 Dents 28 Cracks 15
 ```
+
+**Fetch-style NL** (no inline numbers — e.g. `make a pareto chart for various kinds of devices and user base`, `scatter ad spend vs revenue for meta`, `population of India 2020–2025`) is recognized by `src/arka/charts/data.py` (World Bank indicators, StatCounter-style market share, SEC EDGAR scatter). Wiring those requests through `chart fetch` in `plot.py` is in progress; today use inline pairs or the direct CLI above.
 
 Preview routing without running:
 
 ```fish
-agent_route "pie chart traffic sources organic 400 direct 300"
-# → skill|chart pie --data Organic:400,Direct:300 …
+agent_route "compare apple and tesla stock last year"
+# → skill|chart line AAPL TSLA --range 1y …
 
 agent_route "scatter ad spend vs revenue 100 200 120 190 170 280"
 # → skill|chart scatter --data 100:200,120:190,170:280 …
 ```
 
-Flow: your words → `_agent_build_chart_cmd` → `chart line|bar|pie|scatter …` → matplotlib PNG.
+Flow: your words → `_agent_build_chart_cmd` → `chart <kind> …` → matplotlib PNG + JSON sidecar.
 
 Charts save to `~/Pictures/arka-generated/` (or `CHART_OUTPUT_DIR` / `IMAGE_OUTPUT_DIR`) and open automatically on macOS/Linux.
 
+#### Chart defaults (`~/.config/arka/charts.yaml`)
+
+Store reusable data per chart kind so bare NL phrases work (e.g. `scatter ad spend vs revenue` without retyping numbers). Config path: `~/.config/arka/charts.yaml` on Linux, `~/Library/Application Support/arka/charts.yaml` on macOS — override with `ARKA_CHARTS_CONFIG`.
+
+```yaml
+defaults:
+  scatter:
+    data: "100:200,120:190,170:280"
+    xlabel: "Ad Spend"
+    ylabel: "Revenue"
+  bar:
+    data: "Apple:230,Samsung:210,Xiaomi:140"
+    title: "Phone sales"
+  line:
+    tickers: [AAPL, TSLA]
+    range: 1y
+```
+
+Manage via the chart defaults API (`src/arka/charts/defaults.py`). Intended CLI (integration in progress):
+
+```fish
+chart defaults list
+chart defaults show scatter
+chart defaults set scatter --data '100:200,120:190,170:280' --xlabel 'Ad Spend' --ylabel 'Revenue'
+chart defaults unset scatter
+```
+
+After editing `charts.yaml`, run `arka reload` so the shell picks up env changes (chart defaults are read at chart runtime).
+
 ```env
 # CHART_OUTPUT_DIR=~/Pictures/arka-generated
-# OPEN_CHART=1    # open PNG after save (default on)
+# OPEN_CHART=1              # open PNG after save (default on)
+# ARKA_CHARTS_CONFIG=        # override defaults file path
+# ARKA_CHART_COUNTRY=IN      # default country for fetched indicators
+# ARKA_WORLDBANK_CACHE_TTL=86400
 ```
 
 
@@ -753,9 +813,102 @@ After adding routines, run `routines install` once so timers are registered. Set
 
 
 
+### Currency conversion (`currency_convert`)
+
+Live FX rates via Frankfurter API with open.er-api fallback. Offline NL routing — no LLM.
+
+```fish
+currency_convert 100 USD INR
+currency_convert convert 50 euros to rupees
+arka convert $200 to INR
+arka how much is 1000 USD in GBP
+```
+
+Aliases: `convert`, `currency`. Supports symbols (`$`, `€`, `£`, `₹`) and common currency names.
+
+### Compose video (`compose_video`)
+
+YouTube-style info videos — stock photos (Unsplash/Pexels), optional LLM script, edge-tts narration, ffmpeg assembly. Chart slides can embed bar/pie/line/grouped_bar from structured JSON.
+
+```fish
+pip install 'arka-agent[video]'   # Pillow, edge-tts
+# Also needs: ffmpeg, optional UNSPLASH_ACCESS_KEY or PEXELS_API_KEY
+
+compose_video compose --topic "Python asyncio" --llm
+compose_video compose --script scenes.json -o out.mp4
+compose_video check
+arka make a video about Python asyncio
+```
+
+```env
+# UNSPLASH_ACCESS_KEY=          # or PEXELS_API_KEY
+# VIDEO_OUTPUT_DIR=~/Videos/arka-generated
+# VIDEO_TTS=edge                # edge-tts narration
+# LLM_FALLBACK_COMPOSE_VIDEO=     # per-task LLM chain for script generation
+```
+
+### Observability / SigNoz (opt-in)
+
+OpenTelemetry traces, metrics, and logs export to [SigNoz](https://signoz.io) when enabled. **Off by default** — set `OTEL_TRACES_ENABLED=1` and `SIGNOZ_ENDPOINT` in `.env`. Portable `arka` requests are already instrumented when tracing is on.
+
+```bash
+python3 bin/arka_signoz.py status          # tracing + UI + Docker/foundryctl
+python3 bin/arka_signoz.py setup -y          # local SigNoz stack (Docker + foundryctl)
+python3 bin/arka_signoz.py demo              # sample agent trace (no LLM)
+python3 bin/arka_signoz.py mcp tools         # list SigNoz MCP tools
+python3 bin/arka_signoz.py cursor-setup      # Cursor MCP + Agent Skills setup
+python3 bin/arka_llm.py trace-status         # LLM span status
+```
+
+```env
+# OTEL_TRACES_ENABLED=1
+# SIGNOZ_ENDPOINT=http://localhost:4318
+# SIGNOZ_UI_URL=http://localhost:8080
+# OTEL_SERVICE_NAME=arka
+# SIGNOZ_API_KEY=               # for alert-create / MCP
+```
+
+Hackathon assets: `hackathon/signoz/` (dashboards, alerts, demos). See `src/arka/env.example` for the full OTEL block.
+
+### Agent heartbeat & webhooks
+
+```fish
+heartbeat status              # last activity, routines, memory stats
+heartbeat ping manual.ping    # record a heartbeat event
+webhook status                # webhook ingress (opt-in)
+webhook serve                 # start verified HTTP ingress (WEBHOOK_ENABLED=1)
+```
+
+```env
+# WEBHOOK_ENABLED=0
+# WEBHOOK_TOKEN=              # or REMOTE_TOKEN
+# WEBHOOK_PORT=8767
+```
+
+### GitHub repo activity (`github_repo`)
+
+Recent commits and modified files for a GitHub URL — offline routing, no LLM.
+
+```fish
+github_repo activity owner/repo --days 7
+arka show recent commits for github.com/owner/repo
+```
+
+### Screen capture (`describe_screen`)
+
+10-second countdown, full-display capture, vision describe (same backends as `describe_image`).
+
+```fish
+describe_screen
+describe_screen what app is in focus
+arka describe my screen
+```
+
 ### Other notable skills
 
-**Media:** `play_spotify`, `play_youtube`, `play_movie`, `play_song`
+**Media:** `play_spotify`, `play_youtube`, `play_movie`, `play_song`, `compose_video`, `generate_thumbnail`
+
+**Commerce:** `currency_convert`, `price_check`, `product_reviewer`
 
 **Spotify (`arka_spotify.py`):** Resolves songs via Spotify Web API (optional), iTunes + DuckDuckGo, then plays through the **Spotify desktop app** — AppleScript on macOS, `playerctl` on Linux. No Premium API needed for playback.
 
@@ -775,7 +928,7 @@ spotify_control status
 Without API keys, search still works via iTunes + web lookup; without the desktop app, Arka opens the Spotify web player.  
 **System:** `weather`, `system_monitor`, `disk_breakdown`, `app_usage`, `screenshot`  
 **Sports:** `sports_score`, `live_scores` — IPL, cricket, NFL, NBA, EPL via ESPN (no key)  
-**Dev:** `install_uv`, `install_app`, `git_summary`, `lint_python`, `open_project`  
+**Dev:** `install_uv`, `install_app`, `git_summary`, `lint_python`, `open_project`, `github_repo`, `pr_check`  
 **Web:** `web_essay`, `search_web`, `browse_web`  
 **Advisory:** `agent_ask` — gathers Linux context via shell, then answers  
 
@@ -820,6 +973,14 @@ fix   # after a failed command
 | `arka_agent.py`                     | Memory, trace, research, watches, handoff, fanout      |
 | `arka_supermemory.py`               | Supermemory API + local memory fallback                |
 | `arka_skills.py`                    | Third-party plugin registry (discover, install, route) |
+| `arka_chart.py` / `charts/`         | Matplotlib charts, NL parse, defaults, external data   |
+| `arka_currency.py`                  | Live currency conversion (Frankfurter + fallback)    |
+| `arka_compose_video.py`             | Info-video composer (Unsplash, ffmpeg, TTS, charts)    |
+| `arka_signoz.py` / `telemetry/`     | OpenTelemetry export, SigNoz setup, demos, MCP client  |
+| `arka_github_repo.py`               | GitHub repo commits and modified files                 |
+| `arka_screen.py`                    | Screen capture + vision describe                       |
+| `arka_heartbeat.py`                 | Agent health / last-activity heartbeat                 |
+| `arka_webhook.py`                   | Verified webhook ingress for external channels         |
 | `arka_voice.py`                     | Voice acks, formatting, session context                |
 | `arka_wake.py`                      | Wake-word listener (AssemblyAI / Vosk)                 |
 | `arka_stt_map.py`                   | STT normalization (Devanagari → Latin routing)         |
@@ -864,7 +1025,7 @@ python3 scripts/sync_bundled.py
 pip wheel . -w dist/
 ```
 
-Optional extras: `[chat]`, `[voice]`, `[pdf]`, `[all]`.
+Optional extras: `[chat]`, `[voice]`, `[pdf]`, `[charts]`, `[drawings]`, `[video]`, `[all]`.
 
 ### Fish + Linux (full skills)
 
@@ -953,6 +1114,9 @@ arka/                          # Git repo
 ├── src/arka/                  # Python package
 │   ├── cli.py                 # `arka` CLI
 │   ├── paths.py               # Config, cache, env, entry_script()
+│   ├── charts/                # plot, data fetch, defaults
+│   ├── telemetry/             # OpenTelemetry + SigNoz helpers
+│   ├── integrations/          # Google, currency, MCP, routines, …
 │   ├── fish/                  # config.fish, scripts/, completions/
 │   ├── llm/ youtube/ media/ stock/ agent/ integrations/ …
 │   ├── aie/                   # Desktop automation scripts + cli.py
@@ -982,6 +1146,9 @@ arka "ipl score"                             # → sports_score
 arka "remember that I prefer Gemini"         # → agent_remember (Supermemory + local)
 arka "is my cpu too outdated for gaming?"    # → agent_ask
 arka "where is Tokyo"                        # → web_answer
+arka compare Apple and Tesla stock last year # → chart line
+arka scatter ad spend vs revenue 100 200 120 190  # → chart scatter
+arka convert 100 USD to INR                  # → currency_convert
 arka facing hair loss                        # → web_answer + session
 arka "stock macro 8"                         # → macro events → stock impact
 arka "market emotion"                        # → sentiment + crowd forecast
@@ -1241,6 +1408,9 @@ flowchart LR
 | Listener crashes (no vosk)           | `~/.config/fish/venv-arka/bin/python3 ~/.config/fish/arka_wake.py --check` then `arka debug`           |
 | Wrong microphone                     | `pactl list sources short` → set `MIC_DEVICE=<source name>` in `.env` (Linux)                     |
 | Config changes not picked up         | `arka reload` or open a new shell; `arka reload --listen` for Python wake changes                      |
+| Chart defaults not applied           | Edit `~/.config/arka/charts.yaml`; set `ARKA_CHARTS_CONFIG` if using a custom path                     |
+| Fetch-style chart NL not routing     | Use inline label:value pairs today; external fetch (`charts/data.py`) wiring to `chart fetch` in progress |
+| SigNoz traces not appearing          | Set `OTEL_TRACES_ENABLED=1` (not just `SIGNOZ_ENDPOINT`); `python3 bin/arka_signoz.py status`          |
 | Supermemory not used                 | `supermemory status` — set `SUPERMEMORY_API_KEY`; `ARKA_MEMORY=auto`                                   |
 | Plugin not routing                   | `arka skills refresh`; check `skill.json` triggers; `agent_route "your trigger phrase"`                |
 

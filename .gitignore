@@ -41,3 +41,6 @@ test.py
 .pytest_cache/
 .coverage
 htmlcov/
+.chart-test-output/
+.mpl-cache/
+test-output/
