@@ -98,18 +98,70 @@ def _api_request(
         headers["Content-Type"] = "application/json"
 
     req = urllib.request.Request(url, data=data, headers=headers, method=method.upper())
+
+    span_ctx: Any = None
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
-            raw = resp.read().decode("utf-8", errors="replace")
-            if not raw.strip():
-                return {}
-            parsed = json.loads(raw)
-            return parsed if isinstance(parsed, dict) else {"data": parsed}
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")[:400]
-        raise RuntimeError(f"Supermemory HTTP {exc.code}: {detail}") from exc
-    except urllib.error.URLError as exc:
-        raise RuntimeError(f"Supermemory network error: {exc.reason}") from exc
+        from contextlib import nullcontext
+
+        from arka.telemetry import mark_error, mark_ok, span
+        from arka.telemetry.supermemory_obs import (
+            record_supermemory_request,
+            supermemory_api_attrs,
+        )
+        from arka.telemetry.tracing import set_http_span_attributes
+
+        span_ctx = span(
+            "arka.supermemory.api",
+            attributes=supermemory_api_attrs(method, path, container=_container_tag()),
+        )
+    except ImportError:
+        from contextlib import nullcontext
+
+        span_ctx = nullcontext()
+
+    with span_ctx as sp:
+        try:
+            with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+                raw = resp.read().decode("utf-8", errors="replace")
+                if sp is not None:
+                    try:
+                        set_http_span_attributes(
+                            sp,
+                            method=method.upper(),
+                            status_code=getattr(resp, "status", 200),
+                            url=url,
+                        )
+                        mark_ok(sp)
+                        record_supermemory_request(operation=path, success=True)
+                    except Exception:
+                        pass
+                if not raw.strip():
+                    return {}
+                parsed = json.loads(raw)
+                return parsed if isinstance(parsed, dict) else {"data": parsed}
+        except urllib.error.HTTPError as exc:
+            if sp is not None:
+                try:
+                    set_http_span_attributes(
+                        sp,
+                        method=method.upper(),
+                        status_code=exc.code,
+                        url=url,
+                    )
+                    mark_error(sp, f"Supermemory HTTP {exc.code}", exc=exc)
+                    record_supermemory_request(operation=path, success=False)
+                except Exception:
+                    pass
+            detail = exc.read().decode("utf-8", errors="replace")[:400]
+            raise RuntimeError(f"Supermemory HTTP {exc.code}: {detail}") from exc
+        except urllib.error.URLError as exc:
+            if sp is not None:
+                try:
+                    mark_error(sp, f"Supermemory network error: {exc.reason}", exc=exc)
+                    record_supermemory_request(operation=path, success=False)
+                except Exception:
+                    pass
+            raise RuntimeError(f"Supermemory network error: {exc.reason}") from exc
 
 
 def _local_remember(text: str, *, tags: list[str] | None = None) -> str:
@@ -153,7 +205,34 @@ def _local_recall(query: str, *, limit: int = 5) -> list[str]:
 
 
 def _local_context(goal: str, *, limit: int = 3) -> str:
-    hits = _local_recall(goal, limit=limit)
+    try:
+        from arka.telemetry import mark_ok, span
+        from arka.telemetry.tracing import duration_ms, set_span_attributes
+    except ImportError:
+        hits = _local_recall(goal, limit=limit)
+        if not hits:
+            return ""
+        return "Relevant memories (local):\n" + "\n".join(f"- {h}" for h in hits)
+
+    import time
+
+    start = time.perf_counter()
+    with span(
+        "arka.supermemory.vector_lookup",
+        attributes={
+            "arka.supermemory.backend": "local",
+            "arka.supermemory.operation": "keyword_search",
+        },
+    ) as sp:
+        hits = _local_recall(goal, limit=limit)
+        set_span_attributes(
+            sp,
+            {
+                "arka.supermemory.hits": len(hits),
+                "arka.supermemory.lookup_ms": duration_ms(start),
+            },
+        )
+        mark_ok(sp)
     if not hits:
         return ""
     return "Relevant memories (local):\n" + "\n".join(f"- {h}" for h in hits)
@@ -242,6 +321,43 @@ def remember(text: str, *, tags: list[str] | None = None) -> dict[str, Any]:
     if not text:
         raise ValueError("empty memory text")
 
+    try:
+        from arka.telemetry import mark_error, mark_ok, set_span_attributes, span
+        from arka.telemetry.supermemory_obs import emit_supermemory_log, record_supermemory_op
+    except ImportError:
+        return _remember_impl(text, tags=tags)
+
+    with span(
+        "arka.supermemory.remember",
+        attributes={"arka.supermemory.mode": _mode(), "arka.supermemory.container": _container_tag()},
+    ) as sp:
+        try:
+            result = _remember_impl(text, tags=tags)
+            backend = str(result.get("backend") or "local")
+            success = backend == "supermemory+local" or "api_error" not in result
+            set_span_attributes(
+                sp,
+                {
+                    "arka.supermemory.backend": backend,
+                    "arka.supermemory.success": success,
+                },
+            )
+            record_supermemory_op(operation="remember", backend=backend, success=success)
+            emit_supermemory_log(
+                f"remember via {backend}",
+                operation="remember",
+                backend=backend,
+                success=success,
+            )
+            mark_ok(sp)
+            return result
+        except Exception as exc:
+            mark_error(sp, str(exc))
+            record_supermemory_op(operation="remember", backend=_mode(), success=False)
+            raise
+
+
+def _remember_impl(text: str, *, tags: list[str] | None = None) -> dict[str, Any]:
     local_id = _local_remember(text, tags=tags)
     result: dict[str, Any] = {"backend": "local", "local_id": local_id}
 
@@ -268,6 +384,44 @@ def remember(text: str, *, tags: list[str] | None = None) -> dict[str, Any]:
 def recall(query: str, *, limit: int = 5) -> str:
     """Recall memories — API first, local keyword fallback."""
     query = query.strip()
+
+    try:
+        from arka.telemetry import mark_error, mark_ok, set_span_attributes, span
+        from arka.telemetry.supermemory_obs import emit_supermemory_log, record_supermemory_op
+    except ImportError:
+        return _recall_impl(query, limit=limit)
+
+    with span(
+        "arka.supermemory.recall",
+        attributes={"arka.supermemory.mode": _mode(), "arka.supermemory.container": _container_tag()},
+    ) as sp:
+        try:
+            backend, hits = _recall_impl(query, limit=limit)
+            set_span_attributes(
+                sp,
+                {
+                    "arka.supermemory.backend": backend,
+                    "arka.supermemory.hits": hits,
+                    "arka.supermemory.success": hits > 0 or not query,
+                },
+            )
+            record_supermemory_op(operation="recall", backend=backend, success=True, hits=hits)
+            emit_supermemory_log(
+                f"recall via {backend} ({hits} hits)",
+                operation="recall",
+                backend=backend,
+                hits=hits,
+                success=True,
+            )
+            mark_ok(sp)
+            return backend
+        except Exception as exc:
+            mark_error(sp, str(exc))
+            record_supermemory_op(operation="recall", backend=_mode(), success=False)
+            raise
+
+
+def _recall_impl(query: str, *, limit: int = 5) -> tuple[str, int]:
     if _should_try_api():
         try:
             hits = _api_search(query, limit=limit) if query else []
@@ -277,7 +431,7 @@ def recall(query: str, *, limit: int = 5) -> str:
                 for line in hits:
                     print(f"• {line}")
                 print(f"(via Supermemory · container {_container_tag()})", file=sys.stderr)
-                return "supermemory"
+                return "supermemory", len(hits)
         except Exception as exc:
             if _mode() == "supermemory":
                 raise RuntimeError(str(exc)) from exc
@@ -285,16 +439,18 @@ def recall(query: str, *, limit: int = 5) -> str:
 
     if not query:
         list_memories(limit=limit)
-        return "local"
+        items = load_json(MEMORY_FILE, [])
+        count = len(items) if isinstance(items, list) else 0
+        return "local", count
 
     hits = _local_recall(query, limit=limit)
     if not hits:
         print("No matching memories.")
-        return "local"
+        return "local", 0
     for line in hits:
         print(f"• {line}")
     print("(via local cache)", file=sys.stderr)
-    return "local"
+    return "local", len(hits)
 
 
 def _turboquant_context(goal: str, *, limit_chars: int) -> str:
@@ -308,14 +464,51 @@ def _turboquant_context(goal: str, *, limit_chars: int) -> str:
         from arka.agent.talents import MEMORY_INDEX_SLUG, memory_reindex
     except ImportError:
         return ""
-    store = _media_store(MEMORY_INDEX_SLUG)
-    if not store.chunks:
-        memory_reindex()
+
+    try:
+        from arka.telemetry import mark_ok, span
+        from arka.telemetry.tracing import duration_ms, set_span_attributes
+    except ImportError:
         store = _media_store(MEMORY_INDEX_SLUG)
-    if store.chunks:
-        ctx = store.search(goal, max_chars=limit_chars)
-        if ctx.strip():
-            return "Relevant memories (semantic):\n" + ctx.strip()
+        if not store.chunks:
+            memory_reindex()
+            store = _media_store(MEMORY_INDEX_SLUG)
+        if store.chunks:
+            ctx = store.search(goal, max_chars=limit_chars)
+            if ctx.strip():
+                return "Relevant memories (semantic):\n" + ctx.strip()
+        return ""
+
+    import time
+
+    start = time.perf_counter()
+    with span(
+        "arka.supermemory.vector_lookup",
+        attributes={
+            "arka.supermemory.backend": "turboquant",
+            "arka.supermemory.operation": "vector_search",
+        },
+    ) as sp:
+        store = _media_store(MEMORY_INDEX_SLUG)
+        if not store.chunks:
+            memory_reindex()
+            store = _media_store(MEMORY_INDEX_SLUG)
+        ctx = ""
+        hits = 0
+        if store.chunks:
+            ctx = store.search(goal, max_chars=limit_chars)
+            hits = ctx.count("\n- ") if ctx.strip() else 0
+        set_span_attributes(
+            sp,
+            {
+                "arka.supermemory.hits": hits,
+                "arka.supermemory.lookup_ms": duration_ms(start),
+                "arka.supermemory.chunks": len(store.chunks),
+            },
+        )
+        mark_ok(sp)
+    if ctx.strip():
+        return "Relevant memories (semantic):\n" + ctx.strip()
     return ""
 
 
@@ -325,20 +518,66 @@ def context_for(goal: str, *, limit_chars: int = 3500) -> str:
     if not goal:
         return ""
 
+    try:
+        from arka.telemetry import mark_error, mark_ok, set_span_attributes, span
+        from arka.telemetry.supermemory_obs import emit_supermemory_log, record_supermemory_op
+    except ImportError:
+        return _context_for_impl(goal, limit_chars=limit_chars)
+
+    with span(
+        "arka.supermemory.context",
+        attributes={"arka.supermemory.mode": _mode(), "arka.supermemory.container": _container_tag()},
+    ) as sp:
+        try:
+            ctx, backend, hits = _context_for_impl(goal, limit_chars=limit_chars)
+            set_span_attributes(
+                sp,
+                {
+                    "arka.supermemory.backend": backend,
+                    "arka.supermemory.hits": hits,
+                    "arka.supermemory.success": bool(ctx.strip()),
+                },
+            )
+            record_supermemory_op(
+                operation="context",
+                backend=backend,
+                success=bool(ctx.strip()),
+                hits=hits,
+            )
+            emit_supermemory_log(
+                f"context via {backend} ({hits} hits, {len(ctx)} chars)",
+                operation="context",
+                backend=backend,
+                hits=hits,
+                success=bool(ctx.strip()),
+            )
+            mark_ok(sp)
+            return ctx
+        except Exception as exc:
+            mark_error(sp, str(exc))
+            record_supermemory_op(operation="context", backend=_mode(), success=False)
+            raise
+
+
+def _context_for_impl(goal: str, *, limit_chars: int = 3500) -> tuple[str, str, int]:
     if _should_try_api():
         try:
             ctx = _api_profile_context(goal, limit_chars=limit_chars)
             if ctx.strip():
-                return ctx
+                hits = ctx.count("\n- ")
+                return ctx, "supermemory", hits
         except Exception:
             if _mode() == "supermemory":
                 pass
 
     ctx = _turboquant_context(goal, limit_chars=limit_chars)
     if ctx.strip():
-        return ctx
+        hits = ctx.count("\n- ")
+        return ctx, "turboquant", hits
 
-    return _local_context(goal)
+    local = _local_context(goal)
+    hits = local.count("\n- ") if local else 0
+    return local, "local", hits
 
 
 def list_memories(*, limit: int = 20) -> None:

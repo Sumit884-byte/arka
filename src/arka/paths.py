@@ -148,6 +148,18 @@ def stock_project_dir() -> Path:
     return default
 
 
+def downloads_dir() -> Path:
+    """User Downloads folder (macOS/Linux: ~/Downloads, Windows: %USERPROFILE%\\Downloads)."""
+    override = os.environ.get("AIE_DOWNLOADS_DIR", "").strip()
+    if override:
+        return Path(override).expanduser()
+    if sys.platform == "win32":
+        profile = os.environ.get("USERPROFILE", "").strip()
+        if profile:
+            return Path(profile) / "Downloads"
+    return Path.home() / "Downloads"
+
+
 def load_env_file() -> None:
     from arka.env import load_env
 

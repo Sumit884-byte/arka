@@ -33,6 +33,12 @@ def _llm(system: str, user: str, *, temperature: float = 0.15) -> str:
         pass
     from arka.paths import entry_script
 
+    try:
+        from arka.telemetry import inject_trace_env
+    except ImportError:
+        inject_trace_env = None  # type: ignore[assignment,misc]
+
+    env = inject_trace_env() if inject_trace_env else None
     proc = subprocess.run(
         [
             sys.executable,
@@ -50,6 +56,7 @@ def _llm(system: str, user: str, *, temperature: float = 0.15) -> str:
         capture_output=True,
         text=True,
         timeout=180,
+        env=env,
     )
     if proc.returncode != 0:
         return ""
@@ -114,18 +121,44 @@ def _dir_context(cwd: Path, depth: int) -> tuple[str, str]:
 
 
 def _read_file(path: str, cwd: Path) -> str:
-    target = (cwd / path).resolve()
     try:
-        target.relative_to(cwd.resolve())
-    except ValueError:
-        return f"Error: path outside cwd: {path}"
-    if not target.is_file():
-        return f"Error: not a file: {path}"
-    try:
-        data = target.read_text(encoding="utf-8", errors="replace")
-    except OSError as exc:
-        return f"Error reading {path}: {exc}"
-    return _truncate(data, 12000)
+        from arka.telemetry import mark_error, mark_ok, span
+    except ImportError:
+        span = None  # type: ignore[assignment,misc]
+
+    ctx = (
+        span("arka.tool.read_file", attributes={"arka.tool.file": path[:500]})
+        if span is not None
+        else _goal_null_context()
+    )
+    with ctx as current:
+        target = (cwd / path).resolve()
+        try:
+            target.relative_to(cwd.resolve())
+        except ValueError:
+            if span is not None:
+                mark_error(current, "path outside cwd")
+            return f"Error: path outside cwd: {path}"
+        if not target.is_file():
+            if span is not None:
+                mark_error(current, "not a file")
+            return f"Error: not a file: {path}"
+        try:
+            data = target.read_text(encoding="utf-8", errors="replace")
+        except OSError as exc:
+            if span is not None:
+                mark_error(current, str(exc), exc=exc)
+            return f"Error reading {path}: {exc}"
+        if span is not None:
+            current.set_attribute("arka.tool.file_chars", len(data))
+            mark_ok(current)
+        return _truncate(data, 12000)
+
+
+def _goal_null_context():
+    from contextlib import nullcontext
+
+    return nullcontext()
 
 
 def _parse_step(raw: str) -> dict:
@@ -179,23 +212,82 @@ def _security_gate(cmd: str, *, auto_yes: bool) -> bool:
     return True
 
 
-def _run_cmd(cmd: str, cwd: Path, *, auto_yes: bool) -> tuple[int, str]:
-    if not _security_gate(cmd, auto_yes=auto_yes):
-        return 2, "[skipped: security gate]"
+def _annotate_llm_http(span_obj: Any) -> None:
+    """Propagate HTTP attrs from the last LLM call onto a parent span."""
     try:
-        proc = subprocess.run(
-            ["fish", "-c", cmd],
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            timeout=int(os.environ.get("GOAL_CMD_TIMEOUT", "300")),
-        )
-        out = (proc.stdout or "") + (proc.stderr or "")
-        return proc.returncode, _truncate(out.strip())
-    except subprocess.TimeoutExpired:
-        return 124, "Command timed out"
-    except OSError as exc:
-        return 1, str(exc)
+        from arka.llm.fallback import llm_last_model
+        from arka.telemetry import llm_http_span_attributes, set_http_span_attributes
+
+        last = llm_last_model()
+        if last:
+            set_http_span_attributes(
+                span_obj,
+                method="POST",
+                url=llm_http_span_attributes(last[0])["http.url"],
+                status_code=200,
+            )
+            span_obj.set_attribute("gen_ai.provider.name", last[0])
+            span_obj.set_attribute("gen_ai.request.model", last[1])
+    except ImportError:
+        pass
+
+
+def _run_cmd(cmd: str, cwd: Path, *, auto_yes: bool) -> tuple[int, str]:
+    try:
+        from arka.telemetry import mark_error, mark_ok, set_span_attributes, span
+    except ImportError:
+        span = None  # type: ignore[assignment,misc]
+        set_span_attributes = None  # type: ignore[assignment,misc]
+
+    shell_attrs: dict[str, Any] = {
+        "arka.tool.command": cmd[:500],
+        "arka.tool.kind": "subprocess",
+        "process.executable.name": "fish",
+        "process.command": cmd[:500],
+    }
+    ctx = (
+        span("arka.tool.shell", attributes=shell_attrs)
+        if span is not None
+        else _goal_null_context()
+    )
+    with ctx as current:
+        if not _security_gate(cmd, auto_yes=auto_yes):
+            if span is not None:
+                mark_error(current, "security gate")
+            return 2, "[skipped: security gate]"
+        try:
+            proc = subprocess.run(
+                ["fish", "-c", cmd],
+                cwd=cwd,
+                capture_output=True,
+                text=True,
+                timeout=int(os.environ.get("GOAL_CMD_TIMEOUT", "300")),
+            )
+            out = (proc.stdout or "") + (proc.stderr or "")
+            code = proc.returncode
+        except subprocess.TimeoutExpired:
+            if span is not None:
+                mark_error(current, "timeout")
+            return 124, "Command timed out"
+        except OSError as exc:
+            if span is not None:
+                mark_error(current, str(exc), exc=exc)
+            return 1, str(exc)
+        if span is not None:
+            current.set_attribute("arka.tool.exit_code", code)
+            current.set_attribute("process.exit_code", code)
+            if set_span_attributes is not None:
+                set_span_attributes(
+                    current,
+                    {
+                        "arka.tool.result": "ok" if code == 0 else "error",
+                    },
+                )
+            if code == 0:
+                mark_ok(current)
+            else:
+                mark_error(current, f"exit {code}")
+        return code, _truncate(out.strip())
 
 
 def _platform_hint() -> str:
@@ -267,8 +359,35 @@ Rules:
     print(f"Goal agent: {goal}", file=sys.stderr)
     print(f"  cwd: {cwd} | max steps: {max_steps}", file=sys.stderr)
 
-    for step in range(1, max_steps + 1):
-        user = f"""GOAL: {goal}
+    try:
+        from arka.telemetry import mark_error, mark_ok, span
+    except ImportError:
+        span = None  # type: ignore[assignment,misc]
+
+    goal_ctx = (
+        span(
+            "arka.agent.goal",
+            attributes={
+                "arka.agent.goal_text": goal[:500],
+                "arka.agent.max_steps": max_steps,
+                "arka.agent.cwd": str(cwd),
+            },
+        )
+        if span is not None
+        else _goal_null_context()
+    )
+    with goal_ctx as goal_span:
+        for step in range(1, max_steps + 1):
+            step_ctx = (
+                span(
+                    f"arka.agent.goal.step",
+                    attributes={"arka.agent.step": step, "arka.agent.max_steps": max_steps},
+                )
+                if span is not None
+                else _goal_null_context()
+            )
+            with step_ctx as step_span:
+                user = f"""GOAL: {goal}
 CWD: {cwd}
 
 DIRECTORY (depth {TREE_DEPTH}):
@@ -285,75 +404,120 @@ AGENT_HISTORY:
 
 Step {step}/{max_steps} — return the NEXT action as JSON."""
 
-        print(f"━━━ Goal step {step}/{max_steps} ━━━", file=sys.stderr)
-        raw = _llm(system, user)
-        if not raw:
-            print("LLM unavailable.", file=sys.stderr)
-            return 1
+                print(f"━━━ Goal step {step}/{max_steps} ━━━", file=sys.stderr)
+                raw = _llm(system, user)
+                if not raw:
+                    print("LLM unavailable.", file=sys.stderr)
+                    if span is not None:
+                        mark_error(goal_span, "LLM unavailable")
+                    return 1
 
-        parsed = _parse_step(raw)
-        status = str(parsed.get("status") or "continue").lower()
-        cmd = str(parsed.get("cmd") or "").strip()
-        why = str(parsed.get("why") or "").strip()
-        file_path = str(parsed.get("file") or "").strip()
+                if span is not None:
+                    _annotate_llm_http(step_span)
 
-        if status == "done":
-            print("✓ Goal complete.", file=sys.stderr)
-            if why:
-                print(f"  {why}", file=sys.stderr)
-            if verify:
-                from arka.agent.core import loop_verify
+                parsed = _parse_step(raw)
+                status = str(parsed.get("status") or "continue").lower()
+                cmd = str(parsed.get("cmd") or "").strip()
+                why = str(parsed.get("why") or "").strip()
+                file_path = str(parsed.get("file") or "").strip()
+                if span is not None:
+                    step_span.set_attribute("arka.agent.status", status)
+                    if why:
+                        step_span.set_attribute("arka.agent.why", why[:500])
+                    try:
+                        from arka.telemetry.metrics import record_goal_step
 
-                done, summary = loop_verify(goal, history)
-                if done:
-                    print(f"✓ Verified: {summary}", file=sys.stderr)
+                        record_goal_step(step=step, status=status)
+                    except ImportError:
+                        pass
+
+                if status == "done":
+                    print("✓ Goal complete.", file=sys.stderr)
+                    if why:
+                        print(f"  {why}", file=sys.stderr)
+                    if verify:
+                        from arka.agent.core import loop_verify
+
+                        done, summary = loop_verify(goal, history)
+                        if done:
+                            print(f"✓ Verified: {summary}", file=sys.stderr)
+                        else:
+                            print(f"⚠ Verify uncertain: {summary}", file=sys.stderr)
+                    if span is not None:
+                        mark_ok(goal_span)
+                    return 0
+
+                if status == "read" and file_path:
+                    content = _read_file(file_path, cwd)
+                    print(f"  📄 read {file_path}", file=sys.stderr)
+                    history += f"\n--- step {step} (read) ---\nfile: {file_path}\ncontent:\n{content}\n"
+                    continue
+
+                if not cmd:
+                    print("Empty command from agent; stopping.", file=sys.stderr)
+                    if span is not None:
+                        mark_error(goal_span, "empty command")
+                    return 1
+
+                print(f"  → {cmd}", file=sys.stderr)
+                if why:
+                    print(f"    {why}", file=sys.stderr)
+
+                code, out = _run_cmd(cmd, cwd, auto_yes=auto_yes)
+                if code == 0:
+                    print("  ✓ exit 0", file=sys.stderr)
+                elif code == 2:
+                    print("  ⊘ skipped", file=sys.stderr)
                 else:
-                    print(f"⚠ Verify uncertain: {summary}", file=sys.stderr)
-            return 0
+                    print(f"  ✗ exit {code}", file=sys.stderr)
+                    try:
+                        from arka.telemetry import record_span_event
 
-        if status == "read" and file_path:
-            content = _read_file(file_path, cwd)
-            print(f"  📄 read {file_path}", file=sys.stderr)
-            history += f"\n--- step {step} (read) ---\nfile: {file_path}\ncontent:\n{content}\n"
-            continue
+                        record_span_event(
+                            "agent.self_heal",
+                            {
+                                "arka.agent.step": step,
+                                "arka.tool.exit_code": code,
+                                "arka.agent.note": "agent will diagnose and retry on next step",
+                            },
+                        )
+                        from arka.telemetry.logs import emit_log
 
-        if not cmd:
-            print("Empty command from agent; stopping.", file=sys.stderr)
-            return 1
+                        emit_log(
+                            f"self-heal after failed command (exit {code})",
+                            level="warn",
+                            attributes={
+                                "arka.agent.step": step,
+                                "arka.tool.exit_code": code,
+                                "arka.event": "agent.self_heal",
+                            },
+                        )
+                    except ImportError:
+                        pass
+                if out:
+                    for line in out.splitlines()[:30]:
+                        print(f"    {line}", file=sys.stderr)
+                    if out.count("\n") > 30:
+                        print("    ...(more lines)", file=sys.stderr)
 
-        print(f"  → {cmd}", file=sys.stderr)
-        if why:
-            print(f"    {why}", file=sys.stderr)
+                history += f"\n--- step {step} ---\ncmd: {cmd}\nexit: {code}\nwhy: {why}\noutput:\n{out}\n"
 
-        code, out = _run_cmd(cmd, cwd, auto_yes=auto_yes)
-        if code == 0:
-            print("  ✓ exit 0", file=sys.stderr)
-        elif code == 2:
-            print("  ⊘ skipped", file=sys.stderr)
-        else:
-            print(f"  ✗ exit {code}", file=sys.stderr)
-        if out:
-            for line in out.splitlines()[:30]:
-                print(f"    {line}", file=sys.stderr)
-            if out.count("\n") > 30:
-                print("    ...(more lines)", file=sys.stderr)
+                if not auto_continue and not auto_yes and sys.stdin.isatty():
+                    try:
+                        cont = input("  Continue goal? [Y/n/q]: ").strip().lower()
+                    except EOFError:
+                        cont = "y"
+                    if cont in ("q", "quit"):
+                        print("Stopped.", file=sys.stderr)
+                        return 0
+                    if cont in ("n", "no"):
+                        print(f"Stopped after step {step}.", file=sys.stderr)
+                        return 0
 
-        history += f"\n--- step {step} ---\ncmd: {cmd}\nexit: {code}\nwhy: {why}\noutput:\n{out}\n"
-
-        if not auto_continue and not auto_yes and sys.stdin.isatty():
-            try:
-                cont = input("  Continue goal? [Y/n/q]: ").strip().lower()
-            except EOFError:
-                cont = "y"
-            if cont in ("q", "quit"):
-                print("Stopped.", file=sys.stderr)
-                return 0
-            if cont in ("n", "no"):
-                print(f"Stopped after step {step}.", file=sys.stderr)
-                return 0
-
-    print(f"Max steps ({max_steps}) reached.", file=sys.stderr)
-    return 1
+        print(f"Max steps ({max_steps}) reached.", file=sys.stderr)
+        if span is not None:
+            mark_error(goal_span, "max steps reached")
+        return 1
 
 
 def goal_engine_name() -> str:

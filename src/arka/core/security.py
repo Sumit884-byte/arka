@@ -132,6 +132,7 @@ _INSTALL_SKILLS = frozenset(
     {
         "install_app",
         "install_apt",
+        "install_brew",
         "install_flatpak",
         "install_snap",
         "install_uv",

@@ -858,6 +858,59 @@ def should_auto_search(text: str) -> bool:
     return any(re.search(r"\b" + re.escape(kw) + r"\b", low) for kw in SEARCH_KEYWORDS)
 
 
+def memory_search_fallback_enabled() -> bool:
+    v = env("MEMORY_SEARCH_FALLBACK", "1").lower()
+    return v not in ("0", "false", "no", "off")
+
+
+_UNKNOWN_ANSWER_PATTERNS = tuple(
+    re.compile(p, re.I)
+    for p in (
+        r"\bi\s+(?:do\s+not|don't)\s+(?:know|have(?:\s+enough)?)\b",
+        r"\b(?:i\s+am|i'm|im)\s+not\s+sure\b",
+        r"\bi\s+cannot\s+(?:answer|say|tell|find|confirm|determine)\b",
+        r"\bi\s+can't\s+(?:answer|say|tell|find|confirm|determine)\b",
+        r"\b(?:don't|do not)\s+have\s+(?:enough|sufficient|any)\s+(?:information|info|context|data)\b",
+        r"\bno\s+(?:relevant\s+)?(?:information|info|context|data)\b",
+        r"\bnot\s+(?:enough|sufficient)\s+(?:information|info|context|data)\b",
+        r"\bunable\s+to\s+(?:answer|determine|find|locate|verify)\b",
+        r"\bbeyond\s+(?:my|what)\s+(?:knowledge|training)\b",
+        r"\bi\s+(?:would\s+need|need)\s+(?:to\s+)?search\b",
+        r"\bcheck\s+(?:online|the\s+web)\b",
+    )
+)
+
+
+def looks_like_unknown_answer(text: str) -> bool:
+    if not text or not text.strip():
+        return True
+    body = re.sub(r"^\[(FROM SEARCH|FROM MEMORY)\]\s*", "", text, flags=re.I).strip()
+    if re.match(r"(?i)^could not ", body):
+        return True
+    low = body.lower()
+    return any(pat.search(low) for pat in _UNKNOWN_ANSWER_PATTERNS)
+
+
+def gather_web_context(question: str, *, snippet: str = "") -> str:
+    """Scrape/search the web; returns context text or empty string."""
+    search_q = ground_search_query(question)
+    raw_web = scrape_search_results(search_q)
+    web_context = ""
+    if raw_web:
+        try:
+            from arka.stock.turboquant_rag import retrieve_web_context, use_turboquant
+
+            if use_turboquant():
+                web_context = retrieve_web_context(raw_web, question)
+            else:
+                web_context = raw_web
+        except Exception:
+            web_context = raw_web
+    if not web_context:
+        web_context = snippet
+    return web_context
+
+
 def detect_list_request(question: str) -> int | None:
     """Return requested list size (e.g. top 10 → 10), or None."""
     low = question.lower()
@@ -1051,6 +1104,8 @@ def get_intent(prompt: str) -> tuple[str, str]:
         return "ANSWER", ""
     if prompt.startswith("/"):
         return "SEARCH", prompt[1:].strip() or prompt
+    if extract_urls(prompt):
+        return "SEARCH", prompt
     low = prompt.lower()
     if detect_error(prompt):
         return "ERROR", prompt
@@ -1146,7 +1201,7 @@ def _looks_like_raw_scrape(text: str) -> bool:
 
 
 def scrape_url(url: str, timeout: int = 12) -> str:
-    headers = {"User-Agent": "Mozilla/5.0 (compatible; arka-chat/1.0)"}
+    headers = {"User-Agent": "Mozilla/5.0 (compatible; arka-chat/1.0; +https://github.com/Sumit884-byte/arka)"}
     try:
         import trafilatura  # type: ignore
 
@@ -1169,6 +1224,66 @@ def scrape_url(url: str, timeout: int = 12) -> str:
         return " ".join(p.get_text() for p in soup.find_all("p")).strip()
     except Exception:
         return ""
+
+
+_URL_RE = re.compile(r"https?://[^\s\"'<>]+", re.I)
+
+
+def extract_urls(text: str) -> list[str]:
+    seen: set[str] = set()
+    urls: list[str] = []
+    for match in _URL_RE.finditer(text or ""):
+        url = match.group(0).rstrip(".,)")
+        if url and url not in seen:
+            seen.add(url)
+            urls.append(url)
+    return urls
+
+
+def scrape_linked_pages(urls: list[str], *, timeout: int = 15, max_pages: int = 3) -> str:
+    parts: list[str] = []
+    for url in urls[:max_pages]:
+        print(f"Reading {url} …", file=sys.stderr)
+        page = scrape_url(url, timeout=timeout)
+        if page:
+            parts.append(f"Source: {url}\n{page[:8000]}")
+    return "\n\n".join(parts)[:12000]
+
+
+def _wants_opinion_analysis(question: str) -> bool:
+    return bool(
+        re.search(
+            r"(?i)\b("
+            r"what\s+(?:do\s+)?you\s+think|your\s+(?:thoughts?|opinion|take)|think\s+about|"
+            r"for\s+and\s+against|pros?\s+and\s+cons?|takeaway|analyze|analysis|opinion\s+on"
+            r")\b",
+            question,
+        )
+    )
+
+
+def _linked_page_answer_instructions(question: str, *, list_extra: str) -> str:
+    if list_extra:
+        return list_extra
+    if _wants_opinion_analysis(question):
+        return (
+            "\nAnswer using only the scraped page content above.\n"
+            "Use this exact structure with these headers (plain text, one header per line, blank line after each header):\n"
+            "Intro:\n"
+            "(one sentence — note if meme/satire/joke)\n\n"
+            "For:\n"
+            "- 2-4 bullets — arguments or strengths one side makes\n\n"
+            "Against:\n"
+            "- 2-4 bullets — counterarguments or the other side\n\n"
+            "Takeaway:\n"
+            "(1-2 sentences — bottom line only here)\n"
+            "Do not merge sections into one paragraph. Do not invent facts absent from the page."
+        )
+    return (
+        "\nAnswer the user's question using only the scraped page content above. "
+        "If the post is a meme, joke, or satire, say so and explain the punchline. "
+        "Do not invent facts that are not in the page."
+    )
 
 
 def scrape_search_results(query: str, min_words: int = 400, hard_limit: int = 8) -> str:
@@ -1528,6 +1643,15 @@ def build_session_context(question: str | None = None) -> str:
                 for m in recent
             )
         )
+    if question:
+        try:
+            from arka.agent.core import memory_context_for
+
+            mem = memory_context_for(question)
+            if mem and mem.strip():
+                parts.append(mem.strip())
+        except ImportError:
+            pass
     return "\n".join(parts)
 
 
@@ -1607,24 +1731,34 @@ def answer_question(
 
     snippet = snippet_lookup(question)
 
-    if action == "SEARCH" or deep:
-        print("Searching web…", file=sys.stderr)
-        search_q = ground_search_query(question)
-        raw_web = scrape_search_results(search_q)
-        if raw_web:
-            try:
-                from arka.stock.turboquant_rag import retrieve_web_context, use_turboquant
+    linked_urls = extract_urls(question)
+    github_activity_context = False
+    try:
+        from arka.agent.github_repo import fetch_activity_for_question, wants_github_repo_activity
 
-                if use_turboquant():
-                    web_context = retrieve_web_context(raw_web, question)
-                else:
-                    web_context = raw_web
-            except Exception:
-                web_context = raw_web
-        else:
-            web_context = ""
-        if not web_context:
-            web_context = snippet
+        if linked_urls and wants_github_repo_activity(question):
+            activity = fetch_activity_for_question(question)
+            if activity:
+                parsed = __import__(
+                    "arka.agent.github_repo", fromlist=["parse_github_repo"]
+                ).parse_github_repo(question)
+                if parsed:
+                    print(f"GitHub activity: {parsed[0]}/{parsed[1]} …", file=sys.stderr)
+                web_context = activity
+                github_activity_context = True
+    except ImportError:
+        pass
+
+    if linked_urls and not github_activity_context:
+        scraped_pages = scrape_linked_pages(linked_urls)
+        if scraped_pages:
+            web_context = scraped_pages
+
+    if (action == "SEARCH" or deep) and not web_context:
+        print("Searching web…", file=sys.stderr)
+        web_context = gather_web_context(question, snippet=snippet)
+    elif not web_context:
+        web_context = ""
 
     if sanitize_web_context is not None:
         if web_context:
@@ -1638,17 +1772,43 @@ def answer_question(
             snippet, _ = sanitize_web_context(snippet)
 
     if web_context:
-        system = ASSISTANT_SYSTEM
-        length_hint = (list_extra or "\nGive a direct answer using the search results.") + memory_hint
+        if linked_urls and _wants_opinion_analysis(question):
+            system = (
+                ASSISTANT_SYSTEM
+                + "\nFor linked-page opinion questions, always output Intro, For, Against, and Takeaway "
+                "as separate labeled sections with bullets under For and Against."
+            )
+        else:
+            system = ASSISTANT_SYSTEM
+        if github_activity_context:
+            length_hint = (
+                list_extra
+                or "\nSummarize the repository activity below. List commits briefly, then enumerate "
+                "modified files. Start with [FROM SEARCH]. Use only the activity data provided."
+            ) + memory_hint
+            page_label = "GITHUB ACTIVITY"
+        elif linked_urls:
+            length_hint = _linked_page_answer_instructions(question, list_extra=list_extra) + memory_hint
+            page_label = "PAGE CONTENT"
+        else:
+            length_hint = (list_extra or "\nGive a direct answer using the search results.") + memory_hint
+            page_label = "SEARCH RESULTS"
         user = (
             f"{context_block}\n\n"
-            f"SEARCH RESULTS:\n---\n{web_context}\n---\n\n"
+            f"{page_label}:\n---\n{web_context}\n---\n\n"
             f"Question: {question}\n"
             f"{length_hint}\n"
             "Start with [FROM SEARCH]. Do not copy tables or navigation text."
         )
-        answer = llm_complete(system, user, task="chat")
-        prov = "search"
+        if github_activity_context:
+            answer = f"[FROM SEARCH]\n\n{web_context.strip()}"
+            prov = "search"
+        elif linked_urls and _wants_opinion_analysis(question):
+            answer = llm_complete(system, user, temperature=0.0, task="chat")
+            prov = "search"
+        else:
+            answer = llm_complete(system, user, task="chat")
+            prov = "search"
     else:
         system = ASSISTANT_SYSTEM
         user = f"{context_block}\n\n"
@@ -1658,6 +1818,34 @@ def answer_question(
         user += f"Question: {question}\n{length_hint}\nStart with [FROM MEMORY] unless snippet was decisive."
         answer = llm_complete(system, user, task="chat")
         prov = "memory"
+
+        if (
+            memory_search_fallback_enabled()
+            and action == "ANSWER"
+            and not deep
+            and looks_like_unknown_answer(answer or "")
+        ):
+            print("Memory insufficient — searching web…", file=sys.stderr)
+            fallback_ctx = gather_web_context(question, snippet=snippet)
+            if sanitize_web_context is not None and fallback_ctx:
+                fallback_ctx, _fb_warn = sanitize_web_context(fallback_ctx)
+                if _fb_warn:
+                    print(
+                        f"Sanitized {len(_fb_warn)} suspicious line(s) from web results.",
+                        file=sys.stderr,
+                    )
+            if fallback_ctx:
+                length_hint = (list_extra or "\nGive a direct answer using the search results.") + memory_hint
+                user = (
+                    f"{context_block}\n\n"
+                    f"SEARCH RESULTS:\n---\n{fallback_ctx}\n---\n\n"
+                    f"Question: {question}\n"
+                    f"{length_hint}\n"
+                    "Start with [FROM SEARCH]. Do not copy tables or navigation text."
+                )
+                answer = llm_complete(system, user, task="chat")
+                prov = "search"
+                web_context = fallback_ctx
 
     if _looks_like_raw_scrape(answer or ""):
         retry_ctx = snippet or (web_context[:2000] if web_context else "")
@@ -1694,8 +1882,15 @@ def answer_question(
         if prior_items:
             answer = merge_prior_list_details(answer, prior_items)
 
-    if cleanup and len(answer) > 300 and not _looks_like_raw_scrape(answer) and not list_n:
-        answer = cleanup_response(answer, question)
+    if (
+        cleanup
+        and not github_activity_context
+        and len(answer) > 300
+        and not _looks_like_raw_scrape(answer)
+        and not list_n
+    ):
+        if not (linked_urls and _wants_opinion_analysis(question)):
+            answer = cleanup_response(answer, question)
 
     if use_session:
         session_append("user", question)

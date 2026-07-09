@@ -90,6 +90,27 @@ def _skill_from_manifest(manifest_path: Path) -> dict[str, Any] | None:
     triggers = [str(t).strip().lower() for t in triggers if str(t).strip()]
     if name not in [t.split()[0] for t in triggers if t]:
         triggers.insert(0, name.replace("_", " "))
+
+    requires = data.get("requires") or {}
+    if not isinstance(requires, dict):
+        requires = {}
+    meta = data.get("metadata") or {}
+    if isinstance(meta, dict):
+        oc = meta.get("openclaw") or meta.get("arka") or {}
+        if isinstance(oc, dict):
+            for key in ("requires", "os", "permissions"):
+                if key in oc and key not in data:
+                    data[key] = oc[key]
+            if isinstance(oc.get("requires"), dict):
+                requires = {**requires, **oc["requires"]}
+
+    os_filter = data.get("os") or []
+    if isinstance(os_filter, str):
+        os_filter = [os_filter]
+    permissions = data.get("permissions") or []
+    if isinstance(permissions, str):
+        permissions = [permissions]
+
     return {
         "name": name,
         "description": (data.get("description") or "").strip(),
@@ -100,6 +121,9 @@ def _skill_from_manifest(manifest_path: Path) -> dict[str, Any] | None:
         "triggers": triggers,
         "enabled": data.get("enabled", True) is not False,
         "voice_ack": (data.get("voice_ack") or "").strip(),
+        "requires": requires,
+        "os": [str(x).strip().lower() for x in os_filter if str(x).strip()],
+        "permissions": [str(x).strip().lower() for x in permissions if str(x).strip()],
         "root": str(root),
         "manifest": str(manifest_path),
     }
@@ -264,11 +288,79 @@ def _py() -> str:
     return sys.executable
 
 
+def _which(bin_name: str) -> bool:
+    return shutil.which(bin_name) is not None
+
+
+def _skill_gates(sk: dict[str, Any]) -> tuple[bool, str]:
+    """OpenClaw-style requires/os gates — skip skill when deps are missing."""
+    os_filter = sk.get("os") or []
+    if os_filter:
+        plat = {"darwin": "darwin", "linux": "linux", "win32": "windows"}.get(
+            sys.platform, sys.platform
+        )
+        if plat not in os_filter and sys.platform not in os_filter:
+            return False, f"os gate ({plat} not in {', '.join(os_filter)})"
+
+    requires = sk.get("requires") or {}
+    if not isinstance(requires, dict):
+        requires = {}
+    for bin_name in requires.get("bins") or []:
+        if not _which(str(bin_name)):
+            return False, f"missing binary: {bin_name}"
+    any_bins = requires.get("anyBins") or requires.get("any_bins") or []
+    if any_bins and not any(_which(str(b)) for b in any_bins):
+        return False, f"needs one of: {', '.join(str(b) for b in any_bins)}"
+    for env_name in requires.get("env") or []:
+        if not os.environ.get(str(env_name), "").strip():
+            return False, f"missing env: {env_name}"
+
+    allowed = {
+        p.strip().lower()
+        for p in (os.environ.get("SKILL_PERMISSIONS") or "read,write,network,shell").split(",")
+        if p.strip()
+    }
+    for perm in sk.get("permissions") or []:
+        if perm and perm not in allowed:
+            return False, f"permission not allowed: {perm}"
+    return True, ""
+
+
+def _skill_security_gate(name: str, args: list[str]) -> tuple[bool, str]:
+    """Apply symbolic action checks before running a plugin skill."""
+    if os.environ.get("SECURITY", "1").strip() == "0":
+        return True, ""
+    if os.environ.get("SECURITY_ACTIONS", "1").strip() == "0":
+        return True, ""
+    cmd = f"{name} {' '.join(args)}".strip()
+    try:
+        from arka.core.security import check_action
+
+        result = check_action(cmd)
+        if result.status == "block":
+            return False, result.reason
+        if result.status == "confirm" and not sys.stdin.isatty():
+            return False, f"needs confirmation (non-interactive): {result.reason}"
+    except ImportError:
+        pass
+    return True, ""
+
+
 def run_skill(name: str, args: list[str]) -> int:
     sk = get_skill(name)
     if not sk or not sk.get("enabled"):
         print(f"Unknown or disabled third-party skill: {name}", file=sys.stderr)
         return 1
+
+    ok, reason = _skill_gates(sk)
+    if not ok:
+        print(f"Skill gate blocked '{name}': {reason}", file=sys.stderr)
+        return 2
+
+    ok, reason = _skill_security_gate(name, args)
+    if not ok:
+        print(f"Security blocked '{name}': {reason}", file=sys.stderr)
+        return 2
 
     root = Path(sk["root"])
     entry = sk.get("entry") or ""
@@ -378,6 +470,10 @@ def print_list(*, verbose: bool = False) -> None:
             print(f"       type={sk.get('type')} root={sk.get('root')}")
             if sk.get("triggers"):
                 print(f"       triggers: {', '.join(sk['triggers'][:8])}")
+            if sk.get("requires"):
+                print(f"       requires: {sk['requires']}")
+            if sk.get("permissions"):
+                print(f"       permissions: {', '.join(sk['permissions'])}")
 
 
 def main() -> int:

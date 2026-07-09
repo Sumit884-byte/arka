@@ -50,6 +50,17 @@ def route_drawing(cmd: str) -> str | None:
     return "drawing_ask " + " ".join(shlex.quote(a) for a in argv)
 
 
+def route_describe_screen(cmd: str) -> str | None:
+    try:
+        from arka.vision.screen import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "describe_screen " + " ".join(shlex.quote(a) for a in argv)
+
+
 def route_describe_image(cmd: str) -> str | None:
     try:
         from arka.vision.describe import nl_to_argv
@@ -106,6 +117,41 @@ def route_search_web(cmd: str) -> str | None:
     return None
 
 
+def route_price_check(cmd: str) -> str | None:
+    try:
+        from arka.agent.price_sources import is_price_check_query
+    except ImportError:
+        return None
+    if not is_price_check_query(cmd):
+        return None
+    rest = re.sub(r"(?i)^price_check\s+", "", cmd).strip() or cmd.strip()
+    return f"price_check {shlex.quote(rest)}"
+
+
+def route_product_reviewer(cmd: str) -> str | None:
+    clean = cmd.lower().strip()
+    triggers = [
+        r"(?i)\b(?:product\s+reviewer|review\s+this\s+product|check\s+(?:the\s+)?ingredients|"
+        r"ingredient\s+check|analyze\s+ingredients|ingredients?\s+review)\b",
+        r"(?i)\b(?:is\s+this|are\s+these)\s+.+\s+good\s+for\s+",
+        r"(?i)\bis\s+.+\s+(?:vegan|cruelty[- ]free|safe\s+for\s+sensitive\s+skin)\b",
+        r"(?i)\b(?:what(?:'s| is)\s+in|ingredients?\s+(?:of|in))\s+",
+    ]
+    matched = any(re.search(pat, clean) for pat in triggers)
+    if not matched:
+        return None
+    rest = re.sub(
+        r"(?i)^(?:please\s+)?(?:product\s+reviewer|review\s+this\s+product|"
+        r"check\s+(?:the\s+)?ingredients|ingredient\s+check|analyze\s+ingredients|"
+        r"ingredients?\s+review)\s*",
+        "",
+        cmd,
+    ).strip()
+    if rest:
+        return f"product_reviewer {shlex.quote(rest)}"
+    return "product_reviewer"
+
+
 def route_agent_skills(cmd: str) -> str | None:
     clean = cmd.lower().strip()
     patterns: list[tuple[str, str]] = [
@@ -115,6 +161,8 @@ def route_agent_skills(cmd: str) -> str | None:
         (r"(?i)\b(?:meeting\s+agent|summarize\s+(?:these\s+)?meeting\s+notes)\b", "meeting_agent"),
         (r"(?i)\b(?:study\s+agent|help\s+me\s+study)\b", "study_agent"),
         (r"(?i)\b(?:compare\s+agent|agent\s+compare)\b", "compare_agent"),
+        (r"(?i)\b(?:product\s+reviewer|review\s+this\s+product|check\s+(?:the\s+)?ingredients|"
+         r"ingredient\s+check|analyze\s+ingredients)\b", "product_reviewer"),
         (r"(?i)\b(?:agent\s+fanout|fanout\s+agent|parallel\s+agent)\b", "agent_fanout"),
         (r"(?i)\b(?:agent\s+watch|watch\s+agent)\b", "agent_watch"),
         (r"(?i)\bsupermemory\b", "supermemory"),
@@ -142,6 +190,17 @@ def route_agent_skills(cmd: str) -> str | None:
                 return f"{skill} {shlex.quote(rest)}"
             return skill
     return None
+
+
+def route_currency_convert(cmd: str) -> str | None:
+    try:
+        from arka.integrations.currency import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "currency_convert " + " ".join(shlex.quote(a) for a in argv)
 
 
 def route_compose_video(cmd: str) -> str | None:
@@ -177,13 +236,19 @@ def route_generate_thumbnail(cmd: str) -> str | None:
     return "generate_thumbnail generate " + " ".join(shlex.quote(a) for a in argv)
 
 
+from arka.routing.file_size import route_find_files_by_size  # noqa: F401 — re-export
+
+
 def route_offline_extras(cmd: str) -> str | None:
     """Try supplemental NL routes not always available via fish bridge."""
     for fn in (
+        route_find_files_by_size,
+        route_currency_convert,
         route_remind,
         route_routines,
         route_chart,
         route_drawing,
+        route_describe_screen,
         route_describe_image,
         route_generate_thumbnail,
         route_generate_image,
@@ -191,6 +256,8 @@ def route_offline_extras(cmd: str) -> str | None:
         route_compose_video,
         route_timer,
         route_search_web,
+        route_price_check,
+        route_product_reviewer,
         route_agent_skills,
     ):
         hit = fn(cmd)

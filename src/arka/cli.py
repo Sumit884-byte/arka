@@ -144,21 +144,48 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _run_portable(text: str) -> int:
-    r = route(text)
-    if r:
-        if r.skill == "help":
-            return _cmd_help()
-        print(f"→ {r.skill}")
-        if r.kind == "shell":
-            from arka.dispatch import run_shell
+    try:
+        from arka.telemetry import mark_error, mark_ok, request_span
+    except ImportError:
+        request_span = None  # type: ignore[assignment,misc]
 
-            return run_shell(r.skill)
-        return run_skill(r.skill)
+    ctx = (
+        request_span("arka ask", attributes={"arka.request.text": text[:500]})
+        if request_span is not None
+        else _cli_null_context()
+    )
+    with ctx as current:
+        r = route(text)
+        if r:
+            if r.skill == "help":
+                code = _cmd_help()
+            elif r.kind == "shell":
+                from arka.dispatch import run_shell
 
-    from arka.skills import run_chat_ask
+                print(f"→ {r.skill}")
+                code = run_shell(r.skill)
+            else:
+                print(f"→ {r.skill}")
+                code = run_skill(r.skill)
+        else:
+            from arka.skills import run_chat_ask
 
-    print("→ ask")
-    return run_chat_ask(text)
+            print("→ ask")
+            code = run_chat_ask(text)
+
+        if request_span is not None:
+            current.set_attribute("arka.exit_code", code)
+            if code == 0:
+                mark_ok(current)
+            else:
+                mark_error(current, f"exit {code}")
+        return code
+
+
+def _cli_null_context():
+    from contextlib import nullcontext
+
+    return nullcontext()
 
 
 def _cmd_refetch(extra: list[str]) -> int:
@@ -453,7 +480,26 @@ def _cmd_goal(rest: list[str]) -> int:
 
     from arka.agent.goal import main as goal_main
 
-    return goal_main(argv=["goal", *rest])
+    try:
+        from arka.telemetry import mark_error, mark_ok, request_span
+    except ImportError:
+        request_span = None  # type: ignore[assignment,misc]
+
+    goal_text = " ".join(rest).strip()
+    ctx = (
+        request_span("arka goal", attributes={"arka.request.text": goal_text[:500]})
+        if request_span is not None
+        else _cli_null_context()
+    )
+    with ctx as current:
+        code = goal_main(argv=["goal", *rest])
+        if request_span is not None:
+            current.set_attribute("arka.exit_code", code)
+            if code == 0:
+                mark_ok(current)
+            else:
+                mark_error(current, f"exit {code}")
+        return code
 
 
 def _cmd_youtube(rest: list[str]) -> int:

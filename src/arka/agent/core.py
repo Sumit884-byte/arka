@@ -15,7 +15,7 @@ import subprocess
 import sys
 import time
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 CACHE = Path.home() / ".cache" / "fish-agent"
@@ -222,14 +222,25 @@ def memory_context_for(goal: str, *, limit: int = 3) -> str:
     try:
         from arka.integrations.supermemory import context_for
 
-        return context_for(goal, limit_chars=3500)
+        ctx = context_for(goal, limit_chars=3500)
+        if ctx:
+            return ctx
     except ImportError:
         pass
     except Exception:
         pass
+
+    session_ctx = ""
+    try:
+        from arka.core.session_memory import context_for as session_context_for
+
+        session_ctx = session_context_for(goal)
+    except ImportError:
+        pass
+
     items = load_json(MEMORY_FILE, [])
     if not isinstance(items, list) or not items:
-        return ""
+        return session_ctx
     q = goal.lower()
     scored: list[tuple[float, str]] = []
     for row in items:
@@ -239,9 +250,12 @@ def memory_context_for(goal: str, *, limit: int = 3) -> str:
             scored.append((score, text))
     scored.sort(key=lambda x: x[0], reverse=True)
     if not scored:
-        return ""
+        return session_ctx
     lines = [t for _, t in scored[:limit]]
-    return "Relevant memories:\n" + "\n".join(f"- {l}" for l in lines)
+    local = "Relevant memories:\n" + "\n".join(f"- {l}" for l in lines)
+    if session_ctx:
+        return session_ctx + "\n\n" + local
+    return local
 
 
 # ── Trace ─────────────────────────────────────────────────────────────────────
@@ -686,6 +700,18 @@ def _specialist_prompt(mode: str, question: str) -> tuple[str, str]:
             "Compare the topics factually. Use a table or bullet contrast. Cite sources when given.",
             question,
         ),
+        "product": (
+            "You are a product reviewer analyzing ingredients and product claims. "
+            "Use only the provided authoritative sources (INCIDecoder, EWG Skin Deep, "
+            "Paula's Choice Ingredient Dictionary, EU CosIng, USDA FoodData Central, "
+            "Open Food Facts, FDA, PubMed, and brand ingredient lists as available). "
+            "Structure: Summary, Key Ingredients, Concerns/Allergens, Answer to User's Question, "
+            "Alternatives (if relevant). Flag uncertainty when sources disagree or data is incomplete. "
+            "End with a Sources: section listing each source you relied on "
+            "(e.g. Sources: INCIDecoder; EWG Skin Deep; PubMed). "
+            "Not medical or dermatological advice — recommend patch-testing new products.",
+            question,
+        ),
         "dev": (
             "You are a senior developer. Answer with code references when context is provided.",
             question,
@@ -716,13 +742,22 @@ def _research_web_context(question: str, *, deep: bool) -> str:
     return scrape_search_results(question, min_words=min_words, hard_limit=pages)
 
 
-def research(question: str, *, doc: str | None = None, path: str | None = None, deep: bool = False) -> None:
-    mode = _research_mode(question)
+def research(
+    question: str,
+    *,
+    doc: str | None = None,
+    path: str | None = None,
+    deep: bool = False,
+    force_mode: str | None = None,
+) -> None:
+    mode = force_mode or _research_mode(question)
+    if mode == "product":
+        deep = True
     contexts: list[str] = []
     web_ctx = ""
 
     # TurboQuant docs
-    if doc or mode in {"dev", "research", "compare"}:
+    if doc or mode in {"dev", "research", "compare", "product"}:
         try:
             from arka.stock.turboquant_rag import search_documents, use_turboquant
 
@@ -756,12 +791,23 @@ def research(question: str, *, doc: str | None = None, path: str | None = None, 
         except Exception as exc:
             contexts.append(f"[Media error: {exc}]")
 
-    # Web — always try; shallow mode falls back from snippet to full scrape
+    # Web — product mode targets authoritative ingredient databases
     try:
-        web_ctx = _research_web_context(question, deep=deep)
-        if web_ctx:
-            label = "[Web search]" if deep or len(web_ctx) > 400 else "[Web snippet]"
-            contexts.append(f"{label}\n{web_ctx[:8000]}")
+        if mode == "product":
+            from arka.agent.product_sources import fetch_product_web_context
+
+            web_ctx, source_labels = fetch_product_web_context(question, deep=deep)
+            if web_ctx:
+                label = "[Product sources"
+                if source_labels:
+                    label += ": " + ", ".join(source_labels)
+                label += "]"
+                contexts.append(f"{label}\n{web_ctx[:8000]}")
+        else:
+            web_ctx = _research_web_context(question, deep=deep)
+            if web_ctx:
+                label = "[Web search]" if deep or len(web_ctx) > 400 else "[Web snippet]"
+                contexts.append(f"{label}\n{web_ctx[:8000]}")
     except Exception:
         pass
 
@@ -791,6 +837,13 @@ def research(question: str, *, doc: str | None = None, path: str | None = None, 
             "never claim memories are the only sources when the question is factual."
         )
         user_q += _research_length_hint()
+    elif mode == "product":
+        user_q += (
+            "\nWrite a thorough product review (400–700 words). "
+            "Cite which authoritative sources support each claim. "
+            "If evidence is thin or conflicting, say so explicitly. "
+            "End with a Sources: section naming every source used."
+        )
     if contexts:
         user_q = f"Sources:\n\n" + "\n\n---\n\n".join(contexts) + f"\n\nQuestion: {user_q}"
     task = "research" if mode == "research" else "agent"
@@ -813,6 +866,46 @@ def compare_agent(a: str, b: str, *, context: str = "") -> None:
     if context:
         q += f"\n\nContext:\n{context}"
     research(q, deep=True)
+
+
+def product_reviewer(query: str) -> None:
+    """Review product ingredients and claims using deep web research."""
+    text = query.strip()
+    if not text:
+        print("Usage: product_reviewer <ingredients or product name> [what you want to know]")
+        return
+    research(text, deep=True, force_mode="product")
+
+
+def price_check(query: str) -> None:
+    """Look up current retail prices from scraped store listings."""
+    text = query.strip()
+    if not text:
+        print("Usage: price_check <product> [e.g. macbook air m3 | iphone 16 price in india]")
+        return
+
+    from arka.agent.price_sources import (
+        fetch_price_listings,
+        format_price_check_output,
+        parse_price_query,
+    )
+    from arka.output import print_block
+
+    product, region = parse_price_query(text)
+    if not product:
+        print("Usage: price_check <product> [e.g. macbook air m3 | iphone 16 price in india]")
+        return
+
+    listings, source_labels = fetch_price_listings(product, region=region, deep=True)
+    today = date.today().isoformat()
+    output = format_price_check_output(
+        listings,
+        product=product,
+        region=region,
+        searched_labels=source_labels,
+        retrieved_on=today,
+    )
+    print_block("Price check", output)
 
 
 # ── Code agent ────────────────────────────────────────────────────────────────
@@ -1059,6 +1152,12 @@ def main() -> int:
     p = sub.add_parser("inbox")
     p.add_argument("text", nargs="+")
 
+    p = sub.add_parser("product-reviewer")
+    p.add_argument("query", nargs="+")
+
+    p = sub.add_parser("price-check")
+    p.add_argument("query", nargs="+")
+
     p = sub.add_parser("goal")
     p.add_argument("goal", nargs="*")
     p.add_argument("-n", "--max", type=int, default=None)
@@ -1164,6 +1263,10 @@ def main() -> int:
         research("study: " + " ".join(args.topic), deep=True)
     elif args.cmd == "inbox":
         research("inbox triage: " + " ".join(args.text), deep=False)
+    elif args.cmd == "product-reviewer":
+        product_reviewer(" ".join(args.query))
+    elif args.cmd == "price-check":
+        price_check(" ".join(args.query))
     elif args.cmd == "goal":
         from arka.agent.goal import DEFAULT_MAX, run_goal
         from arka.integrations.butterfish import launch_shell

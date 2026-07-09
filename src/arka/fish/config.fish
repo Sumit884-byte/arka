@@ -219,6 +219,10 @@ end
 _arka_apply_pythonpath
 
 function _arka_platform_init --description "Load cached platform profile (detect once on first run)"
+    set -l env_platform ""
+    if set -q PLATFORM; and test -n "$PLATFORM"
+        set env_platform "$PLATFORM"
+    end
     set -l pf "$_ARKA_CFG/platform.env"
     if not test -f "$pf"
         set -l vpy $_ARKA_ROOT/venv-arka/bin/python3
@@ -236,7 +240,10 @@ function _arka_platform_init --description "Load cached platform profile (detect
             end
         end
     end
-    if set -q PLATFORM; and test -n "$PLATFORM"
+    if test -n "$env_platform"
+        set -gx PLATFORM $env_platform
+        set -gx _PLATFORM $env_platform
+    else if set -q PLATFORM; and test -n "$PLATFORM"
         set -gx _PLATFORM $PLATFORM
     else if not set -q _PLATFORM
         set -l uname (uname -s)
@@ -553,6 +560,7 @@ if status is-interactive
         echo "timer <time>    -> Countdown timer"
         echo "remind <when>   -> Reminder later (idle/shutdown aware)"
         echo "screenshot      -> Take a screenshot"
+        echo "describe_screen -> 10s countdown, capture screen, describe (vision)"
         echo "system_info     -> System overview"
         echo "search_web <q>  -> Google search"
         echo "open_urls       -> Open one or more URLs"
@@ -1577,6 +1585,20 @@ function _arka_confirm_risky_action --description "Confirm install/delete/send/d
     return 0
 end
 
+function _arka_run_shell_string --description "Run a shell command string; apostrophe-safe for simple commands (internal)"
+    set -l cmd (string trim -- "$argv[1]")
+    test -z "$cmd"; and return 1
+    if string match -qr '[|;&<>$`()]' -- "$cmd"
+        eval $cmd
+    else
+        set -l tokens (string split " " -- "$cmd")
+        test (count $tokens) -eq 0; and return 1
+        set -l bin $tokens[1]
+        set -e tokens[1]
+        $bin $tokens
+    end
+end
+
 function _agent_exec_shell_cmd --description "Execute shell only; prompt if __agent_classify says dangerous"
     argparse 'y/yes' -- $argv
     or return
@@ -1604,7 +1626,7 @@ function _agent_exec_shell_cmd --description "Execute shell only; prompt if __ag
             end
         end
     end
-    eval $cmd
+    _arka_run_shell_string "$cmd"
 end
 
 # --- Modular fallback utilities (shared by agent, media, Spotify, screenshots) ---
@@ -1706,12 +1728,9 @@ function _agent_dispatch_one --description "Run one skill by name or shell via _
     set -l tokens (string split " " -- "$cmd_trim")
     set -l cleaned
     for t in $tokens
-        set -a cleaned -- (_agent_strip_quotes "$t")
+        set -a cleaned (_agent_strip_quotes "$t")
     end
-    set -l tokens
-    for t in $cleaned
-        set -a tokens -- $t
-    end
+    set -l tokens $cleaned
     set -l first $tokens[1]
     if _arka_is_builtin_skill "$first"
         if test "$first" = pdf_ask
@@ -1772,14 +1791,14 @@ function _agent_all_skills --description "Canonical registered agent skill names
         play_spotify spotify_control play_song stop_music play_youtube play_movie \
         weather hyperlocal_weather timer screenshot set_wallpaper system_info \
         search_web open_urls open_finance open_news git_summary disk_usage disk_breakdown \
-        pdf_ask pdf_ingest pdf_ingest_dir pdf_list doc_ask doc_ingest doc_list drawing_ask describe_image port_scan speedtest clipboard todo translate survive_lang \
+        pdf_ask pdf_ingest pdf_ingest_dir pdf_list doc_ask doc_ingest doc_list drawing_ask describe_image describe_screen port_scan speedtest clipboard todo translate survive_lang \
         generate_password ip_info open_project create_folder list_folders show_folder \
         store_password pass \
         open_file list_files search_files find_files_by_size browse_web activate_venv create_venv fix_venv \
         write_script run_script ollama_run lint_python cheat qr_code shorten_url \
-        crypto_price pomodoro sports_score live_scores system_monitor excuse bored open_app create_skill \
+        crypto_price currency_convert convert currency pomodoro sports_score live_scores system_monitor excuse bored open_app create_skill \
         calculate_bmi send_whatsapp whatsapp_listen search_stores download_file extract_and_run \
-        create_desktop_app fix_graphics_driver install_app install_apt install_flatpak \
+        create_desktop_app fix_graphics_driver install_app install_apt install_brew install_flatpak \
         install_snap install_package install_uv stock_analysis stock macro emotion \
         auto_click auto_copy decrypt_pdf classify_files cleanup_downloads watch_zip monitor_x \
         generate_image generate_thumbnail generate_video compose_video chart youtube_transcript youtube_download yt_download media_transcript transcribe_media summarize_url daily_brief wifi_info \
@@ -1787,7 +1806,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         agent_remember agent_recall agent_memory agent_trace agent_why agent_last \
         agent_resume agent_research agent_nudge agent_watch agent_routine agent_fanout \
         agent_code agent_handoff agent_browser transcript_ask media_ask \
-        meeting_agent study_agent inbox_agent compare_agent profession pr_check \
+        meeting_agent study_agent inbox_agent compare_agent product_reviewer price_check profession pr_check github_repo \
         arka_ask semantic_memory supermemory speak_research voice_session handoff_notify remind routines predictions stock \
         rag_setup rag_status voice_agent wake_control \
         agent_ask web_answer deep_web_answer web_essay calc chat_reset set_location files_preference_help google \
@@ -2028,7 +2047,7 @@ function _agent_loop_execute --description "Run one loop command; prints output,
             echo "[skipped: security confirm declined]"
             return 2
         end
-        set -l out (eval $cmd 2>&1)
+        set -l out (_arka_run_shell_string "$cmd" 2>&1)
         set -l st $status
         printf '%s' (_agent_loop_truncate "$out")
         return $st
@@ -2040,7 +2059,7 @@ function _agent_loop_execute --description "Run one loop command; prints output,
             return 2
         end
         if set -q _flag_y
-            set -l out (eval $cmd 2>&1)
+            set -l out (_arka_run_shell_string "$cmd" 2>&1)
             set -l st $status
             printf '%s' (_agent_loop_truncate "$out")
             return $st
@@ -2051,7 +2070,7 @@ function _agent_loop_execute --description "Run one loop command; prints output,
         return $st
     end
 
-    set -l out (eval $cmd 2>&1)
+    set -l out (_arka_run_shell_string "$cmd" 2>&1)
     set -l st $status
     printf '%s' (_agent_loop_truncate "$out")
     return $st
@@ -2109,6 +2128,8 @@ function skills --description "Show what commands the agent can auto-run"
                 echo (set_color green)"  drawing_ask     "(set_color normal)"<file.pdf|image> <question> — vision analysis (Gemini)"
             case describe_image
                 echo (set_color green)"  describe_image  "(set_color normal)"<path|url> [question] — photo caption (vLLM)"
+            case describe_screen
+                echo (set_color green)"  describe_screen "(set_color normal)"[question] — 10s countdown, capture display, describe"
             case pdf_list doc_list
                 echo (set_color green)"  pdf_list / doc_list  "(set_color normal)"List ingested documents"
             case disk_breakdown
@@ -2205,6 +2226,8 @@ function skills --description "Show what commands the agent can auto-run"
                 echo (set_color green)"  daily_brief    "(set_color normal)"Weather + top news headlines"
             case sports_score live_scores
                 echo (set_color green)"  sports_score   "(set_color normal)"[ipl|nfl|nba|epl|cricket|…] — live match scores (ESPN)"
+            case currency_convert convert currency
+                echo (set_color green)"  currency_convert "(set_color normal)"<amount> <from> <to> — live FX rates (USD, EUR, INR, …)"
             case wifi_info
                 echo (set_color green)"  wifi_info      "(set_color normal)"Current Wi-Fi network + signal"
             case generate_image
@@ -2387,7 +2410,7 @@ $files_out"
         end
 
         # Run it
-        set -l output (eval $cmd 2>&1)
+        set -l output (_arka_run_shell_string "$cmd" 2>&1)
         set -l cmd_status $status
 
         if test $cmd_status -eq 0
@@ -2784,100 +2807,69 @@ export FZF_DEFAULT_OPTS='--height 40% --border --reverse'
 alias o='gnome-text-editor'
 
 function ai-models --description "List available AI models, providers, and limits"
-    echo (set_color --bold blue)"AI Provider & Model Reference"(set_color normal)
-    echo (set_color cyan)"--------------------------------------------------------------------------------"(set_color normal)
-    printf "%-10s | %-25s | %-30s\n" "Provider" "Model ID" "Typical Free Tier Limits"
-    echo (set_color cyan)"-----------|---------------------------|----------------------------------------"(set_color normal)
-    printf "%-10s | %-25s | %-30s\n" "Gemini" "gemini-2.0-flash" "15 RPM, 1M TPM, 1500 RPD"
-    printf "%-10s | %-25s | %-30s\n" "Gemini" "gemini-1.5-flash" "15 RPM, 1M TPM, 1500 RPD"
-    printf "%-10s | %-25s | %-30s\n" "Groq" "llama-3.3-70b-versatile" "30 RPM, 6k TPM"
-    printf "%-10s | %-25s | %-30s\n" "Groq" "llama-3.1-8b-instant" "fast, 128K context"
-    printf "%-10s | %-25s | %-30s\n" "Ollama" "llama3.2:1b" "Unlimited (Local Hardware)"
-    echo (set_color cyan)"--------------------------------------------------------------------------------"(set_color normal)
-    echo "RPM = Requests Per Minute | TPM = Tokens Per Minute | RPD = Requests Per Day"
+    set -l py (_arka_python)
+    set -l script (_arka_py_script arka_llm.py)
+    echo (set_color --bold blue)"AI Provider Reference"(set_color normal)
+    echo ""
+    if test -f "$script"
+        $py $script providers 2>/dev/null | while read -l line
+            set -l parts (string split \t "$line")
+            if test (count $parts) -lt 2
+                echo $line
+                continue
+            end
+            if test "$parts[1]" = display_name
+                echo (set_color cyan)"$line"(set_color normal)
+                continue
+            end
+            set -l mark (set_color brblack)" "(set_color normal)
+            if test "$parts[3]" = yes
+                set mark (set_color green)"✓"(set_color normal)
+            end
+            echo "  $mark $parts[2] ($parts[1]) — default: $parts[4]"
+        end
+    else
+        echo "  anthropic, openai, gemini, groq, xai, deepseek, moonshot, zai,"
+        echo "  minimax, venice, bedrock, azure, openrouter, litellm, ollama, lmstudio"
+    end
+    echo ""
+    echo (set_color cyan)"Chain:"(set_color normal) $py $script models"
+    echo (set_color cyan)"Live Gemini:"(set_color normal) $py $script models --gemini-live"
 end
 
 function ai-status --description "Show current AI provider and model in use"
+    set -l py (_arka_python)
+    set -l script (_arka_py_script arka_llm.py)
     echo (set_color --bold blue)"━━━ AI Status ━━━"(set_color normal)
     echo ""
-    
-    # Check available providers
-    set -l available_providers
-    set -l primary_provider ""
-    set -l primary_model ""
-    
-    # Check Gemini (only if key is actually set with content)
-    if test -n "$GEMINI_API_KEY"
-        set -a available_providers "Gemini"
-        if test -z "$primary_provider"
-            set primary_provider "Gemini"
-            set primary_model "gemini-2.0-flash"
-        end
+    echo (set_color cyan)"  Configured providers:"(set_color normal)
+    set -l configured_lines
+    if test -f "$script"
+        set configured_lines ($py $script providers 2>/dev/null | string match -r '\tyes\t')
     end
-    
-    # Check Groq
-    if test -n "$GROQ_API_KEY"
-        set -a available_providers "Groq"
-        if test -z "$primary_provider"
-            set primary_provider "Groq"
-            set primary_model "llama-3.3-70b-versatile"
-        end
-    end
-    
-    # Check Ollama (local server or key)
-    if test -n "$OLLAMA_API_KEY"
-        set -a available_providers "Ollama"
-        if test -z "$primary_provider"
-            set primary_provider "Ollama"
-            set primary_model "llama3.2:1b"
-        end
-    else
-        # Also check if Ollama is running locally
-        if curl -s http://localhost:11434/api/tags &>/dev/null
-            set -a available_providers "Ollama"
-            if test -z "$primary_provider"
-                set primary_provider "Ollama"
-                set primary_model "llama3.2:1b"
-            end
-        end
-    end
-    
-    # Display available providers
-    echo (set_color cyan)"  Available Providers:"(set_color normal)
-    if test (count $available_providers) -eq 0
+    if test (count $configured_lines) -eq 0
         echo (set_color red)"    None configured"(set_color normal)
+        echo (set_color yellow)"    Add keys to $_ARKA_CFG/.env — run: ai-models"(set_color normal)
     else
-        for provider in $available_providers
-            echo (set_color green)"    ✓ $provider"(set_color normal)
+        for line in $configured_lines
+            set -l parts (string split \t "$line")
+            echo (set_color green)"    ✓ $parts[2] ($parts[1]) — default $parts[4]"(set_color normal)
         end
     end
-    
     echo ""
-    echo (set_color cyan)"  Primary (First Available):"(set_color normal)
-    if test -z "$primary_provider"
-        echo (set_color red)"    No AI provider configured"(set_color normal)
-        echo ""
-        echo (set_color yellow)"  To configure, add to $_ARKA_CFG/.env:"(set_color normal)
-        echo (set_color brblack)"    GEMINI_API_KEY=your_key_here"(set_color normal)
-        echo (set_color brblack)"    GROQ_API_KEY=your_key_here"(set_color normal)
-        echo (set_color brblack)"    OLLAMA_API_KEY=your_key_here"(set_color normal)
-    else
-        echo (set_color --bold green)"    $primary_provider → $primary_model"(set_color normal)
-    end
-    
-    echo ""
-    echo (set_color cyan)"  Current Preference:"(set_color normal)
+    echo (set_color cyan)"  Current preference:"(set_color normal)
     if test -n "$AI_PREFERRED_PROVIDER" -a -n "$AI_PREFERRED_MODEL"
         echo (set_color --bold green)"    $AI_PREFERRED_PROVIDER → $AI_PREFERRED_MODEL"(set_color normal)
     else
         echo (set_color brblack)"    Not set (using auto-fallback)"(set_color normal)
     end
-    
     echo ""
-    echo (set_color cyan)"  Fallback Order:"(set_color normal)
-    echo (set_color brblack)"    1. Gemini (gemini-2.0-flash)"(set_color normal)
-    echo (set_color brblack)"    2. Groq (llama-3.3-70b-versatile)"(set_color normal)
-    echo (set_color brblack)"    3. Ollama (llama3.2:1b)"(set_color normal)
+    echo (set_color cyan)"  Active / fallback chain:"(set_color normal)
+    if test -f "$script"
+        $py $script models 2>/dev/null | head -8 | while read -l row
+            echo (set_color brblack)"    $row"(set_color normal)
+        end
+    end
 end
 
 function ai-pref --description "Set preferred AI provider and model"
@@ -2887,36 +2879,26 @@ function ai-pref --description "Set preferred AI provider and model"
     if test (count $argv) -eq 0
         echo "Usage: ai-pref <provider> [model]"
         echo ""
-        echo (set_color cyan)"Available providers:"(set_color normal)
-        echo "  gemini  - Google Gemini"
-        echo "  groq    - Groq (Llama models)"
-        echo "  ollama  - Local Ollama"
-        echo ""
-        echo (set_color cyan)"Available models:"(set_color normal)
-        echo "  gemini:"
-        echo "    gemini-2.0-flash"
-        echo "    gemini-1.5-flash"
-        echo "  groq:"
-        echo "    llama-3.3-70b-versatile"
-        echo "    llama-3.1-8b-instant"
-        echo "  ollama:"
-        echo "    llama3.2:1b"
-        echo "    llama3.2:3b"
-        echo "    mistral"
+        ai-models
         echo ""
         echo (set_color cyan)"Examples:"(set_color normal)
-        echo "  ai-pref groq                    # Use Groq with default model"
-        echo "  ai-pref groq llama-3.1-8b-instant    # Use Groq with specific model"
+        echo "  ai-pref openrouter anthropic/claude-3.5-sonnet"
+        echo "  ai-pref anthropic claude-sonnet-4-20250514"
         echo "  ai-pref gemini gemini-2.0-flash"
-        echo "  ai-pref ollama llama3.2:1b"
-        echo "  ai-pref clear                  # Clear preference, use auto-fallback"
+        echo "  ai-pref clear"
         return 0
     end
     
-    set -l arg1 $argv[1]
+    set -l arg1 (string lower $argv[1])
+    if test "$arg1" = kimi
+        set arg1 moonshot
+    end
+    if test "$arg1" = google
+        set arg1 gemini
+    end
     
     # Clear preference
-    if test "$arg1" = "clear"
+    if test "$arg1" = clear
         set -gx AI_PREFERRED_PROVIDER ""
         set -gx AI_PREFERRED_MODEL ""
         if test -f $_ARKA_CFG/.env
@@ -2927,53 +2909,40 @@ function ai-pref --description "Set preferred AI provider and model"
         return 0
     end
     
-    # Set provider
-    switch $arg1
-        case gemini
-            set provider "gemini"
-            set model $argv[2]
-            if test -z "$model"
-                set model "gemini-2.0-flash"
+    set -l py (_arka_python)
+    set -l script (_arka_py_script arka_llm.py)
+    set -l def ""
+    if test -f "$script"
+        set -l row ($py $script providers 2>/dev/null | string match -r "^$arg1\t")
+        if test -n "$row"
+            set -l parts (string split \t "$row")
+            if test (count $parts) -ge 4
+                set provider $parts[1]
+                set model $argv[2]
+                test -z "$model"; and set model $parts[4]
             end
-        case groq
-            set provider "groq"
-            set model $argv[2]
-            if test -z "$model"
-                set model "llama-3.3-70b-versatile"
-            end
-        case ollama
-            set provider "ollama"
-            set model $argv[2]
-            if test -z "$model"
-                set model "llama3.2:1b"
-            end
-        case '*'
-            echo (set_color red)"Unknown provider: $arg1"(set_color normal)
-            echo "Use 'ai-pref' without arguments to see available options."
-            return 1
-    end
-    
-    # Validate model
-    if test -n "$model"
-        set -gx AI_PREFERRED_PROVIDER "$provider"
-        set -gx AI_PREFERRED_MODEL "$model"
-        
-        # Save permanently to $_ARKA_CFG/.env
-        if test -f $_ARKA_CFG/.env
-            set -l env_content (cat $_ARKA_CFG/.env | grep -v '^AI_PREFERRED_PROVIDER=' | grep -v '^AI_PREFERRED_MODEL=')
-            printf "%s\n" $env_content > $_ARKA_CFG/.env
-            echo "AI_PREFERRED_PROVIDER=$provider" >> $_ARKA_CFG/.env
-            echo "AI_PREFERRED_MODEL=$model" >> $_ARKA_CFG/.env
-        else
-            echo "AI_PREFERRED_PROVIDER=$provider" > $_ARKA_CFG/.env
-            echo "AI_PREFERRED_MODEL=$model" >> $_ARKA_CFG/.env
         end
-        
-        echo (set_color --bold green)"✓ Preference set & saved permanently: $provider → $model"(set_color normal)
-    else
-        echo (set_color red)"Invalid model: $model"(set_color normal)
+    end
+    if test -z "$provider"
+        echo (set_color red)"Unknown provider: $arg1"(set_color normal)
+        echo "Run ai-models for supported slugs."
         return 1
     end
+
+    set -gx AI_PREFERRED_PROVIDER "$provider"
+    set -gx AI_PREFERRED_MODEL "$model"
+
+    if test -f $_ARKA_CFG/.env
+        set -l env_content (cat $_ARKA_CFG/.env | grep -v '^AI_PREFERRED_PROVIDER=' | grep -v '^AI_PREFERRED_MODEL=')
+        printf "%s\n" $env_content > $_ARKA_CFG/.env
+        echo "AI_PREFERRED_PROVIDER=$provider" >> $_ARKA_CFG/.env
+        echo "AI_PREFERRED_MODEL=$model" >> $_ARKA_CFG/.env
+    else
+        echo "AI_PREFERRED_PROVIDER=$provider" > $_ARKA_CFG/.env
+        echo "AI_PREFERRED_MODEL=$model" >> $_ARKA_CFG/.env
+    end
+
+    echo (set_color --bold green)"✓ Preference set & saved permanently: $provider → $model"(set_color normal)
 end
 
 # --- Virtual Environment Skills ---
@@ -3103,11 +3072,43 @@ function create_folder --description "Create one or more directories"
     end
 end
 
+function _arka_downloads_dir --description "Platform Downloads folder (internal)"
+    if set -q AIE_DOWNLOADS_DIR; and test -n "$AIE_DOWNLOADS_DIR"; and test -d "$AIE_DOWNLOADS_DIR"
+        echo (realpath "$AIE_DOWNLOADS_DIR" 2>/dev/null; or echo "$AIE_DOWNLOADS_DIR")
+        return 0
+    end
+    if test -d "$HOME/Downloads"
+        echo (realpath "$HOME/Downloads" 2>/dev/null; or echo "$HOME/Downloads")
+        return 0
+    end
+    if set -q USERPROFILE; and test -d "$USERPROFILE/Downloads"
+        echo (realpath "$USERPROFILE/Downloads" 2>/dev/null; or echo "$USERPROFILE/Downloads")
+        return 0
+    end
+    echo "$HOME/Downloads"
+end
+
 function _resolve_folder_path --description "Expand ~ and common folder names from a path fragment (internal)"
     set -l path (string trim -- $argv[1])
     if test -z "$path"
         echo "."
         return 0
+    end
+    set -l lower (string lower "$path")
+    switch $lower
+        case downloads download
+            _arka_downloads_dir
+            return 0
+        case desktop
+            set path Desktop
+        case documents document
+            set path Documents
+        case pictures picture photos photo
+            set path Pictures
+        case videos video
+            set path Videos
+        case music
+            set path Music
     end
     set path (string replace -a '~' "$HOME" -- $path)
     if test -d "$path"
@@ -3123,6 +3124,43 @@ function _resolve_folder_path --description "Expand ~ and common folder names fr
         return 0
     end
     echo "$path"
+end
+
+function _parse_file_size_root --description "Extract search root from NL file-size query (internal)"
+    set -l text "$argv[1]"
+    set -l lower (string lower "$text")
+
+    set -l folder_m (string match -r '(?i)\s+in\s+(?:my\s+)?(?:the\s+)?(downloads?|desktop|documents?|document|pictures?|picture|photos?|photo|videos?|video|music)\s*$' "$text")
+    if test (count $folder_m) -ge 2
+        _resolve_folder_path $folder_m[2]
+        return 0
+    end
+
+    set -l fi_m (string match -r '(?i)\b(?:large\s+)?files?\s+in\s+(?:my\s+)?(?:the\s+)?(\S+)' "$text")
+    if test (count $fi_m) -ge 2
+        _resolve_folder_path $fi_m[2]
+        return 0
+    end
+
+    for name in downloads download desktop documents document pictures picture photos photo videos video music
+        if string match -qr "(?i)\b$name\b" "$lower"
+            _resolve_folder_path $name
+            return 0
+        end
+    end
+
+    set -l in_m (string match -r '(?i)\s+in\s+(.+)$' "$text")
+    if test (count $in_m) -ge 2
+        set -l tail (string trim -- $in_m[2])
+        if string match -qr '(?i)^(range|between|the\s+range)\b' "$tail"
+            echo "."
+            return 0
+        end
+        _resolve_folder_path $tail
+        return 0
+    end
+
+    echo "."
 end
 
 function list_folders --description "List folder names in a directory (directories only)"
@@ -3222,6 +3260,42 @@ function search_files --description "Search for files by name pattern under a di
     end
 end
 
+function _find_size_unit --description "Map NL size unit to find -size suffix (internal)"
+    set -l raw_unit (string lower "$argv[1]")
+    switch $raw_unit
+        case b byte bytes
+            echo c
+        case k kb
+            echo k
+        case m mb ''
+            echo M
+        case g gb
+            echo G
+    end
+end
+
+function _parse_file_size_range --description "Parse min/max from NL size range (internal)"
+    set -l text "$argv[1]"
+    set -l m (string match -r '(?i)(?:range\s+of|between|from)\s+(\d+(?:\.\d+)?)\s*(kb|mb|gb|bytes?|b|k|m|g)?\s+(?:to|and|-)\s+(\d+(?:\.\d+)?)\s*(kb|mb|gb|bytes?|b|k|m|g)\b' "$text")
+    if test (count $m) -ge 5
+        set -l u1 $m[3]
+        test -z "$u1"; and set u1 $m[5]
+        printf '%s\n' $m[2] $m[4] $u1 $m[5]
+        return 0
+    end
+    set m (string match -r '(?i)(\d+(?:\.\d+)?)\s*(kb|mb|gb|bytes?|b|k|m|g)\b\s+(?:to|and|-)\s+(\d+(?:\.\d+)?)\s*(kb|mb|gb|bytes?|b|k|m|g)\b' "$text")
+    if test (count $m) -ge 5
+        printf '%s\n' $m[2] $m[4] $m[3] $m[5]
+        return 0
+    end
+    set m (string match -r '(?i)between\s+(\d+(?:\.\d+)?)\s+and\s+(\d+(?:\.\d+)?)\s*(kb|mb|gb|bytes?|b|k|m|g)\b' "$text")
+    if test (count $m) -ge 4
+        printf '%s\n' $m[2] $m[3] $m[4] $m[4]
+        return 0
+    end
+    return 1
+end
+
 function find_files_by_size --description "Find files smaller or larger than a size threshold"
     set -l text (string join " " $argv)
     if test -z "$text"
@@ -3231,6 +3305,51 @@ function find_files_by_size --description "Find files smaller or larger than a s
     end
 
     set -l clean (string lower "$text")
+    set -l root (_parse_file_size_root "$text")
+
+    if not test -d "$root"
+        printf '%s\n' (set_color red)"Not a directory: $root"(set_color normal)
+        return 1
+    end
+
+    set -l resolved (realpath "$root" 2>/dev/null; or echo "$root")
+
+    set -l range (_parse_file_size_range "$text" 2>/dev/null)
+    if test (count $range) -eq 4
+        set -l min_num (math -s0 $range[1])
+        set -l max_num (math -s0 $range[2])
+        set -l min_unit (_find_size_unit $range[3])
+        set -l max_unit (_find_size_unit $range[4])
+        if test $min_num -gt $max_num
+            set -l tmp_num $min_num
+            set min_num $max_num
+            set max_num $tmp_num
+            set -l tmp_unit $min_unit
+            set min_unit $max_unit
+            set max_unit $tmp_unit
+        end
+        set -l min_spec "+"(math -s0 $min_num - 1)"$min_unit"
+        set -l max_spec "-"(math -s0 $max_num + 1)"$max_unit"
+        set -l min_label "$min_num"(string upper "$range[3]")
+        set -l max_label "$max_num"(string upper "$range[4]")
+        printf "Files between %s and %s under %s\n" "$min_label" "$max_label" "$resolved"
+
+        set -l results (find "$root" -type f -size $min_spec -size $max_spec 2>/dev/null)
+        if test (count $results) -eq 0
+            printf '%s\n' (set_color yellow)"  No files found."(set_color normal)
+            return 1
+        end
+
+        set -l sorted (du -k $results 2>/dev/null | sort -rn -k1 | cut -f2-)
+        for f in $sorted[1..100]
+            set -l sz (du -h "$f" 2>/dev/null | cut -f1)
+            printf '  %s  (%s)\n' "$f" "$sz"
+        end
+        if test (count $sorted) -gt 100
+            printf '%s\n' (set_color brblack)"  ... and "(count $sorted)" total (showing first 100)"(set_color normal)
+        end
+        return 0
+    end
 
     set -l sign "-"
     if string match -qr '(?i)(more|greater|larger|over|above|bigger)(\s+than)?|\bover\s+\d' "$clean"
@@ -3238,14 +3357,19 @@ function find_files_by_size --description "Find files smaller or larger than a s
     end
 
     set -l sm (string match -r '(?i)(\d+(?:\.\d+)?)\s*(kb|mb|gb|bytes?|b|k|m|g)\b' "$text")
-    if test (count $sm) -lt 2
+    set -l num 0
+    set -l raw_unit mb
+    if test (count $sm) -ge 2
+        set num (math -s0 $sm[2])
+        set raw_unit (string lower "$sm[3]")
+    else if string match -qr '(?i)\b(large|big|huge)\b' "$clean"
+        set num 100
+        set raw_unit mb
+    else
         echo (set_color red)"Could not parse size from: $text"(set_color normal)
         echo "Example: find files less than 100mb"
         return 1
     end
-
-    set -l num (math -s0 $sm[2])
-    set -l raw_unit (string lower "$sm[3]")
     set -l unit M
     switch $raw_unit
         case b byte bytes
@@ -3258,19 +3382,7 @@ function find_files_by_size --description "Find files smaller or larger than a s
             set unit G
     end
 
-    set -l root "."
-    set -l in_m (string match -r '(?i)\s+in\s+(.+)$' "$text")
-    if test (count $in_m) -ge 2
-        set root (_resolve_folder_path (string trim -- $in_m[2]))
-    end
-
-    if not test -d "$root"
-        printf '%s\n' (set_color red)"Not a directory: $root"(set_color normal)
-        return 1
-    end
-
     set -l size_spec "$sign$num$unit"
-    set -l resolved (realpath "$root" 2>/dev/null; or echo "$root")
     set -l op "smaller than"
     if test "$sign" = "+"
         set op "larger than"
@@ -5576,6 +5688,35 @@ function describe_image --description "Describe a photo/image via local vLLM vis
     return $status
 end
 
+function describe_screen --description "10s countdown, capture display, describe via vision"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        $py (_arka_py_script arka_screen.py) capture
+        return $status
+    end
+    switch $argv[1]
+        case help -h --help
+            echo "Usage: describe_screen [question]"
+            echo ""
+            echo "Examples:"
+            echo "  describe_screen"
+            echo "  describe_screen what app is in focus"
+            echo ""
+            echo "NL: arka what is on my screen"
+            echo "    arka screen"
+            echo "    arka describe screen"
+            echo ""
+            echo "Shows a 10-second countdown, captures the display, then describes it."
+            return 0
+        case capture
+            $py (_arka_py_script arka_screen.py) $argv
+            return $status
+        case '*'
+            $py (_arka_py_script arka_screen.py) capture $argv
+            return $status
+    end
+end
+
 function generate_video --description "Generate real AI video (Pollinations or Gemini Veo — no fake slideshows)"
     set -l prompt_parts
     set -l flags
@@ -6085,6 +6226,25 @@ function pr_check --description "PR diff, CI status, explain failures, babysit u
     end
 end
 
+function github_repo --description "Recent GitHub repo commits and modified files"
+    set -l py (_arka_python)
+    set -l script (_arka_py_script arka_github_repo.py)
+    if test (count $argv) -eq 0
+        echo "Usage: github_repo activity owner/repo [--days N]"
+        echo "NL: arka tell what files changed in 2 days for https://github.com/owner/repo"
+        return 0
+    end
+    set -l answer (_arka_capture_output $py $script $argv)
+    set -l st $status
+    if test $st -ne 0
+        return $st
+    end
+    if test -z "$answer"
+        return 1
+    end
+    _arka_print_answer_block "$answer" "GitHub activity"
+end
+
 function disk_usage --description "Analyze disk usage of current or specified directory"
     set -l target "."
     if test (count $argv) -gt 0
@@ -6349,7 +6509,7 @@ end
 function _arka_strip_atx_prefix --description "Remove ATX markdown heading prefix (# .. ###### + space) (internal)"
     set -l text (string trim -- "$argv[1]")
     test -z "$text"; and return
-    if string match -qr '^#{1,6}\s+\S' "$text"
+    if string match -qr '^#{1,6}\s+\S' -- "$text"
         set text (string replace -r '^#{1,6}\s+' '' -- "$text")
     end
     echo -n "$text"
@@ -6359,7 +6519,7 @@ function _arka_is_markdown_heading --description "True for ATX markdown headings
     set -l text (string trim -- "$argv[1]")
     test -z "$text"; and return 1
     # CommonMark ATX: 1–6 hashes, required space, then title (#health is NOT a heading).
-    if not string match -qr '^#{1,6}\s+\S' "$text"
+    if not string match -qr '^#{1,6}\s+\S' -- "$text"
         return 1
     end
     set -l m (string match -r '^#{1,6}\s+(.+)$' -- "$text")
@@ -6369,7 +6529,7 @@ function _arka_is_markdown_heading --description "True for ATX markdown headings
     if _arka_is_source_line "$title"
         return 1
     end
-    if string match -qr '(?i)^Sources?\s*:' "$title"
+    if string match -qr '(?i)^Sources?\s*:' -- "$title"
         return 1
     end
     return 0
@@ -6424,18 +6584,18 @@ end
 function _arka_is_source_line --description "True if line is a web/source citation (internal)"
     set -l text (_arka_strip_source_text "$argv[1]")
     test -z "$text"; and return 1
-    string match -qr '(?i)^Sources?\s*:' "$text"; and return 0
-    string match -qr '(?i)^\(Sources?\s*:' "$text"; and return 0
-    string match -qr '(?i)via (provided )?search results' "$text"; and return 0
-    string match -qr '(?i)via web search' "$text"; and return 0
-    string match -qr '(?i)^according to\s' "$text"; and return 0
+    string match -qr '(?i)^Sources?\s*:' -- "$text"; and return 0
+    string match -qr '(?i)^\(Sources?\s*:' -- "$text"; and return 0
+    string match -qr '(?i)via (provided )?search results' -- "$text"; and return 0
+    string match -qr '(?i)via web search' -- "$text"; and return 0
+    string match -qr '(?i)^according to\s' -- "$text"; and return 0
     return 1
 end
 
 function _arka_is_sources_section --description "True if line is a Sources section title (internal)"
     set -l text (_arka_clean_markdown_stars (_arka_strip_atx_prefix "$argv[1]"))
     test -z "$text"; and return 1
-    string match -qr '(?i)^Sources?\s*:?\s*$' "$text"
+    string match -qr '(?i)^Sources?\s*:?\s*$' -- "$text"
 end
 
 function _arka_print_numbered --description "Print one numbered answer line (internal)"
@@ -6573,6 +6733,17 @@ function _arka_pretty_python_output --description "Format Python ━━━ block
                 set -a body_lines "$ln"
                 set i (math $i + 1)
             end
+            if test "$title" = "Currency Conversion"
+                printf '%s%s%s\n' (set_color --bold green) "━━━ $title ━━━" (set_color normal)
+                for ln in $body_lines
+                    if test -z "$ln"
+                        echo ""
+                    else
+                        echo "  $ln"
+                    end
+                end
+                continue
+            end
             set -l joined (string join \n -- $body_lines)
             _arka_print_answer_block "$joined" "$title"
             continue
@@ -6687,12 +6858,42 @@ function _arka_print_answer --description "Pretty-print web/chat answer for the 
             continue
         end
 
+        if string match -qr '^[^\s\-*].+/$' -- "$trimmed"
+            set_color --bold cyan
+            echo "  $trimmed"
+            set_color normal
+            continue
+        end
+
+        set -l ibul (string match -r '^(\s+)•\s+(.+)$' -- "$lines[$i]")
+        if test (count $ibul) -ge 3
+            if _arka_is_source_line "$ibul[2]"
+                _arka_print_source_line "$ibul[2]"
+                continue
+            end
+            _pdf_bullet "$ibul[1]" "" "$ibul[2]"
+            continue
+        end
+
         set -l ubul (string match -r '^•\s+(.+)$' -- "$trimmed")
         if test (count $ubul) -ge 2
             if _arka_is_source_line "$ubul[2]"
                 _arka_print_source_line "$ubul[2]"
                 continue
             end
+            _pdf_bullet "  " "" "$ubul[2]"
+            continue
+        end
+
+        set -l dbul (string match -r '^-\s+(.+)$' -- "$trimmed")
+        if test (count $dbul) -ge 2
+            set -l body (string replace -a -r '\*\*([^*]+)\*\*' '$1' -- "$dbul[2]")
+            if _arka_is_source_line "$body"
+                _arka_print_source_line "$body"
+                continue
+            end
+            _pdf_bullet "  " "" "$body"
+            continue
         end
 
         if string match -qr '(?i)^(based on|here .{0,60}(summary|answer|list)|these (places|cities|options)|in summary|to summarize)' -- "$trimmed"
@@ -7532,6 +7733,65 @@ except Exception as e:
 " "$coins"
 end
 
+function _arka_currency_text_from_argv --description "Build currency NL text; recover shell-eaten \$amount (internal)"
+    set -l text (string join " " $argv)
+    set -l py (_arka_python)
+    if test (count ($py (_arka_py_script arka_currency.py) parse (string escape --style=script -- $text) 2>/dev/null)) -gt 0
+        echo $text
+        return 0
+    end
+    if not string match -qr '^(?i)(to|in|into|ot)\s' -- "$text"
+        echo $text
+        return 0
+    end
+    for entry in (history --prefix arka --max 12 2>/dev/null)
+        if string match -qr '(?i)convert\s+\$[0-9].*\b(to|in|into|ot)\s' -- "$entry"
+            set -l stripped (string replace -r '^(?i).*?\bconvert\s+' '' -- "$entry" | string trim)
+            if test (count ($py (_arka_py_script arka_currency.py) parse (string escape --style=script -- $stripped) 2>/dev/null)) -gt 0
+                echo $stripped
+                return 0
+            end
+        end
+    end
+    for entry in (history --prefix convert --max 8 2>/dev/null)
+        if string match -qr '\$[0-9]' -- "$entry"
+            set -l stripped (string replace -r '^(?i).*\b(convert|currency)\s+' '' -- "$entry" | string trim)
+            if test (count ($py (_arka_py_script arka_currency.py) parse (string escape --style=script -- $stripped) 2>/dev/null)) -gt 0
+                echo $stripped
+                return 0
+            end
+        end
+    end
+    echo $text
+end
+
+function currency_convert --description "Convert amounts between currencies using live exchange rates"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        echo "Usage: currency_convert <amount> <from> <to>"
+        echo "       currency_convert convert 100 USD to INR"
+        echo "       arka 'what is 500 EUR in GBP'"
+        return 1
+    end
+    set -l text (_arka_currency_text_from_argv $argv)
+    set -l out (_arka_capture_output $py (_arka_py_script arka_currency.py) convert (string escape --style=script -- $text))
+    set -l st $status
+    if test $st -ne 0
+        echo $out >&2
+        return $st
+    end
+    _arka_pretty_python_output "$out"
+    return 0
+end
+
+function convert --description "Alias for currency_convert"
+    currency_convert $argv
+end
+
+function currency --description "Alias for currency_convert"
+    currency_convert $argv
+end
+
 function sports_score --description "Live sports scores — IPL, cricket, NFL, NBA, soccer, F1, …"
     set -l py (_arka_python)
     if test (count $argv) -eq 0
@@ -8201,9 +8461,15 @@ end
 
 function _agent_parse_install_app_name --description "Extract app name from install NL (internal)"
     set -l cmd $argv[1]
+    set -l brew_m (string match -r -i '^(?:brew|homebrew)\s+install\s+(.+)$' "$cmd")
+    if test (count $brew_m) -ge 2
+        echo (string trim -- "$brew_m[2]")
+        return
+    end
     set -l app (string replace -r -i '^(?:please\s+)?(?:install|get|setup)\s+(?:the\s+)?' '' "$cmd")
-    set app (string replace -r -i '\s+(?:from|via|using|with|on)\s+(?:flatpak|flathub|snap|snapcraft|apt|apt-get|dpkg).*$' '' "$app")
+    set app (string replace -r -i '\s+(?:from|via|using|with|on)\s+(?:flatpak|flathub|snap|snapcraft|apt|apt-get|dpkg|brew|homebrew).*$' '' "$app")
     set app (string replace -r -i '\s+(?:with|via|using)\s+apt(?:-get)?\s*$' '' "$app")
+    set app (string replace -r -i '\s+(?:with|via|using)\s+brew(?:\s|$)' '' "$app")
     set app (string replace -r -i '\s+(?:app|package)\s*$' '' "$app")
     echo (string trim -- "$app")
 end
@@ -8334,10 +8600,27 @@ end
 
 function _agent_is_file_size_find --description "True if NL is find-files-by-size (internal)"
     set -l clean (string lower "$argv[1]")
-    if not string match -qr '(?i)(find|search|list|show)\s+.*\bfiles?\b' "$clean"
-        return 1
+    set -l has_subject 0
+    if string match -qr '(?i)(find|search|list|show)\s+.*\bfiles?\b' "$clean"
+        set has_subject 1
+    else if string match -qr '(?i)(find|search|list|show)\s+.*\bdownloads?\b' "$clean"
+        set has_subject 1
+    else if string match -qr '(?i)\bfiles?\b.*\b(downloads?|desktop|documents?|pictures?|photos?|videos?|music)\b' "$clean"
+        set has_subject 1
+    else if string match -qr '(?i)\bdownloads?\b.*\b(range\s+of|between|from|\d+\s*(kb|mb|gb))\b' "$clean"
+        set has_subject 1
+    else if string match -qr '(?i)\bfiles?\s+in\s+(?:my\s+)?(?:the\s+)?(?:downloads?|desktop|documents?|pictures?|photos?|videos?|music)\b' "$clean"
+        set has_subject 1
+    else if string match -qr '(?i)\blarge\s+files?\s+in\s+(?:my\s+)?(?:the\s+)?(?:downloads?|desktop|documents?|pictures?|photos?|videos?|music)\b' "$clean"
+        set has_subject 1
+    else if string match -qr '(?i)\b(big|large|huge)\s+files?\b.*\b(downloads?|desktop|documents?|pictures?|photos?|videos?|music)\b' "$clean"
+        set has_subject 1
     end
-    string match -qr '(?i)(less|more|greater|larger|smaller|lesser|under|over|above|below|bigger)(\s+than)?|\d+\s*(kb|mb|gb)\b' "$clean"
+    test $has_subject -eq 0; and return 1
+    if string match -qr '(?i)(less|more|greater|larger|smaller|lesser|under|over|above|below|bigger)(\s+than)?|\b(?:range\s+of|between|from)\b|\d+\s*(kb|mb|gb)\b\s+(?:to|and|-)\s+\d+\s*(kb|mb|gb)\b|\d+\s*(kb|mb|gb)\b' "$clean"
+        return 0
+    end
+    string match -qr '(?i)\b(large|big|huge)\s+files?\b' "$clean"
 end
 
 function _agent_route_file_size_find --description "Map NL to find_files_by_size (internal)"
@@ -8639,6 +8922,18 @@ end
 function _agent_route_pr_check --description "Build pr_check invocation from NL (internal)"
     set -l py (_arka_python)
     set -l route ($py (_arka_py_script arka_pr_check.py) route "$argv[1]" 2>/dev/null | string trim)
+    echo "$route"
+end
+
+function _agent_is_github_repo_request --description "True if user wants GitHub repo activity (commits/files) (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_github_repo.py) route "$argv[1]" 2>/dev/null | string trim)
+    test -n "$route"
+end
+
+function _agent_route_github_repo --description "Build github_repo invocation from NL (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_github_repo.py) route "$argv[1]" 2>/dev/null | string trim)
     echo "$route"
 end
 
@@ -9016,6 +9311,9 @@ function _agent_route_system_info --description "Route to system_info or system_
 end
 
 function _agent_is_knowledge_question --description "True if user wants a factual answer, not a browser search"
+    if _agent_is_price_check_request "$argv[1]"
+        return 1
+    end
     if _agent_is_investment_question "$argv[1]"
         return 1
     end
@@ -9040,7 +9338,13 @@ function _agent_is_knowledge_question --description "True if user wants a factua
     if _agent_is_pr_check_request "$argv[1]"
         return 1
     end
+    if _agent_is_github_repo_request "$argv[1]"
+        return 1
+    end
     if _agent_is_survival_lang_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_currency_request "$argv[1]"
         return 1
     end
     if _agent_is_google_calendar_request "$argv[1]"
@@ -9066,6 +9370,10 @@ function _agent_is_knowledge_question --description "True if user wants a factua
     end
     if string match -qr '(?i)(outdated|too\s+old|too\s+slow|good\s+enough|worth\s+upgrad|bottleneck|malware|infected|hacked|compromised|specs?\s+for\s+my)' "$clean"
         return 1
+    end
+    if string match -qr '(?i)^show\s+me\s+' "$clean"
+        and not string match -qr '(?i)\b(image|photo|picture|pic|screenshot|snapshot|\.png|\.jpe?g|\.webp|\.gif|\.bmp|\.svg|\.heic|\.tiff?)\b' "$clean"
+        return 0
     end
     if string match -qr '(?i)^(why\s+(is|are|was|were|do|does|did)|where\s+(is|are|was|were)|when\s+(is|are|was|were|did|does)|who\s+(is|are|was|were)|what\s+(is|are|was|were)|tell\s+(me\s+)?(about|why|where|who|what|when|how)|tell\s+about|explain\s+(what|why|where|who|when|the|about)|describe\s+(what|why|the|about)|how\s+(old|tall|long|far|big|many|much)\s+(is|are|was|were)|what\s+do\s+you\s+know\s+about)' "$clean"
         and not string match -qr '(?i)^(what\s+(is\s+)?(the\s+)?(weather|time|date|ip|my\s+ip)|how\s+(much|many)\s+(disk|space|memory|ram)\s+(left|free|used)|explain\s+how\s+to\s+(install|download|setup|get|fix|use|run|create|open))' "$clean"
@@ -9103,6 +9411,9 @@ function _agent_is_desktop_organize_request --description "True if user wants to
 end
 
 function _agent_is_advisory_question --description "True if user wants an opinion/answer, not a metrics dump"
+    if _agent_is_describe_screen_request "$argv[1]"
+        return 1
+    end
     if _agent_is_investment_question "$argv[1]"
         return 1
     end
@@ -9319,6 +9630,55 @@ function _agent_is_remind_request --description "True if user wants a reminder (
     test -n "$(_agent_build_remind_cmd "$argv[1]")"
 end
 
+function _agent_is_currency_request --description "True if user wants currency conversion (internal)"
+    test -n "$(_agent_build_currency_cmd "$argv[1]")"
+end
+
+function _agent_build_currency_cmd --description "Build currency_convert args from NL (internal)"
+    set -l cmd "$argv[1]"
+    set -l py (_arka_python)
+    set -l rest ($py (_arka_py_script arka_currency.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
+    if test (count $rest) -gt 0
+        echo "currency_convert $rest"
+    end
+end
+
+function _agent_is_price_check_request --description "True if user wants retail product prices (internal)"
+    set -l clean (string lower "$argv[1]")
+    if string match -qr '(?i)^price_check\b' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)\b(?:stock|crypto|bitcoin|ethereum|btc|eth|solana|share|ticker|house\s+price|rent|gas\s+price|oil\s+price|gold\s+price|silver\s+price)\b' "$clean"
+        return 1
+    end
+    if string match -qr '(?i)\b(?:price\s+of|cost\s+of|what(?:''s| is) the price of)\s+' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)\bhow\s+much\s+(?:is|are|does|for)\s+(?:the\s+)?(?:a\s+)?' "$clean"
+        and not string match -qr '(?i)\b(?:disk|space|memory|ram|cpu|gpu|battery)\b' "$clean"
+        return 0
+    end
+    if string match -qr '(?i).+\s+price\s+(?:right\s+now|in\s+(?:india|us|usa))' "$clean"
+        return 0
+    end
+    if string match -qr '(?i).+\s+price\s*$' "$clean"
+        and not string match -qr '(?i)\b(?:stock|crypto|bitcoin|ethereum)\b' "$clean"
+        return 0
+    end
+    return 1
+end
+
+function _agent_parse_price_check_query --description "Extract product query for price_check (internal)"
+    set -l cmd "$argv[1]"
+    set -l py (_arka_python)
+    set -l out ($py -c "
+from arka.agent.price_sources import extract_product_name
+import sys
+print(extract_product_name(sys.argv[1]))
+" (string escape --style=script -- $cmd) 2>/dev/null)
+    string trim -- $out
+end
+
 function _agent_build_remind_cmd --description "Build remind args from NL (internal)"
     set -l cmd "$argv[1]"
     set -l py (_arka_python)
@@ -9359,6 +9719,10 @@ end
 
 function _agent_offline_route_cmd --description "Full symbolic NL to skill command (internal)"
     set -l cmd "$argv[1]"
+    if _agent_is_currency_request "$cmd"
+        echo (_agent_build_currency_cmd "$cmd")
+        return 0
+    end
     if _agent_is_remind_request "$cmd"
         echo (_agent_build_remind_cmd "$cmd")
         return 0
@@ -9367,12 +9731,20 @@ function _agent_offline_route_cmd --description "Full symbolic NL to skill comma
         echo (_agent_build_routines_cmd "$cmd")
         return 0
     end
+    if _agent_is_file_size_find "$cmd"
+        echo (_agent_route_file_size_find "$cmd")
+        return 0
+    end
     if _agent_is_chart_request "$cmd"
         echo (_agent_build_chart_cmd "$cmd")
         return 0
     end
     if _agent_is_drawing_ask_request "$cmd"
         echo (_agent_build_drawing_ask_cmd "$cmd")
+        return 0
+    end
+    if _agent_is_describe_screen_request "$cmd"
+        echo (_agent_build_describe_screen_cmd "$cmd")
         return 0
     end
     if _agent_is_describe_image_request "$cmd"
@@ -9442,6 +9814,19 @@ function _agent_build_drawing_ask_cmd --description "Build drawing_ask args from
     set -l rest ($py (_arka_py_script arka_drawing.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
     if test (count $rest) -gt 0
         echo "drawing_ask $rest"
+    end
+end
+
+function _agent_is_describe_screen_request --description "True if user wants screen capture + vision describe (internal)"
+    test -n "$(_agent_build_describe_screen_cmd "$argv[1]")"
+end
+
+function _agent_build_describe_screen_cmd --description "Build describe_screen args from NL (internal)"
+    set -l cmd "$argv[1]"
+    set -l py (_arka_python)
+    set -l rest ($py (_arka_py_script arka_screen.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
+    if test (count $rest) -gt 0
+        echo "describe_screen $rest"
     end
 end
 
@@ -9809,7 +10194,7 @@ function _agent_ask_gather_exec --description "Run AI-chosen gather cmd (read-on
     test -z "$cmd"; and return 1
 
     if __agent_classify "$cmd"
-        eval $cmd 2>&1
+        _arka_run_shell_string "$cmd" 2>&1
         return $status
     end
 
@@ -9819,11 +10204,11 @@ function _agent_ask_gather_exec --description "Run AI-chosen gather cmd (read-on
         return 2
     end
     if string match -qr '(?i)^(lscpu|grep|free|df |du |lsblk|lspci|uname|cat |head |tail |wc |uptime|lsb_release|sysctl|sw_vers|vm_stat|system_profiler|lsappinfo|ioreg|command |eza |batcat |rg |fd |nvidia-smi|glxinfo|vulkaninfo|ls |find |stat |file |which |type |ps |ss |netstat|lsof |journalctl|systemctl |last |w |who |dpkg -l|snap list|flatpak list|clamscan|freshclam|rkhunter|chkrootkit|crontab -l|python3.*arka_usage\.py|app_usage)' "$low"
-        eval $cmd 2>&1
+        _arka_run_shell_string "$cmd" 2>&1
         return $status
     end
     if string match -qr '(?i)(/proc/|/sys/|/etc/os-release|cpuinfo|meminfo|/var/log/)' "$low"
-        eval $cmd 2>&1
+        _arka_run_shell_string "$cmd" 2>&1
         return $status
     end
 
@@ -10460,6 +10845,22 @@ function compare_agent --description "Compare two topics with web research"
     _arka_agent compare $argv[1] $argv[2]
 end
 
+function product_reviewer --description "Review product ingredients with web research"
+    if test (count $argv) -eq 0
+        echo "Usage: product_reviewer <ingredients or product name> [what you want to know]"
+        return 1
+    end
+    _arka_agent product-reviewer (string join " " $argv)
+end
+
+function price_check --description "Look up current retail product prices"
+    if test (count $argv) -eq 0
+        echo "Usage: price_check <product> [e.g. macbook air m3 | iphone 16 price in india]"
+        return 1
+    end
+    _arka_agent price-check (string join " " $argv)
+end
+
 function rag_setup --description "Install Firmamento TurboQuant for unified RAG"
     argparse q/quiet -- $argv
     or return 1
@@ -10670,6 +11071,79 @@ function handoff_notify --description "Handoff notifications for phone (list/rea
             _arka_talents handoff-run-notify
         case '*'
             echo "Usage: handoff_notify list|read [id]|run"
+    end
+end
+
+function session_memory --description "OpenClaw-style markdown session memory (MEMORY.md + daily notes)"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        $py (_arka_py_script arka_session_memory.py) status
+        echo ""
+        echo "Usage: session_memory append|search|context|status [text|query|goal]"
+        return 0
+    end
+    switch $argv[1]
+        case append remember note add
+            if test (count $argv) -lt 2
+                echo "Usage: session_memory append <note>"
+                return 1
+            end
+            $py (_arka_py_script arka_session_memory.py) append (string join " " $argv[2..-1])
+        case search find
+            if test (count $argv) -lt 2
+                $py (_arka_py_script arka_session_memory.py) search
+            else
+                $py (_arka_py_script arka_session_memory.py) search (string join " " $argv[2..-1])
+            end
+        case context ctx
+            if test (count $argv) -lt 2
+                echo "Usage: session_memory context <goal>"
+                return 1
+            end
+            $py (_arka_py_script arka_session_memory.py) context (string join " " $argv[2..-1])
+        case status
+            $py (_arka_py_script arka_session_memory.py) status
+        case '*'
+            $py (_arka_py_script arka_session_memory.py) $argv
+    end
+end
+
+function heartbeat --description "Agent health — last activity, routines, memory stats"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        $py (_arka_py_script arka_heartbeat.py) status
+        return $status
+    end
+    switch $argv[1]
+        case ping touch
+            if test (count $argv) -ge 2
+                $py (_arka_py_script arka_heartbeat.py) ping (string join " " $argv[2..-1])
+            else
+                $py (_arka_py_script arka_heartbeat.py) ping manual.ping
+            end
+        case status health
+            $py (_arka_py_script arka_heartbeat.py) status
+        case '*'
+            $py (_arka_py_script arka_heartbeat.py) $argv
+    end
+end
+
+function webhook --description "Verified webhook ingress for external channels (opt-in)"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        $py (_arka_py_script arka_webhook.py) status
+        echo ""
+        echo "Usage: webhook serve | status"
+        echo "Set WEBHOOK_ENABLED=1 and WEBHOOK_TOKEN in .env first."
+        return 0
+    end
+    switch $argv[1]
+        case serve start run
+            $py (_arka_py_script arka_webhook.py) serve
+        case status
+            $py (_arka_py_script arka_webhook.py) status
+        case '*'
+            $py (_arka_py_script arka_webhook.py) $argv
     end
 end
 
@@ -11161,14 +11635,16 @@ function _agent_skill_matches_request --description "True if skill fits the user
             string match -qr '(?i)(summarize|summary|digest).*(folder|directory|playlist|series|all videos|all episodes)|playlist.*summarize' "$cmd"
         case media_transcript transcribe_media
             string match -qr '(?i)(transcrib|transcript).*(mp3|mp4|m4a|wav|audio|video|podcast|recording)|(?:mp3|mp4|m4a|wav|mkv|mov|webm|ogg|flac)\b.*(transcrib|transcript|summarize)' "$cmd"
-        case install_app install_apt install_flatpak install_snap install_package install_uv
+        case install_app install_apt install_brew install_flatpak install_snap install_package install_uv
             string match -qr '(?i)(install|setup|get\s+app)' "$cmd"
         case install_uv
             string match -qr '(?i)(install|setup|get)\s+' "$cmd"
             and _agent_is_python_pip_install "$cmd"
         case install_app
             string match -qr '(?i)(install|setup|get)\s+' "$cmd"
-            and not string match -qr '(?i)(flatpak|flathub|snap|with\s+apt|via\s+apt)' "$cmd"
+            and not string match -qr '(?i)(flatpak|flathub|snap|with\s+apt|via\s+apt|brew|homebrew)' "$cmd"
+        case install_brew
+            string match -qr '(?i)(install|get|setup).*(with|via|using)\s+brew|\bhomebrew\s+install|\bbrew\s+install' "$cmd"
         case install_apt
             string match -qr '(?i)(install|get|setup).*(with|via|using)\s+apt|\bapt\s+install' "$cmd"
         case search_stores
@@ -11223,6 +11699,8 @@ function _agent_skill_matches_request --description "True if skill fits the user
             _agent_is_chart_request "$cmd"
         case drawing_ask
             _agent_is_drawing_ask_request "$cmd"
+        case describe_screen
+            _agent_is_describe_screen_request "$cmd"
         case describe_image
             _agent_is_describe_image_request "$cmd"
         case compose_video
@@ -11339,6 +11817,10 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         echo "skill|install_apt $(_agent_parse_install_app_name "$cmd")|APT package install"
         return
     end
+    if string match -qr '(?i)(install|get|setup).*(with|via|using)\s+brew|\bhomebrew\s+install|\bbrew\s+install' "$clean"
+        echo "skill|install_brew $(_agent_parse_install_app_name "$cmd")|Homebrew install"
+        return
+    end
     if string match -qr '(?i)(install|get|setup).*(flatpak|flathub)' "$clean"
         echo "skill|install_flatpak $(_agent_parse_install_app_name "$cmd")|Flatpak install"
         return
@@ -11348,16 +11830,20 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         return
     end
     if string match -qr '(?i)^(install|get|setup)\s+' "$clean"
-        and not string match -qr '(flatpak|flathub|snap|apt)' "$clean"
+        and not string match -qr '(flatpak|flathub|snap|apt|brew|homebrew)' "$clean"
         and _agent_is_python_pip_install "$cmd"
         echo "skill|"(string trim -- (_agent_parse_install_uv "$cmd"))"|Python package via uv pip"
         return
     end
     if string match -qr '(?i)^(install|get|setup)\s+' "$clean"
-        and not string match -qr '(flatpak|flathub|snap|apt)' "$clean"
+        and not string match -qr '(flatpak|flathub|snap|apt|brew|homebrew)' "$clean"
         set -l app (_agent_parse_install_app_name "$cmd")
         if test -n "$app"; and not _install_target_is_package_file "$app"
-            echo "skill|install_app $app|Search Flatpak, Snap, and apt"
+            if _arka_is_macos
+                echo "skill|install_app $app|Search Homebrew and install"
+            else
+                echo "skill|install_app $app|Search Flatpak, Snap, and apt"
+            end
             return
         end
     end
@@ -11391,6 +11877,10 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         echo "skill|hyperlocal_weather $cmd|Weather via Open-Meteo + IP"
         return
     end
+    if _agent_is_file_size_find "$cmd"
+        echo "skill|find_files_by_size $cmd|Find files by size threshold"
+        return
+    end
     if _agent_is_chart_request "$cmd"
         set -l parts (_agent_build_chart_cmd "$cmd")
         if test -n "$parts"
@@ -11402,6 +11892,13 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         set -l parts (_agent_build_drawing_ask_cmd "$cmd")
         if test -n "$parts"
             echo "skill|$parts|Vision analysis of blueprints, drawings, and scanned specs"
+            return
+        end
+    end
+    if _agent_is_describe_screen_request "$cmd"
+        set -l parts (_agent_build_describe_screen_cmd "$cmd")
+        if test -n "$parts"
+            echo "skill|$parts|Capture screen after countdown and describe with vision"
             return
         end
     end
@@ -11473,6 +11970,21 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         test -n "$topic"; and echo "skill|study_agent $topic|Study agent"
         test -n "$topic"; and return
         echo "skill|study_agent|Study agent"
+        return
+    end
+    if string match -qr '(?i)\b(?:product\s+reviewer|review\s+this\s+product|check\s+(?:the\s+)?ingredients|ingredient\s+check|analyze\s+ingredients|ingredients?\s+review)\b' "$clean"
+        set -l query (string replace -r -i '^(?:product\s+reviewer|review\s+this\s+product|check\s+(?:the\s+)?ingredients|ingredient\s+check|analyze\s+ingredients|ingredients?\s+review)\s*' '' "$cmd" | string trim)
+        test -n "$query"; and echo "skill|product_reviewer $query|Product reviewer"
+        test -n "$query"; and return
+        echo "skill|product_reviewer|Product reviewer"
+        return
+    end
+    if string match -qr '(?i)\b(?:is\s+this|are\s+these)\s+.+\s+good\s+for\s+' "$clean"
+        echo "skill|product_reviewer $cmd|Product reviewer"
+        return
+    end
+    if string match -qr '(?i)\bis\s+.+\s+(?:vegan|cruelty[- ]free|safe\s+for\s+sensitive\s+skin)\b' "$clean"
+        echo "skill|product_reviewer $cmd|Product reviewer"
         return
     end
     if string match -qr '(?i)\bsupermemory\b' "$clean"
@@ -11595,9 +12107,29 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
             return
         end
     end
+    if _agent_is_github_repo_request "$cmd"
+        set -l gr (_agent_route_github_repo "$cmd")
+        if test -n "$gr"
+            echo "skill|$gr|GitHub repo commits and modified files"
+            return
+        end
+    end
     if _agent_is_survival_lang_request "$cmd"
         set -l sl (_agent_build_survival_lang_cmd "$cmd")
         echo "skill|$sl|Travel survival phrases"
+        return
+    end
+    if _agent_is_currency_request "$cmd"
+        set -l cc (_agent_build_currency_cmd "$cmd")
+        if test -n "$cc"
+            echo "skill|$cc|Currency conversion"
+            return
+        end
+    end
+    if _agent_is_price_check_request "$cmd"
+        set -l pq (string replace -r -i '^price_check\s+' '' "$cmd" | string trim)
+        test -z "$pq"; and set pq $cmd
+        echo "skill|price_check $pq|Product price lookup"
         return
     end
     if _agent_is_knowledge_question "$cmd"
@@ -11713,6 +12245,12 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         echo "skill|sports_score $cmd|Live sports scores"
         return
     end
+    if set -l cc_cmd (_agent_build_currency_cmd "$cmd")
+        if test -n "$cc_cmd"
+            echo "skill|$cc_cmd|Currency conversion"
+            return
+        end
+    end
     set -l py (_arka_python)
     set -l tp ($py (_arka_py_script arka_skills.py) match "$cmd" 2>/dev/null)
     if test -n "$tp"
@@ -11816,6 +12354,11 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         echo "skill|web_answer $kq|Factual web lookup"
         return
     end
+    if _agent_is_describe_screen_request "$cmd"
+        set -l parts (_agent_build_describe_screen_cmd "$cmd")
+        test -n "$parts"; and echo "skill|$parts|Capture screen after countdown and describe with vision"
+        return
+    end
     if _agent_is_advisory_question "$cmd"
         echo "skill|agent_ask $cmd|AI gathers context via shell, then answers"
         return
@@ -11828,6 +12371,10 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         echo "skill|$g_route|Google Calendar or Gmail"
         return
     end
+    if _agent_is_file_size_find "$cmd"
+        echo "skill|find_files_by_size $cmd|Find files by size threshold"
+        return
+    end
     if _agent_is_chart_request "$cmd"
         set -l parts (_agent_build_chart_cmd "$cmd")
         test -n "$parts"; and echo "skill|$parts|Line, bar, pie, or scatter chart (matplotlib PNG)"
@@ -11836,6 +12383,11 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
     if _agent_is_drawing_ask_request "$cmd"
         set -l parts (_agent_build_drawing_ask_cmd "$cmd")
         test -n "$parts"; and echo "skill|$parts|Vision analysis of blueprints, drawings, and scanned specs"
+        return
+    end
+    if _agent_is_describe_screen_request "$cmd"
+        set -l parts (_agent_build_describe_screen_cmd "$cmd")
+        test -n "$parts"; and echo "skill|$parts|Capture screen after countdown and describe with vision"
         return
     end
     if _agent_is_describe_image_request "$cmd"
@@ -11906,6 +12458,11 @@ function _agent_correct_interpretation --description "Fix bad LLM skill picks us
         return
     end
 
+    if _agent_is_file_size_find "$cmd"
+        echo (_agent_route_file_size_find "$cmd")
+        return
+    end
+
     if _agent_is_chart_request "$cmd"
         echo (_agent_build_chart_cmd "$cmd")
         return
@@ -11913,6 +12470,11 @@ function _agent_correct_interpretation --description "Fix bad LLM skill picks us
 
     if _agent_is_drawing_ask_request "$cmd"
         echo (_agent_build_drawing_ask_cmd "$cmd")
+        return
+    end
+
+    if _agent_is_describe_screen_request "$cmd"
+        echo (_agent_build_describe_screen_cmd "$cmd")
         return
     end
 
@@ -12131,6 +12693,13 @@ function _agent_correct_interpretation --description "Fix bad LLM skill picks us
             return
         end
     end
+    if string match -qr '(?i)(install|get|setup).*(with|via|using)\s+brew|\bhomebrew\s+install|\bbrew\s+install' "$clean"
+        set -l app (_agent_parse_install_app_name "$cmd")
+        if test -n "$app"
+            echo "install_brew $app"
+            return
+        end
+    end
     if string match -qr '(?i)(install|get|setup).*(flatpak|flathub)' "$clean"
         set -l app (_agent_parse_install_app_name "$cmd")
         if test -n "$app"
@@ -12151,7 +12720,7 @@ function _agent_correct_interpretation --description "Fix bad LLM skill picks us
         return
     end
     if string match -qr '(?i)^(install|get|setup)\s+' "$clean"
-        and not string match -qr '(flatpak|flathub|snap|apt)' "$clean"
+        and not string match -qr '(flatpak|flathub|snap|apt|brew|homebrew)' "$clean"
         if _agent_is_python_pip_install "$cmd"
             echo (_agent_parse_install_uv "$cmd")
             return
@@ -12347,7 +12916,77 @@ function install_uv --description "Install Python packages with uv pip (--cpu/--
     return $st
 end
 
-function install_app --description "Search Flatpak, Snap, and apt; install the best match"
+function install_brew --description "Search Homebrew and install a formula or cask by name"
+    if test (count $argv) -eq 0
+        echo "Usage: install_brew <app name>"
+        echo "Example: install_brew fish"
+        echo "Example: agent \"install fish with brew\""
+        return 1
+    end
+
+    if not command -v brew >/dev/null
+        echo (set_color red)"Homebrew is not installed."(set_color normal)
+        echo "Install Homebrew from: https://brew.sh"
+        echo 'Run: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
+        return 1
+    end
+
+    set -l query (string join " " $argv | string trim)
+    if _install_target_is_package_file "$query"
+        echo (set_color yellow)"$query looks like a package file — using install_package"(set_color normal)
+        install_package $argv
+        return $status
+    end
+
+    echo (set_color --bold cyan)"Searching Homebrew for: $query"(set_color normal)
+    echo ""
+
+    set -l brew_pkg ""
+    if brew info "$query" >/dev/null 2>&1
+        set brew_pkg "$query"
+        echo (set_color green)"Found: $brew_pkg"(set_color normal)
+        echo ""
+    else
+        printf "━━━ Homebrew formulae ━━━\n"
+        set -l formula_out (brew search --formulae "$query" 2>/dev/null)
+        if test -n "$formula_out"
+            printf '%s\n' $formula_out
+            set brew_pkg (printf '%s\n' $formula_out | head -1)
+        else
+            echo (set_color yellow)"  No formula matches"(set_color normal)
+        end
+        echo ""
+
+        if test -z "$brew_pkg"
+            printf "━━━ Homebrew casks ━━━\n"
+            set -l cask_out (brew search --cask "$query" 2>/dev/null)
+            if test -n "$cask_out"
+                printf '%s\n' $cask_out
+                set brew_pkg (printf '%s\n' $cask_out | head -1)
+            else
+                echo (set_color yellow)"  No cask matches"(set_color normal)
+            end
+            echo ""
+        end
+    end
+
+    if test -z "$brew_pkg"
+        if _agent_is_python_pip_install "install $query"
+            echo (set_color yellow)"No Homebrew match — trying uv pip..."(set_color normal)
+            set -l uv_line (_agent_parse_install_uv "install $query")
+            set -l uv_args (string split " " -- "$uv_line")
+            install_uv $uv_args[2..-1]
+            return $status
+        end
+        echo (set_color red)"No Homebrew matches for: $query"(set_color normal)
+        return 1
+    end
+
+    echo (set_color green)"Installing via Homebrew: $brew_pkg"(set_color normal)
+    brew install "$brew_pkg"
+end
+
+function install_app --description "Search package stores and install the best match (Homebrew on macOS; Flatpak/Snap/apt on Linux)"
     if test (count $argv) -eq 0
         echo "Usage: install_app <app name>"
         echo "Example: install_app LocalSend"
@@ -12359,6 +12998,11 @@ function install_app --description "Search Flatpak, Snap, and apt; install the b
     if _install_target_is_package_file "$query"
         echo (set_color yellow)"$query looks like a package file — using install_package"(set_color normal)
         install_package $argv
+        return $status
+    end
+
+    if _arka_is_macos
+        install_brew $argv
         return $status
     end
 
@@ -12749,6 +13393,10 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                                 _agent_dispatch_one "$ycmd"
                             case compare
                                 compare_agent $argv[3..-1]
+                            case product product-reviewer product_reviewer
+                                product_reviewer $argv[3..-1]
+                            case price-check price_check
+                                price_check $argv[3..-1]
                             case ask
                                 arka_ask $argv[3..-1]
                             case speak-research speak_research yt-speak
@@ -13141,13 +13789,27 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                 case tell explain describe
                     if test (count $argv) -ge 2
                         set -l raw (string join " " $argv[2..-1])
-                        set -l nl "describe $raw"
-                        if _agent_is_describe_image_request "$nl"
-                            set -l dcmd (_agent_build_describe_image_cmd "$nl")
+                        if _agent_is_describe_screen_request "$raw"
+                            set -l scmd (_agent_build_describe_screen_cmd "$raw")
+                            set -l show $raw
+                            echo (set_color yellow)"💡 [Screen → describe_screen $show]"(set_color normal)
+                            _agent_dispatch_one "$scmd"
+                            return $status
+                        end
+                        if _agent_is_describe_image_request "$raw"
+                            set -l dcmd (_agent_build_describe_image_cmd "$raw")
                             set -l show $raw
                             echo (set_color yellow)"💡 [Image → describe_image $show]"(set_color normal)
                             _agent_dispatch_one "$dcmd"
                             return $status
+                        end
+                        if _agent_is_github_repo_request "$raw"
+                            set -l gr (_agent_route_github_repo "$raw")
+                            if test -n "$gr"
+                                echo (set_color yellow)"💡 [GitHub repo activity]"(set_color normal)
+                                _agent_dispatch_one "$gr"
+                                return $status
+                            end
                         end
                         set -l q $raw
                         set q (string replace -r -i '^me\s+about\s+' '' "$q")
@@ -13778,6 +14440,7 @@ function agent --description "Run commands safely: executes safe commands automa
         echo "  doc_ask / pdf_ask [--doc DOC] <q> - Ask or summarize any ingested file"
         echo "  drawing_ask <file> <q>           - Vision analysis of blueprints, drawings, scans"
         echo "  describe_image <path|url> [q]    - Describe photos via local vLLM vision"
+        echo "  describe_screen [question]       - 10s countdown, capture display, describe"
         echo "  arka pdf status|list|ingest|ask|formats"
         echo "  NL: ingest readme.md  |  summarize notes.docx  |  ask config.fish about routing"
         echo ""
@@ -13799,6 +14462,8 @@ function agent --description "Run commands safely: executes safe commands automa
         echo "  pr_check diff|ci|explain|babysit - PR diff, CI status, failure diagnosis, merge-ready loop"
         echo "  open_project [query]   - Search and launch VS Code on a local project repo"
         echo "  crypto_price [coins]   - Get real-time crypto prices (BTC, ETH, etc.) beautifully"
+        echo "  currency_convert <amt> <from> <to> - Live currency conversion (USD, EUR, INR, …)"
+        echo "  convert / currency       - Aliases for currency_convert"
         echo "  sports_score [league]  - Live scores: IPL, cricket, NFL, NBA, EPL, F1, …"
         echo "  live_scores            - Alias for sports_score"
         echo "  lint_python <file>     - Lint Python code automatically using ruff or flake8"
@@ -13821,7 +14486,12 @@ function agent --description "Run commands safely: executes safe commands automa
         
         echo (set_color --bold yellow)"🤖 Automation (~/Projects/python/products/automation):"(set_color normal)
         echo "  search_stores <query>  - Search Flatpak, Snap, and apt for apps"
-        echo "  install_app <name>     - Search Flatpak/Snap/apt and install best match"
+        if _arka_is_macos
+            echo "  install_app <name>     - Search Homebrew and install best match"
+            echo "  install_brew <name>    - Install package with Homebrew (brew)"
+        else
+            echo "  install_app <name>     - Search Flatpak/Snap/apt and install best match"
+        end
         echo "  install_uv [--cpu] <pkg> - Install Python packages with uv pip (PyTorch CPU/CUDA)"
         echo "  install_apt <pkg>      - Install package with apt (sudo)"
         echo "  install_flatpak <app>  - Install app from Flathub"
@@ -13854,6 +14524,7 @@ function agent --description "Run commands safely: executes safe commands automa
         echo "  chart bar --data 'Apple:230,Samsung:210' - Bar graph from numbers"
         echo "  drawing_ask plan.pdf <question>   - Blueprint/drawing vision (Gemini)"
         echo "  describe_image photo.jpg          - Photo caption via vLLM vision"
+        echo "  describe_screen [question]        - 10s countdown, capture screen, describe"
         echo "  generate_video <prompt> - Real AI video (POLLINATIONS_API_KEY or Gemini billing required)"
         echo ""
         echo (set_color cyan)"  arka aie|yt-bulk|queue|brief|wifi|agent — same via subcommands"(set_color normal)
@@ -13936,6 +14607,11 @@ function agent --description "Run commands safely: executes safe commands automa
         set route_source offline
     end
 
+    if test -z "$interpreted"; and _agent_is_currency_request "$cmd"
+        set interpreted (_agent_build_currency_cmd "$cmd")
+        set route_source offline
+    end
+
     if test -z "$interpreted"; and _agent_is_remind_request "$cmd"
         set interpreted (_agent_build_remind_cmd "$cmd")
         set route_source offline
@@ -13946,6 +14622,11 @@ function agent --description "Run commands safely: executes safe commands automa
         set route_source offline
     end
 
+    if test -z "$interpreted"; and _agent_is_file_size_find "$cmd"
+        set interpreted (_agent_route_file_size_find "$cmd")
+        set route_source offline
+    end
+
     if test -z "$interpreted"; and _agent_is_chart_request "$cmd"
         set interpreted (_agent_build_chart_cmd "$cmd")
         set route_source offline
@@ -13953,6 +14634,11 @@ function agent --description "Run commands safely: executes safe commands automa
 
     if test -z "$interpreted"; and _agent_is_drawing_ask_request "$cmd"
         set interpreted (_agent_build_drawing_ask_cmd "$cmd")
+        set route_source offline
+    end
+
+    if test -z "$interpreted"; and _agent_is_describe_screen_request "$cmd"
+        set interpreted (_agent_build_describe_screen_cmd "$cmd")
         set route_source offline
     end
 
@@ -14179,6 +14865,11 @@ function agent --description "Run commands safely: executes safe commands automa
         if test -n "$interpreted"
             set route_source offline
         end
+    else if _agent_is_describe_screen_request "$cmd"
+        set interpreted (_agent_build_describe_screen_cmd "$cmd")
+        if test -n "$interpreted"
+            set route_source offline
+        end
     else if _agent_is_describe_image_request "$cmd"
         set interpreted (_agent_build_describe_image_cmd "$cmd")
         if test -n "$interpreted"
@@ -14344,8 +15035,19 @@ function agent --description "Run commands safely: executes safe commands automa
     else if _agent_is_pr_check_request "$cmd"
         set interpreted (_agent_route_pr_check "$cmd")
         set route_source offline
+    else if _agent_is_github_repo_request "$cmd"
+        set interpreted (_agent_route_github_repo "$cmd")
+        set route_source offline
     else if _agent_is_survival_lang_request "$cmd"
         set interpreted (_agent_build_survival_lang_cmd "$cmd")
+        set route_source offline
+    else if _agent_is_currency_request "$cmd"
+        set interpreted (_agent_build_currency_cmd "$cmd")
+        set route_source offline
+    else if _agent_is_price_check_request "$cmd"
+        set -l pq (string replace -r -i '^price_check\s+' '' "$cmd" | string trim)
+        test -z "$pq"; and set pq $cmd
+        set interpreted "price_check $pq"
         set route_source offline
     else if _agent_is_knowledge_question "$cmd"
         set -l kq (_agent_normalize_knowledge_q "$cmd")
@@ -14416,7 +15118,7 @@ function agent --description "Run commands safely: executes safe commands automa
     else if _agent_is_advisory_question "$cmd"
         set interpreted "agent_ask $cmd"
         set route_source offline
-    else if string match -qr '(screenshot|capture)' "$clean_cmd"
+    else if string match -qr '(?i)(?:take\s+(?:a\s+)?screenshot|save\s+(?:a\s+)?screenshot)' "$clean_cmd"
         set interpreted "screenshot"
     else if string match -qr '(?i)(system\s*monitor|system\s*status|show\s+(me\s+)?(system\s+)?(monitor|resources)|check\s+(cpu|ram|memory|disk|battery)|\b(cpu|ram|memory)\s+(usage|load|percent)|how\s+much\s+(cpu|ram|memory)\s+(left|free|used)|\buptime\b|\bbattery\b)' "$clean_cmd"
         set interpreted "system_monitor"
@@ -14430,6 +15132,9 @@ function agent --description "Run commands safely: executes safe commands automa
         set interpreted "qr_code $args"
     else if string match -qr '(crypto|bitcoin|ethereum|solana|btc)' "$clean_cmd"
         set interpreted "crypto_price $args"
+    else if _agent_is_currency_request "$cmd"
+        set interpreted (_agent_build_currency_cmd "$cmd")
+        set route_source offline
     else if string match -qr '(pomodoro|tomato)' "$clean_cmd"
         set interpreted "pomodoro $args"
     else if _agent_is_pr_check_request "$cmd"
@@ -14492,6 +15197,14 @@ function agent --description "Run commands safely: executes safe commands automa
         end
     else if string match -qr '(cheat|cheat.*sheet)' "$clean_cmd"
         set interpreted "cheat $args"
+    else if string match -qr '(?i)(install|get|setup).*(with|via|using)\s+brew|\bhomebrew\s+install|\bbrew\s+install' "$clean_cmd"
+        and not string match -qr 'download\s+and\s+install' "$clean_cmd"
+        set -l app (_agent_parse_install_app_name "$cmd")
+        if test -n "$app"
+            set interpreted "install_brew $app"
+        else
+            set interpreted "install_brew"
+        end
     else if string match -qr '(?i)(install|get|setup).*(flatpak|flathub)' "$clean_cmd"
         and not string match -qr 'download\s+and\s+install' "$clean_cmd"
         set -l app (_agent_parse_install_app_name "$cmd")
@@ -14575,6 +15288,21 @@ function agent --description "Run commands safely: executes safe commands automa
         if test (count $cm) -ge 3
             set interpreted "compare_agent $cm[2] $cm[3]"
         end
+    else if _agent_is_price_check_request "$cmd"
+        set -l pq (string replace -r -i '^price_check\s+' '' "$cmd" | string trim)
+        test -z "$pq"; and set pq $cmd
+        set interpreted "price_check $pq"
+    else if string match -qr '(?i)\b(?:product\s+reviewer|review\s+this\s+product|check\s+(?:the\s+)?ingredients|ingredient\s+check|analyze\s+ingredients|ingredients?\s+review)\b' "$clean_cmd"
+        set -l pq (string replace -r -i '^(?:product\s+reviewer|review\s+this\s+product|check\s+(?:the\s+)?ingredients|ingredient\s+check|analyze\s+ingredients|ingredients?\s+review)\s*' '' "$cmd" | string trim)
+        if test -n "$pq"
+            set interpreted "product_reviewer $pq"
+        else
+            set interpreted "product_reviewer"
+        end
+    else if string match -qr '(?i)\b(?:is\s+this|are\s+these)\s+.+\s+good\s+for\s+' "$clean_cmd"
+        set interpreted "product_reviewer $cmd"
+    else if string match -qr '(?i)\bis\s+.+\s+(?:vegan|cruelty[- ]free|safe\s+for\s+sensitive\s+skin)\b' "$clean_cmd"
+        set interpreted "product_reviewer $cmd"
     else if _agent_matches_graphics_driver "$clean_cmd"
         set interpreted (_agent_route_graphics_driver "$cmd")
     else if string match -qr '(extract\s+this\s+and\s+run|extract\s+and\s+run|extract.*\brun\b|unzip.*\brun\b)' "$clean_cmd"
@@ -14595,7 +15323,7 @@ function agent --description "Run commands safely: executes safe commands automa
             set route_source offline
         end
     else if string match -qr '(install|setup|download\s+and\s+install)' "$clean_cmd"
-        and not string match -qr '(?i)(flatpak|flathub|snap|with\s+apt|via\s+apt)' "$clean_cmd"
+        and not string match -qr '(?i)(flatpak|flathub|snap|with\s+apt|via\s+apt|brew|homebrew)' "$clean_cmd"
         if _agent_is_python_pip_install "$cmd"
             set interpreted (string trim -- (_agent_parse_install_uv "$cmd"))
         else
@@ -14744,6 +15472,10 @@ function agent --description "Run commands safely: executes safe commands automa
         set -l routine_cmd (_agent_build_routines_cmd "$cmd")
         echo (set_color yellow)"💡 [Routine → $routine_cmd]"(set_color normal)
         _agent_dispatch_one "$routine_cmd"
+    else if _agent_is_file_size_find "$cmd"
+        set -l size_cmd (_agent_route_file_size_find "$cmd")
+        echo (set_color yellow)"💡 [File size → $size_cmd]"(set_color normal)
+        _agent_dispatch_one "$size_cmd"
     else if _agent_is_chart_request "$cmd"
         set -l chart_cmd (_agent_build_chart_cmd "$cmd")
         echo (set_color yellow)"💡 [Chart → $chart_cmd]"(set_color normal)
@@ -14752,6 +15484,10 @@ function agent --description "Run commands safely: executes safe commands automa
         set -l drawing_cmd (_agent_build_drawing_ask_cmd "$cmd")
         echo (set_color yellow)"💡 [Drawing → $drawing_cmd]"(set_color normal)
         _agent_dispatch_one "$drawing_cmd"
+    else if _agent_is_describe_screen_request "$cmd"
+        set -l screen_cmd (_agent_build_describe_screen_cmd "$cmd")
+        echo (set_color yellow)"💡 [Screen → $screen_cmd]"(set_color normal)
+        _agent_dispatch_one "$screen_cmd"
     else if _agent_is_describe_image_request "$cmd"
         set -l image_cmd (_agent_build_describe_image_cmd "$cmd")
         echo (set_color yellow)"💡 [Image → $image_cmd]"(set_color normal)

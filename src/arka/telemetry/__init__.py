@@ -1,0 +1,41 @@
+"""OpenTelemetry tracing for Arka agent, LLM, and skill execution."""
+
+from arka.telemetry.tracing import (
+    duration_ms,
+    exception_attributes,
+    inject_trace_env,
+    llm_http_span_attributes,
+    mark_error,
+    mark_ok,
+    parse_http_status_code,
+    record_exception,
+    record_span_event,
+    request_span,
+    set_http_span_attributes,
+    set_span_attributes,
+    set_timing_attrs,
+    shutdown_tracing,
+    span,
+    spans_enabled,
+    trace_status,
+)
+
+__all__ = [
+    "duration_ms",
+    "exception_attributes",
+    "inject_trace_env",
+    "llm_http_span_attributes",
+    "mark_error",
+    "mark_ok",
+    "parse_http_status_code",
+    "record_exception",
+    "record_span_event",
+    "request_span",
+    "set_http_span_attributes",
+    "set_span_attributes",
+    "set_timing_attrs",
+    "shutdown_tracing",
+    "span",
+    "spans_enabled",
+    "trace_status",
+]

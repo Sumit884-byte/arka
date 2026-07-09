@@ -14,6 +14,7 @@ import urllib.error
 import urllib.request
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Iterator
 
 from arka.llm.api_keys import (
@@ -25,7 +26,21 @@ from arka.llm.api_keys import (
     rotate_provider_key,
     key_rotation_label,
 )
-from arka.llm.servers import LOCAL_PROVIDERS, LlmServerSession, is_reachable, provider_available_with_servers
+from arka.llm.providers import (
+    get_provider,
+    provider_api_key,
+    provider_base_url,
+    provider_model_ids,
+    provider_specs,
+)
+from arka.llm.servers import (
+    LOCAL_PROVIDERS,
+    LlmServerSession,
+    apply_vllm_defaults,
+    is_reachable,
+    provider_available_with_servers,
+    vllm_explicitly_configured,
+)
 
 DEFAULT_GEMINI_MODELS = [
     "gemini-2.5-flash",
@@ -105,6 +120,7 @@ TASK_ALIASES = {
     "skill": "agent",
     "talk": "chat",
     "ask": "chat",
+    "compose_video": "compose_video",
 }
 
 
@@ -224,23 +240,248 @@ def is_retryable_error(msg: str) -> bool:
     )
 
 
+def infer_provider_from_model(model_id: str) -> str | None:
+    """Guess provider slug from a bare model id (no provider prefix)."""
+    mid = (model_id or "").strip()
+    if not mid:
+        return None
+    low = mid.lower()
+    if low.startswith("gemini-"):
+        return "gemini"
+    if low.startswith(("gpt-", "o1", "o3", "chatgpt")):
+        return "openai"
+    if low.startswith("claude-"):
+        return "anthropic"
+    if low.startswith("grok-"):
+        return "xai"
+    if low.startswith("deepseek-"):
+        return "deepseek"
+    if low.startswith(("moonshot-", "kimi-")):
+        return "moonshot"
+    if low.startswith("glm-"):
+        return "zai"
+    if low.startswith(("minimax-", "abab")):
+        return "minimax"
+    if low.startswith("venice-"):
+        return "venice"
+    if "/" in mid and not mid.startswith(("http://", "https://")):
+        return "openrouter"
+    if ":" in mid or low.startswith(("qwen", "llama3", "minimax-m", "mistral", "phi")):
+        return "ollama"
+    if low.startswith(("llama-", "llama3", "gemma", "mixtral")):
+        return "groq"
+    pref = (env("AI_PREFERRED_PROVIDER") or env("LLM_PROVIDER")).lower()
+    return pref or None
+
+
 def parse_chain(raw: str) -> list[tuple[str, str]]:
     out: list[tuple[str, str]] = []
     for part in raw.split(","):
         part = part.strip()
         if not part:
             continue
-        if ":" in part:
-            provider, model_id = part.split(":", 1)
+        provider = ""
+        model_id = ""
+        if ":" in part and not part.lower().startswith(("http:", "https:")):
+            head, _, tail = part.partition(":")
+            if head.strip().lower() in {
+                "gemini",
+                "groq",
+                "ollama",
+                "openai",
+                "anthropic",
+                "vllm",
+                "vllm-cloud",
+                "xai",
+                "deepseek",
+                "moonshot",
+                "zai",
+                "minimax",
+                "venice",
+                "bedrock",
+                "azure",
+                "openrouter",
+                "litellm",
+                "lmstudio",
+            }:
+                provider, model_id = head, tail
+            else:
+                inferred = infer_provider_from_model(part)
+                if inferred:
+                    out.append((inferred, part.strip()))
+                continue
         elif "/" in part:
             provider, model_id = part.split("/", 1)
         else:
+            inferred = infer_provider_from_model(part)
+            if inferred:
+                out.append((inferred, part.strip()))
             continue
         provider = provider.strip().lower()
         model_id = model_id.strip()
         if provider and model_id:
             out.append((provider, model_id))
     return out
+
+
+def _dedupe_chain(entries: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    seen: set[tuple[str, str]] = set()
+    out: list[tuple[str, str]] = []
+    for provider, model_id in entries:
+        key = (provider.lower(), model_id)
+        if key not in seen:
+            seen.add(key)
+            out.append(key)
+    return out
+
+
+def _prepend_chain(head: list[tuple[str, str]], tail: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    return _dedupe_chain(head + tail)
+
+
+def _explicit_fallback_chain(task: str) -> list[tuple[str, str]] | None:
+    """Full chain override from env (task-specific beats global)."""
+    task_key = normalize_task(task).upper()
+    for env_name in (f"LLM_FALLBACK_{task_key}", "LLM_FALLBACK", "LLM_FALLBACK_CHAIN"):
+        explicit = parse_chain(env(env_name))
+        if explicit:
+            return explicit
+    return None
+
+
+_SKILL_MODELS_CACHE: tuple[str, float, dict[str, list[tuple[str, str]]]] | None = None
+_SKILL_MODELS_LOCK = threading.Lock()
+
+
+def _parse_skill_model_value(raw: Any) -> list[tuple[str, str]]:
+    if isinstance(raw, str):
+        return parse_chain(raw)
+    if isinstance(raw, list):
+        out: list[tuple[str, str]] = []
+        for item in raw:
+            if isinstance(item, str):
+                out.extend(parse_chain(item))
+            elif isinstance(item, dict):
+                provider = str(item.get("provider") or item.get("slug") or "").strip().lower()
+                model_id = str(item.get("model") or item.get("model_id") or item.get("id") or "").strip()
+                if provider and model_id:
+                    out.append((provider, model_id))
+        return out
+    if isinstance(raw, dict):
+        provider = str(raw.get("provider") or raw.get("slug") or "").strip().lower()
+        model_id = str(raw.get("model") or raw.get("model_id") or raw.get("id") or "").strip()
+        if provider and model_id:
+            return [(provider, model_id)]
+    return []
+
+
+def _skill_models_from_data(data: Any) -> dict[str, list[tuple[str, str]]]:
+    if not isinstance(data, dict):
+        return {}
+    out: dict[str, list[tuple[str, str]]] = {}
+    for key, value in data.items():
+        task_key = normalize_task(str(key))
+        entries = _parse_skill_model_value(value)
+        if entries:
+            out[task_key] = entries
+    return out
+
+
+def _load_skill_models_inline() -> dict[str, list[tuple[str, str]]]:
+    """Inline JSON map from SKILL_MODELS env (e.g. {\"chat\":\"gemini-2.5-flash\"})."""
+    raw = env("SKILL_MODELS")
+    if not raw or not raw.lstrip().startswith(("{", "[")):
+        return {}
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return _skill_models_from_data(data)
+
+
+def _load_skill_models_config() -> dict[str, list[tuple[str, str]]]:
+    """Load per-task models from SKILL_MODELS JSON and/or LLM_SKILL_MODELS file."""
+    global _SKILL_MODELS_CACHE
+
+    inline = _load_skill_models_inline()
+    path_raw = env("LLM_SKILL_MODELS")
+    if not path_raw:
+        return inline
+
+    path = Path(path_raw).expanduser()
+    if not path.is_file():
+        return inline
+
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        return inline
+
+    cache_key = f"{env('SKILL_MODELS')}|{path}"
+    with _SKILL_MODELS_LOCK:
+        if _SKILL_MODELS_CACHE and _SKILL_MODELS_CACHE[0] == cache_key and _SKILL_MODELS_CACHE[1] == mtime:
+            return dict(_SKILL_MODELS_CACHE[2])
+
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return inline
+
+    data: Any = None
+    if path.suffix.lower() in {".yaml", ".yml"}:
+        try:
+            import yaml
+
+            data = yaml.safe_load(text)
+        except Exception:
+            return inline
+    else:
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            return inline
+
+    file_map = _skill_models_from_data(data)
+    merged = dict(inline)
+    for task_key, entries in file_map.items():
+        merged[task_key] = _dedupe_chain(merged.get(task_key, []) + entries)
+
+    with _SKILL_MODELS_LOCK:
+        _SKILL_MODELS_CACHE = (cache_key, mtime, dict(merged))
+    return merged
+
+
+def _route_model_entries() -> list[tuple[str, str]]:
+    """Preferred model for NL routing (task=route). ROUTING_MODEL is an alias."""
+    raw = env("ROUTE_MODEL") or env("ROUTING_MODEL")
+    return parse_chain(raw)
+
+
+def _skill_model_entries(task: str) -> list[tuple[str, str]]:
+    """Per-task model guidance — prepended to the auto-built chain.
+
+    Precedence (first wins at attempt time; all are prepended in this order):
+      1. SKILL_MODEL_<TASK> env
+      2. SKILL_MODELS / LLM_SKILL_MODELS map entries for this task
+      3. ROUTE_MODEL / ROUTING_MODEL (route task only)
+    """
+    task_key = normalize_task(task)
+    task_upper = task_key.upper()
+    entries: list[tuple[str, str]] = []
+
+    entries.extend(parse_chain(env(f"SKILL_MODEL_{task_upper}")))
+
+    file_map = _load_skill_models_config()
+    entries.extend(file_map.get(task_key, []))
+
+    if task_key == "route":
+        entries.extend(_route_model_entries())
+
+    return _dedupe_chain(entries)
+
+
+def _guidance_entries() -> list[tuple[str, str]]:
+    return parse_chain(env("LLM_FALLBACK_GUIDANCE"))
 
 
 def normalize_gemini_model(model_id: str) -> str:
@@ -621,11 +862,9 @@ def _expand_provider_models(
 
 
 def build_default_chain(*, task: str = "default") -> list[tuple[str, str]]:
-    task_key = normalize_task(task).upper()
-    for env_name in (f"LLM_FALLBACK_{task_key}", "LLM_FALLBACK"):
-        explicit = parse_chain(env(env_name))
-        if explicit:
-            return explicit
+    explicit = _explicit_fallback_chain(task)
+    if explicit:
+        return explicit
 
     pref_provider = (env("AI_PREFERRED_PROVIDER") or env("LLM_PROVIDER")).lower()
     pref_model = env("AI_PREFERRED_MODEL") or env("LLM_MODEL")
@@ -652,7 +891,13 @@ def build_default_chain(*, task: str = "default") -> list[tuple[str, str]]:
         else:
             add(pref_provider, pref_model)
 
-    if env("VLLM_HOST") or env("VLLM_API_URL"):
+    if env("VLLM_CLOUD_URL") or env("VLLM_CLOUD_API_URL"):
+        cloud_model = env("VLLM_CLOUD_MODEL") or "default"
+        add("vllm-cloud", cloud_model)
+
+    explicit_vllm = vllm_explicitly_configured()
+    apply_vllm_defaults()
+    if explicit_vllm or is_reachable("vllm"):
         add("vllm", env("VLLM_MODEL") or "default")
 
     _expand_provider_models(add, pref_provider, provider="gemini", model_ids=gemini_model_ids())
@@ -662,6 +907,14 @@ def build_default_chain(*, task: str = "default") -> list[tuple[str, str]]:
     for model_id in ollama_model_ids():
         add("ollama", model_id)
 
+    for spec in provider_specs():
+        if spec.slug in {"gemini", "groq", "ollama", "vllm", "vllm-cloud"}:
+            continue
+        if not provider_available(spec.slug):
+            continue
+        for model_id in provider_model_ids(spec):
+            add(spec.slug, model_id)
+
     for provider, model_id in DEFAULT_CHAIN:
         add(provider, model_id)
 
@@ -669,6 +922,11 @@ def build_default_chain(*, task: str = "default") -> list[tuple[str, str]]:
         pref_first = [x for x in ordered if x[0] == pref_provider]
         pref_rest = [x for x in ordered if x[0] != pref_provider]
         ordered = pref_first + pref_rest
+
+    guidance = _guidance_entries()
+    skill_models = _skill_model_entries(task)
+    if skill_models or guidance:
+        ordered = _prepend_chain(skill_models + guidance, ordered)
 
     return ordered
 
@@ -710,6 +968,25 @@ def _vllm_base_url() -> str:
     if not base.endswith("/v1"):
         base = f"{base}/v1"
     return base
+
+
+def _vllm_cloud_base_url() -> str:
+    spec = get_provider("vllm-cloud")
+    base = provider_base_url(spec) if spec else ""
+    if not base:
+        return ""
+    if not base.endswith("/v1"):
+        base = f"{base}/v1"
+    return base
+
+
+def _inference_backend(provider: str) -> str:
+    provider = provider.lower()
+    if provider == "vllm-cloud":
+        return "vllm-cloud"
+    if provider == "vllm":
+        return "vllm"
+    return provider
 
 
 def provider_available(provider: str) -> bool:
@@ -756,11 +1033,13 @@ def build_model(provider: str, model_id: str, temperature: float, *, session: Ll
     if provider == "openai":
         from agno.models.openai import OpenAIChat
 
+        apply_provider_key("openai")
         return OpenAIChat(id=model_id, temperature=temperature)
 
     if provider == "anthropic":
         from agno.models.anthropic import Claude
 
+        apply_provider_key("anthropic")
         return Claude(id=model_id, temperature=temperature)
 
     if provider == "vllm":
@@ -770,6 +1049,40 @@ def build_model(provider: str, model_id: str, temperature: float, *, session: Ll
             id=model_id or "default",
             base_url=_vllm_base_url(),
             api_key=env("VLLM_API_KEY") or "EMPTY",
+            temperature=temperature,
+        )
+
+    if provider == "vllm-cloud":
+        from agno.models.openai import OpenAIChat
+
+        apply_provider_key("vllm-cloud")
+        base = _vllm_cloud_base_url()
+        if not base:
+            return None
+        spec = get_provider("vllm-cloud")
+        mid = model_id or env("VLLM_CLOUD_MODEL") or (spec.default_model if spec else "default")
+        api_key = (provider_api_key(spec) if spec else "") or env("VLLM_CLOUD_API_KEY") or "EMPTY"
+        return OpenAIChat(
+            id=mid,
+            base_url=base,
+            api_key=api_key,
+            temperature=temperature,
+        )
+
+    spec = get_provider(provider)
+    if spec and spec.kind in {"openai_compatible", "local_openai"}:
+        from agno.models.openai import OpenAIChat
+
+        apply_provider_key(provider)
+        base = provider_base_url(spec)
+        if not base:
+            return None
+        api_key = provider_api_key(spec) or env("OPENAI_API_KEY") or "EMPTY"
+        mid = model_id or spec.default_model
+        return OpenAIChat(
+            id=mid,
+            base_url=base,
+            api_key=api_key,
             temperature=temperature,
         )
 
@@ -892,49 +1205,154 @@ class LlmFallbackEngine:
                             label = f"{label} ({kr})"
                         tried.append(label)
                         try:
-                            if verbose:
-                                print(
-                                    f"arka_llm: trying {label} (task={normalize_task(self.task)})",
-                                    file=sys.stderr,
-                                )
-                            agent = Agent(model=model, instructions=system, markdown=False)
-                            run = agent.run(user)
-                            text = getattr(run, "content", None)
-                            if text is None:
-                                text = str(run)
-                            text = _strip_fences(str(text).strip())
-                            if text and not _looks_like_error(text):
-                                _LAST_MODEL = (provider, model_id)
-                                _LAST_ERROR = ""
-                                if notify and len(tried) > 1:
-                                    print(
-                                        f"arka_llm: fallback ok → {label} "
-                                        f"(after {len(tried) - 1} failure(s))",
-                                        file=sys.stderr,
-                                    )
-                                elif verbose:
-                                    print(f"arka_llm: ok {label}", file=sys.stderr)
-                                return CompletionResult(
-                                    text=text,
-                                    provider=provider,
-                                    model_id=model_id,
-                                    attempts=attempts,
-                                )
-                            err_text = (text or "empty response")[:300]
-                            last_error = f"{label}: {err_text}"
-                            if rotate_provider_key(provider, err_text):
+                            from arka.telemetry import (
+                                llm_http_span_attributes,
+                                mark_error,
+                                mark_ok,
+                                parse_http_status_code,
+                                set_http_span_attributes,
+                                span as trace_span,
+                            )
+                        except ImportError:
+                            trace_span = None  # type: ignore[assignment,misc]
+                            llm_http_span_attributes = None  # type: ignore[assignment,misc]
+                            parse_http_status_code = None  # type: ignore[assignment,misc]
+                            set_http_span_attributes = None  # type: ignore[assignment,misc]
+                        from contextlib import nullcontext
+
+                        attempt_attrs = {
+                            "gen_ai.provider.name": provider,
+                            "gen_ai.request.model": model_id,
+                            "arka.task": normalize_task(self.task),
+                            "arka.llm.attempt_index": attempts,
+                            **(
+                                {"arka.inference.backend": _inference_backend(provider)}
+                                if provider
+                                in {"vllm", "vllm-cloud", "ollama", "lmstudio", "litellm"}
+                                else {}
+                            ),
+                        }
+                        if llm_http_span_attributes is not None:
+                            attempt_attrs.update(llm_http_span_attributes(provider))
+
+                        attempt_mgr = (
+                            trace_span("arka.llm.attempt", attributes=attempt_attrs)
+                            if trace_span is not None
+                            else nullcontext()
+                        )
+                        try:
+                            with attempt_mgr as attempt_span:
                                 if verbose:
                                     print(
-                                        f"arka_llm: rotating {provider} API key after error",
+                                        f"arka_llm: trying {label} (task={normalize_task(self.task)})",
                                         file=sys.stderr,
                                     )
-                                key_retry = True
-                                continue
-                            self.store.mark(provider, model_id, RuntimeError(err_text))
-                            if verbose:
-                                print(f"arka_llm: fail {label}: {err_text}", file=sys.stderr)
+                                attempt_start = time.perf_counter()
+                                agent = Agent(model=model, instructions=system, markdown=False)
+                                run = agent.run(user)
+                                text = getattr(run, "content", None)
+                                if text is None:
+                                    text = str(run)
+                                text = _strip_fences(str(text).strip())
+                                if text and not _looks_like_error(text):
+                                    _LAST_MODEL = (provider, model_id)
+                                    _LAST_ERROR = ""
+                                    if trace_span is not None:
+                                        try:
+                                            from arka.telemetry.tracing import set_timing_attrs
+
+                                            set_timing_attrs(
+                                                attempt_span,
+                                                start=attempt_start,
+                                                streaming=False,
+                                            )
+                                        except ImportError:
+                                            pass
+                                        attempt_span.set_attribute("arka.llm.completion_chars", len(text))
+                                        try:
+                                            from arka.telemetry.llm_obs import apply_run_telemetry
+
+                                            apply_run_telemetry(
+                                                attempt_span,
+                                                run,
+                                                provider=provider,
+                                                model_id=model_id,
+                                                task=normalize_task(self.task),
+                                                label=label,
+                                            )
+                                        except ImportError:
+                                            try:
+                                                from arka.telemetry.logs import emit_log
+                                                from arka.telemetry.metrics import record_llm_attempt
+
+                                                record_llm_attempt(
+                                                    provider=provider,
+                                                    model=model_id,
+                                                    success=True,
+                                                    backend=_inference_backend(provider),
+                                                )
+                                                emit_log(
+                                                    f"llm ok {label}",
+                                                    level="info",
+                                                    attributes={
+                                                        "gen_ai.provider.name": provider,
+                                                        "gen_ai.request.model": model_id,
+                                                    },
+                                                )
+                                            except ImportError:
+                                                pass
+                                        if set_http_span_attributes is not None:
+                                            set_http_span_attributes(attempt_span, status_code=200)
+                                        mark_ok(attempt_span)
+                                    if notify and len(tried) > 1:
+                                        print(
+                                            f"arka_llm: fallback ok → {label} "
+                                            f"(after {len(tried) - 1} failure(s))",
+                                            file=sys.stderr,
+                                        )
+                                    elif verbose:
+                                        print(f"arka_llm: ok {label}", file=sys.stderr)
+                                    return CompletionResult(
+                                        text=text,
+                                        provider=provider,
+                                        model_id=model_id,
+                                        attempts=attempts,
+                                    )
+                                err_text = (text or "empty response")[:300]
+                                last_error = f"{label}: {err_text}"
+                                if trace_span is not None:
+                                    if set_http_span_attributes is not None:
+                                        code = (
+                                            parse_http_status_code(err_text)
+                                            if parse_http_status_code is not None
+                                            else None
+                                        )
+                                        if code is not None:
+                                            set_http_span_attributes(attempt_span, status_code=code)
+                                    mark_error(attempt_span, err_text)
+                                if rotate_provider_key(provider, err_text):
+                                    if verbose:
+                                        print(
+                                            f"arka_llm: rotating {provider} API key after error",
+                                            file=sys.stderr,
+                                        )
+                                    key_retry = True
+                                    continue
+                                self.store.mark(provider, model_id, RuntimeError(err_text))
+                                if verbose:
+                                    print(f"arka_llm: fail {label}: {err_text}", file=sys.stderr)
                         except Exception as exc:
                             last_error = f"{label}: {exc}"
+                            if trace_span is not None:
+                                if set_http_span_attributes is not None:
+                                    code = (
+                                        parse_http_status_code(exc)
+                                        if parse_http_status_code is not None
+                                        else None
+                                    )
+                                    if code is not None:
+                                        set_http_span_attributes(attempt_span, status_code=code)
+                                mark_error(attempt_span, str(exc), exc=exc)
                             if rotate_provider_key(provider, exc):
                                 if verbose:
                                     print(
@@ -1086,6 +1504,11 @@ def llm_last_model() -> tuple[str, str] | None:
 
 def ordered_model_candidates(*, task: str | None = None) -> list[tuple[str, str]]:
     return build_default_chain(task=normalize_task(task))
+
+
+def builtin_tail_chain() -> list[tuple[str, str]]:
+    """Built-in DEFAULT_CHAIN tail appended after provider discovery."""
+    return list(DEFAULT_CHAIN)
 
 
 def reset_llm_exhaustion() -> None:

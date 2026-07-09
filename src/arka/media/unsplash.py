@@ -18,6 +18,8 @@ class UnsplashPhoto:
     photographer: str
     photographer_url: str
     description: str
+    alt_description: str = ""
+    tags: tuple[str, ...] = ()
 
 
 def access_key() -> str:
@@ -65,7 +67,7 @@ def search_photos(
         with urllib.request.urlopen(req, timeout=30) as resp:
             payload = json.loads(resp.read().decode())
     except Exception as exc:
-        raise SystemExit(f"Unsplash search failed: {exc}") from exc
+        raise RuntimeError(f"Unsplash search failed: {exc}") from exc
 
     results: list[UnsplashPhoto] = []
     for row in payload.get("results") or []:
@@ -78,6 +80,16 @@ def search_photos(
             photo_url = urls.get("regular") or urls.get("full") or ""
         if not photo_url:
             continue
+        tag_rows = row.get("tags") or []
+        tags: tuple[str, ...] = ()
+        if isinstance(tag_rows, list):
+            tags = tuple(
+                dict.fromkeys(
+                    str(item.get("title") if isinstance(item, dict) else item).strip().lower()
+                    for item in tag_rows
+                    if str(item.get("title") if isinstance(item, dict) else item).strip()
+                )
+            )
         results.append(
             UnsplashPhoto(
                 id=str(row.get("id") or ""),
@@ -86,10 +98,10 @@ def search_photos(
                 photographer=str(user.get("name") or "Unknown"),
                 photographer_url=str(user.get("links", {}).get("html") or "https://unsplash.com"),
                 description=str(row.get("description") or row.get("alt_description") or query),
+                alt_description=str(row.get("alt_description") or row.get("description") or ""),
+                tags=tags,
             )
         )
-    if not results:
-        raise SystemExit(f"No Unsplash photos found for: {query!r}")
     return results
 
 

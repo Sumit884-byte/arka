@@ -20,6 +20,9 @@ from typing import Callable
 
 LOCAL_PROVIDERS = frozenset({"ollama", "vllm"})
 
+DEFAULT_VLLM_VISION_MODEL = "Qwen/Qwen2-VL-2B-Instruct"
+DEFAULT_VLLM_METAL_MODEL = "mlx-community/Qwen2-VL-2B-Instruct-4bit"
+
 
 def _env(name: str, default: str = "") -> str:
     return (os.environ.get(name) or default).strip()
@@ -51,6 +54,72 @@ def _ollama_base_url() -> str:
     return host.rstrip("/")
 
 
+def host_os() -> str:
+    """Return macos, linux, windows, or a lower-case system name."""
+    sysname = platform.system()
+    if sysname == "Darwin":
+        return "macos"
+    if sysname == "Windows":
+        return "windows"
+    if sysname.startswith("Linux"):
+        return "linux"
+    return sysname.lower()
+
+
+def vllm_explicitly_configured() -> bool:
+    """True when env indicates the user wants local vLLM in the fallback chain."""
+    return bool(
+        _env("VLLM_API_URL")
+        or _env("VLLM_START_CMD")
+        or _env("DESCRIBE_IMAGE_VLLM_START_CMD")
+        or _env("VLLM_HOST")
+    )
+
+
+def _vllm_port() -> str:
+    host = _env("VLLM_HOST", "127.0.0.1:8000")
+    if ":" in host.rsplit("/", 1)[-1]:
+        return host.rsplit(":", 1)[-1]
+    return "8000"
+
+
+def _default_vllm_start_cmd(*, vision: bool = False) -> str:
+    """Platform-aware default `vllm serve` when binary is available."""
+    plat = host_os()
+    if plat == "windows" and not shutil.which("vllm"):
+        return ""
+    model = _env("VLLM_MODEL") or _env("DESCRIBE_IMAGE_MODEL") or "default"
+    if model == "default":
+        if plat == "macos":
+            model = DEFAULT_VLLM_METAL_MODEL if vision else DEFAULT_VLLM_VISION_MODEL
+        else:
+            model = DEFAULT_VLLM_VISION_MODEL
+    port = _vllm_port()
+    return f"vllm serve {model} --host 127.0.0.1 --port {port} --max-model-len 4096"
+
+
+def apply_vllm_defaults(*, vision: bool = False) -> None:
+    """Default host/start cmd so local vLLM can auto-start when configured."""
+    if not _env("VLLM_HOST") and not _env("VLLM_API_URL"):
+        os.environ.setdefault("VLLM_HOST", "127.0.0.1:8000")
+    if _env("DESCRIBE_IMAGE_VLLM_START_CMD") and not _env("VLLM_START_CMD"):
+        os.environ.setdefault("VLLM_START_CMD", _env("DESCRIBE_IMAGE_VLLM_START_CMD"))
+    if not _env("VLLM_START_CMD"):
+        cmd = _default_vllm_start_cmd(vision=vision)
+        if cmd and (vision or shutil.which("vllm")):
+            os.environ.setdefault("VLLM_START_CMD", cmd)
+    if vision:
+        os.environ.setdefault("LLM_SERVER_START_TIMEOUT", "600")
+    if not _env("VLLM_MODEL") and not _env("DESCRIBE_IMAGE_MODEL"):
+        cmd = _env("VLLM_START_CMD")
+        if cmd:
+            import re
+
+            m = re.search(r"vllm serve\s+(\S+)", cmd)
+            if m:
+                os.environ.setdefault("VLLM_MODEL", m.group(1))
+
+
 def _vllm_health_url() -> str:
     base = _env("VLLM_API_URL")
     if not base:
@@ -73,17 +142,42 @@ def _http_ok(url: str, *, timeout: float = 3.0) -> bool:
         return False
 
 
+def _openai_models_url(base: str) -> str:
+    base = (base or "").rstrip("/")
+    if not base:
+        return ""
+    if base.endswith("/v1"):
+        return f"{base}/models"
+    return f"{base}/v1/models"
+
+
 def is_reachable(provider: str) -> bool:
     provider = provider.lower()
     if provider == "ollama":
         return _http_ok(f"{_ollama_base_url()}/api/tags")
     if provider == "vllm":
         return _http_ok(_vllm_health_url())
+    if provider == "vllm-cloud":
+        return _vllm_cloud_ready()
+    try:
+        from arka.llm.providers import get_provider, provider_base_url
+
+        spec = get_provider(provider)
+        if spec and spec.kind == "local_openai":
+            url = _openai_models_url(provider_base_url(spec))
+            if url:
+                return _http_ok(url)
+    except ImportError:
+        pass
     return False
 
 
 def _display_name(provider: str) -> str:
-    return {"ollama": "Ollama", "vllm": "vLLM"}.get(provider.lower(), provider.title())
+    return {
+        "ollama": "Ollama",
+        "vllm": "vLLM",
+        "vllm-cloud": "vLLM Cloud",
+    }.get(provider.lower(), provider.title())
 
 
 def _vllm_log_path() -> Path:
@@ -108,6 +202,62 @@ def _vllm_models_url() -> str:
     if not base.endswith("/v1"):
         base = f"{base}/v1"
     return f"{base}/models"
+
+
+def _vllm_cloud_base_raw() -> str:
+    base = _env("VLLM_CLOUD_URL") or _env("VLLM_CLOUD_API_URL")
+    if not base:
+        return ""
+    if not base.startswith("http"):
+        base = f"https://{base}"
+    return base.rstrip("/")
+
+
+def _vllm_cloud_api_base() -> str:
+    base = _vllm_cloud_base_raw()
+    if not base:
+        return ""
+    if base.endswith("/v1"):
+        return base
+    return f"{base}/v1"
+
+
+def _vllm_cloud_health_url() -> str:
+    base = _vllm_cloud_base_raw()
+    if not base:
+        return ""
+    root = base[:-3] if base.endswith("/v1") else base
+    return f"{root}/health"
+
+
+def _vllm_cloud_models_url() -> str:
+    api = _vllm_cloud_api_base()
+    return f"{api}/models" if api else ""
+
+
+def _vllm_cloud_request(url: str, *, timeout: float = 5.0) -> urllib.request.Request:
+    req = urllib.request.Request(url, method="GET")
+    key = _env("VLLM_CLOUD_API_KEY")
+    if key:
+        req.add_header("Authorization", f"Bearer {key}")
+    return req
+
+
+def _vllm_cloud_ready() -> bool:
+    models_url = _vllm_cloud_models_url()
+    if not models_url:
+        return False
+    health_url = _vllm_cloud_health_url()
+    if health_url and _http_ok(health_url):
+        return True
+    try:
+        req = _vllm_cloud_request(models_url)
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            models = data.get("data") if isinstance(data, dict) else None
+            return bool(models)
+    except (urllib.error.URLError, OSError, TimeoutError, ValueError, json.JSONDecodeError):
+        return False
 
 
 def _vllm_ready() -> bool:
@@ -247,10 +397,25 @@ class LlmServerSession:
             return True
         if provider in self._used:
             return is_reachable(provider)
-        if MANAGER.prepare(provider):
-            self._used.add(provider)
-            return True
-        return False
+        try:
+            from arka.telemetry import span
+        except ImportError:
+            span = None  # type: ignore[assignment,misc]
+        from contextlib import nullcontext
+
+        ctx = (
+            span(
+                "arka.inference.server.prepare",
+                attributes={"arka.inference.backend": provider},
+            )
+            if span is not None
+            else nullcontext()
+        )
+        with ctx:
+            if MANAGER.prepare(provider):
+                self._used.add(provider)
+                return True
+            return False
 
     def close(self) -> None:
         MANAGER.release_all(self._used)
@@ -311,7 +476,8 @@ def _start_vllm() -> subprocess.Popen[bytes] | None:
         return None
     vllm_bin = shutil.which(cmd[0])
     if not vllm_bin:
-        if platform.system() == "Darwin":
+        plat = host_os()
+        if plat == "macos":
             print(
                 "vLLM not found on macOS — plain `pip install vllm` usually fails.\n"
                 "Options:\n"
@@ -320,10 +486,20 @@ def _start_vllm() -> subprocess.Popen[bytes] | None:
                 "  • vLLM-Metal: curl -fsSL https://raw.githubusercontent.com/vllm-project/vllm-metal/main/install.sh | bash",
                 file=sys.stderr,
             )
+        elif plat == "windows":
+            print(
+                "vLLM not found on Windows.\n"
+                "Options:\n"
+                "  • export DESCRIBE_IMAGE_BACKEND=gemini  (needs GEMINI_API_KEY)\n"
+                "  • ollama pull llava && export DESCRIBE_IMAGE_BACKEND=ollama\n"
+                "  • WSL2: pip install vllm, then set VLLM_HOST=127.0.0.1:8000 and VLLM_START_CMD\n"
+                "  • Native Windows: install vLLM if supported, or point VLLM_API_URL at a remote server",
+                file=sys.stderr,
+            )
         else:
             print(
                 "vLLM not found — install: pip install vllm\n"
-                "Then retry describe_image (Arka auto-starts/stops the server).",
+                "Then retry (Arka auto-starts/stops the server when VLLM_START_CMD is set).",
                 file=sys.stderr,
             )
         return None
@@ -359,20 +535,50 @@ def _start_vllm() -> subprocess.Popen[bytes] | None:
 def provider_available_with_servers(provider: str) -> bool:
     """Provider check that can auto-start local servers when configured."""
     provider = provider.lower()
+    try:
+        from arka.llm.api_keys import provider_has_keys
+        from arka.llm.providers import get_provider, provider_base_url
+
+        spec = get_provider(provider)
+        if spec:
+            if spec.slug == "bedrock":
+                if provider_has_keys("bedrock"):
+                    return True
+                return bool(_env("AWS_ACCESS_KEY_ID") and _env("AWS_SECRET_ACCESS_KEY"))
+            if spec.slug == "azure":
+                return bool(provider_has_keys("azure") and provider_base_url(spec))
+            if spec.slug == "vllm":
+                if is_reachable("vllm"):
+                    return True
+                return auto_start_enabled() and bool(_env("VLLM_START_CMD"))
+            if spec.kind == "local_openai":
+                return is_reachable(provider) or provider_has_keys(provider)
+            if spec.kind == "openai_compatible":
+                if spec.slug == "vllm-cloud":
+                    return bool(provider_base_url(spec))
+                if spec.slug in {"bedrock", "azure"} and not provider_base_url(spec):
+                    return provider_has_keys(provider) and bool(provider_base_url(spec))
+                return provider_has_keys(provider)
+            if spec.slug == "gemini":
+                return provider_has_keys("gemini") or bool(_env("GOOGLE_API_KEY"))
+            if spec.slug == "groq":
+                return provider_has_keys("groq")
+            if spec.slug == "ollama":
+                return is_reachable("ollama") or (auto_start_enabled() and bool(shutil.which("ollama")))
+            if spec.slug in {"openai", "anthropic"}:
+                return provider_has_keys(provider)
+        if provider == "vllm":
+            if is_reachable("vllm"):
+                return True
+            return auto_start_enabled() and bool(_env("VLLM_START_CMD"))
+        if provider == "vllm-cloud":
+            return bool(_vllm_cloud_base_raw())
+    except ImportError:
+        pass
     if provider == "gemini":
-        try:
-            from arka.llm.api_keys import provider_has_keys
-
-            return provider_has_keys("gemini") or bool(_env("GOOGLE_API_KEY"))
-        except ImportError:
-            return bool(_env("GEMINI_API_KEY") or _env("GOOGLE_API_KEY"))
+        return bool(_env("GEMINI_API_KEY") or _env("GOOGLE_API_KEY"))
     if provider == "groq":
-        try:
-            from arka.llm.api_keys import provider_has_keys
-
-            return provider_has_keys("groq")
-        except ImportError:
-            return bool(_env("GROQ_API_KEY"))
+        return bool(_env("GROQ_API_KEY"))
     if provider == "openai":
         return bool(_env("OPENAI_API_KEY"))
     if provider == "anthropic":
@@ -383,4 +589,6 @@ def provider_available_with_servers(provider: str) -> bool:
         if is_reachable("vllm"):
             return True
         return auto_start_enabled() and bool(_env("VLLM_START_CMD"))
+    if provider == "vllm-cloud":
+        return bool(_vllm_cloud_base_raw())
     return False

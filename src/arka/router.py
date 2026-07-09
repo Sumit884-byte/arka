@@ -7,7 +7,9 @@ import re
 import shlex
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
+from typing import Any
 
 from arka.paths import fish_config, script_path
 
@@ -54,31 +56,94 @@ def route(text: str) -> Route | None:
     if not cmd:
         return None
 
-    mode = _route_mode()
+    try:
+        from arka.telemetry import mark_ok, span
+    except ImportError:
+        span = None  # type: ignore[assignment,misc]
+    from contextlib import nullcontext
 
-    fish_route = _route_via_fish(cmd)
-    if fish_route:
-        return fish_route
+    route_ctx = (
+        span("arka.route", attributes={"arka.route.input": cmd[:500]})
+        if span is not None
+        else nullcontext()
+    )
+    route_start = time.perf_counter()
+    with route_ctx as current:
+        mode = _route_mode()
+        if span is not None:
+            current.set_attribute("arka.route.mode", mode)
 
-    if fish_config() is not None and mode in ("ai_only", "symbolic_only"):
-        return None
+        fish_route = _route_via_fish(cmd)
+        if fish_route:
+            if span is not None:
+                _finish_route_span(
+                    current,
+                    fish_route,
+                    decision="fish",
+                    start=route_start,
+                )
+            return fish_route
 
-    if mode in ("ai", "ai_only"):
-        llm = _route_llm(cmd)
-        if llm:
-            return llm
-        if mode == "ai_only":
+        if fish_config() is not None and mode in ("ai_only", "symbolic_only"):
             return None
 
-    if mode != "ai_only":
-        offline = _route_offline(cmd)
-        if offline:
-            return offline
+        if mode in ("ai", "ai_only"):
+            llm = _route_llm(cmd)
+            if llm:
+                if span is not None:
+                    _finish_route_span(
+                        current,
+                        llm,
+                        decision="llm",
+                        start=route_start,
+                    )
+                return llm
+            if mode == "ai_only":
+                return None
 
-    if mode == "symbolic":
-        return _route_llm(cmd)
+        if mode != "ai_only":
+            offline = _route_offline(cmd)
+            if offline:
+                if span is not None:
+                    _finish_route_span(
+                        current,
+                        offline,
+                        decision="symbolic",
+                        start=route_start,
+                    )
+                return offline
 
-    return None
+        if mode == "symbolic":
+            llm = _route_llm(cmd)
+            if llm and span is not None:
+                _finish_route_span(
+                    current,
+                    llm,
+                    decision="llm",
+                    start=route_start,
+                )
+            return llm
+
+        return None
+
+
+def _finish_route_span(
+    current: Any,
+    route_result: Route,
+    *,
+    decision: str,
+    start: float,
+) -> None:
+    try:
+        from arka.telemetry import mark_ok
+        from arka.telemetry.tracing import duration_ms
+    except ImportError:
+        return
+    current.set_attribute("arka.route.source", route_result.source)
+    current.set_attribute("arka.route.skill", route_result.skill[:500])
+    current.set_attribute("arka.route.decision", decision)
+    current.set_attribute("arka.route.latency_ms", duration_ms(start))
+    mark_ok(current)
 
 
 def _route_via_fish(cmd: str) -> Route | None:
@@ -160,6 +225,19 @@ def _route_remind(cmd: str) -> Route | None:
         skill = route_remind(cmd)
         if skill:
             return Route(skill, source="offline")
+    except ImportError:
+        pass
+    return None
+
+
+def _route_github_repo(cmd: str) -> Route | None:
+    try:
+        from arka.agent.github_repo import route_command, wants_github_repo_activity
+
+        if wants_github_repo_activity(cmd):
+            skill = route_command(cmd)
+            if skill:
+                return Route(skill, source="offline")
     except ImportError:
         pass
     return None
@@ -277,9 +355,29 @@ def _route_offline(cmd: str) -> Route | None:
                 return Route(f"youtube_download {qurl}", source="offline")
             return Route(f"download_file {qurl}", source="offline")
 
-    if re.search(r"(find|search|list|show).*\bfiles?\b", clean) and re.search(
-        r"(less|more|greater|larger|smaller|lesser|under|over|above|below|bigger)|\d+\s*(kb|mb|gb)\b",
+    file_size_subject = re.search(
+        r"(?i)(?:"
+        r"\b(?:find|search|list|show)\s+.*\bfiles?\b|"
+        r"\b(?:find|search|list|show)\s+.*\bdownloads?\b|"
+        r"\bfiles?\b.*\b(?:downloads?|desktop|documents?|pictures?|photos?|videos?|music)\b|"
+        r"\bdownloads?\b.*\b(?:range\s+of|between|from|\d+\s*(?:kb|mb|gb))\b|"
+        r"\bfiles?\s+in\s+(?:my\s+)?(?:the\s+)?(?:downloads?|desktop|documents?|pictures?|photos?|videos?|music)\b|"
+        r"\blarge\s+files?\s+in\s+(?:my\s+)?(?:the\s+)?(?:downloads?|desktop|documents?|pictures?|photos?|videos?|music)\b|"
+        r"\b(?:big|large|huge)\s+files?\b.*\b(?:downloads?|desktop|documents?|pictures?|photos?|videos?|music)\b"
+        r")",
         clean,
+    )
+    file_size_threshold = re.search(
+        r"(?i)(?:"
+        r"(?:less|more|greater|larger|smaller|lesser|under|over|above|below|bigger)(?:\s+than)?|"
+        r"\b(?:range\s+of|between|from)\b|"
+        r"\d+\s*(?:kb|mb|gb)\b\s+(?:to|and|-)\s+\d+\s*(?:kb|mb|gb)\b|"
+        r"\d+\s*(?:kb|mb|gb)\b"
+        r")",
+        clean,
+    )
+    if file_size_subject and (
+        file_size_threshold or re.search(r"(?i)\b(?:large|big|huge)\s+files?\b", clean)
     ):
         return Route(f"find_files_by_size {cmd}", source="offline")
 
@@ -287,12 +385,25 @@ def _route_offline(cmd: str) -> Route | None:
     if chat_route:
         return chat_route
 
+    github_route = _route_github_repo(cmd)
+    if github_route:
+        return github_route
+
     if _is_investment_question(clean):
         topic = _strip_query_prefix(cmd)
         return Route(
             f"predictions --domain stocks --deep {shlex.quote(topic)}",
             source="offline",
         )
+
+    try:
+        from arka.routing.symbolic import route_currency_convert
+
+        currency_route = route_currency_convert(cmd)
+        if currency_route:
+            return Route(currency_route, source="offline")
+    except ImportError:
+        pass
 
     if _is_knowledge_question(clean):
         return Route(f"web_answer {cmd}")
@@ -376,11 +487,26 @@ def _is_investment_question(clean: str) -> bool:
     )
 
 
+_SHOW_ME_IMAGE_HINT = re.compile(
+    r"(?i)\b(?:image|photo|picture|pic|screenshot|snapshot|"
+    r"\.png|\.jpe?g|\.webp|\.gif|\.bmp|\.svg|\.heic|\.tiff?)\b",
+)
+
+
 def _is_knowledge_question(clean: str) -> bool:
+    try:
+        from arka.agent.price_sources import is_price_check_query
+
+        if is_price_check_query(clean):
+            return False
+    except ImportError:
+        pass
     if _is_investment_question(clean):
         return False
     if re.search(r"\b(my|this pc|my computer|my mac|my macbook|my machine|should i)\b", clean):
         return False
+    if re.match(r"^show\s+me\s+", clean) and not _SHOW_ME_IMAGE_HINT.search(clean):
+        return True
     return bool(
         re.match(
             r"^(why |where |when |who |what |tell me |explain |describe |how old |how many |how much )",
