@@ -181,6 +181,17 @@ def route_agent_skills(cmd: str) -> str | None:
     return None
 
 
+def route_currency_convert(cmd: str) -> str | None:
+    try:
+        from arka.integrations.currency import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "currency_convert " + " ".join(shlex.quote(a) for a in argv)
+
+
 def route_compose_video(cmd: str) -> str | None:
     try:
         from arka.media.compose_video import nl_to_argv
@@ -230,6 +241,7 @@ def route_offline_extras(cmd: str) -> str | None:
         route_timer,
         route_search_web,
         route_product_reviewer,
+        route_currency_convert,
         route_agent_skills,
     ):
         hit = fn(cmd)

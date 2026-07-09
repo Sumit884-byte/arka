@@ -1796,7 +1796,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         store_password pass \
         open_file list_files search_files find_files_by_size browse_web activate_venv create_venv fix_venv \
         write_script run_script ollama_run lint_python cheat qr_code shorten_url \
-        crypto_price pomodoro sports_score live_scores system_monitor excuse bored open_app create_skill \
+        crypto_price currency_convert convert currency pomodoro sports_score live_scores system_monitor excuse bored open_app create_skill \
         calculate_bmi send_whatsapp whatsapp_listen search_stores download_file extract_and_run \
         create_desktop_app fix_graphics_driver install_app install_apt install_brew install_flatpak \
         install_snap install_package install_uv stock_analysis stock macro emotion \
@@ -2226,6 +2226,8 @@ function skills --description "Show what commands the agent can auto-run"
                 echo (set_color green)"  daily_brief    "(set_color normal)"Weather + top news headlines"
             case sports_score live_scores
                 echo (set_color green)"  sports_score   "(set_color normal)"[ipl|nfl|nba|epl|cricket|…] — live match scores (ESPN)"
+            case currency_convert convert currency
+                echo (set_color green)"  currency_convert "(set_color normal)"<amount> <from> <to> — live FX rates (USD, EUR, INR, …)"
             case wifi_info
                 echo (set_color green)"  wifi_info      "(set_color normal)"Current Wi-Fi network + signal"
             case generate_image
@@ -7577,6 +7579,32 @@ except Exception as e:
 " "$coins"
 end
 
+function currency_convert --description "Convert amounts between currencies using live exchange rates"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        echo "Usage: currency_convert <amount> <from> <to>"
+        echo "       currency_convert convert 100 USD to INR"
+        echo "       arka 'what is 500 EUR in GBP'"
+        return 1
+    end
+    set -l out ($py (_arka_py_script arka_currency.py) $argv 2>&1)
+    set -l status $status
+    if test $status -ne 0
+        echo $out >&2
+        return $status
+    end
+    _arka_pretty_python_output "$out"
+    return 0
+end
+
+function convert --description "Alias for currency_convert"
+    currency_convert $argv
+end
+
+function currency --description "Alias for currency_convert"
+    currency_convert $argv
+end
+
 function sports_score --description "Live sports scores — IPL, cricket, NFL, NBA, soccer, F1, …"
     set -l py (_arka_python)
     if test (count $argv) -eq 0
@@ -9390,6 +9418,19 @@ end
 
 function _agent_is_remind_request --description "True if user wants a reminder (internal)"
     test -n "$(_agent_build_remind_cmd "$argv[1]")"
+end
+
+function _agent_is_currency_request --description "True if user wants currency conversion (internal)"
+    test -n "$(_agent_build_currency_cmd "$argv[1]")"
+end
+
+function _agent_build_currency_cmd --description "Build currency_convert args from NL (internal)"
+    set -l cmd "$argv[1]"
+    set -l py (_arka_python)
+    set -l rest ($py (_arka_py_script arka_currency.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
+    if test (count $rest) -gt 0
+        echo "currency_convert $rest"
+    end
 end
 
 function _agent_build_remind_cmd --description "Build remind args from NL (internal)"
@@ -11812,6 +11853,13 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         echo "skill|$sl|Travel survival phrases"
         return
     end
+    if _agent_is_currency_request "$cmd"
+        set -l cc (_agent_build_currency_cmd "$cmd")
+        if test -n "$cc"
+            echo "skill|$cc|Currency conversion"
+            return
+        end
+    end
     if _agent_is_knowledge_question "$cmd"
         set -l kq (_agent_normalize_knowledge_q "$cmd")
         test -z "$kq"; and set kq $cmd
@@ -11924,6 +11972,12 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
     if string match -qr '(?i)(live\s+(sports?\s+)?scores?|sports?\s+scores?|ipl\s+(live|score)|cricket\s+(live|score)|nfl\s+scores?|nba\s+scores?|match\s+score)' "$clean"
         echo "skill|sports_score $cmd|Live sports scores"
         return
+    end
+    if set -l cc_cmd (_agent_build_currency_cmd "$cmd")
+        if test -n "$cc_cmd"
+            echo "skill|$cc_cmd|Currency conversion"
+            return
+        end
     end
     set -l py (_arka_python)
     set -l tp ($py (_arka_py_script arka_skills.py) match "$cmd" 2>/dev/null)
@@ -14125,6 +14179,8 @@ function agent --description "Run commands safely: executes safe commands automa
         echo "  pr_check diff|ci|explain|babysit - PR diff, CI status, failure diagnosis, merge-ready loop"
         echo "  open_project [query]   - Search and launch VS Code on a local project repo"
         echo "  crypto_price [coins]   - Get real-time crypto prices (BTC, ETH, etc.) beautifully"
+        echo "  currency_convert <amt> <from> <to> - Live currency conversion (USD, EUR, INR, …)"
+        echo "  convert / currency       - Aliases for currency_convert"
         echo "  sports_score [league]  - Live scores: IPL, cricket, NFL, NBA, EPL, F1, …"
         echo "  live_scores            - Alias for sports_score"
         echo "  lint_python <file>     - Lint Python code automatically using ruff or flake8"
@@ -14265,6 +14321,11 @@ function agent --description "Run commands safely: executes safe commands automa
 
     if test -z "$interpreted"; and _agent_is_gmail_summarize_request "$cmd"
         set interpreted (_agent_build_gmail_cmd "$cmd" summarize)
+        set route_source offline
+    end
+
+    if test -z "$interpreted"; and _agent_is_currency_request "$cmd"
+        set interpreted (_agent_build_currency_cmd "$cmd")
         set route_source offline
     end
 
@@ -14775,6 +14836,9 @@ function agent --description "Run commands safely: executes safe commands automa
         set interpreted "qr_code $args"
     else if string match -qr '(crypto|bitcoin|ethereum|solana|btc)' "$clean_cmd"
         set interpreted "crypto_price $args"
+    else if _agent_is_currency_request "$cmd"
+        set interpreted (_agent_build_currency_cmd "$cmd")
+        set route_source offline
     else if string match -qr '(pomodoro|tomato)' "$clean_cmd"
         set interpreted "pomodoro $args"
     else if _agent_is_pr_check_request "$cmd"
