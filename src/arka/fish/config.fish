@@ -9137,6 +9137,9 @@ function _agent_is_knowledge_question --description "True if user wants a factua
     if _agent_is_survival_lang_request "$argv[1]"
         return 1
     end
+    if _agent_is_currency_request "$argv[1]"
+        return 1
+    end
     if _agent_is_google_calendar_request "$argv[1]"
         or _agent_is_google_gmail_request "$argv[1]"
         return 1
@@ -9473,6 +9476,10 @@ end
 
 function _agent_offline_route_cmd --description "Full symbolic NL to skill command (internal)"
     set -l cmd "$argv[1]"
+    if _agent_is_currency_request "$cmd"
+        echo (_agent_build_currency_cmd "$cmd")
+        return 0
+    end
     if _agent_is_remind_request "$cmd"
         echo (_agent_build_remind_cmd "$cmd")
         return 0

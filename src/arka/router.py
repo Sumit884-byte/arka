@@ -376,6 +376,15 @@ def _route_offline(cmd: str) -> Route | None:
             source="offline",
         )
 
+    try:
+        from arka.routing.symbolic import route_currency_convert
+
+        currency_route = route_currency_convert(cmd)
+        if currency_route:
+            return Route(currency_route, source="offline")
+    except ImportError:
+        pass
+
     if _is_knowledge_question(clean):
         return Route(f"web_answer {cmd}")
 

@@ -16,11 +16,22 @@ from decimal import Decimal, ROUND_HALF_UP
 
 USER_AGENT = "Mozilla/5.0 (compatible; Arka/1.0)"
 
+# Currency symbols → ISO 4217 (¥ defaults to JPY; CNY also uses ¥ in some locales).
+CURRENCY_SYMBOLS: dict[str, str] = {
+    "$": "USD",
+    "€": "EUR",
+    "£": "GBP",
+    "₹": "INR",
+    "¥": "JPY",
+}
+
 # ISO 4217 codes and common aliases / plural forms.
 CURRENCY_ALIASES: dict[str, str] = {
     "usd": "USD",
     "dollar": "USD",
     "dollars": "USD",
+    "buck": "USD",
+    "bucks": "USD",
     "us dollar": "USD",
     "us dollars": "USD",
     "american dollar": "USD",
@@ -35,6 +46,7 @@ CURRENCY_ALIASES: dict[str, str] = {
     "gbp": "GBP",
     "pound": "GBP",
     "pounds": "GBP",
+    "quid": "GBP",
     "sterling": "GBP",
     "british pound": "GBP",
     "british pounds": "GBP",
@@ -101,10 +113,13 @@ KNOWN_CODES = frozenset(set(CURRENCY_ALIASES.values()))
 _CURRENCY_NAMES = (
     r"usd|eur|inr|gbp|jpy|cad|aud|chf|cny|sgd|aed|hkd|nzd|krw|mxn|brl|zar|"
     r"sek|nok|dkk|try|thb|php|myr|idr|pln|ils|"
-    r"dollars?|euros?|rupees?|pounds?|sterling|yen|yuan|renminbi|rmb|"
+    r"dollars?|euros?|rupees?|rs|pounds?|bucks?|quid|sterling|yen|yuan|renminbi|rmb|"
     r"dirhams?|pesos?|reais?|rand|krona|krone|lira|baht|ringgit|rupiah|zloty|shekels?"
 )
-_CURRENCY_TOKEN = rf"({_CURRENCY_NAMES})"
+_CURRENCY_SYMBOLS = r"[\$€£₹¥]"
+_CURRENCY_TOKEN = rf"({_CURRENCY_NAMES}|{_CURRENCY_SYMBOLS})"
+_AMOUNT = r"(\d[\d,]*(?:\.\d+)?(?:\s*[kK])?(?:\s+grand)?)"
+_CONVERT_CONNECTOR = r"(?:to|ot|in|into|→|->)"
 
 _KNOWN_CMDS = frozenset({"parse", "convert"})
 
@@ -121,13 +136,17 @@ class ConversionResult:
 
 
 def normalize_currency(token: str) -> str | None:
-    """Map a currency token or name to an ISO 4217 code."""
+    """Map a currency token, symbol, or name to an ISO 4217 code."""
     raw = (token or "").strip()
     if not raw:
         return None
-    cleaned = re.sub(r"[^\w₹$€£]", "", raw.lower())
+    if raw in CURRENCY_SYMBOLS:
+        return CURRENCY_SYMBOLS[raw]
+    cleaned = re.sub(r"[^\w₹$€£¥]", "", raw.lower())
     if not cleaned:
         return None
+    if cleaned in CURRENCY_SYMBOLS:
+        return CURRENCY_SYMBOLS[cleaned]
     if len(cleaned) == 3 and cleaned.isalpha():
         code = cleaned.upper()
         return code if code in KNOWN_CODES else None
@@ -138,29 +157,82 @@ def _parse_amount(token: str) -> Decimal | None:
     raw = (token or "").strip().replace(",", "")
     if not raw:
         return None
+    m = re.fullmatch(r"(?i)(\d+(?:\.\d+)?)\s+grand", raw)
+    if m:
+        return Decimal(m.group(1)) * 1000
+    m = re.fullmatch(r"(?i)(\d+(?:\.\d+)?)\s*[kK]", raw)
+    if m:
+        return Decimal(m.group(1)) * 1000
     try:
         return Decimal(raw)
     except Exception:
         return None
 
 
+def _format_amount(amount: Decimal) -> str:
+    text = format(amount.normalize(), "f")
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    return text
+
+
+def _normalize_convert_text(text: str) -> str:
+    """Fix common typos and arrow connectors before currency parsing."""
+    t = (text or "").strip()
+    t = t.replace("→", " to ").replace("->", " to ")
+    # "ot" is a frequent typo for "to" in convert queries.
+    t = re.sub(r"(?i)\bot\b", "to", t)
+    return re.sub(r"\s+", " ", t).strip()
+
+
+def _preprocess_symbol_amounts(text: str) -> str:
+    """Expand symbol-before/after amounts: $250, 250$, €100, ₹5000."""
+    t = text
+    for sym, code in CURRENCY_SYMBOLS.items():
+        esc = re.escape(sym)
+
+        def _sym_before(m: re.Match[str], *, ccy: str = code) -> str:
+            amt = _parse_amount(m.group(1))
+            if amt is None:
+                return m.group(0)
+            return f"{_format_amount(amt)} {ccy}"
+
+        def _sym_after(m: re.Match[str], *, ccy: str = code) -> str:
+            amt = _parse_amount(m.group(1))
+            if amt is None:
+                return m.group(0)
+            return f"{_format_amount(amt)} {ccy}"
+
+        t = re.sub(
+            rf"{esc}\s*(\d[\d,]*(?:\.\d+)?(?:\s*[kK])?)",
+            _sym_before,
+            t,
+        )
+        t = re.sub(
+            rf"(\d[\d,]*(?:\.\d+)?(?:\s*[kK])?)\s*{esc}",
+            _sym_after,
+            t,
+        )
+    return t
+
+
 def parse_convert(text: str) -> tuple[Decimal, str, str] | None:
     """Parse natural language or direct args into (amount, from_ccy, to_ccy)."""
-    t = (text or "").strip()
+    t = _preprocess_symbol_amounts(_normalize_convert_text(text))
     if not t:
         return None
 
     # Strip leading command words.
     t = re.sub(
-        r"(?i)^(?:please\s+)?(?:currency(?:\s+convert)?|convert|exchange|what\s+is|how\s+much\s+is)\s+",
+        r"(?i)^(?:please\s+)?(?:arka\s+)?(?:currency(?:\s+convert)?|convert|exchange|what\s+is|how\s+much\s+is)\s+",
         "",
         t,
     ).strip()
     t = re.sub(r"(?i)^(?:the\s+)?(?:exchange\s+rate\s+for\s+)", "", t).strip()
 
-    # "100 USD to INR" / "50 euros to dollars" / "what is 500 EUR in GBP"
+    # "100 USD to INR" / "$250 to ₹" / "50 euros to dollars" / "1k usd → eur"
     m = re.search(
-        rf"(?i)(\d[\d,]*(?:\.\d+)?)\s*{_CURRENCY_TOKEN}\s*(?:to|in|into)\s*{_CURRENCY_TOKEN}",
+        rf"(?i){_AMOUNT}\s*{_CURRENCY_TOKEN}\s*{_CONVERT_CONNECTOR}\s*{_CURRENCY_TOKEN}",
         t,
     )
     if m:
@@ -172,7 +244,7 @@ def parse_convert(text: str) -> tuple[Decimal, str, str] | None:
 
     # "USD to INR" with default amount 1 (exchange rate query)
     m = re.search(
-        rf"(?i)^(?:exchange\s+rate\s+)?{_CURRENCY_TOKEN}\s*(?:to|in|into)\s*{_CURRENCY_TOKEN}$",
+        rf"(?i)^(?:exchange\s+rate\s+)?{_CURRENCY_TOKEN}\s*{_CONVERT_CONNECTOR}\s*{_CURRENCY_TOKEN}$",
         t,
     )
     if m:
@@ -197,13 +269,6 @@ def parse_convert(text: str) -> tuple[Decimal, str, str] | None:
             return Decimal("1"), from_ccy, to_ccy
 
     return None
-
-
-def _format_amount(amount: Decimal) -> str:
-    text = format(amount.normalize(), "f")
-    if "." in text:
-        text = text.rstrip("0").rstrip(".")
-    return text
 
 
 def nl_to_argv(text: str) -> list[str]:

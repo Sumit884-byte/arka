@@ -29,7 +29,17 @@ class CurrencyNormalizeTests(unittest.TestCase):
         self.assertEqual(normalize_currency("dollars"), "USD")
         self.assertEqual(normalize_currency("euros"), "EUR")
         self.assertEqual(normalize_currency("rupees"), "INR")
+        self.assertEqual(normalize_currency("rs"), "INR")
         self.assertEqual(normalize_currency("pounds"), "GBP")
+        self.assertEqual(normalize_currency("bucks"), "USD")
+        self.assertEqual(normalize_currency("quid"), "GBP")
+
+    def test_symbols(self) -> None:
+        self.assertEqual(normalize_currency("$"), "USD")
+        self.assertEqual(normalize_currency("€"), "EUR")
+        self.assertEqual(normalize_currency("£"), "GBP")
+        self.assertEqual(normalize_currency("₹"), "INR")
+        self.assertEqual(normalize_currency("¥"), "JPY")
 
     def test_unknown(self) -> None:
         self.assertIsNone(normalize_currency("monopoly money"))
@@ -46,6 +56,30 @@ class CurrencyParseTests(unittest.TestCase):
 
     def test_nl_to_pattern(self) -> None:
         parsed = parse_convert("convert 100 USD to INR")
+        self.assertIsNotNone(parsed)
+        assert parsed is not None
+        self.assertEqual(parsed[0], Decimal("100"))
+        self.assertEqual(parsed[1], "USD")
+        self.assertEqual(parsed[2], "INR")
+
+    def test_dollars_to_rs(self) -> None:
+        parsed = parse_convert("convert 250 dollars to rs")
+        self.assertIsNotNone(parsed)
+        assert parsed is not None
+        self.assertEqual(parsed[0], Decimal("250"))
+        self.assertEqual(parsed[1], "USD")
+        self.assertEqual(parsed[2], "INR")
+
+    def test_dollars_ot_rs_typo(self) -> None:
+        parsed = parse_convert("convert 250 dollars ot rs")
+        self.assertIsNotNone(parsed)
+        assert parsed is not None
+        self.assertEqual(parsed[0], Decimal("250"))
+        self.assertEqual(parsed[1], "USD")
+        self.assertEqual(parsed[2], "INR")
+
+    def test_arka_prefix(self) -> None:
+        parsed = parse_convert("arka convert 100 USD to INR")
         self.assertIsNotNone(parsed)
         assert parsed is not None
         self.assertEqual(parsed[0], Decimal("100"))
@@ -87,6 +121,77 @@ class CurrencyParseTests(unittest.TestCase):
     def test_nl_to_argv(self) -> None:
         self.assertEqual(nl_to_argv("convert 100 USD to INR"), ["100", "USD", "INR"])
         self.assertEqual(nl_to_argv("hello world"), [])
+
+    def test_symbol_before_amount(self) -> None:
+        parsed = parse_convert("convert $250 to ₹")
+        self.assertIsNotNone(parsed)
+        assert parsed is not None
+        self.assertEqual(parsed[0], Decimal("250"))
+        self.assertEqual(parsed[1], "USD")
+        self.assertEqual(parsed[2], "INR")
+
+    def test_symbol_after_amount(self) -> None:
+        parsed = parse_convert("convert 250 $ to rs")
+        self.assertIsNotNone(parsed)
+        assert parsed is not None
+        self.assertEqual(parsed[0], Decimal("250"))
+        self.assertEqual(parsed[1], "USD")
+        self.assertEqual(parsed[2], "INR")
+
+    def test_euro_to_dollars(self) -> None:
+        parsed = parse_convert("convert €100 to dollars")
+        self.assertIsNotNone(parsed)
+        assert parsed is not None
+        self.assertEqual(parsed[0], Decimal("100"))
+        self.assertEqual(parsed[1], "EUR")
+        self.assertEqual(parsed[2], "USD")
+
+    def test_pound_to_inr_no_convert_prefix(self) -> None:
+        parsed = parse_convert("£50 to inr")
+        self.assertIsNotNone(parsed)
+        assert parsed is not None
+        self.assertEqual(parsed[0], Decimal("50"))
+        self.assertEqual(parsed[1], "GBP")
+        self.assertEqual(parsed[2], "INR")
+
+    def test_k_shorthand_with_arrow(self) -> None:
+        parsed = parse_convert("convert 1k usd → eur")
+        self.assertIsNotNone(parsed)
+        assert parsed is not None
+        self.assertEqual(parsed[0], Decimal("1000"))
+        self.assertEqual(parsed[1], "USD")
+        self.assertEqual(parsed[2], "EUR")
+
+    def test_bucks_to_rupees(self) -> None:
+        parsed = parse_convert("250 bucks to rupees")
+        self.assertIsNotNone(parsed)
+        assert parsed is not None
+        self.assertEqual(parsed[0], Decimal("250"))
+        self.assertEqual(parsed[1], "USD")
+        self.assertEqual(parsed[2], "INR")
+
+    def test_quid_to_usd(self) -> None:
+        parsed = parse_convert("100 quid to usd")
+        self.assertIsNotNone(parsed)
+        assert parsed is not None
+        self.assertEqual(parsed[0], Decimal("100"))
+        self.assertEqual(parsed[1], "GBP")
+        self.assertEqual(parsed[2], "USD")
+
+    def test_ot_typo_connector(self) -> None:
+        parsed = parse_convert("250 $ ot rs")
+        self.assertIsNotNone(parsed)
+        assert parsed is not None
+        self.assertEqual(parsed[1], "USD")
+        self.assertEqual(parsed[2], "INR")
+
+    def test_grand_shorthand(self) -> None:
+        parsed = parse_convert("2 grand bucks to inr")
+        self.assertIsNotNone(parsed)
+        assert parsed is not None
+        self.assertEqual(parsed[0], Decimal("2000"))
+        self.assertEqual(parsed[1], "USD")
+        self.assertEqual(parsed[2], "INR")
 
 
 class CurrencyFetchTests(unittest.TestCase):
@@ -138,6 +243,15 @@ class CurrencyRoutingTests(unittest.TestCase):
         assert hit is not None
         self.assertEqual(hit.split()[0], "currency_convert")
 
+    def test_symbolic_route_dollars_to_rs_typo(self) -> None:
+        hit = route_currency_convert("convert 250 dollars ot rs")
+        self.assertIsNotNone(hit)
+        assert hit is not None
+        self.assertEqual(hit.split()[0], "currency_convert")
+        self.assertIn("250", hit)
+        self.assertIn("USD", hit)
+        self.assertIn("INR", hit)
+
     def test_symbolic_route_what_is(self) -> None:
         hit = route_currency_convert("what is 500 EUR in GBP")
         self.assertIsNotNone(hit)
@@ -148,11 +262,34 @@ class CurrencyRoutingTests(unittest.TestCase):
     def test_symbolic_route_non_currency(self) -> None:
         self.assertIsNone(route_currency_convert("what is the weather today"))
 
+    def test_symbolic_route_symbols_and_shorthand(self) -> None:
+        for query, amount, from_ccy, to_ccy in (
+            ("convert $250 to ₹", "250", "USD", "INR"),
+            ("250 bucks to rupees", "250", "USD", "INR"),
+            ("100 quid to usd", "100", "GBP", "USD"),
+            ("£50 to inr", "50", "GBP", "INR"),
+            ("convert 1k usd → eur", "1000", "USD", "EUR"),
+        ):
+            with self.subTest(query=query):
+                hit = route_currency_convert(query)
+                self.assertIsNotNone(hit)
+                assert hit is not None
+                self.assertEqual(hit.split()[0], "currency_convert")
+                self.assertIn(amount, hit)
+                self.assertIn(from_ccy, hit)
+                self.assertIn(to_ccy, hit)
+
     def test_router_symbolic_only(self) -> None:
         for query in (
             "convert 100 USD to INR",
+            "convert 250 dollars to rs",
+            "convert 250 dollars ot rs",
+            "arka convert 100 USD to INR",
             "what is 500 EUR in GBP",
             "currency 50 euros to dollars",
+            "convert $250 to ₹",
+            "250 bucks to rupees",
+            "£50 to inr",
         ):
             with self.subTest(query=query):
                 with mock.patch.dict(os.environ, {"ROUTE_MODE": "symbolic_only"}, clear=False):

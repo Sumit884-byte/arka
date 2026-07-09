@@ -228,6 +228,7 @@ def route_generate_thumbnail(cmd: str) -> str | None:
 def route_offline_extras(cmd: str) -> str | None:
     """Try supplemental NL routes not always available via fish bridge."""
     for fn in (
+        route_currency_convert,
         route_remind,
         route_routines,
         route_chart,
@@ -241,7 +242,6 @@ def route_offline_extras(cmd: str) -> str | None:
         route_timer,
         route_search_web,
         route_product_reviewer,
-        route_currency_convert,
         route_agent_skills,
     ):
         hit = fn(cmd)
