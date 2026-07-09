@@ -1038,6 +1038,11 @@ def resolve_image_path(name: str) -> Path:
 
 
 def _has_describe_intent(text: str) -> bool:
+    if re.search(
+        r"(?i)\b(what\s+(?:do\s+)?you\s+think|your\s+(?:thoughts?|opinion|take)|think\s+about|opinion\s+on)\b",
+        text,
+    ):
+        return False
     return bool(
         _DESCRIBE_VERB.match(text.strip())
         or re.search(
@@ -1046,6 +1051,16 @@ def _has_describe_intent(text: str) -> bool:
             text,
         )
     )
+
+
+_PAGE_URL = re.compile(
+    r"(?i)(?:linkedin\.com|twitter\.com|x\.com|facebook\.com|instagram\.com|reddit\.com|"
+    r"youtube\.com/watch|youtu\.be/|tiktok\.com|threads\.net|medium\.com/@)"
+)
+
+
+def _is_page_url(url: str) -> bool:
+    return bool(_PAGE_URL.search(url))
 
 
 def _default_prompt_for_source(source: str) -> str:
@@ -1070,6 +1085,8 @@ def parse_describe_request(text: str) -> tuple[str | None, str]:
     url_m = re.search(r"(https?://[^\s\"']+)", t, re.I)
     if url_m:
         url = url_m.group(1).rstrip(".,)")
+        if _is_page_url(url):
+            return None, DEFAULT_PROMPT
         if _has_describe_intent(t):
             question = _strip_describe_words(t, url) or DEFAULT_PROMPT
             return url, question

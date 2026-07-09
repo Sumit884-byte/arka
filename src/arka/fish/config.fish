@@ -1577,6 +1577,20 @@ function _arka_confirm_risky_action --description "Confirm install/delete/send/d
     return 0
 end
 
+function _arka_run_shell_string --description "Run a shell command string; apostrophe-safe for simple commands (internal)"
+    set -l cmd (string trim -- "$argv[1]")
+    test -z "$cmd"; and return 1
+    if string match -qr '[|;&<>$`()]' -- "$cmd"
+        eval $cmd
+    else
+        set -l tokens (string split " " -- "$cmd")
+        test (count $tokens) -eq 0; and return 1
+        set -l bin $tokens[1]
+        set -e tokens[1]
+        $bin $tokens
+    end
+end
+
 function _agent_exec_shell_cmd --description "Execute shell only; prompt if __agent_classify says dangerous"
     argparse 'y/yes' -- $argv
     or return
@@ -1604,7 +1618,7 @@ function _agent_exec_shell_cmd --description "Execute shell only; prompt if __ag
             end
         end
     end
-    eval $cmd
+    _arka_run_shell_string "$cmd"
 end
 
 # --- Modular fallback utilities (shared by agent, media, Spotify, screenshots) ---
@@ -1706,12 +1720,9 @@ function _agent_dispatch_one --description "Run one skill by name or shell via _
     set -l tokens (string split " " -- "$cmd_trim")
     set -l cleaned
     for t in $tokens
-        set -a cleaned -- (_agent_strip_quotes "$t")
+        set -a cleaned (_agent_strip_quotes "$t")
     end
-    set -l tokens
-    for t in $cleaned
-        set -a tokens -- $t
-    end
+    set -l tokens $cleaned
     set -l first $tokens[1]
     if _arka_is_builtin_skill "$first"
         if test "$first" = pdf_ask
@@ -1787,7 +1798,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         agent_remember agent_recall agent_memory agent_trace agent_why agent_last \
         agent_resume agent_research agent_nudge agent_watch agent_routine agent_fanout \
         agent_code agent_handoff agent_browser transcript_ask media_ask \
-        meeting_agent study_agent inbox_agent compare_agent profession pr_check \
+        meeting_agent study_agent inbox_agent compare_agent profession pr_check github_repo \
         arka_ask semantic_memory supermemory speak_research voice_session handoff_notify remind routines predictions stock \
         rag_setup rag_status voice_agent wake_control \
         agent_ask web_answer deep_web_answer web_essay calc chat_reset set_location files_preference_help google \
@@ -2028,7 +2039,7 @@ function _agent_loop_execute --description "Run one loop command; prints output,
             echo "[skipped: security confirm declined]"
             return 2
         end
-        set -l out (eval $cmd 2>&1)
+        set -l out (_arka_run_shell_string "$cmd" 2>&1)
         set -l st $status
         printf '%s' (_agent_loop_truncate "$out")
         return $st
@@ -2040,7 +2051,7 @@ function _agent_loop_execute --description "Run one loop command; prints output,
             return 2
         end
         if set -q _flag_y
-            set -l out (eval $cmd 2>&1)
+            set -l out (_arka_run_shell_string "$cmd" 2>&1)
             set -l st $status
             printf '%s' (_agent_loop_truncate "$out")
             return $st
@@ -2051,7 +2062,7 @@ function _agent_loop_execute --description "Run one loop command; prints output,
         return $st
     end
 
-    set -l out (eval $cmd 2>&1)
+    set -l out (_arka_run_shell_string "$cmd" 2>&1)
     set -l st $status
     printf '%s' (_agent_loop_truncate "$out")
     return $st
@@ -2387,7 +2398,7 @@ $files_out"
         end
 
         # Run it
-        set -l output (eval $cmd 2>&1)
+        set -l output (_arka_run_shell_string "$cmd" 2>&1)
         set -l cmd_status $status
 
         if test $cmd_status -eq 0
@@ -2784,100 +2795,69 @@ export FZF_DEFAULT_OPTS='--height 40% --border --reverse'
 alias o='gnome-text-editor'
 
 function ai-models --description "List available AI models, providers, and limits"
-    echo (set_color --bold blue)"AI Provider & Model Reference"(set_color normal)
-    echo (set_color cyan)"--------------------------------------------------------------------------------"(set_color normal)
-    printf "%-10s | %-25s | %-30s\n" "Provider" "Model ID" "Typical Free Tier Limits"
-    echo (set_color cyan)"-----------|---------------------------|----------------------------------------"(set_color normal)
-    printf "%-10s | %-25s | %-30s\n" "Gemini" "gemini-2.0-flash" "15 RPM, 1M TPM, 1500 RPD"
-    printf "%-10s | %-25s | %-30s\n" "Gemini" "gemini-1.5-flash" "15 RPM, 1M TPM, 1500 RPD"
-    printf "%-10s | %-25s | %-30s\n" "Groq" "llama-3.3-70b-versatile" "30 RPM, 6k TPM"
-    printf "%-10s | %-25s | %-30s\n" "Groq" "llama-3.1-8b-instant" "fast, 128K context"
-    printf "%-10s | %-25s | %-30s\n" "Ollama" "llama3.2:1b" "Unlimited (Local Hardware)"
-    echo (set_color cyan)"--------------------------------------------------------------------------------"(set_color normal)
-    echo "RPM = Requests Per Minute | TPM = Tokens Per Minute | RPD = Requests Per Day"
+    set -l py (_arka_python)
+    set -l script (_arka_py_script arka_llm.py)
+    echo (set_color --bold blue)"AI Provider Reference"(set_color normal)
+    echo ""
+    if test -f "$script"
+        $py $script providers 2>/dev/null | while read -l line
+            set -l parts (string split \t "$line")
+            if test (count $parts) -lt 2
+                echo $line
+                continue
+            end
+            if test "$parts[1]" = display_name
+                echo (set_color cyan)"$line"(set_color normal)
+                continue
+            end
+            set -l mark (set_color brblack)" "(set_color normal)
+            if test "$parts[3]" = yes
+                set mark (set_color green)"✓"(set_color normal)
+            end
+            echo "  $mark $parts[2] ($parts[1]) — default: $parts[4]"
+        end
+    else
+        echo "  anthropic, openai, gemini, groq, xai, deepseek, moonshot, zai,"
+        echo "  minimax, venice, bedrock, azure, openrouter, litellm, ollama, lmstudio"
+    end
+    echo ""
+    echo (set_color cyan)"Chain:"(set_color normal) $py $script models"
+    echo (set_color cyan)"Live Gemini:"(set_color normal) $py $script models --gemini-live"
 end
 
 function ai-status --description "Show current AI provider and model in use"
+    set -l py (_arka_python)
+    set -l script (_arka_py_script arka_llm.py)
     echo (set_color --bold blue)"━━━ AI Status ━━━"(set_color normal)
     echo ""
-    
-    # Check available providers
-    set -l available_providers
-    set -l primary_provider ""
-    set -l primary_model ""
-    
-    # Check Gemini (only if key is actually set with content)
-    if test -n "$GEMINI_API_KEY"
-        set -a available_providers "Gemini"
-        if test -z "$primary_provider"
-            set primary_provider "Gemini"
-            set primary_model "gemini-2.0-flash"
-        end
+    echo (set_color cyan)"  Configured providers:"(set_color normal)
+    set -l configured_lines
+    if test -f "$script"
+        set configured_lines ($py $script providers 2>/dev/null | string match -r '\tyes\t')
     end
-    
-    # Check Groq
-    if test -n "$GROQ_API_KEY"
-        set -a available_providers "Groq"
-        if test -z "$primary_provider"
-            set primary_provider "Groq"
-            set primary_model "llama-3.3-70b-versatile"
-        end
-    end
-    
-    # Check Ollama (local server or key)
-    if test -n "$OLLAMA_API_KEY"
-        set -a available_providers "Ollama"
-        if test -z "$primary_provider"
-            set primary_provider "Ollama"
-            set primary_model "llama3.2:1b"
-        end
-    else
-        # Also check if Ollama is running locally
-        if curl -s http://localhost:11434/api/tags &>/dev/null
-            set -a available_providers "Ollama"
-            if test -z "$primary_provider"
-                set primary_provider "Ollama"
-                set primary_model "llama3.2:1b"
-            end
-        end
-    end
-    
-    # Display available providers
-    echo (set_color cyan)"  Available Providers:"(set_color normal)
-    if test (count $available_providers) -eq 0
+    if test (count $configured_lines) -eq 0
         echo (set_color red)"    None configured"(set_color normal)
+        echo (set_color yellow)"    Add keys to $_ARKA_CFG/.env — run: ai-models"(set_color normal)
     else
-        for provider in $available_providers
-            echo (set_color green)"    ✓ $provider"(set_color normal)
+        for line in $configured_lines
+            set -l parts (string split \t "$line")
+            echo (set_color green)"    ✓ $parts[2] ($parts[1]) — default $parts[4]"(set_color normal)
         end
     end
-    
     echo ""
-    echo (set_color cyan)"  Primary (First Available):"(set_color normal)
-    if test -z "$primary_provider"
-        echo (set_color red)"    No AI provider configured"(set_color normal)
-        echo ""
-        echo (set_color yellow)"  To configure, add to $_ARKA_CFG/.env:"(set_color normal)
-        echo (set_color brblack)"    GEMINI_API_KEY=your_key_here"(set_color normal)
-        echo (set_color brblack)"    GROQ_API_KEY=your_key_here"(set_color normal)
-        echo (set_color brblack)"    OLLAMA_API_KEY=your_key_here"(set_color normal)
-    else
-        echo (set_color --bold green)"    $primary_provider → $primary_model"(set_color normal)
-    end
-    
-    echo ""
-    echo (set_color cyan)"  Current Preference:"(set_color normal)
+    echo (set_color cyan)"  Current preference:"(set_color normal)
     if test -n "$AI_PREFERRED_PROVIDER" -a -n "$AI_PREFERRED_MODEL"
         echo (set_color --bold green)"    $AI_PREFERRED_PROVIDER → $AI_PREFERRED_MODEL"(set_color normal)
     else
         echo (set_color brblack)"    Not set (using auto-fallback)"(set_color normal)
     end
-    
     echo ""
-    echo (set_color cyan)"  Fallback Order:"(set_color normal)
-    echo (set_color brblack)"    1. Gemini (gemini-2.0-flash)"(set_color normal)
-    echo (set_color brblack)"    2. Groq (llama-3.3-70b-versatile)"(set_color normal)
-    echo (set_color brblack)"    3. Ollama (llama3.2:1b)"(set_color normal)
+    echo (set_color cyan)"  Active / fallback chain:"(set_color normal)
+    if test -f "$script"
+        $py $script models 2>/dev/null | head -8 | while read -l row
+            echo (set_color brblack)"    $row"(set_color normal)
+        end
+    end
 end
 
 function ai-pref --description "Set preferred AI provider and model"
@@ -2887,36 +2867,26 @@ function ai-pref --description "Set preferred AI provider and model"
     if test (count $argv) -eq 0
         echo "Usage: ai-pref <provider> [model]"
         echo ""
-        echo (set_color cyan)"Available providers:"(set_color normal)
-        echo "  gemini  - Google Gemini"
-        echo "  groq    - Groq (Llama models)"
-        echo "  ollama  - Local Ollama"
-        echo ""
-        echo (set_color cyan)"Available models:"(set_color normal)
-        echo "  gemini:"
-        echo "    gemini-2.0-flash"
-        echo "    gemini-1.5-flash"
-        echo "  groq:"
-        echo "    llama-3.3-70b-versatile"
-        echo "    llama-3.1-8b-instant"
-        echo "  ollama:"
-        echo "    llama3.2:1b"
-        echo "    llama3.2:3b"
-        echo "    mistral"
+        ai-models
         echo ""
         echo (set_color cyan)"Examples:"(set_color normal)
-        echo "  ai-pref groq                    # Use Groq with default model"
-        echo "  ai-pref groq llama-3.1-8b-instant    # Use Groq with specific model"
+        echo "  ai-pref openrouter anthropic/claude-3.5-sonnet"
+        echo "  ai-pref anthropic claude-sonnet-4-20250514"
         echo "  ai-pref gemini gemini-2.0-flash"
-        echo "  ai-pref ollama llama3.2:1b"
-        echo "  ai-pref clear                  # Clear preference, use auto-fallback"
+        echo "  ai-pref clear"
         return 0
     end
     
-    set -l arg1 $argv[1]
+    set -l arg1 (string lower $argv[1])
+    if test "$arg1" = kimi
+        set arg1 moonshot
+    end
+    if test "$arg1" = google
+        set arg1 gemini
+    end
     
     # Clear preference
-    if test "$arg1" = "clear"
+    if test "$arg1" = clear
         set -gx AI_PREFERRED_PROVIDER ""
         set -gx AI_PREFERRED_MODEL ""
         if test -f $_ARKA_CFG/.env
@@ -2927,53 +2897,40 @@ function ai-pref --description "Set preferred AI provider and model"
         return 0
     end
     
-    # Set provider
-    switch $arg1
-        case gemini
-            set provider "gemini"
-            set model $argv[2]
-            if test -z "$model"
-                set model "gemini-2.0-flash"
+    set -l py (_arka_python)
+    set -l script (_arka_py_script arka_llm.py)
+    set -l def ""
+    if test -f "$script"
+        set -l row ($py $script providers 2>/dev/null | string match -r "^$arg1\t")
+        if test -n "$row"
+            set -l parts (string split \t "$row")
+            if test (count $parts) -ge 4
+                set provider $parts[1]
+                set model $argv[2]
+                test -z "$model"; and set model $parts[4]
             end
-        case groq
-            set provider "groq"
-            set model $argv[2]
-            if test -z "$model"
-                set model "llama-3.3-70b-versatile"
-            end
-        case ollama
-            set provider "ollama"
-            set model $argv[2]
-            if test -z "$model"
-                set model "llama3.2:1b"
-            end
-        case '*'
-            echo (set_color red)"Unknown provider: $arg1"(set_color normal)
-            echo "Use 'ai-pref' without arguments to see available options."
-            return 1
-    end
-    
-    # Validate model
-    if test -n "$model"
-        set -gx AI_PREFERRED_PROVIDER "$provider"
-        set -gx AI_PREFERRED_MODEL "$model"
-        
-        # Save permanently to $_ARKA_CFG/.env
-        if test -f $_ARKA_CFG/.env
-            set -l env_content (cat $_ARKA_CFG/.env | grep -v '^AI_PREFERRED_PROVIDER=' | grep -v '^AI_PREFERRED_MODEL=')
-            printf "%s\n" $env_content > $_ARKA_CFG/.env
-            echo "AI_PREFERRED_PROVIDER=$provider" >> $_ARKA_CFG/.env
-            echo "AI_PREFERRED_MODEL=$model" >> $_ARKA_CFG/.env
-        else
-            echo "AI_PREFERRED_PROVIDER=$provider" > $_ARKA_CFG/.env
-            echo "AI_PREFERRED_MODEL=$model" >> $_ARKA_CFG/.env
         end
-        
-        echo (set_color --bold green)"✓ Preference set & saved permanently: $provider → $model"(set_color normal)
-    else
-        echo (set_color red)"Invalid model: $model"(set_color normal)
+    end
+    if test -z "$provider"
+        echo (set_color red)"Unknown provider: $arg1"(set_color normal)
+        echo "Run ai-models for supported slugs."
         return 1
     end
+
+    set -gx AI_PREFERRED_PROVIDER "$provider"
+    set -gx AI_PREFERRED_MODEL "$model"
+
+    if test -f $_ARKA_CFG/.env
+        set -l env_content (cat $_ARKA_CFG/.env | grep -v '^AI_PREFERRED_PROVIDER=' | grep -v '^AI_PREFERRED_MODEL=')
+        printf "%s\n" $env_content > $_ARKA_CFG/.env
+        echo "AI_PREFERRED_PROVIDER=$provider" >> $_ARKA_CFG/.env
+        echo "AI_PREFERRED_MODEL=$model" >> $_ARKA_CFG/.env
+    else
+        echo "AI_PREFERRED_PROVIDER=$provider" > $_ARKA_CFG/.env
+        echo "AI_PREFERRED_MODEL=$model" >> $_ARKA_CFG/.env
+    end
+
+    echo (set_color --bold green)"✓ Preference set & saved permanently: $provider → $model"(set_color normal)
 end
 
 # --- Virtual Environment Skills ---
@@ -6085,6 +6042,25 @@ function pr_check --description "PR diff, CI status, explain failures, babysit u
     end
 end
 
+function github_repo --description "Recent GitHub repo commits and modified files"
+    set -l py (_arka_python)
+    set -l script (_arka_py_script arka_github_repo.py)
+    if test (count $argv) -eq 0
+        echo "Usage: github_repo activity owner/repo [--days N]"
+        echo "NL: arka tell what files changed in 2 days for https://github.com/owner/repo"
+        return 0
+    end
+    set -l answer (_arka_capture_output $py $script $argv)
+    set -l st $status
+    if test $st -ne 0
+        return $st
+    end
+    if test -z "$answer"
+        return 1
+    end
+    _arka_print_answer_block "$answer" "GitHub activity"
+end
+
 function disk_usage --description "Analyze disk usage of current or specified directory"
     set -l target "."
     if test (count $argv) -gt 0
@@ -8642,6 +8618,18 @@ function _agent_route_pr_check --description "Build pr_check invocation from NL 
     echo "$route"
 end
 
+function _agent_is_github_repo_request --description "True if user wants GitHub repo activity (commits/files) (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_github_repo.py) route "$argv[1]" 2>/dev/null | string trim)
+    test -n "$route"
+end
+
+function _agent_route_github_repo --description "Build github_repo invocation from NL (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_github_repo.py) route "$argv[1]" 2>/dev/null | string trim)
+    echo "$route"
+end
+
 function _agent_youtube_limit_digit --description "Convert limit token to number for --limit (internal)"
     set -l tok (string lower (string trim -- "$argv[1]"))
     switch $tok
@@ -9038,6 +9026,9 @@ function _agent_is_knowledge_question --description "True if user wants a factua
         return 1
     end
     if _agent_is_pr_check_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_github_repo_request "$argv[1]"
         return 1
     end
     if _agent_is_survival_lang_request "$argv[1]"
@@ -9809,7 +9800,7 @@ function _agent_ask_gather_exec --description "Run AI-chosen gather cmd (read-on
     test -z "$cmd"; and return 1
 
     if __agent_classify "$cmd"
-        eval $cmd 2>&1
+        _arka_run_shell_string "$cmd" 2>&1
         return $status
     end
 
@@ -9819,11 +9810,11 @@ function _agent_ask_gather_exec --description "Run AI-chosen gather cmd (read-on
         return 2
     end
     if string match -qr '(?i)^(lscpu|grep|free|df |du |lsblk|lspci|uname|cat |head |tail |wc |uptime|lsb_release|sysctl|sw_vers|vm_stat|system_profiler|lsappinfo|ioreg|command |eza |batcat |rg |fd |nvidia-smi|glxinfo|vulkaninfo|ls |find |stat |file |which |type |ps |ss |netstat|lsof |journalctl|systemctl |last |w |who |dpkg -l|snap list|flatpak list|clamscan|freshclam|rkhunter|chkrootkit|crontab -l|python3.*arka_usage\.py|app_usage)' "$low"
-        eval $cmd 2>&1
+        _arka_run_shell_string "$cmd" 2>&1
         return $status
     end
     if string match -qr '(?i)(/proc/|/sys/|/etc/os-release|cpuinfo|meminfo|/var/log/)' "$low"
-        eval $cmd 2>&1
+        _arka_run_shell_string "$cmd" 2>&1
         return $status
     end
 
@@ -10670,6 +10661,79 @@ function handoff_notify --description "Handoff notifications for phone (list/rea
             _arka_talents handoff-run-notify
         case '*'
             echo "Usage: handoff_notify list|read [id]|run"
+    end
+end
+
+function session_memory --description "OpenClaw-style markdown session memory (MEMORY.md + daily notes)"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        $py (_arka_py_script arka_session_memory.py) status
+        echo ""
+        echo "Usage: session_memory append|search|context|status [text|query|goal]"
+        return 0
+    end
+    switch $argv[1]
+        case append remember note add
+            if test (count $argv) -lt 2
+                echo "Usage: session_memory append <note>"
+                return 1
+            end
+            $py (_arka_py_script arka_session_memory.py) append (string join " " $argv[2..-1])
+        case search find
+            if test (count $argv) -lt 2
+                $py (_arka_py_script arka_session_memory.py) search
+            else
+                $py (_arka_py_script arka_session_memory.py) search (string join " " $argv[2..-1])
+            end
+        case context ctx
+            if test (count $argv) -lt 2
+                echo "Usage: session_memory context <goal>"
+                return 1
+            end
+            $py (_arka_py_script arka_session_memory.py) context (string join " " $argv[2..-1])
+        case status
+            $py (_arka_py_script arka_session_memory.py) status
+        case '*'
+            $py (_arka_py_script arka_session_memory.py) $argv
+    end
+end
+
+function heartbeat --description "Agent health — last activity, routines, memory stats"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        $py (_arka_py_script arka_heartbeat.py) status
+        return $status
+    end
+    switch $argv[1]
+        case ping touch
+            if test (count $argv) -ge 2
+                $py (_arka_py_script arka_heartbeat.py) ping (string join " " $argv[2..-1])
+            else
+                $py (_arka_py_script arka_heartbeat.py) ping manual.ping
+            end
+        case status health
+            $py (_arka_py_script arka_heartbeat.py) status
+        case '*'
+            $py (_arka_py_script arka_heartbeat.py) $argv
+    end
+end
+
+function webhook --description "Verified webhook ingress for external channels (opt-in)"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        $py (_arka_py_script arka_webhook.py) status
+        echo ""
+        echo "Usage: webhook serve | status"
+        echo "Set WEBHOOK_ENABLED=1 and WEBHOOK_TOKEN in .env first."
+        return 0
+    end
+    switch $argv[1]
+        case serve start run
+            $py (_arka_py_script arka_webhook.py) serve
+        case status
+            $py (_arka_py_script arka_webhook.py) status
+        case '*'
+            $py (_arka_py_script arka_webhook.py) $argv
     end
 end
 
@@ -11592,6 +11656,13 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         set -l prr (_agent_route_pr_check "$cmd")
         if test -n "$prr"
             echo "skill|$prr|PR diff / CI / babysit"
+            return
+        end
+    end
+    if _agent_is_github_repo_request "$cmd"
+        set -l gr (_agent_route_github_repo "$cmd")
+        if test -n "$gr"
+            echo "skill|$gr|GitHub repo commits and modified files"
             return
         end
     end
@@ -13141,13 +13212,20 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                 case tell explain describe
                     if test (count $argv) -ge 2
                         set -l raw (string join " " $argv[2..-1])
-                        set -l nl "describe $raw"
-                        if _agent_is_describe_image_request "$nl"
-                            set -l dcmd (_agent_build_describe_image_cmd "$nl")
+                        if _agent_is_describe_image_request "$raw"
+                            set -l dcmd (_agent_build_describe_image_cmd "$raw")
                             set -l show $raw
                             echo (set_color yellow)"💡 [Image → describe_image $show]"(set_color normal)
                             _agent_dispatch_one "$dcmd"
                             return $status
+                        end
+                        if _agent_is_github_repo_request "$raw"
+                            set -l gr (_agent_route_github_repo "$raw")
+                            if test -n "$gr"
+                                echo (set_color yellow)"💡 [GitHub repo activity]"(set_color normal)
+                                _agent_dispatch_one "$gr"
+                                return $status
+                            end
                         end
                         set -l q $raw
                         set q (string replace -r -i '^me\s+about\s+' '' "$q")
@@ -14343,6 +14421,9 @@ function agent --description "Run commands safely: executes safe commands automa
         set route_source offline
     else if _agent_is_pr_check_request "$cmd"
         set interpreted (_agent_route_pr_check "$cmd")
+        set route_source offline
+    else if _agent_is_github_repo_request "$cmd"
+        set interpreted (_agent_route_github_repo "$cmd")
         set route_source offline
     else if _agent_is_survival_lang_request "$cmd"
         set interpreted (_agent_build_survival_lang_cmd "$cmd")

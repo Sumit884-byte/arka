@@ -73,17 +73,42 @@ def _http_ok(url: str, *, timeout: float = 3.0) -> bool:
         return False
 
 
+def _openai_models_url(base: str) -> str:
+    base = (base or "").rstrip("/")
+    if not base:
+        return ""
+    if base.endswith("/v1"):
+        return f"{base}/models"
+    return f"{base}/v1/models"
+
+
 def is_reachable(provider: str) -> bool:
     provider = provider.lower()
     if provider == "ollama":
         return _http_ok(f"{_ollama_base_url()}/api/tags")
     if provider == "vllm":
         return _http_ok(_vllm_health_url())
+    if provider == "vllm-cloud":
+        return _vllm_cloud_ready()
+    try:
+        from arka.llm.providers import get_provider, provider_base_url
+
+        spec = get_provider(provider)
+        if spec and spec.kind == "local_openai":
+            url = _openai_models_url(provider_base_url(spec))
+            if url:
+                return _http_ok(url)
+    except ImportError:
+        pass
     return False
 
 
 def _display_name(provider: str) -> str:
-    return {"ollama": "Ollama", "vllm": "vLLM"}.get(provider.lower(), provider.title())
+    return {
+        "ollama": "Ollama",
+        "vllm": "vLLM",
+        "vllm-cloud": "vLLM Cloud",
+    }.get(provider.lower(), provider.title())
 
 
 def _vllm_log_path() -> Path:
@@ -108,6 +133,62 @@ def _vllm_models_url() -> str:
     if not base.endswith("/v1"):
         base = f"{base}/v1"
     return f"{base}/models"
+
+
+def _vllm_cloud_base_raw() -> str:
+    base = _env("VLLM_CLOUD_URL") or _env("VLLM_CLOUD_API_URL")
+    if not base:
+        return ""
+    if not base.startswith("http"):
+        base = f"https://{base}"
+    return base.rstrip("/")
+
+
+def _vllm_cloud_api_base() -> str:
+    base = _vllm_cloud_base_raw()
+    if not base:
+        return ""
+    if base.endswith("/v1"):
+        return base
+    return f"{base}/v1"
+
+
+def _vllm_cloud_health_url() -> str:
+    base = _vllm_cloud_base_raw()
+    if not base:
+        return ""
+    root = base[:-3] if base.endswith("/v1") else base
+    return f"{root}/health"
+
+
+def _vllm_cloud_models_url() -> str:
+    api = _vllm_cloud_api_base()
+    return f"{api}/models" if api else ""
+
+
+def _vllm_cloud_request(url: str, *, timeout: float = 5.0) -> urllib.request.Request:
+    req = urllib.request.Request(url, method="GET")
+    key = _env("VLLM_CLOUD_API_KEY")
+    if key:
+        req.add_header("Authorization", f"Bearer {key}")
+    return req
+
+
+def _vllm_cloud_ready() -> bool:
+    models_url = _vllm_cloud_models_url()
+    if not models_url:
+        return False
+    health_url = _vllm_cloud_health_url()
+    if health_url and _http_ok(health_url):
+        return True
+    try:
+        req = _vllm_cloud_request(models_url)
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            models = data.get("data") if isinstance(data, dict) else None
+            return bool(models)
+    except (urllib.error.URLError, OSError, TimeoutError, ValueError, json.JSONDecodeError):
+        return False
 
 
 def _vllm_ready() -> bool:
@@ -247,10 +328,25 @@ class LlmServerSession:
             return True
         if provider in self._used:
             return is_reachable(provider)
-        if MANAGER.prepare(provider):
-            self._used.add(provider)
-            return True
-        return False
+        try:
+            from arka.telemetry import span
+        except ImportError:
+            span = None  # type: ignore[assignment,misc]
+        from contextlib import nullcontext
+
+        ctx = (
+            span(
+                "arka.inference.server.prepare",
+                attributes={"arka.inference.backend": provider},
+            )
+            if span is not None
+            else nullcontext()
+        )
+        with ctx:
+            if MANAGER.prepare(provider):
+                self._used.add(provider)
+                return True
+            return False
 
     def close(self) -> None:
         MANAGER.release_all(self._used)
@@ -359,20 +455,46 @@ def _start_vllm() -> subprocess.Popen[bytes] | None:
 def provider_available_with_servers(provider: str) -> bool:
     """Provider check that can auto-start local servers when configured."""
     provider = provider.lower()
+    try:
+        from arka.llm.api_keys import provider_has_keys
+        from arka.llm.providers import get_provider, provider_base_url
+
+        spec = get_provider(provider)
+        if spec:
+            if spec.slug == "bedrock":
+                if provider_has_keys("bedrock"):
+                    return True
+                return bool(_env("AWS_ACCESS_KEY_ID") and _env("AWS_SECRET_ACCESS_KEY"))
+            if spec.slug == "azure":
+                return bool(provider_has_keys("azure") and provider_base_url(spec))
+            if spec.kind == "local_openai":
+                return is_reachable(provider) or provider_has_keys(provider)
+            if spec.kind == "openai_compatible":
+                if spec.slug == "vllm-cloud":
+                    return bool(provider_base_url(spec))
+                if spec.slug in {"bedrock", "azure"} and not provider_base_url(spec):
+                    return provider_has_keys(provider) and bool(provider_base_url(spec))
+                return provider_has_keys(provider)
+            if spec.slug == "gemini":
+                return provider_has_keys("gemini") or bool(_env("GOOGLE_API_KEY"))
+            if spec.slug == "groq":
+                return provider_has_keys("groq")
+            if spec.slug == "ollama":
+                return is_reachable("ollama") or (auto_start_enabled() and bool(shutil.which("ollama")))
+            if spec.slug in {"openai", "anthropic"}:
+                return provider_has_keys(provider)
+        if provider == "vllm":
+            if is_reachable("vllm"):
+                return True
+            return auto_start_enabled() and bool(_env("VLLM_START_CMD"))
+        if provider == "vllm-cloud":
+            return bool(_vllm_cloud_base_raw())
+    except ImportError:
+        pass
     if provider == "gemini":
-        try:
-            from arka.llm.api_keys import provider_has_keys
-
-            return provider_has_keys("gemini") or bool(_env("GOOGLE_API_KEY"))
-        except ImportError:
-            return bool(_env("GEMINI_API_KEY") or _env("GOOGLE_API_KEY"))
+        return bool(_env("GEMINI_API_KEY") or _env("GOOGLE_API_KEY"))
     if provider == "groq":
-        try:
-            from arka.llm.api_keys import provider_has_keys
-
-            return provider_has_keys("groq")
-        except ImportError:
-            return bool(_env("GROQ_API_KEY"))
+        return bool(_env("GROQ_API_KEY"))
     if provider == "openai":
         return bool(_env("OPENAI_API_KEY"))
     if provider == "anthropic":
@@ -383,4 +505,6 @@ def provider_available_with_servers(provider: str) -> bool:
         if is_reachable("vllm"):
             return True
         return auto_start_enabled() and bool(_env("VLLM_START_CMD"))
+    if provider == "vllm-cloud":
+        return bool(_vllm_cloud_base_raw())
     return False

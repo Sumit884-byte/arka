@@ -71,7 +71,57 @@ def llm_complete(
                 return blocked
         except ImportError:
             pass
-    return _fallback_complete(system, user, temperature, task=task)
+    try:
+        from arka.telemetry import (
+            llm_http_span_attributes,
+            mark_error,
+            mark_ok,
+            parse_http_status_code,
+            set_http_span_attributes,
+            span,
+        )
+    except ImportError:
+        return _fallback_complete(system, user, temperature, task=task)
+
+    attrs = {
+        "gen_ai.system": "arka",
+        "arka.task": task or "default",
+        "gen_ai.request.temperature": temperature,
+        "arka.llm.prompt_chars": len(system) + len(user),
+    }
+    with span("arka.llm.complete", attributes=attrs) as current:
+        try:
+            text = _fallback_complete(system, user, temperature, task=task)
+        except Exception as exc:
+            code = parse_http_status_code(exc)
+            if code is not None:
+                set_http_span_attributes(current, method="POST", status_code=code)
+            mark_error(current, str(exc), exc=exc)
+            raise
+        if text.startswith("[LLM error:"):
+            code = parse_http_status_code(text)
+            if code is not None:
+                set_http_span_attributes(current, method="POST", status_code=code)
+            mark_error(current, text[:200])
+        else:
+            current.set_attribute("arka.llm.completion_chars", len(text))
+            try:
+                from arka.llm.fallback import llm_last_model
+
+                last = llm_last_model()
+                if last:
+                    current.set_attribute("gen_ai.provider.name", last[0])
+                    current.set_attribute("gen_ai.request.model", last[1])
+                    set_http_span_attributes(
+                        current,
+                        method="POST",
+                        url=llm_http_span_attributes(last[0])["http.url"],
+                        status_code=200,
+                    )
+            except ImportError:
+                set_http_span_attributes(current, method="POST", status_code=200)
+            mark_ok(current)
+        return text
 
 
 def _host_platform() -> str:
@@ -120,84 +170,111 @@ def llm_route(cmd: str, available_skills: str, aliases_list: str) -> str:
             return "impossible"
     except ImportError:
         pass
-    if not aliases_list:
-        aliases_list = env("ROUTE_ALIASES")
-    plat = _host_platform()
-    plat_hint = _platform_hint(plat)
-    system = (
-        f"You are a cross-platform shell expert on {plat} (fish shell). "
-        "Respond with ONLY the command(s) or skill name(s). "
-        "No markdown. No explanations. If no command is safe or possible, respond 'impossible'.\n"
-        f"{plat_hint}\n"
-        "If the user's request is a question, math calculation, or query that can be answered by "
-        "running a standard shell command (e.g. date, date +%Y, python3 -c \"print(...)\"), "
-        "output that exact shell command.\n"
-        "Do NOT map a request to one of the custom skills unless it is a very direct and clear match. "
-        "Unrelated or loose matches must not be mapped to skills "
-        "(e.g., do NOT map 'tell me year' to 'system_info', use date or date +%Y instead).\n"
-        f"Available Shell Aliases:\n{aliases_list}\n"
-        "Use symbolic reasoning to match and use the most appropriate shell alias if one exists.\n"
-        "CRITICAL NOTE ON ALIASES:\n"
-        "- ls is aliased to eza. eza does NOT support standard ls sorting flags like -t, -ltr, or -lt. "
-        "To sort by newest/recency, use eza --sort newest. To sort by oldest, use eza --sort oldest. "
-        "Alternatively bypass the alias via command ls -lt.\n"
-        "- cat is aliased to batcat."
+    try:
+        from arka.telemetry import mark_error, mark_ok, span
+    except ImportError:
+        span = None  # type: ignore[assignment,misc]
+
+    ctx = (
+        span(
+            "arka.route.llm",
+            attributes={"arka.task": "route", "arka.route.input_chars": len(cmd)},
+        )
+        if span is not None
+        else _null_context()
     )
-    user = (
-        f"Convert to safe shell command(s) or skill(s): '{cmd}'. "
-        f"Available skills: {available_skills}. "
-        "IMPORTANT: For multiple tasks, use '&&' between commands. "
-        "ROUTING RULES: Multi-step goals that need try/fix/retry -> goal <goal> (or loop <goal>). "
-        "'install APP' (no store named) -> install_app APP. "
-        "Python/PyPI packages -> install_uv [--cpu|--cuda] PACKAGE. "
-        "Intel/GPU driver warnings (Linux) -> fix_graphics_driver. "
-        "'install APP with apt' -> install_apt APP. "
-        "Local machine specs (specs of my pc/mac, tell me about my mac, tell me my gpu/cpu/ram) -> system_info or system_info gpu|cpu|ram|disk. "
-        "Opinion/advice questions (is my cpu good enough, should I upgrade) -> agent_ask <full question>. "
-        "Factual general-knowledge questions -> web_answer <full question> (NOT search_web). "
-        "Live CPU/RAM usage meters -> system_monitor (NOT for specs dumps). "
-        "'play <title>' -> play_movie. "
-        "Ambiguous play/media (film + music, song on spotify, etc.): pick the skill that matches user intent — "
-        "film/movie/video -> play_movie; song/soundtrack only -> play_song; spotify -> play_spotify; youtube -> play_youtube. "
-        "Example: 'play a film that has X music' -> play_movie <title> (user wants the movie, not just the track). "
-        "'generate image of X' -> generate_image X. "
-        "'generate password' -> generate_password [len]. "
-        "'save password for wifi' / generate_password save <name> -> encrypted vault. "
-        "'get password wifi' -> generate_password get <name>. "
-        "'generate video of X' -> generate_video X. "
-        "'predict opportunities in antiques/stocks/strategy' -> predictions <topic>. "
-        "'where to invest 3000 for 1 month' / 'make profit' -> predictions --domain stocks --deep <question>. "
-        "'stock invest <question>' — same as above. "
-        "'stock macro' / disaster/geopolitics questions → macro event stock impact + hold duration. "
-        "'stock funding' / 'stock competition TICKER' → recent VC/IPO deals + peer scoreboard. "
-        "'stock fundamentals TICKER' → debt/equity, ROE, P/E, margins. "
-        "'stock emotion' → net news sentiment sum + crowd behavior forecast. "
-        "'stock news/prices/analyze TICKER/dashboard' -> stock <subcommand>. "
-        "Profession NL — explicit only: 'as a nutritionist …' → profession ask nutrition …. "
-        "Professions are curated source lists (RSS, web, local repos) — not role prompts; answers cite sources. "
-        "'profession sources nutrition' lists feeds and indexes for a domain. "
-        "'I'm a doctor' is remembered; later health questions use your saved domain. "
-        "Domains: health, nutrition, startup, investor, teacher, legal, engineer, journalism, marketing, finance, counselor, chef. "
-        "'profession setup' clones and indexes investor/nutrition/startup/engineer repos for source-backed answers. "
-        "Document RAG: ingest -> doc_ingest|pdf_ingest <path> (PDF, docx, pptx, xlsx, txt, md, html, code, …). "
-        "Q&A/summarize -> doc_ask|pdf_ask [--doc NAME] <question>. "
-        "List docs -> doc_list|pdf_list. Supported formats: arka pdf formats. "
-        "ARCHIVES: extract and run FILE.zip -> extract_and_run. "
-        "Artificial Internet Enhancements (AIE): start/stop/status/cleanup -> internet_enhance [start|stop|status|cleanup] [all|click|copy|zip|classify]. "
-        "YouTube transcript -> youtube_transcript <url> [--summarize]. "
-        "Single YouTube video download -> youtube_download <url> [--audio] [--quality 1080|720|480]. "
-        "YouTube bulk download playlist/channel -> youtube_bulk download <url> [--channel] [--audio] [--wait]; "
-        "youtube_bulk start|stop|open|library|status. "
-        "Local mp3/mp4/audio -> media_transcript <path> [--summarize] [-q \"your instructions\"] (Groq/Sarvam STT + ffmpeg). "
-        "Or: arka summarize [for N words] [focus on X] <file> — default covers the entire video concisely. "
-        "Folder of media -> folder_summarize <dir> [-r] [--limit N]. "
-        "YouTube/local playlist digest -> playlist_summarize --url URL | --folder DIR. "
-        "Codebase Q&A -> codebase_ingest <project-dir> [-n name]; then doc_ask --doc codebase-NAME <question>. "
-        "Summarize web page -> summarize_url <url>. "
-        "Daily brief -> daily_brief. Wi-Fi info -> wifi_info. "
-        "Simple queries: shell commands (date, df)."
-    )
-    return llm_complete(system, user, temperature=0.1, task="route")
+    with ctx as current:
+        if not aliases_list:
+            aliases_list = env("ROUTE_ALIASES")
+        plat = _host_platform()
+        plat_hint = _platform_hint(plat)
+        system = (
+            f"You are a cross-platform shell expert on {plat} (fish shell). "
+            "Respond with ONLY the command(s) or skill name(s). "
+            "No markdown. No explanations. If no command is safe or possible, respond 'impossible'.\n"
+            f"{plat_hint}\n"
+            "If the user's request is a question, math calculation, or query that can be answered by "
+            "running a standard shell command (e.g. date, date +%Y, python3 -c \"print(...)\"), "
+            "output that exact shell command.\n"
+            "Do NOT map a request to one of the custom skills unless it is a very direct and clear match. "
+            "Unrelated or loose matches must not be mapped to skills "
+            "(e.g., do NOT map 'tell me year' to 'system_info', use date or date +%Y instead).\n"
+            f"Available Shell Aliases:\n{aliases_list}\n"
+            "Use symbolic reasoning to match and use the most appropriate shell alias if one exists.\n"
+            "CRITICAL NOTE ON ALIASES:\n"
+            "- ls is aliased to eza. eza does NOT support standard ls sorting flags like -t, -ltr, or -lt. "
+            "To sort by newest/recency, use eza --sort newest. To sort by oldest, use eza --sort oldest. "
+            "Alternatively bypass the alias via command ls -lt.\n"
+            "- cat is aliased to batcat."
+        )
+        user = (
+            f"Convert to safe shell command(s) or skill(s): '{cmd}'. "
+            f"Available skills: {available_skills}. "
+            "IMPORTANT: For multiple tasks, use '&&' between commands. "
+            "ROUTING RULES: Multi-step goals that need try/fix/retry -> goal <goal> (or loop <goal>). "
+            "'install APP' (no store named) -> install_app APP. "
+            "Python/PyPI packages -> install_uv [--cpu|--cuda] PACKAGE. "
+            "Intel/GPU driver warnings (Linux) -> fix_graphics_driver. "
+            "'install APP with apt' -> install_apt APP. "
+            "Local machine specs (specs of my pc/mac, tell me about my mac, tell me my gpu/cpu/ram) -> system_info or system_info gpu|cpu|ram|disk. "
+            "Opinion/advice questions (is my cpu good enough, should I upgrade) -> agent_ask <full question>. "
+            "Factual general-knowledge questions -> web_answer <full question> (NOT search_web). "
+            "Live CPU/RAM usage meters -> system_monitor (NOT for specs dumps). "
+            "'play <title>' -> play_movie. "
+            "Ambiguous play/media (film + music, song on spotify, etc.): pick the skill that matches user intent — "
+            "film/movie/video -> play_movie; song/soundtrack only -> play_song; spotify -> play_spotify; youtube -> play_youtube. "
+            "Example: 'play a film that has X music' -> play_movie <title> (user wants the movie, not just the track). "
+            "'generate image of X' -> generate_image X. "
+            "'generate password' -> generate_password [len]. "
+            "'save password for wifi' / generate_password save <name> -> encrypted vault. "
+            "'get password wifi' -> generate_password get <name>. "
+            "'generate video of X' -> generate_video X. "
+            "'predict opportunities in antiques/stocks/strategy' -> predictions <topic>. "
+            "'where to invest 3000 for 1 month' / 'make profit' -> predictions --domain stocks --deep <question>. "
+            "'stock invest <question>' — same as above. "
+            "'stock macro' / disaster/geopolitics questions → macro event stock impact + hold duration. "
+            "'stock funding' / 'stock competition TICKER' → recent VC/IPO deals + peer scoreboard. "
+            "'stock fundamentals TICKER' → debt/equity, ROE, P/E, margins. "
+            "'stock emotion' → net news sentiment sum + crowd behavior forecast. "
+            "'stock news/prices/analyze TICKER/dashboard' -> stock <subcommand>. "
+            "Profession NL — explicit only: 'as a nutritionist …' → profession ask nutrition …. "
+            "Professions are curated source lists (RSS, web, local repos) — not role prompts; answers cite sources. "
+            "'profession sources nutrition' lists feeds and indexes for a domain. "
+            "'I'm a doctor' is remembered; later health questions use your saved domain. "
+            "Domains: health, nutrition, startup, investor, teacher, legal, engineer, journalism, marketing, finance, counselor, chef. "
+            "'profession setup' clones and indexes investor/nutrition/startup/engineer repos for source-backed answers. "
+            "Document RAG: ingest -> doc_ingest|pdf_ingest <path> (PDF, docx, pptx, xlsx, txt, md, html, code, …). "
+            "Q&A/summarize -> doc_ask|pdf_ask [--doc NAME] <question>. "
+            "List docs -> doc_list|pdf_list. Supported formats: arka pdf formats. "
+            "ARCHIVES: extract and run FILE.zip -> extract_and_run. "
+            "Artificial Internet Enhancements (AIE): start/stop/status/cleanup -> internet_enhance [start|stop|status|cleanup] [all|click|copy|zip|classify]. "
+            "YouTube transcript -> youtube_transcript <url> [--summarize]. "
+            "Single YouTube video download -> youtube_download <url> [--audio] [--quality 1080|720|480]. "
+            "YouTube bulk download playlist/channel -> youtube_bulk download <url> [--channel] [--audio] [--wait]; "
+            "youtube_bulk start|stop|open|library|status. "
+            "Local mp3/mp4/audio -> media_transcript <path> [--summarize] [-q \"your instructions\"] (Groq/Sarvam STT + ffmpeg). "
+            "Or: arka summarize [for N words] [focus on X] <file> — default covers the entire video concisely. "
+            "Folder of media -> folder_summarize <dir> [-r] [--limit N]. "
+            "YouTube/local playlist digest -> playlist_summarize --url URL | --folder DIR. "
+            "Codebase Q&A -> codebase_ingest <project-dir> [-n name]; then doc_ask --doc codebase-NAME <question>. "
+            "Summarize web page -> summarize_url <url>. "
+            "Daily brief -> daily_brief. Wi-Fi info -> wifi_info. "
+            "Simple queries: shell commands (date, df)."
+        )
+        result = llm_complete(system, user, temperature=0.1, task="route")
+        if span is not None:
+            current.set_attribute("arka.route.result", result[:500])
+            if result == "impossible":
+                mark_error(current, "impossible")
+            else:
+                mark_ok(current)
+        return result
+
+
+def _null_context():
+    from contextlib import nullcontext
+
+    return nullcontext()
 
 
 def cmd_active_model(_args: argparse.Namespace) -> int:
@@ -277,6 +354,33 @@ def cmd_models(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_providers(_args: argparse.Namespace) -> int:
+    from arka.llm.providers import provider_specs
+
+    print("slug\tdisplay_name\tconfigured\tdefault_model\tenv_keys")
+    for spec in provider_specs():
+        ok = "yes" if provider_available(spec.slug) else "no"
+        keys = ",".join(spec.env_keys[:3])
+        print(f"{spec.slug}\t{spec.display_name}\t{ok}\t{spec.default_model}\t{keys}")
+    return 0
+
+
+def cmd_trace_status(_args: argparse.Namespace) -> int:
+    try:
+        from arka.telemetry import spans_enabled, trace_status
+    except ImportError:
+        print("enabled\tfalse")
+        print("configured\tfalse")
+        print("packages\tmissing")
+        return 0
+    status = trace_status()
+    for key, value in status.items():
+        print(f"{key}\t{value}")
+    if spans_enabled() and status.get("configured") != "true":
+        print("hint\tpip install 'arka-agent[observability]'")
+    return 0
+
+
 def cmd_reset(_args: argparse.Namespace) -> int:
     reset_llm_exhaustion()
     print("LLM exhaustion cache cleared.")
@@ -341,6 +445,12 @@ def main() -> int:
 
     p_reset = sub.add_parser("reset-exhaustion", help="Clear session provider/model exhaustion cache")
     p_reset.set_defaults(func=cmd_reset)
+
+    p_providers = sub.add_parser("providers", help="List supported LLM providers and env keys")
+    p_providers.set_defaults(func=cmd_providers)
+
+    p_trace = sub.add_parser("trace-status", help="Show OpenTelemetry / SigNoz tracing status")
+    p_trace.set_defaults(func=cmd_trace_status)
 
     args = parser.parse_args()
     return args.func(args)

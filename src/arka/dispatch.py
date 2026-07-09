@@ -39,29 +39,47 @@ def run_skill(skill_line: str) -> int:
     head = parts[0]
     rest = parts[1:]
 
-    if head in ("generate_password", "password", "pass"):
-        return run_password(rest)
+    try:
+        from arka.telemetry import mark_error, mark_ok, span
+    except ImportError:
+        span = None  # type: ignore[assignment,misc]
+    from contextlib import nullcontext
 
-    if head == "web_answer":
-        return run_chat_ask(" ".join(rest))
+    skill_ctx = (
+        span(
+            f"arka.skill.{head}",
+            attributes={"arka.skill.name": head, "arka.skill.line": skill_line[:500]},
+        )
+        if span is not None
+        else nullcontext()
+    )
+    with skill_ctx as current:
+        if head in ("generate_password", "password", "pass"):
+            code = run_password(rest)
+        elif head == "web_answer":
+            code = run_chat_ask(" ".join(rest))
+        elif head == "deep_web_answer":
+            code = run_chat_ask(" ".join(rest), deep=True)
+        elif head == "calc":
+            code = run_chat_calc(" ".join(rest))
+        elif head in ("hyperlocal_weather", "weather"):
+            code = run_chat_weather(" ".join(rest))
+        elif head.endswith(".py") and script_path(head).is_file():
+            code = run_script(head, rest)
+        else:
+            py_name = f"{head}.py"
+            if script_path(py_name).is_file():
+                code = run_script(py_name, rest)
+            else:
+                code = run_fish_skill(skill_line)
 
-    if head == "deep_web_answer":
-        return run_chat_ask(" ".join(rest), deep=True)
-
-    if head == "calc":
-        return run_chat_calc(" ".join(rest))
-
-    if head in ("hyperlocal_weather", "weather"):
-        return run_chat_weather(" ".join(rest))
-
-    if head.endswith(".py") and script_path(head).is_file():
-        return run_script(head, rest)
-
-    py_name = f"{head}.py"
-    if script_path(py_name).is_file():
-        return run_script(py_name, rest)
-
-    return run_fish_skill(skill_line)
+        if span is not None:
+            current.set_attribute("arka.skill.exit_code", code)
+            if code == 0:
+                mark_ok(current)
+            else:
+                mark_error(current, f"exit {code}")
+        return code
 
 
 def run_fish_skill(skill_line: str) -> int:

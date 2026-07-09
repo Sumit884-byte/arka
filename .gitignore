@@ -18,12 +18,17 @@ venv-*/
 .env.local
 
 # IDE / local
+.cursor/mcp.json
 .qoder/
 .skills_setup_done
 fish_variables
 *.swp
 .DS_Store
 Thumbs.db
+
+# SigNoz Foundry generated output (reproduced via foundryctl forge/cast)
+pours/
+.foundry/
 
 # Runtime cache (user machine, not repo)
 .cache/

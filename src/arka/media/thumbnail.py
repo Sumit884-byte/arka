@@ -240,7 +240,12 @@ def _fetch_background(topic: str, style: str, work: Path, *, scene: str = "") ->
 
     query = image_query(topic)
     print(f"Searching Unsplash: {query!r}", file=sys.stderr)
-    photos = search_photos(query, count=5, orientation="landscape", size="full")
+    try:
+        photos = search_photos(query, count=5, orientation="landscape", size="full")
+    except RuntimeError as exc:
+        raise SystemExit(str(exc)) from exc
+    if not photos:
+        raise SystemExit(f"No Unsplash photos found for: {query!r}")
     photo = photos[0]
     img_path = work / "photo.jpg"
     download_photo(photo, img_path)

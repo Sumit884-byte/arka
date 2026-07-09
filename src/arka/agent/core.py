@@ -222,14 +222,25 @@ def memory_context_for(goal: str, *, limit: int = 3) -> str:
     try:
         from arka.integrations.supermemory import context_for
 
-        return context_for(goal, limit_chars=3500)
+        ctx = context_for(goal, limit_chars=3500)
+        if ctx:
+            return ctx
     except ImportError:
         pass
     except Exception:
         pass
+
+    session_ctx = ""
+    try:
+        from arka.core.session_memory import context_for as session_context_for
+
+        session_ctx = session_context_for(goal)
+    except ImportError:
+        pass
+
     items = load_json(MEMORY_FILE, [])
     if not isinstance(items, list) or not items:
-        return ""
+        return session_ctx
     q = goal.lower()
     scored: list[tuple[float, str]] = []
     for row in items:
@@ -239,9 +250,12 @@ def memory_context_for(goal: str, *, limit: int = 3) -> str:
             scored.append((score, text))
     scored.sort(key=lambda x: x[0], reverse=True)
     if not scored:
-        return ""
+        return session_ctx
     lines = [t for _, t in scored[:limit]]
-    return "Relevant memories:\n" + "\n".join(f"- {l}" for l in lines)
+    local = "Relevant memories:\n" + "\n".join(f"- {l}" for l in lines)
+    if session_ctx:
+        return session_ctx + "\n\n" + local
+    return local
 
 
 # ── Trace ─────────────────────────────────────────────────────────────────────

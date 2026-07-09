@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlencode
 
+from arka.env import env_get
 from arka.integrations import google_oauth as oauth
 
 try:
@@ -256,7 +257,7 @@ def _gmail_day_range(*, days: int) -> tuple[str, str, str]:
 
 def _gmail_max_results(*, fetch_all: bool, limit: int) -> int:
     if fetch_all or limit <= 0:
-        raw = os.environ.get("ARKA_GMAIL_MAX", "500")
+        raw = env_get("GMAIL_MAX", "500")
         try:
             return max(1, int(raw))
         except ValueError:
@@ -326,7 +327,7 @@ def _gmail_query_from_args(args: argparse.Namespace) -> tuple[str, str]:
 
 
 def _gmail_summarize_cap() -> int:
-    raw = os.environ.get("ARKA_GMAIL_SUMMARIZE_MAX", "40")
+    raw = env_get("GMAIL_SUMMARIZE_MAX", "40")
     try:
         return max(1, int(raw))
     except ValueError:
@@ -334,7 +335,7 @@ def _gmail_summarize_cap() -> int:
 
 
 def _gmail_summarize_chars() -> int:
-    raw = os.environ.get("ARKA_GMAIL_SUMMARIZE_CHARS", "120000")
+    raw = env_get("GMAIL_SUMMARIZE_CHARS", "120000")
     try:
         return max(8000, int(raw))
     except ValueError:
@@ -688,7 +689,7 @@ def cmd_gmail(args: argparse.Namespace) -> int:
         if estimate is not None and estimate > len(rows):
             print(
                 f"(Summarized first {len(rows)} of ~{estimate}; "
-                f"raise ARKA_GMAIL_SUMMARIZE_MAX for more.)",
+                f"raise GMAIL_SUMMARIZE_MAX for more.)",
                 file=sys.stderr,
             )
         summary = _summarize_gmail_rows(
@@ -720,7 +721,7 @@ def cmd_gmail(args: argparse.Namespace) -> int:
     if email:
         header += f"\nAccount: {email}"
     if not unread_query and estimate is not None and estimate > len(rows):
-        header += f"\n(Gmail estimates ~{estimate}; raise ARKA_GMAIL_MAX or use --all)"
+        header += f"\n(Gmail estimates ~{estimate}; raise GMAIL_MAX or use --all)"
     print(f"{header}\n")
 
     for row in rows:
@@ -1139,7 +1140,7 @@ def main(argv: list[str] | None = None) -> int:
     p_gmail.add_argument(
         "--all",
         action="store_true",
-        help="Fetch all matching messages (paginated, up to ARKA_GMAIL_MAX)",
+        help="Fetch all matching messages (paginated, up to GMAIL_MAX)",
     )
     p_gmail.add_argument("-n", "--limit", type=int, default=10, help="Max messages (ignored with --all)")
     p_gmail.add_argument("--snippet", action="store_true", help="Show snippet preview")

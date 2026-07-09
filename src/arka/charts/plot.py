@@ -742,6 +742,51 @@ def plot_pareto(
     return output
 
 
+_SUFFIX_MULTIPLIERS: dict[str, float] = {
+    "k": 1e3,
+    "thousand": 1e3,
+    "m": 1e6,
+    "mil": 1e6,
+    "million": 1e6,
+    "b": 1e9,
+    "bn": 1e9,
+    "billion": 1e9,
+    "t": 1e12,
+    "trillion": 1e12,
+}
+
+
+def parse_numeric_value(raw: str | float | int) -> float:
+    """Parse chart numbers like 4.7, $4.7T, 45%, 1,200B into floats."""
+    if isinstance(raw, bool):
+        raise ValueError(f"invalid numeric value: {raw!r}")
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    text = str(raw).strip()
+    if not text:
+        raise ValueError("empty numeric value")
+    text = text.replace(",", "").replace(" ", "")
+    text = re.sub(r"^[\$€£₹]", "", text)
+    if text.endswith("%"):
+        return float(text[:-1] or "0")
+    match = re.match(r"^([+-]?\d+(?:\.\d+)?)([a-zA-Z]+)?$", text)
+    if not match:
+        cleaned = re.sub(r"[^\d.+-]", "", text)
+        if not cleaned:
+            raise ValueError(f"could not parse numeric value: {raw!r}")
+        return float(cleaned)
+    num = float(match.group(1))
+    suffix = (match.group(2) or "").lower()
+    if not suffix or suffix in {"usd", "pct", "percent", "points"}:
+        return num
+    multiplier = _SUFFIX_MULTIPLIERS.get(suffix)
+    if multiplier is None and suffix:
+        multiplier = _SUFFIX_MULTIPLIERS.get(suffix[0])
+    if multiplier is None:
+        raise ValueError(f"unknown numeric suffix in {raw!r}")
+    return num * multiplier
+
+
 def parse_data_arg(raw: str) -> tuple[list[str], list[float]]:
     labels: list[str] = []
     values: list[float] = []
@@ -751,7 +796,7 @@ def parse_data_arg(raw: str) -> tuple[list[str], list[float]]:
             continue
         label, val = part.split(":", 1)
         labels.append(label.strip())
-        values.append(float(val.strip().replace(",", "")))
+        values.append(parse_numeric_value(val.strip()))
     if len(labels) < 2:
         raise SystemExit("Need at least two label:value pairs in --data (e.g. Apple:230,Samsung:210)")
     return labels, values
@@ -765,8 +810,8 @@ def parse_xy_data(raw: str) -> tuple[list[float], list[float]]:
         if not part or ":" not in part:
             continue
         raw_x, raw_y = part.split(":", 1)
-        xs.append(float(raw_x.strip().replace(",", "")))
-        ys.append(float(raw_y.strip().replace(",", "")))
+        xs.append(parse_numeric_value(raw_x.strip()))
+        ys.append(parse_numeric_value(raw_y.strip()))
     if len(xs) < 3:
         raise SystemExit("Need at least three x:y pairs in --data (e.g. 100:200,120:190,170:280)")
     return xs, ys

@@ -1,0 +1,208 @@
+import json
+import os
+
+import pytest
+
+
+def _clear_fallback_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    for key in list(os.environ):
+        if key.startswith(
+            (
+                "LLM_FALLBACK",
+                "SKILL_MODEL",
+                "SKILL_MODELS",
+                "ROUTE_MODEL",
+                "ROUTING_MODEL",
+                "LLM_SKILL_MODELS",
+                "AI_PREFERRED",
+                "LLM_PROVIDER",
+                "LLM_MODEL",
+            )
+        ):
+            monkeypatch.delenv(key, raising=False)
+
+
+def test_parse_chain_colon_and_slash():
+    from arka.llm.fallback import parse_chain
+
+    assert parse_chain("gemini:gemini-2.0-flash,groq/llama-3.3-70b-versatile") == [
+        ("gemini", "gemini-2.0-flash"),
+        ("groq", "llama-3.3-70b-versatile"),
+    ]
+
+
+def test_parse_chain_bare_model_infers_provider(monkeypatch: pytest.MonkeyPatch):
+    _clear_fallback_env(monkeypatch)
+    from importlib import reload
+
+    import arka.llm.fallback as fb
+
+    reload(fb)
+
+    assert fb.parse_chain("gemini-2.5-flash") == [("gemini", "gemini-2.5-flash")]
+    assert fb.parse_chain("llama-3.3-70b-versatile") == [("groq", "llama-3.3-70b-versatile")]
+
+
+def test_llm_fallback_chain_alias(monkeypatch: pytest.MonkeyPatch):
+    _clear_fallback_env(monkeypatch)
+    monkeypatch.setenv("LLM_FALLBACK_CHAIN", "groq:llama-3.1-8b-instant,gemini:gemini-2.0-flash")
+
+    from importlib import reload
+
+    import arka.llm.fallback as fb
+
+    reload(fb)
+
+    chain = fb.build_default_chain(task="default")
+    assert chain[:2] == [
+        ("groq", "llama-3.1-8b-instant"),
+        ("gemini", "gemini-2.0-flash"),
+    ]
+
+
+def test_task_override_beats_global(monkeypatch: pytest.MonkeyPatch):
+    _clear_fallback_env(monkeypatch)
+    monkeypatch.setenv("LLM_FALLBACK", "gemini:gemini-2.0-flash")
+    monkeypatch.setenv("LLM_FALLBACK_ROUTE", "groq:llama-3.1-8b-instant")
+
+    from importlib import reload
+
+    import arka.llm.fallback as fb
+
+    reload(fb)
+
+    assert fb.build_default_chain(task="route") == [("groq", "llama-3.1-8b-instant")]
+    assert fb.build_default_chain(task="chat") == [("gemini", "gemini-2.0-flash")]
+
+
+def test_route_model_prepends(monkeypatch: pytest.MonkeyPatch):
+    _clear_fallback_env(monkeypatch)
+    monkeypatch.setenv("ROUTE_MODEL", "groq/llama-3.1-8b-instant")
+
+    from importlib import reload
+
+    import arka.llm.fallback as fb
+
+    reload(fb)
+
+    chain = fb.build_default_chain(task="route")
+    assert chain[0] == ("groq", "llama-3.1-8b-instant")
+    assert len(chain) > 1
+
+
+def test_routing_model_alias(monkeypatch: pytest.MonkeyPatch):
+    _clear_fallback_env(monkeypatch)
+    monkeypatch.setenv("ROUTING_MODEL", "groq/llama-3.1-8b-instant")
+
+    from importlib import reload
+
+    import arka.llm.fallback as fb
+
+    reload(fb)
+
+    chain = fb.build_default_chain(task="route")
+    assert chain[0] == ("groq", "llama-3.1-8b-instant")
+
+
+def test_skill_model_beats_route_model(monkeypatch: pytest.MonkeyPatch):
+    _clear_fallback_env(monkeypatch)
+    monkeypatch.setenv("ROUTE_MODEL", "groq/llama-3.1-8b-instant")
+    monkeypatch.setenv("SKILL_MODEL_ROUTE", "gemini/gemini-2.5-flash")
+
+    from importlib import reload
+
+    import arka.llm.fallback as fb
+
+    reload(fb)
+
+    chain = fb.build_default_chain(task="route")
+    assert chain[0] == ("gemini", "gemini-2.5-flash")
+    assert ("groq", "llama-3.1-8b-instant") in chain
+
+
+def test_skill_model_task_prepend(monkeypatch: pytest.MonkeyPatch):
+    _clear_fallback_env(monkeypatch)
+    monkeypatch.setenv("SKILL_MODEL_CHAT", "groq:llama-3.3-70b-versatile")
+
+    from importlib import reload
+
+    import arka.llm.fallback as fb
+
+    reload(fb)
+
+    chain = fb.build_default_chain(task="chat")
+    assert chain[0] == ("groq", "llama-3.3-70b-versatile")
+
+
+def test_llm_fallback_guidance_prepends(monkeypatch: pytest.MonkeyPatch):
+    _clear_fallback_env(monkeypatch)
+    monkeypatch.setenv("LLM_FALLBACK_GUIDANCE", "openai:gpt-4o-mini")
+
+    from importlib import reload
+
+    import arka.llm.fallback as fb
+
+    reload(fb)
+
+    chain = fb.build_default_chain(task="default")
+    assert chain[0] == ("openai", "gpt-4o-mini")
+
+
+def test_llm_skill_models_json(tmp_path, monkeypatch: pytest.MonkeyPatch):
+    _clear_fallback_env(monkeypatch)
+    cfg = tmp_path / "skill-models.json"
+    cfg.write_text(
+        json.dumps(
+            {
+                "route": "groq/llama-3.1-8b-instant",
+                "summarize": ["gemini/gemini-2.5-flash", "groq/llama-3.3-70b-versatile"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("LLM_SKILL_MODELS", str(cfg))
+
+    from importlib import reload
+
+    import arka.llm.fallback as fb
+
+    reload(fb)
+    fb._SKILL_MODELS_CACHE = None
+
+    route_chain = fb.build_default_chain(task="route")
+    assert route_chain[0] == ("groq", "llama-3.1-8b-instant")
+
+    summarize_chain = fb.build_default_chain(task="summarize")
+    assert summarize_chain[:2] == [
+        ("gemini", "gemini-2.5-flash"),
+        ("groq", "llama-3.3-70b-versatile"),
+    ]
+
+
+def test_skill_models_inline_json(monkeypatch: pytest.MonkeyPatch):
+    _clear_fallback_env(monkeypatch)
+    monkeypatch.setenv(
+        "SKILL_MODELS",
+        json.dumps({"chat": "gemini-2.5-flash", "route": "groq/llama-3.1-8b-instant"}),
+    )
+
+    from importlib import reload
+
+    import arka.llm.fallback as fb
+
+    reload(fb)
+    fb._SKILL_MODELS_CACHE = None
+
+    chat_chain = fb.build_default_chain(task="chat")
+    assert chat_chain[0] == ("gemini", "gemini-2.5-flash")
+
+    route_chain = fb.build_default_chain(task="route")
+    assert route_chain[0] == ("groq", "llama-3.1-8b-instant")
+
+
+def test_builtin_tail_chain_matches_default():
+    from arka.llm.fallback import DEFAULT_CHAIN, builtin_tail_chain
+
+    assert builtin_tail_chain() == list(DEFAULT_CHAIN)
+    assert DEFAULT_CHAIN[0] == ("gemini", "gemini-2.5-flash")
+    assert DEFAULT_CHAIN[-1] == ("ollama", "llama3.2:1b")

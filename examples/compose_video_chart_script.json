@@ -1,0 +1,39 @@
+[
+  {
+    "title": "IT in 2026",
+    "narration": "Global IT spending in 2026 is approaching five trillion dollars. Software, cloud, and AI infrastructure are where the momentum is.",
+    "chart": {
+      "type": "barh",
+      "title": "Global IT Spending Mix, 2026",
+      "data": "Enterprise software:1390,Cloud services:717,Other IT services:1564,Hardware:994,Communications:296",
+      "ylabel": "USD billions",
+      "source": "Illustrative composite · totals ~$4.96T"
+    }
+  },
+  {
+    "title": "AI acceleration",
+    "narration": "AI investment is the fastest line on the chart, with roughly forty four percent year over year growth into twenty twenty six.",
+    "chart": {
+      "type": "line",
+      "title": "Global AI Investment",
+      "data": "2023:0.95,2024:1.35,2025:1.75,2026:2.52",
+      "ylabel": "USD trillions",
+      "source": "Industry analyst estimates"
+    }
+  },
+  {
+    "title": "Hybrid shift",
+    "narration": "Enterprises are moving from cloud first to strategic hybrid, balancing cost, latency, and control.",
+    "chart": {
+      "type": "grouped_bar",
+      "title": "Enterprise Workload Share",
+      "categories": ["Public cloud", "Hybrid", "On-prem AI", "Edge"],
+      "series": {
+        "2023": [62, 24, 8, 6],
+        "2026": [48, 38, 10, 4]
+      },
+      "ylabel": "Share (%)",
+      "source": "Deloitte Tech Trends · illustrative"
+    }
+  }
+]

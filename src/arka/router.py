@@ -7,7 +7,9 @@ import re
 import shlex
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
+from typing import Any
 
 from arka.paths import fish_config, script_path
 
@@ -54,31 +56,94 @@ def route(text: str) -> Route | None:
     if not cmd:
         return None
 
-    mode = _route_mode()
+    try:
+        from arka.telemetry import mark_ok, span
+    except ImportError:
+        span = None  # type: ignore[assignment,misc]
+    from contextlib import nullcontext
 
-    fish_route = _route_via_fish(cmd)
-    if fish_route:
-        return fish_route
+    route_ctx = (
+        span("arka.route", attributes={"arka.route.input": cmd[:500]})
+        if span is not None
+        else nullcontext()
+    )
+    route_start = time.perf_counter()
+    with route_ctx as current:
+        mode = _route_mode()
+        if span is not None:
+            current.set_attribute("arka.route.mode", mode)
 
-    if fish_config() is not None and mode in ("ai_only", "symbolic_only"):
-        return None
+        fish_route = _route_via_fish(cmd)
+        if fish_route:
+            if span is not None:
+                _finish_route_span(
+                    current,
+                    fish_route,
+                    decision="fish",
+                    start=route_start,
+                )
+            return fish_route
 
-    if mode in ("ai", "ai_only"):
-        llm = _route_llm(cmd)
-        if llm:
-            return llm
-        if mode == "ai_only":
+        if fish_config() is not None and mode in ("ai_only", "symbolic_only"):
             return None
 
-    if mode != "ai_only":
-        offline = _route_offline(cmd)
-        if offline:
-            return offline
+        if mode in ("ai", "ai_only"):
+            llm = _route_llm(cmd)
+            if llm:
+                if span is not None:
+                    _finish_route_span(
+                        current,
+                        llm,
+                        decision="llm",
+                        start=route_start,
+                    )
+                return llm
+            if mode == "ai_only":
+                return None
 
-    if mode == "symbolic":
-        return _route_llm(cmd)
+        if mode != "ai_only":
+            offline = _route_offline(cmd)
+            if offline:
+                if span is not None:
+                    _finish_route_span(
+                        current,
+                        offline,
+                        decision="symbolic",
+                        start=route_start,
+                    )
+                return offline
 
-    return None
+        if mode == "symbolic":
+            llm = _route_llm(cmd)
+            if llm and span is not None:
+                _finish_route_span(
+                    current,
+                    llm,
+                    decision="llm",
+                    start=route_start,
+                )
+            return llm
+
+        return None
+
+
+def _finish_route_span(
+    current: Any,
+    route_result: Route,
+    *,
+    decision: str,
+    start: float,
+) -> None:
+    try:
+        from arka.telemetry import mark_ok
+        from arka.telemetry.tracing import duration_ms
+    except ImportError:
+        return
+    current.set_attribute("arka.route.source", route_result.source)
+    current.set_attribute("arka.route.skill", route_result.skill[:500])
+    current.set_attribute("arka.route.decision", decision)
+    current.set_attribute("arka.route.latency_ms", duration_ms(start))
+    mark_ok(current)
 
 
 def _route_via_fish(cmd: str) -> Route | None:

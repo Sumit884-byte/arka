@@ -47,6 +47,36 @@ def _fish() -> str:
     return shutil.which("fish") or "/usr/bin/fish"
 
 
+def _routines_security_enabled() -> bool:
+    return os.environ.get("ROUTINES_SECURITY", "1").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+        "off",
+    )
+
+
+def _security_gate_action(action: str) -> bool:
+    """Cron runs are non-interactive — block confirm/block actions (OpenClaw safety)."""
+    if not _routines_security_enabled():
+        return True
+    try:
+        from arka.core.security import check_action
+    except ImportError:
+        return True
+    result = check_action(action.strip())
+    if result.status == "block":
+        print(f"Routine blocked: {result.reason}", file=sys.stderr)
+        return False
+    if result.status == "confirm":
+        print(
+            f"Routine skipped (needs confirm, non-interactive): {result.reason}",
+            file=sys.stderr,
+        )
+        return False
+    return True
+
+
 def _normalize_time(token: str) -> str:
     t = token.strip().lower().replace(".", "")
     if t in {"noon", "12pm"}:
@@ -228,6 +258,13 @@ def routine_run(rid: str) -> int:
 
 
 def _run_action(action: str) -> int:
+    if not _security_gate_action(action):
+        LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with LOG_FILE.open("a", encoding="utf-8") as fh:
+            fh.write(
+                f"{time.strftime('%Y-%m-%d %H:%M:%S')} skipped {action!r} (security gate)\n"
+            )
+        return 2
     fish = _fish()
     env = os.environ.copy()
     env.setdefault("FISH_DIR", str(FISH_DIR))
@@ -236,6 +273,12 @@ def _run_action(action: str) -> int:
         env=env,
         cwd=str(Path.home()),
     )
+    try:
+        from arka.integrations.heartbeat import ping
+
+        ping(f"routine.run", source="routines")
+    except ImportError:
+        pass
     LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
     with LOG_FILE.open("a", encoding="utf-8") as fh:
         fh.write(

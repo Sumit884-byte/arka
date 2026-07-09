@@ -7,26 +7,27 @@ import re
 import threading
 from dataclasses import dataclass, field
 
+from arka.llm.providers import provider_specs
+
 _PLACEHOLDER_RE = re.compile(
     r"your_.*_here|^changeme$|^xxx+$|^replace[_-]?me$",
     re.IGNORECASE,
 )
 
-_PROVIDER_ENV: dict[str, list[str]] = {
-    "gemini": ["GEMINI_API_KEY", "GEMINI_API_KEYS", "GOOGLE_API_KEY"],
-    "groq": ["GROQ_API_KEY", "GROQ_API_KEYS"],
-    "ollama": ["OLLAMA_API_KEY", "OLLAMA_API_KEYS"],
-    "openai": ["OPENAI_API_KEY", "OPENAI_API_KEYS"],
-    "anthropic": ["ANTHROPIC_API_KEY", "ANTHROPIC_API_KEYS"],
-}
 
-_ENV_TARGETS: dict[str, list[str]] = {
-    "gemini": ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
-    "groq": ["GROQ_API_KEY"],
-    "ollama": ["OLLAMA_API_KEY"],
-    "openai": ["OPENAI_API_KEY"],
-    "anthropic": ["ANTHROPIC_API_KEY"],
-}
+def _build_provider_env_maps() -> tuple[dict[str, list[str]], dict[str, list[str]]]:
+    env_map: dict[str, list[str]] = {}
+    targets: dict[str, list[str]] = {}
+    for spec in provider_specs():
+        env_map[spec.slug] = list(spec.env_keys)
+        primary = spec.api_key_env or (spec.env_keys[0] if spec.env_keys else f"{spec.slug.upper()}_API_KEY")
+        targets[spec.slug] = [primary]
+        if spec.slug == "gemini":
+            targets[spec.slug] = ["GEMINI_API_KEY", "GOOGLE_API_KEY"]
+    return env_map, targets
+
+
+_PROVIDER_ENV, _ENV_TARGETS = _build_provider_env_maps()
 
 
 def _truthy(name: str, default: str = "1") -> bool:

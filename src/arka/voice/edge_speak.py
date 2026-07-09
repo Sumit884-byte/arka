@@ -7,6 +7,7 @@ import argparse
 import asyncio
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -194,6 +195,61 @@ def chunk_text(text: str, max_len: int) -> list[str]:
     if current:
         chunks.append(current)
     return chunks or [text[:max_len]]
+
+
+def synthesize_to_file(text: str, output: Path, *, voice: str | None = None) -> Path:
+    """Synthesize narration to an MP3 file using Arka voice settings (edge-tts)."""
+    text = " ".join(text.split())
+    if not text:
+        raise ValueError("empty text")
+
+    out = Path(output)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    voice_id = resolve_voice(voice=voice)
+    rate = os.environ.get("SPEAK_RATE", "-5%")
+    pitch = os.environ.get("SPEAK_PITCH", "+0Hz")
+    max_len = int(os.environ.get("AGENT_SPEAK_MAX", str(DEFAULT_CHUNK)))
+    max_len = min(max_len, 2500)
+    chunks = chunk_text(text, max_len)
+
+    if len(chunks) == 1:
+        asyncio.run(_synthesize(chunks[0], voice_id, rate, pitch, out))
+        return out
+
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise RuntimeError("ffmpeg required to merge long narration")
+
+    chunk_paths: list[Path] = []
+    with tempfile.TemporaryDirectory(prefix="arka-tts-") as tmp:
+        tmpdir = Path(tmp)
+        for i, chunk in enumerate(chunks):
+            mp3 = tmpdir / f"chunk_{i:03d}.mp3"
+            asyncio.run(_synthesize(chunk, voice_id, rate, pitch, mp3))
+            chunk_paths.append(mp3)
+        list_file = tmpdir / "concat.txt"
+        list_file.write_text("\n".join(f"file '{p.resolve()}'" for p in chunk_paths), encoding="utf-8")
+        proc = subprocess.run(
+            [
+                ffmpeg,
+                "-y",
+                "-f",
+                "concat",
+                "-safe",
+                "0",
+                "-i",
+                str(list_file),
+                "-c",
+                "copy",
+                str(out),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError((proc.stderr or proc.stdout or "ffmpeg concat failed").strip())
+    return out
 
 
 def speak(text: str, lang: str | None = None, voice: str | None = None) -> None:
