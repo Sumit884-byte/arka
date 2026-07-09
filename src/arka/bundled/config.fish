@@ -219,6 +219,10 @@ end
 _arka_apply_pythonpath
 
 function _arka_platform_init --description "Load cached platform profile (detect once on first run)"
+    set -l env_platform ""
+    if set -q PLATFORM; and test -n "$PLATFORM"
+        set env_platform "$PLATFORM"
+    end
     set -l pf "$_ARKA_CFG/platform.env"
     if not test -f "$pf"
         set -l vpy $_ARKA_ROOT/venv-arka/bin/python3
@@ -236,7 +240,10 @@ function _arka_platform_init --description "Load cached platform profile (detect
             end
         end
     end
-    if set -q PLATFORM; and test -n "$PLATFORM"
+    if test -n "$env_platform"
+        set -gx PLATFORM $env_platform
+        set -gx _PLATFORM $env_platform
+    else if set -q PLATFORM; and test -n "$PLATFORM"
         set -gx _PLATFORM $PLATFORM
     else if not set -q _PLATFORM
         set -l uname (uname -s)
@@ -1791,7 +1798,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         write_script run_script ollama_run lint_python cheat qr_code shorten_url \
         crypto_price pomodoro sports_score live_scores system_monitor excuse bored open_app create_skill \
         calculate_bmi send_whatsapp whatsapp_listen search_stores download_file extract_and_run \
-        create_desktop_app fix_graphics_driver install_app install_apt install_flatpak \
+        create_desktop_app fix_graphics_driver install_app install_apt install_brew install_flatpak \
         install_snap install_package install_uv stock_analysis stock macro emotion \
         auto_click auto_copy decrypt_pdf classify_files cleanup_downloads watch_zip monitor_x \
         generate_image generate_thumbnail generate_video compose_video chart youtube_transcript youtube_download yt_download media_transcript transcribe_media summarize_url daily_brief wifi_info \
@@ -8239,9 +8246,15 @@ end
 
 function _agent_parse_install_app_name --description "Extract app name from install NL (internal)"
     set -l cmd $argv[1]
+    set -l brew_m (string match -r -i '^(?:brew|homebrew)\s+install\s+(.+)$' "$cmd")
+    if test (count $brew_m) -ge 2
+        echo (string trim -- "$brew_m[2]")
+        return
+    end
     set -l app (string replace -r -i '^(?:please\s+)?(?:install|get|setup)\s+(?:the\s+)?' '' "$cmd")
-    set app (string replace -r -i '\s+(?:from|via|using|with|on)\s+(?:flatpak|flathub|snap|snapcraft|apt|apt-get|dpkg).*$' '' "$app")
+    set app (string replace -r -i '\s+(?:from|via|using|with|on)\s+(?:flatpak|flathub|snap|snapcraft|apt|apt-get|dpkg|brew|homebrew).*$' '' "$app")
     set app (string replace -r -i '\s+(?:with|via|using)\s+apt(?:-get)?\s*$' '' "$app")
+    set app (string replace -r -i '\s+(?:with|via|using)\s+brew(?:\s|$)' '' "$app")
     set app (string replace -r -i '\s+(?:app|package)\s*$' '' "$app")
     echo (string trim -- "$app")
 end
@@ -11319,14 +11332,16 @@ function _agent_skill_matches_request --description "True if skill fits the user
             string match -qr '(?i)(summarize|summary|digest).*(folder|directory|playlist|series|all videos|all episodes)|playlist.*summarize' "$cmd"
         case media_transcript transcribe_media
             string match -qr '(?i)(transcrib|transcript).*(mp3|mp4|m4a|wav|audio|video|podcast|recording)|(?:mp3|mp4|m4a|wav|mkv|mov|webm|ogg|flac)\b.*(transcrib|transcript|summarize)' "$cmd"
-        case install_app install_apt install_flatpak install_snap install_package install_uv
+        case install_app install_apt install_brew install_flatpak install_snap install_package install_uv
             string match -qr '(?i)(install|setup|get\s+app)' "$cmd"
         case install_uv
             string match -qr '(?i)(install|setup|get)\s+' "$cmd"
             and _agent_is_python_pip_install "$cmd"
         case install_app
             string match -qr '(?i)(install|setup|get)\s+' "$cmd"
-            and not string match -qr '(?i)(flatpak|flathub|snap|with\s+apt|via\s+apt)' "$cmd"
+            and not string match -qr '(?i)(flatpak|flathub|snap|with\s+apt|via\s+apt|brew|homebrew)' "$cmd"
+        case install_brew
+            string match -qr '(?i)(install|get|setup).*(with|via|using)\s+brew|\bhomebrew\s+install|\bbrew\s+install' "$cmd"
         case install_apt
             string match -qr '(?i)(install|get|setup).*(with|via|using)\s+apt|\bapt\s+install' "$cmd"
         case search_stores
@@ -11499,6 +11514,10 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         echo "skill|install_apt $(_agent_parse_install_app_name "$cmd")|APT package install"
         return
     end
+    if string match -qr '(?i)(install|get|setup).*(with|via|using)\s+brew|\bhomebrew\s+install|\bbrew\s+install' "$clean"
+        echo "skill|install_brew $(_agent_parse_install_app_name "$cmd")|Homebrew install"
+        return
+    end
     if string match -qr '(?i)(install|get|setup).*(flatpak|flathub)' "$clean"
         echo "skill|install_flatpak $(_agent_parse_install_app_name "$cmd")|Flatpak install"
         return
@@ -11508,16 +11527,20 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         return
     end
     if string match -qr '(?i)^(install|get|setup)\s+' "$clean"
-        and not string match -qr '(flatpak|flathub|snap|apt)' "$clean"
+        and not string match -qr '(flatpak|flathub|snap|apt|brew|homebrew)' "$clean"
         and _agent_is_python_pip_install "$cmd"
         echo "skill|"(string trim -- (_agent_parse_install_uv "$cmd"))"|Python package via uv pip"
         return
     end
     if string match -qr '(?i)^(install|get|setup)\s+' "$clean"
-        and not string match -qr '(flatpak|flathub|snap|apt)' "$clean"
+        and not string match -qr '(flatpak|flathub|snap|apt|brew|homebrew)' "$clean"
         set -l app (_agent_parse_install_app_name "$cmd")
         if test -n "$app"; and not _install_target_is_package_file "$app"
-            echo "skill|install_app $app|Search Flatpak, Snap, and apt"
+            if _arka_is_macos
+                echo "skill|install_app $app|Search Homebrew and install"
+            else
+                echo "skill|install_app $app|Search Flatpak, Snap, and apt"
+            end
             return
         end
     end
@@ -12335,6 +12358,13 @@ function _agent_correct_interpretation --description "Fix bad LLM skill picks us
             return
         end
     end
+    if string match -qr '(?i)(install|get|setup).*(with|via|using)\s+brew|\bhomebrew\s+install|\bbrew\s+install' "$clean"
+        set -l app (_agent_parse_install_app_name "$cmd")
+        if test -n "$app"
+            echo "install_brew $app"
+            return
+        end
+    end
     if string match -qr '(?i)(install|get|setup).*(flatpak|flathub)' "$clean"
         set -l app (_agent_parse_install_app_name "$cmd")
         if test -n "$app"
@@ -12355,7 +12385,7 @@ function _agent_correct_interpretation --description "Fix bad LLM skill picks us
         return
     end
     if string match -qr '(?i)^(install|get|setup)\s+' "$clean"
-        and not string match -qr '(flatpak|flathub|snap|apt)' "$clean"
+        and not string match -qr '(flatpak|flathub|snap|apt|brew|homebrew)' "$clean"
         if _agent_is_python_pip_install "$cmd"
             echo (_agent_parse_install_uv "$cmd")
             return
@@ -12551,7 +12581,77 @@ function install_uv --description "Install Python packages with uv pip (--cpu/--
     return $st
 end
 
-function install_app --description "Search Flatpak, Snap, and apt; install the best match"
+function install_brew --description "Search Homebrew and install a formula or cask by name"
+    if test (count $argv) -eq 0
+        echo "Usage: install_brew <app name>"
+        echo "Example: install_brew fish"
+        echo "Example: agent \"install fish with brew\""
+        return 1
+    end
+
+    if not command -v brew >/dev/null
+        echo (set_color red)"Homebrew is not installed."(set_color normal)
+        echo "Install Homebrew from: https://brew.sh"
+        echo 'Run: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
+        return 1
+    end
+
+    set -l query (string join " " $argv | string trim)
+    if _install_target_is_package_file "$query"
+        echo (set_color yellow)"$query looks like a package file — using install_package"(set_color normal)
+        install_package $argv
+        return $status
+    end
+
+    echo (set_color --bold cyan)"Searching Homebrew for: $query"(set_color normal)
+    echo ""
+
+    set -l brew_pkg ""
+    if brew info "$query" >/dev/null 2>&1
+        set brew_pkg "$query"
+        echo (set_color green)"Found: $brew_pkg"(set_color normal)
+        echo ""
+    else
+        printf "━━━ Homebrew formulae ━━━\n"
+        set -l formula_out (brew search --formulae "$query" 2>/dev/null)
+        if test -n "$formula_out"
+            printf '%s\n' $formula_out
+            set brew_pkg (printf '%s\n' $formula_out | head -1)
+        else
+            echo (set_color yellow)"  No formula matches"(set_color normal)
+        end
+        echo ""
+
+        if test -z "$brew_pkg"
+            printf "━━━ Homebrew casks ━━━\n"
+            set -l cask_out (brew search --cask "$query" 2>/dev/null)
+            if test -n "$cask_out"
+                printf '%s\n' $cask_out
+                set brew_pkg (printf '%s\n' $cask_out | head -1)
+            else
+                echo (set_color yellow)"  No cask matches"(set_color normal)
+            end
+            echo ""
+        end
+    end
+
+    if test -z "$brew_pkg"
+        if _agent_is_python_pip_install "install $query"
+            echo (set_color yellow)"No Homebrew match — trying uv pip..."(set_color normal)
+            set -l uv_line (_agent_parse_install_uv "install $query")
+            set -l uv_args (string split " " -- "$uv_line")
+            install_uv $uv_args[2..-1]
+            return $status
+        end
+        echo (set_color red)"No Homebrew matches for: $query"(set_color normal)
+        return 1
+    end
+
+    echo (set_color green)"Installing via Homebrew: $brew_pkg"(set_color normal)
+    brew install "$brew_pkg"
+end
+
+function install_app --description "Search package stores and install the best match (Homebrew on macOS; Flatpak/Snap/apt on Linux)"
     if test (count $argv) -eq 0
         echo "Usage: install_app <app name>"
         echo "Example: install_app LocalSend"
@@ -12563,6 +12663,11 @@ function install_app --description "Search Flatpak, Snap, and apt; install the b
     if _install_target_is_package_file "$query"
         echo (set_color yellow)"$query looks like a package file — using install_package"(set_color normal)
         install_package $argv
+        return $status
+    end
+
+    if _arka_is_macos
+        install_brew $argv
         return $status
     end
 
@@ -14042,7 +14147,12 @@ function agent --description "Run commands safely: executes safe commands automa
         
         echo (set_color --bold yellow)"🤖 Automation (~/Projects/python/products/automation):"(set_color normal)
         echo "  search_stores <query>  - Search Flatpak, Snap, and apt for apps"
-        echo "  install_app <name>     - Search Flatpak/Snap/apt and install best match"
+        if _arka_is_macos
+            echo "  install_app <name>     - Search Homebrew and install best match"
+            echo "  install_brew <name>    - Install package with Homebrew (brew)"
+        else
+            echo "  install_app <name>     - Search Flatpak/Snap/apt and install best match"
+        end
         echo "  install_uv [--cpu] <pkg> - Install Python packages with uv pip (PyTorch CPU/CUDA)"
         echo "  install_apt <pkg>      - Install package with apt (sudo)"
         echo "  install_flatpak <app>  - Install app from Flathub"
@@ -14727,6 +14837,14 @@ function agent --description "Run commands safely: executes safe commands automa
         end
     else if string match -qr '(cheat|cheat.*sheet)' "$clean_cmd"
         set interpreted "cheat $args"
+    else if string match -qr '(?i)(install|get|setup).*(with|via|using)\s+brew|\bhomebrew\s+install|\bbrew\s+install' "$clean_cmd"
+        and not string match -qr 'download\s+and\s+install' "$clean_cmd"
+        set -l app (_agent_parse_install_app_name "$cmd")
+        if test -n "$app"
+            set interpreted "install_brew $app"
+        else
+            set interpreted "install_brew"
+        end
     else if string match -qr '(?i)(install|get|setup).*(flatpak|flathub)' "$clean_cmd"
         and not string match -qr 'download\s+and\s+install' "$clean_cmd"
         set -l app (_agent_parse_install_app_name "$cmd")
@@ -14841,7 +14959,7 @@ function agent --description "Run commands safely: executes safe commands automa
             set route_source offline
         end
     else if string match -qr '(install|setup|download\s+and\s+install)' "$clean_cmd"
-        and not string match -qr '(?i)(flatpak|flathub|snap|with\s+apt|via\s+apt)' "$clean_cmd"
+        and not string match -qr '(?i)(flatpak|flathub|snap|with\s+apt|via\s+apt|brew|homebrew)' "$clean_cmd"
         if _agent_is_python_pip_install "$cmd"
             set interpreted (string trim -- (_agent_parse_install_uv "$cmd"))
         else

@@ -188,6 +188,7 @@ def voice_progress(skill: str) -> str:
         "send_whatsapp": "Sending on WhatsApp.",
         "search_web": "Searching the web.",
         "install_app": "Installing the app.",
+        "install_brew": "Installing with Homebrew.",
         "install_apt": "Installing with apt.",
         "generate_password": "Generating a password.",
         "crypto_price": "Checking crypto prices.",
