@@ -236,26 +236,7 @@ def route_generate_thumbnail(cmd: str) -> str | None:
     return "generate_thumbnail generate " + " ".join(shlex.quote(a) for a in argv)
 
 
-_SIZE_THRESHOLD_RE = re.compile(
-    r"(?i)(?:less|more|greater|larger|smaller|lesser|under|over|above|below|bigger)(?:\s+than)?|\d+\s*(?:kb|mb|gb)\b"
-)
-_FILE_SIZE_SUBJECT_RE = re.compile(
-    r"(?i)(?:"
-    r"\b(?:find|search|list|show)\s+.*\bfiles?\b|"
-    r"\b(?:find|search|list|show)\s+.*\bdownloads?\b|"
-    r"\bfiles?\s+in\s+(?:my\s+)?(?:the\s+)?(?:downloads?|desktop|documents?|pictures?|photos?|videos?|music)\b|"
-    r"\blarge\s+files?\s+in\s+(?:my\s+)?(?:the\s+)?(?:downloads?|desktop|documents?|pictures?|photos?|videos?|music)\b|"
-    r"\b(?:big|large|huge)\s+files?\b.*\b(?:downloads?|desktop|documents?|pictures?|photos?|videos?|music)\b"
-    r")"
-)
-
-
-def route_find_files_by_size(cmd: str) -> str | None:
-    if not _FILE_SIZE_SUBJECT_RE.search(cmd):
-        return None
-    if not _SIZE_THRESHOLD_RE.search(cmd) and not re.search(r"(?i)\b(?:large|big|huge)\s+files?\b", cmd):
-        return None
-    return f"find_files_by_size {cmd}"
+from arka.routing.file_size import route_find_files_by_size  # noqa: F401 — re-export
 
 
 def route_offline_extras(cmd: str) -> str | None:

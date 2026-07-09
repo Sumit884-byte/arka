@@ -318,6 +318,14 @@ def nl_to_argv(text: str) -> list[str]:
     if not t:
         return []
 
+    try:
+        from arka.routing.file_size import is_file_size_query
+
+        if is_file_size_query(t):
+            return []
+    except ImportError:
+        pass
+
     chart_words = r"(?i)\b(chart|graph|plot|visuali[sz]e|diagram)\b"
     stock_words = r"(?i)\b(stock|stocks|share|shares|price|prices|market|ticker|equity)\b"
     bar_words = r"(?i)\b(bar|bars|column|sales|sold|units|phones|mobiles|devices)\b"

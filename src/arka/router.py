@@ -359,6 +359,8 @@ def _route_offline(cmd: str) -> Route | None:
         r"(?i)(?:"
         r"\b(?:find|search|list|show)\s+.*\bfiles?\b|"
         r"\b(?:find|search|list|show)\s+.*\bdownloads?\b|"
+        r"\bfiles?\b.*\b(?:downloads?|desktop|documents?|pictures?|photos?|videos?|music)\b|"
+        r"\bdownloads?\b.*\b(?:range\s+of|between|from|\d+\s*(?:kb|mb|gb))\b|"
         r"\bfiles?\s+in\s+(?:my\s+)?(?:the\s+)?(?:downloads?|desktop|documents?|pictures?|photos?|videos?|music)\b|"
         r"\blarge\s+files?\s+in\s+(?:my\s+)?(?:the\s+)?(?:downloads?|desktop|documents?|pictures?|photos?|videos?|music)\b|"
         r"\b(?:big|large|huge)\s+files?\b.*\b(?:downloads?|desktop|documents?|pictures?|photos?|videos?|music)\b"
@@ -366,7 +368,12 @@ def _route_offline(cmd: str) -> Route | None:
         clean,
     )
     file_size_threshold = re.search(
-        r"(?i)(?:less|more|greater|larger|smaller|lesser|under|over|above|below|bigger)(?:\s+than)?|\d+\s*(?:kb|mb|gb)\b",
+        r"(?i)(?:"
+        r"(?:less|more|greater|larger|smaller|lesser|under|over|above|below|bigger)(?:\s+than)?|"
+        r"\b(?:range\s+of|between|from)\b|"
+        r"\d+\s*(?:kb|mb|gb)\b\s+(?:to|and|-)\s+\d+\s*(?:kb|mb|gb)\b|"
+        r"\d+\s*(?:kb|mb|gb)\b"
+        r")",
         clean,
     )
     if file_size_subject and (

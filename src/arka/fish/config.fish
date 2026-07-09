@@ -3130,9 +3130,9 @@ function _parse_file_size_root --description "Extract search root from NL file-s
     set -l text "$argv[1]"
     set -l lower (string lower "$text")
 
-    set -l in_m (string match -r '(?i)\s+in\s+(.+)$' "$text")
-    if test (count $in_m) -ge 2
-        _resolve_folder_path (string trim -- $in_m[2])
+    set -l folder_m (string match -r '(?i)\s+in\s+(?:my\s+)?(?:the\s+)?(downloads?|desktop|documents?|document|pictures?|picture|photos?|photo|videos?|video|music)\s*$' "$text")
+    if test (count $folder_m) -ge 2
+        _resolve_folder_path $folder_m[2]
         return 0
     end
 
@@ -3147,6 +3147,17 @@ function _parse_file_size_root --description "Extract search root from NL file-s
             _resolve_folder_path $name
             return 0
         end
+    end
+
+    set -l in_m (string match -r '(?i)\s+in\s+(.+)$' "$text")
+    if test (count $in_m) -ge 2
+        set -l tail (string trim -- $in_m[2])
+        if string match -qr '(?i)^(range|between|the\s+range)\b' "$tail"
+            echo "."
+            return 0
+        end
+        _resolve_folder_path $tail
+        return 0
     end
 
     echo "."
@@ -3249,6 +3260,42 @@ function search_files --description "Search for files by name pattern under a di
     end
 end
 
+function _find_size_unit --description "Map NL size unit to find -size suffix (internal)"
+    set -l raw_unit (string lower "$argv[1]")
+    switch $raw_unit
+        case b byte bytes
+            echo c
+        case k kb
+            echo k
+        case m mb ''
+            echo M
+        case g gb
+            echo G
+    end
+end
+
+function _parse_file_size_range --description "Parse min/max from NL size range (internal)"
+    set -l text "$argv[1]"
+    set -l m (string match -r '(?i)(?:range\s+of|between|from)\s+(\d+(?:\.\d+)?)\s*(kb|mb|gb|bytes?|b|k|m|g)?\s+(?:to|and|-)\s+(\d+(?:\.\d+)?)\s*(kb|mb|gb|bytes?|b|k|m|g)\b' "$text")
+    if test (count $m) -ge 5
+        set -l u1 $m[3]
+        test -z "$u1"; and set u1 $m[5]
+        printf '%s\n' $m[2] $m[4] $u1 $m[5]
+        return 0
+    end
+    set m (string match -r '(?i)(\d+(?:\.\d+)?)\s*(kb|mb|gb|bytes?|b|k|m|g)\b\s+(?:to|and|-)\s+(\d+(?:\.\d+)?)\s*(kb|mb|gb|bytes?|b|k|m|g)\b' "$text")
+    if test (count $m) -ge 5
+        printf '%s\n' $m[2] $m[4] $m[3] $m[5]
+        return 0
+    end
+    set m (string match -r '(?i)between\s+(\d+(?:\.\d+)?)\s+and\s+(\d+(?:\.\d+)?)\s*(kb|mb|gb|bytes?|b|k|m|g)\b' "$text")
+    if test (count $m) -ge 4
+        printf '%s\n' $m[2] $m[3] $m[4] $m[4]
+        return 0
+    end
+    return 1
+end
+
 function find_files_by_size --description "Find files smaller or larger than a size threshold"
     set -l text (string join " " $argv)
     if test -z "$text"
@@ -3258,6 +3305,51 @@ function find_files_by_size --description "Find files smaller or larger than a s
     end
 
     set -l clean (string lower "$text")
+    set -l root (_parse_file_size_root "$text")
+
+    if not test -d "$root"
+        printf '%s\n' (set_color red)"Not a directory: $root"(set_color normal)
+        return 1
+    end
+
+    set -l resolved (realpath "$root" 2>/dev/null; or echo "$root")
+
+    set -l range (_parse_file_size_range "$text" 2>/dev/null)
+    if test (count $range) -eq 4
+        set -l min_num (math -s0 $range[1])
+        set -l max_num (math -s0 $range[2])
+        set -l min_unit (_find_size_unit $range[3])
+        set -l max_unit (_find_size_unit $range[4])
+        if test $min_num -gt $max_num
+            set -l tmp_num $min_num
+            set min_num $max_num
+            set max_num $tmp_num
+            set -l tmp_unit $min_unit
+            set min_unit $max_unit
+            set max_unit $tmp_unit
+        end
+        set -l min_spec "+"(math -s0 $min_num - 1)"$min_unit"
+        set -l max_spec "-"(math -s0 $max_num + 1)"$max_unit"
+        set -l min_label "$min_num"(string upper "$range[3]")
+        set -l max_label "$max_num"(string upper "$range[4]")
+        printf "Files between %s and %s under %s\n" "$min_label" "$max_label" "$resolved"
+
+        set -l results (find "$root" -type f -size $min_spec -size $max_spec 2>/dev/null)
+        if test (count $results) -eq 0
+            printf '%s\n' (set_color yellow)"  No files found."(set_color normal)
+            return 1
+        end
+
+        set -l sorted (du -k $results 2>/dev/null | sort -rn -k1 | cut -f2-)
+        for f in $sorted[1..100]
+            set -l sz (du -h "$f" 2>/dev/null | cut -f1)
+            printf '  %s  (%s)\n' "$f" "$sz"
+        end
+        if test (count $sorted) -gt 100
+            printf '%s\n' (set_color brblack)"  ... and "(count $sorted)" total (showing first 100)"(set_color normal)
+        end
+        return 0
+    end
 
     set -l sign "-"
     if string match -qr '(?i)(more|greater|larger|over|above|bigger)(\s+than)?|\bover\s+\d' "$clean"
@@ -3290,15 +3382,7 @@ function find_files_by_size --description "Find files smaller or larger than a s
             set unit G
     end
 
-    set -l root (_parse_file_size_root "$text")
-
-    if not test -d "$root"
-        printf '%s\n' (set_color red)"Not a directory: $root"(set_color normal)
-        return 1
-    end
-
     set -l size_spec "$sign$num$unit"
-    set -l resolved (realpath "$root" 2>/dev/null; or echo "$root")
     set -l op "smaller than"
     if test "$sign" = "+"
         set op "larger than"
@@ -8521,6 +8605,10 @@ function _agent_is_file_size_find --description "True if NL is find-files-by-siz
         set has_subject 1
     else if string match -qr '(?i)(find|search|list|show)\s+.*\bdownloads?\b' "$clean"
         set has_subject 1
+    else if string match -qr '(?i)\bfiles?\b.*\b(downloads?|desktop|documents?|pictures?|photos?|videos?|music)\b' "$clean"
+        set has_subject 1
+    else if string match -qr '(?i)\bdownloads?\b.*\b(range\s+of|between|from|\d+\s*(kb|mb|gb))\b' "$clean"
+        set has_subject 1
     else if string match -qr '(?i)\bfiles?\s+in\s+(?:my\s+)?(?:the\s+)?(?:downloads?|desktop|documents?|pictures?|photos?|videos?|music)\b' "$clean"
         set has_subject 1
     else if string match -qr '(?i)\blarge\s+files?\s+in\s+(?:my\s+)?(?:the\s+)?(?:downloads?|desktop|documents?|pictures?|photos?|videos?|music)\b' "$clean"
@@ -8529,7 +8617,7 @@ function _agent_is_file_size_find --description "True if NL is find-files-by-siz
         set has_subject 1
     end
     test $has_subject -eq 0; and return 1
-    if string match -qr '(?i)(less|more|greater|larger|smaller|lesser|under|over|above|below|bigger)(\s+than)?|\d+\s*(kb|mb|gb)\b' "$clean"
+    if string match -qr '(?i)(less|more|greater|larger|smaller|lesser|under|over|above|below|bigger)(\s+than)?|\b(?:range\s+of|between|from)\b|\d+\s*(kb|mb|gb)\b\s+(?:to|and|-)\s+\d+\s*(kb|mb|gb)\b|\d+\s*(kb|mb|gb)\b' "$clean"
         return 0
     end
     string match -qr '(?i)\b(large|big|huge)\s+files?\b' "$clean"
@@ -9641,6 +9729,10 @@ function _agent_offline_route_cmd --description "Full symbolic NL to skill comma
     end
     if _agent_is_routines_request "$cmd"
         echo (_agent_build_routines_cmd "$cmd")
+        return 0
+    end
+    if _agent_is_file_size_find "$cmd"
+        echo (_agent_route_file_size_find "$cmd")
         return 0
     end
     if _agent_is_chart_request "$cmd"
@@ -11785,6 +11877,10 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         echo "skill|hyperlocal_weather $cmd|Weather via Open-Meteo + IP"
         return
     end
+    if _agent_is_file_size_find "$cmd"
+        echo "skill|find_files_by_size $cmd|Find files by size threshold"
+        return
+    end
     if _agent_is_chart_request "$cmd"
         set -l parts (_agent_build_chart_cmd "$cmd")
         if test -n "$parts"
@@ -12275,6 +12371,10 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         echo "skill|$g_route|Google Calendar or Gmail"
         return
     end
+    if _agent_is_file_size_find "$cmd"
+        echo "skill|find_files_by_size $cmd|Find files by size threshold"
+        return
+    end
     if _agent_is_chart_request "$cmd"
         set -l parts (_agent_build_chart_cmd "$cmd")
         test -n "$parts"; and echo "skill|$parts|Line, bar, pie, or scatter chart (matplotlib PNG)"
@@ -12355,6 +12455,11 @@ function _agent_correct_interpretation --description "Fix bad LLM skill picks us
 
     if set -l g_route (_agent_route_google "$cmd")
         echo $g_route
+        return
+    end
+
+    if _agent_is_file_size_find "$cmd"
+        echo (_agent_route_file_size_find "$cmd")
         return
     end
 
@@ -14517,6 +14622,11 @@ function agent --description "Run commands safely: executes safe commands automa
         set route_source offline
     end
 
+    if test -z "$interpreted"; and _agent_is_file_size_find "$cmd"
+        set interpreted (_agent_route_file_size_find "$cmd")
+        set route_source offline
+    end
+
     if test -z "$interpreted"; and _agent_is_chart_request "$cmd"
         set interpreted (_agent_build_chart_cmd "$cmd")
         set route_source offline
@@ -15362,6 +15472,10 @@ function agent --description "Run commands safely: executes safe commands automa
         set -l routine_cmd (_agent_build_routines_cmd "$cmd")
         echo (set_color yellow)"💡 [Routine → $routine_cmd]"(set_color normal)
         _agent_dispatch_one "$routine_cmd"
+    else if _agent_is_file_size_find "$cmd"
+        set -l size_cmd (_agent_route_file_size_find "$cmd")
+        echo (set_color yellow)"💡 [File size → $size_cmd]"(set_color normal)
+        _agent_dispatch_one "$size_cmd"
     else if _agent_is_chart_request "$cmd"
         set -l chart_cmd (_agent_build_chart_cmd "$cmd")
         echo (set_color yellow)"💡 [Chart → $chart_cmd]"(set_color normal)
