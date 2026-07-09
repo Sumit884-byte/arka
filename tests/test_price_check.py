@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import os
+import re
 import unittest
 from unittest import mock
 
 from arka.agent.core import price_check
 from arka.agent.price_sources import (
     PriceListing,
+    _canonical_product_key,
+    _dedupe_listings,
+    _display_listings_for_output,
     _model_from_title,
     build_price_search_queries,
     check_url_reachable,
@@ -26,6 +30,7 @@ from arka.agent.price_sources import (
     is_price_check_query,
     is_shop_product_url,
     list_price_sources,
+    min_price_floor,
     parse_price_query,
     resolve_apple_shop_url,
     retailer_for_url,
@@ -240,6 +245,21 @@ class PriceExtractionTests(unittest.TestCase):
         )
         prices = extract_prices_from_content(shop_html, region="india")
         self.assertEqual(prices, ["₹1,69,900"])
+
+    def test_extract_rejects_emi_and_low_appliance_prices(self) -> None:
+        html = (
+            "Oral-B Vitality Electric Rechargeable Toothbrush "
+            "₹1,999 No Cost EMI ₹171/month for 12 months "
+            "₹171 accessory pack"
+        )
+        prices = extract_prices_from_content(
+            html, region="india", category="generic", product="electric brush"
+        )
+        self.assertEqual(prices, ["₹1,999"])
+        self.assertNotIn("₹171", prices)
+
+    def test_min_price_floor_for_electric_brush(self) -> None:
+        self.assertGreaterEqual(min_price_floor("electric brush", region="india"), 300)
 
     def test_extract_usd_from_shop_page_html(self) -> None:
         shop_html = "MacBook Pro 14-inch From $1,599.00"
@@ -507,14 +527,80 @@ class PriceCheckCoreTests(unittest.TestCase):
             searched_labels=["Amazon India"],
             retrieved_on="2026-07-09",
         )
-        self.assertIn("Amazon India — ₹1,126 – ₹6,499", output)
+        self.assertIn("Amazon India — ₹1,325 – ₹6,499", output)
+        self.assertNotIn("₹171", output)
         self.assertIn("amazon.in/s?k=oral+b+electric+toothbrush", output)
         self.assertIn("Oral B Vitality Electric Rechargeable Toothbrush — ₹1,325", output)
         self.assertIn("https://www.amazon.in/Oral-Vitality-Electric-Rechargeable-Toothbrush/dp/B07JL3W3KG", output)
         self.assertIn("Oral B Pro 3 Electric Toothbrush — ₹6,499", output)
         self.assertIn("https://www.amazon.in/Oral-B-Pro-3-Electric-Toothbrush/dp/B08YYYY", output)
-        self.assertIn("Oral B Cross Action Replacement Brush Heads — ₹1,126.25", output)
-        self.assertIn("https://www.amazon.in/Oral-B-Cross-Action-Brush-Heads/dp/B09ZZZZ", output)
+        self.assertNotIn("Replacement Brush Heads", output)
+
+    def test_dedupe_listings_by_asin_keeps_lowest_price(self) -> None:
+        url = "https://www.amazon.in/Oral-Vitality-Electric-Rechargeable-Toothbrush/dp/B07JL3W3KG"
+        raw = [
+            PriceListing("Oral-B Vitality", "₹1,999", "Amazon India", url),
+            PriceListing("Oral-B Vitality", "₹1,325", "Amazon India", url),
+            PriceListing("Oral-B Vitality", "₹1,126.25", "Amazon India", url),
+        ]
+        deduped = _dedupe_listings(raw)
+        self.assertEqual(len(deduped), 1)
+        self.assertEqual(deduped[0].price, "₹1,126.25")
+
+    def test_canonical_product_key_uses_asin(self) -> None:
+        url = "https://www.amazon.in/foo/dp/B07JL3W3KG/ref=abc"
+        self.assertEqual(_canonical_product_key(url), "asin:B07JL3W3KG")
+
+    def test_format_electric_brush_range_matches_shown_listings_only(self) -> None:
+        vitality_url = (
+            "https://www.amazon.in/Oral-Vitality-Electric-Rechargeable-Toothbrush/dp/B07JL3W3KG"
+        )
+        listings = [
+            PriceListing("Oral-B Vitality", "₹1,999", "Amazon India", vitality_url),
+            PriceListing("Oral-B Vitality", "₹1,325", "Amazon India", vitality_url),
+            PriceListing("Oral-B Vitality", "₹1,126.25", "Amazon India", vitality_url),
+            PriceListing("Junk Scrape", "₹171", "Amazon India", "https://www.amazon.in/dp/B0JUNK"),
+            PriceListing(
+                "Oral-B iO3",
+                "₹6,499",
+                "Amazon India",
+                "https://www.amazon.in/Oral-B-iO3/dp/B0IO3EX",
+            ),
+            PriceListing(
+                "AGARO Electric Brush",
+                "₹1,126",
+                "Flipkart",
+                "https://www.flipkart.com/agaro-brush/p/itmabc123",
+            ),
+        ]
+        output = format_price_check_output(
+            listings,
+            product="electric brush",
+            region="india",
+            searched_labels=["Amazon India", "Flipkart"],
+            retrieved_on="2026-07-09",
+        )
+        self.assertIn("Electric Brush (India): ₹1,126 – ₹6,499", output)
+        self.assertNotIn("₹171", output)
+        self.assertEqual(output.count(vitality_url), 1)
+        self.assertIn("Oral-B Vitality — ₹1,126.25", output)
+
+    def test_display_listings_for_output_dedupes_before_range(self) -> None:
+        url = "https://www.amazon.in/dp/B07JL3W3KG"
+        listings = [
+            PriceListing("Oral-B Vitality", "₹1,999", "Amazon India", url),
+            PriceListing("Oral-B Vitality", "₹1,325", "Amazon India", url),
+            PriceListing("Oral-B iO3", "₹6,499", "Amazon India", "https://www.amazon.in/dp/B0IO3"),
+        ]
+        shown = _display_listings_for_output(
+            listings, product="electric brush", region="india"
+        )
+        amounts = sorted(
+            int(re.sub(r"[^\d]", "", item.price))
+            for item in shown
+            if item.price
+        )
+        self.assertEqual(amounts, [1325, 6499])
 
     def test_model_from_title_preserves_oral_b_brand(self) -> None:
         title = "Oral-B Vitality Electric Rechargeable Toothbrush - Amazon.in"

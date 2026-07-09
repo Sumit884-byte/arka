@@ -100,6 +100,15 @@ _MIN_PRICE_BY_CATEGORY: dict[PriceProductCategory, dict[str, int]] = {
     "personal_care": {"india": 100, "us": 10},
 }
 
+# Higher floors for durable appliances / electric brushes (reject accessory/EMI junk).
+_APPLIANCE_MIN_PRICE: dict[str, int] = {"india": 300, "us": 15}
+_APPLIANCE_PRODUCT_RE = re.compile(
+    r"(?i)\b(?:electric brush|toothbrush|oral.?b|sonicare|blender|vacuum|mixer|"
+    r"grinder|kettle|iron|fan|heater|purifier|microwave|trimmer|shaver|"
+    r"hair dryer|straightener|pressure cooker|air fryer|coffee maker|juicer|"
+    r"water purifier|washing machine|dryer|refrigerator)\b"
+)
+
 _CATEGORY_SOURCES: dict[PriceProductCategory, dict[str, tuple[str, ...]]] = {
     "apple": {
         "india": ("apple_in", "amazon_in", "flipkart"),
@@ -566,7 +575,36 @@ def check_url_reachable(url: str, *, timeout: int = 10) -> bool:
     return False
 
 
-_MONTHLY_CONTEXT_RE = re.compile(r"(?i)^\s*(?:/|per)\s*(?:month|mo)\b")
+_EMI_TAIL_RE = re.compile(r"(?i)^\s*(?:/|per)\s*(?:month|mo)\b")
+_EMI_HEAD_RE = re.compile(r"(?i)(?:no\s+cost\s+)?emi\s*(?:from|at|:)?\s*$")
+
+
+def min_price_floor(
+    product: str,
+    *,
+    region: str,
+    category: PriceProductCategory | None = None,
+) -> int:
+    """Return the minimum plausible retail price for a product query."""
+    cat = category or detect_price_product_category(product)
+    if _APPLIANCE_PRODUCT_RE.search(product):
+        return _APPLIANCE_MIN_PRICE.get(region, _APPLIANCE_MIN_PRICE["india"])
+    return _MIN_PRICE_BY_CATEGORY.get(cat, _MIN_PRICE).get(
+        region, _MIN_PRICE.get(region, 50)
+    )
+
+
+def _is_emi_price_context(text: str, start: int, end: int) -> bool:
+    """True when this price token is the installment amount, not the full retail price."""
+    tail = text[end : end + 14]
+    head = text[max(0, start - 20) : start]
+    if _EMI_TAIL_RE.search(tail):
+        return True
+    if _EMI_HEAD_RE.search(head):
+        return True
+    if re.search(r"(?i)(?:from|as\s+low\s+as|just)\s*$", head) and _EMI_TAIL_RE.search(tail):
+        return True
+    return False
 
 
 def extract_prices_from_content(
@@ -574,6 +612,7 @@ def extract_prices_from_content(
     *,
     region: str,
     category: PriceProductCategory | None = None,
+    product: str = "",
 ) -> list[str]:
     """Extract normalized retail prices from scraped page text."""
     if not text:
@@ -581,7 +620,9 @@ def extract_prices_from_content(
     patterns = _INR_PRICE_PATTERNS if region == "india" else _USD_PRICE_PATTERNS
     fallback = _USD_PRICE_PATTERNS if region == "india" else _INR_PRICE_PATTERNS
     cat = category or "apple"
-    min_value = _MIN_PRICE_BY_CATEGORY.get(cat, _MIN_PRICE).get(region, _MIN_PRICE.get(region, 50))
+    min_value = min_price_floor(product, region=region, category=cat) if product else (
+        _MIN_PRICE_BY_CATEGORY.get(cat, _MIN_PRICE).get(region, _MIN_PRICE.get(region, 50))
+    )
 
     candidates: list[tuple[int, str]] = []
     seen_values: set[int] = set()
@@ -593,8 +634,7 @@ def extract_prices_from_content(
                 value = _price_to_int(amount)
                 if value is None or value < min_value or value in seen_values:
                     continue
-                tail = text[match.end() : match.end() + 12]
-                if _MONTHLY_CONTEXT_RE.search(tail):
+                if _is_emi_price_context(text, match.start(), match.end()):
                     continue
                 seen_values.add(value)
                 if symbol in ("₹", "$"):
@@ -605,8 +645,82 @@ def extract_prices_from_content(
         if candidates:
             break
 
-    candidates.sort(key=lambda item: item[0], reverse=True)
+    candidates.sort(key=lambda item: item[0])
     return [price for _, price in candidates]
+
+
+def _canonical_product_key(url: str) -> str:
+    """Normalize a retailer URL to a stable product identity for deduplication."""
+    if not url:
+        return ""
+    parsed = urlparse(url)
+    path = parsed.path or ""
+    host = (parsed.netloc or "").lower()
+
+    asin_match = re.search(r"/(?:dp|gp/product|gp/aw/d)/([A-Z0-9]{8,12})", path, re.I)
+    if asin_match:
+        return f"asin:{asin_match.group(1).upper()}"
+
+    fk_match = re.search(r"/p/([\w]+)", path, re.I)
+    if fk_match and "flipkart" in host:
+        return f"flipkart:{fk_match.group(1).lower()}"
+
+    nykaa_match = re.search(r"/p/(\d+)", path, re.I)
+    if nykaa_match:
+        return f"{host}:p:{nykaa_match.group(1)}"
+
+    croma_match = re.search(r"/p/(\d+)", path, re.I)
+    if croma_match and "croma" in host:
+        return f"croma:{croma_match.group(1)}"
+
+    bestbuy_match = re.search(r"/site/[\w\-]+/([\w\-]+)\.p", path, re.I)
+    if bestbuy_match:
+        return f"bestbuy:{bestbuy_match.group(1).lower()}"
+
+    return f"{host}{path.rstrip('/').lower()}"
+
+
+_ACCESSORY_TITLE_RE = re.compile(
+    r"(?i)\b(?:replacement|refill|cartridge|brush\s+head(?:s)?|"
+    r"spare\s+part|accessory|accessories|pack\s+of\s+\d+\s+heads?)\b"
+)
+
+
+def _is_valid_product_listing(model: str, product: str) -> bool:
+    """Reject listings without a plausible product title."""
+    cleaned = _normalize_label(model).strip()
+    if len(cleaned) < 4:
+        return False
+    if _ACCESSORY_TITLE_RE.search(cleaned) and not _ACCESSORY_TITLE_RE.search(product):
+        return False
+    return True
+
+
+def _filter_listings(
+    listings: list[PriceListing],
+    *,
+    product: str,
+    region: str,
+) -> list[PriceListing]:
+    """Drop junk prices and listings with invalid titles."""
+    category = detect_price_product_category(product)
+    floor = min_price_floor(product, region=region, category=category)
+    out: list[PriceListing] = []
+    for listing in listings:
+        amount = _parse_formatted_price(listing.price)
+        if amount is None or amount < floor:
+            continue
+        if not _is_valid_product_listing(listing.model, product):
+            continue
+        out.append(
+            PriceListing(
+                model=_normalize_label(listing.model),
+                price=listing.price,
+                source=listing.source,
+                url=listing.url,
+            )
+        )
+    return out
 
 
 def build_price_search_queries(product: str, *, region: str) -> list[PriceSearchQuery]:
@@ -759,23 +873,44 @@ def _source_id_for_label(label: str, *, region: str) -> str | None:
 
 
 def _dedupe_listings(listings: list[PriceListing]) -> list[PriceListing]:
-    seen_keys: set[tuple[str, str, str]] = set()
-    out: list[PriceListing] = []
+    """Keep one listing per product URL/ASIN, preferring the lowest valid price."""
+    by_key: dict[str, PriceListing] = {}
     for listing in listings:
-        model = _normalize_label(listing.model).lower()
-        key = (model, listing.price, listing.url)
-        if key in seen_keys:
+        key = _canonical_product_key(listing.url)
+        if not key:
+            key = f"{_normalize_label(listing.model).lower()}|{listing.source}"
+        amount = _parse_formatted_price(listing.price)
+        existing = by_key.get(key)
+        if existing is None:
+            by_key[key] = listing
             continue
-        seen_keys.add(key)
-        out.append(
-            PriceListing(
-                model=_normalize_label(listing.model),
-                price=listing.price,
-                source=listing.source,
-                url=listing.url,
-            )
-        )
-    return out
+        existing_amount = _parse_formatted_price(existing.price)
+        if amount is not None and (
+            existing_amount is None or amount < existing_amount
+        ):
+            by_key[key] = listing
+    return list(by_key.values())
+
+
+def _display_listings_for_output(
+    listings: list[PriceListing],
+    *,
+    product: str,
+    region: str,
+    max_per_source: int = 4,
+) -> list[PriceListing]:
+    """Final listings shown to the user — used for accurate price ranges."""
+    filtered = _filter_listings(listings, product=product, region=region)
+    deduped = _dedupe_listings(filtered)
+    by_source: dict[str, list[PriceListing]] = {}
+    for item in deduped:
+        by_source.setdefault(item.source, []).append(item)
+    shown: list[PriceListing] = []
+    for items in by_source.values():
+        items.sort(key=lambda item: _parse_formatted_price(item.price) or 0)
+        shown.extend(items[:max_per_source])
+    shown.sort(key=lambda item: _parse_formatted_price(item.price) or 0)
+    return shown
 
 
 def fetch_price_listings(
@@ -867,23 +1002,30 @@ def fetch_price_listings(
 
             page = scrape_url(link)
             content = "\n".join(part for part in (title, snippet, page) if part)
-            prices = extract_prices_from_content(content, region=region, category=category)
+            prices = extract_prices_from_content(
+                content, region=region, category=category, product=product
+            )
             if not prices:
                 continue
 
-            # Capture multiple prices from listing pages for range display.
             model = _model_from_title(title, product, url=link)
-            for price in prices[:4]:
-                listings.append(
-                    PriceListing(
-                        model=model,
-                        price=price,
-                        source=label,
-                        url=link,
-                    )
-                )
+            if not _is_valid_product_listing(model, product):
+                continue
 
-    return _dedupe_listings(listings), searched_labels
+            # One canonical price per product page (lowest valid retail price).
+            best_price = prices[0]
+            listings.append(
+                PriceListing(
+                    model=model,
+                    price=best_price,
+                    source=label,
+                    url=link,
+                )
+            )
+
+    return _dedupe_listings(
+        _filter_listings(listings, product=product, region=region)
+    ), searched_labels
 
 
 def format_price_check_output(
@@ -927,22 +1069,23 @@ def format_price_check_output(
 
     if category != "apple":
         display_name = product.strip().title()
-        all_amounts = [
+        shown = _display_listings_for_output(listings, product=product, region=region)
+        shown_amounts = [
             value
-            for item in listings
+            for item in shown
             if (value := _parse_formatted_price(item.price)) is not None
         ]
-        if all_amounts:
+        if shown_amounts:
             lines.append(
                 f" {display_name} ({region_name}): "
-                f"{_format_price_range(all_amounts, region=region)}"
+                f"{_format_price_range(shown_amounts, region=region)}"
             )
             lines.append("")
             lines.append(f" {_GENERIC_CONFIG_NOTE}")
             lines.append("")
 
         by_source: dict[str, list[PriceListing]] = {}
-        for item in other_listings or listings:
+        for item in shown:
             by_source.setdefault(item.source, []).append(item)
 
         for source, items in by_source.items():
@@ -961,7 +1104,7 @@ def format_price_check_output(
             browse_url = _retailer_browse_url(sid, product, region=region) if sid else None
             if browse_url:
                 lines.append(f"   {browse_url}")
-            for item in items[:4]:
+            for item in items:
                 lines.append(f"   • {item.model} — {item.price}")
                 if item.url:
                     lines.append(f"     {item.url}")
