@@ -6325,7 +6325,7 @@ end
 function _arka_strip_atx_prefix --description "Remove ATX markdown heading prefix (# .. ###### + space) (internal)"
     set -l text (string trim -- "$argv[1]")
     test -z "$text"; and return
-    if string match -qr '^#{1,6}\s+\S' "$text"
+    if string match -qr '^#{1,6}\s+\S' -- "$text"
         set text (string replace -r '^#{1,6}\s+' '' -- "$text")
     end
     echo -n "$text"
@@ -6335,7 +6335,7 @@ function _arka_is_markdown_heading --description "True for ATX markdown headings
     set -l text (string trim -- "$argv[1]")
     test -z "$text"; and return 1
     # CommonMark ATX: 1–6 hashes, required space, then title (#health is NOT a heading).
-    if not string match -qr '^#{1,6}\s+\S' "$text"
+    if not string match -qr '^#{1,6}\s+\S' -- "$text"
         return 1
     end
     set -l m (string match -r '^#{1,6}\s+(.+)$' -- "$text")
@@ -6345,7 +6345,7 @@ function _arka_is_markdown_heading --description "True for ATX markdown headings
     if _arka_is_source_line "$title"
         return 1
     end
-    if string match -qr '(?i)^Sources?\s*:' "$title"
+    if string match -qr '(?i)^Sources?\s*:' -- "$title"
         return 1
     end
     return 0
@@ -6400,18 +6400,18 @@ end
 function _arka_is_source_line --description "True if line is a web/source citation (internal)"
     set -l text (_arka_strip_source_text "$argv[1]")
     test -z "$text"; and return 1
-    string match -qr '(?i)^Sources?\s*:' "$text"; and return 0
-    string match -qr '(?i)^\(Sources?\s*:' "$text"; and return 0
-    string match -qr '(?i)via (provided )?search results' "$text"; and return 0
-    string match -qr '(?i)via web search' "$text"; and return 0
-    string match -qr '(?i)^according to\s' "$text"; and return 0
+    string match -qr '(?i)^Sources?\s*:' -- "$text"; and return 0
+    string match -qr '(?i)^\(Sources?\s*:' -- "$text"; and return 0
+    string match -qr '(?i)via (provided )?search results' -- "$text"; and return 0
+    string match -qr '(?i)via web search' -- "$text"; and return 0
+    string match -qr '(?i)^according to\s' -- "$text"; and return 0
     return 1
 end
 
 function _arka_is_sources_section --description "True if line is a Sources section title (internal)"
     set -l text (_arka_clean_markdown_stars (_arka_strip_atx_prefix "$argv[1]"))
     test -z "$text"; and return 1
-    string match -qr '(?i)^Sources?\s*:?\s*$' "$text"
+    string match -qr '(?i)^Sources?\s*:?\s*$' -- "$text"
 end
 
 function _arka_print_numbered --description "Print one numbered answer line (internal)"
@@ -6669,6 +6669,19 @@ function _arka_print_answer --description "Pretty-print web/chat answer for the 
                 _arka_print_source_line "$ubul[2]"
                 continue
             end
+            _pdf_bullet "  " "" "$ubul[2]"
+            continue
+        end
+
+        set -l dbul (string match -r '^-\s+(.+)$' -- "$trimmed")
+        if test (count $dbul) -ge 2
+            set -l body (string replace -a -r '\*\*([^*]+)\*\*' '$1' -- "$dbul[2]")
+            if _arka_is_source_line "$body"
+                _arka_print_source_line "$body"
+                continue
+            end
+            _pdf_bullet "  " "" "$body"
+            continue
         end
 
         if string match -qr '(?i)^(based on|here .{0,60}(summary|answer|list)|these (places|cities|options)|in summary|to summarize)' -- "$trimmed"
@@ -9057,6 +9070,10 @@ function _agent_is_knowledge_question --description "True if user wants a factua
     end
     if string match -qr '(?i)(outdated|too\s+old|too\s+slow|good\s+enough|worth\s+upgrad|bottleneck|malware|infected|hacked|compromised|specs?\s+for\s+my)' "$clean"
         return 1
+    end
+    if string match -qr '(?i)^show\s+me\s+' "$clean"
+        and not string match -qr '(?i)\b(image|photo|picture|pic|screenshot|snapshot|\.png|\.jpe?g|\.webp|\.gif|\.bmp|\.svg|\.heic|\.tiff?)\b' "$clean"
+        return 0
     end
     if string match -qr '(?i)^(why\s+(is|are|was|were|do|does|did)|where\s+(is|are|was|were)|when\s+(is|are|was|were|did|does)|who\s+(is|are|was|were)|what\s+(is|are|was|were)|tell\s+(me\s+)?(about|why|where|who|what|when|how)|tell\s+about|explain\s+(what|why|where|who|when|the|about)|describe\s+(what|why|the|about)|how\s+(old|tall|long|far|big|many|much)\s+(is|are|was|were)|what\s+do\s+you\s+know\s+about)' "$clean"
         and not string match -qr '(?i)^(what\s+(is\s+)?(the\s+)?(weather|time|date|ip|my\s+ip)|how\s+(much|many)\s+(disk|space|memory|ram)\s+(left|free|used)|explain\s+how\s+to\s+(install|download|setup|get|fix|use|run|create|open))' "$clean"

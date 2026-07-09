@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
-"""GitHub repo activity — recent commits and modified files via gh API or local git."""
+"""GitHub repo activity - recent commits and modified files via gh API or local git."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from shutil import which
 
 try:
-    from arka.agent.pr_check import _run, gh_available, git_root
+    from arka.agent.pr_check import _run, git_root
     from arka.paths import load_env_file
 
     load_env_file()
@@ -20,9 +22,6 @@ except ImportError:
 
     def load_env_file() -> None:
         pass
-
-    def gh_available() -> bool:
-        return False
 
     def git_root() -> Path | None:
         return None
@@ -32,6 +31,12 @@ except ImportError:
 
 
 _GITHUB_REPO_RE = re.compile(r"github\.com/([^/\s#?]+)/([^/\s#?]+)", re.I)
+_GITHUB_SSH_RE = re.compile(r"github\.com[:/]([^/\s#?]+)/([^/\s#?.]+)", re.I)
+
+_LOCAL_REPO_RE = re.compile(
+    r"(?i)(?:this\s+)?(?:repo(?:sitory)?|project)\s*[:=]\s*([a-zA-Z0-9._-]+)"
+)
+_LOCAL_REPO_WORDS_RE = re.compile(r"(?i)\bthis\s+repo(?:sitory)?\s+([a-zA-Z0-9._-]+)\b")
 
 _ACTIVITY_RE = re.compile(
     r"(?i)\b("
@@ -57,6 +62,69 @@ def parse_github_repo(text: str) -> tuple[str, str] | None:
     if owner.lower() == "orgs" or owner.lower() == "repos":
         return None
     return owner, repo
+
+
+def parse_local_repo_name(text: str) -> str | None:
+    for pattern in (_LOCAL_REPO_RE, _LOCAL_REPO_WORDS_RE):
+        match = pattern.search(text or "")
+        if match:
+            return match.group(1).strip()
+    return None
+
+
+def _owner_repo_from_remote(url: str) -> tuple[str, str] | None:
+    match = _GITHUB_REPO_RE.search(url or "")
+    if match:
+        owner = match.group(1).strip(".")
+        repo = match.group(2).removesuffix(".git").strip(".")
+        return owner, repo
+    match = _GITHUB_SSH_RE.search(url or "")
+    if match:
+        owner = match.group(1).strip(".")
+        repo = match.group(2).removesuffix(".git").strip(".")
+        return owner, repo
+    return None
+
+
+def _owner_repo_from_root(root: Path) -> tuple[str, str] | None:
+    code, out, _ = _run(["git", "remote", "get-url", "origin"], cwd=root)
+    if code != 0:
+        return None
+    return _owner_repo_from_remote(out.strip())
+
+
+def _find_clone_by_name(repo_name: str) -> Path | None:
+    target = repo_name.lower().strip()
+    for root in _candidate_git_roots():
+        if root.name.lower() == target:
+            return root
+        slug = _owner_repo_from_root(root)
+        if slug and slug[1].lower() == target:
+            return root
+    return None
+
+
+def resolve_repo(text: str) -> tuple[str, str] | None:
+    parsed = parse_github_repo(text)
+    if parsed:
+        return parsed
+
+    name = parse_local_repo_name(text)
+    if name:
+        if "/" in name:
+            owner, repo = name.split("/", 1)
+            return owner.strip(), repo.strip()
+        root = _find_clone_by_name(name)
+        if root:
+            return _owner_repo_from_root(root)
+        return None
+
+    if re.search(r"(?i)\b(?:this|the)\s+repo(?:sitory)?\b", text or ""):
+        for root in _candidate_git_roots():
+            slug = _owner_repo_from_root(root)
+            if slug:
+                return slug
+    return None
 
 
 def parse_since_days(question: str, *, default: int = 7) -> int:
@@ -86,7 +154,7 @@ def parse_since_days(question: str, *, default: int = 7) -> int:
 
 
 def wants_github_repo_activity(question: str) -> bool:
-    if not parse_github_repo(question):
+    if not resolve_repo(question):
         return False
     return bool(_ACTIVITY_RE.search(question))
 
@@ -103,6 +171,87 @@ def _local_remote_matches(root: Path, owner: str, repo: str) -> bool:
     remote = out.strip().lower()
     slug = f"{owner.lower()}/{repo.lower()}"
     return slug in remote
+
+
+def _gh_binary() -> str | None:
+    found = which("gh")
+    if found:
+        return found
+    for candidate in (
+        "/opt/homebrew/bin/gh",
+        "/usr/local/bin/gh",
+        os.path.expanduser("~/.local/bin/gh"),
+    ):
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+    return None
+
+
+def _gh_status() -> str:
+    """Return ``available``, ``not_installed``, or ``not_authenticated``."""
+    gh = _gh_binary()
+    if not gh:
+        return "not_installed"
+    code, _, _ = _run([gh, "auth", "status"])
+    if code != 0:
+        return "not_authenticated"
+    return "available"
+
+
+def _candidate_git_roots() -> list[Path]:
+    roots: list[Path] = []
+    seen: set[str] = set()
+
+    def add(path: Path | None) -> None:
+        if not path or not path.is_dir():
+            return
+        key = str(path.resolve())
+        if key in seen:
+            return
+        seen.add(key)
+        roots.append(path)
+
+    add(git_root())
+    try:
+        from arka.paths import arka_home, checkout_root
+
+        add(checkout_root())
+        add(arka_home())
+    except ImportError:
+        pass
+    for env_key in ("INSTALL_HOME", "ARKA_HOME"):
+        raw = os.environ.get(env_key, "").strip()
+        if raw:
+            add(Path(raw).expanduser())
+    return roots
+
+
+def _find_local_clone(owner: str, repo: str) -> Path | None:
+    for root in _candidate_git_roots():
+        if _local_remote_matches(root, owner, repo):
+            return root
+    return None
+
+
+def _activity_unavailable_message(owner: str, repo: str) -> str:
+    status = _gh_status()
+    if status == "not_installed":
+        return (
+            f"Cannot load activity for {owner}/{repo}.\n"
+            "GitHub CLI (gh) is not installed. Install it (e.g. brew install gh) "
+            f"or clone {owner}/{repo} locally."
+        )
+    if status == "not_authenticated":
+        return (
+            f"Cannot load activity for {owner}/{repo}.\n"
+            "GitHub CLI is installed but not authenticated. Run: gh auth login\n"
+            f"Or cd into a local clone of {owner}/{repo}."
+        )
+    return (
+        f"Cannot load activity for {owner}/{repo}.\n"
+        "No matching local clone found and GitHub API is unavailable. "
+        f"Clone {owner}/{repo} or check `gh auth status`."
+    )
 
 
 def _fetch_via_local_git(root: Path, *, days: int) -> tuple[list[dict], OrderedDict[str, int]]:
@@ -162,10 +311,17 @@ def _fetch_via_local_git(root: Path, *, days: int) -> tuple[list[dict], OrderedD
 
 
 def _fetch_via_gh_api(owner: str, repo: str, *, days: int) -> tuple[list[dict], OrderedDict[str, int]]:
+    gh = _gh_binary()
+    if not gh:
+        raise RuntimeError("GitHub CLI (gh) is not installed")
+    status = _gh_status()
+    if status == "not_authenticated":
+        raise RuntimeError("GitHub CLI is not authenticated - run: gh auth login")
+
     since = _since_iso(days)
     code, out, err = _run(
         [
-            "gh",
+            gh,
             "api",
             f"repos/{owner}/{repo}/commits",
             "-f",
@@ -176,7 +332,12 @@ def _fetch_via_gh_api(owner: str, repo: str, *, days: int) -> tuple[list[dict], 
         timeout=180,
     )
     if code != 0:
-        raise RuntimeError(err.strip() or out.strip() or "gh api commits failed")
+        detail = err.strip() or out.strip() or "gh api commits failed"
+        if "401" in detail or "not logged" in detail.lower():
+            raise RuntimeError("GitHub CLI is not authenticated - run: gh auth login")
+        if "404" in detail or "Not Found" in detail:
+            raise RuntimeError(f"Repository not found or not accessible: {owner}/{repo}")
+        raise RuntimeError(detail)
     try:
         rows = json.loads(out)
     except json.JSONDecodeError as exc:
@@ -200,7 +361,7 @@ def _fetch_via_gh_api(owner: str, repo: str, *, days: int) -> tuple[list[dict], 
         if not full_sha:
             continue
         dcode, detail_out, _ = _run(
-            ["gh", "api", f"repos/{owner}/{repo}/commits/{full_sha}"],
+            [gh, "api", f"repos/{owner}/{repo}/commits/{full_sha}"],
             timeout=60,
         )
         if dcode != 0:
@@ -222,23 +383,20 @@ def fetch_repo_activity(owner: str, repo: str, *, days: int) -> str:
     files: OrderedDict[str, int]
     source = "GitHub API"
 
-    root = git_root()
-    if root and _local_remote_matches(root, owner, repo):
+    root = _find_local_clone(owner, repo)
+    if root:
         try:
             commits, files = _fetch_via_local_git(root, days=days)
             source = "local git"
         except RuntimeError:
-            if not gh_available():
+            if _gh_status() != "available":
                 raise
             commits, files = _fetch_via_gh_api(owner, repo, days=days)
             source = "GitHub API"
-    elif gh_available():
+    elif _gh_status() == "available":
         commits, files = _fetch_via_gh_api(owner, repo, days=days)
     else:
-        return (
-            f"Cannot load activity for {owner}/{repo}.\n"
-            "Install GitHub CLI and run `gh auth login`, or clone the repo locally."
-        )
+        return _activity_unavailable_message(owner, repo)
 
     lines = [
         f"Repository: {owner}/{repo}",
@@ -257,7 +415,7 @@ def fetch_repo_activity(owner: str, repo: str, *, days: int) -> str:
             f"({row.get('author', '?')}, {str(row.get('date', ''))[:10]})"
         )
     if len(commits) > 20:
-        lines.append(f"… and {len(commits) - 20} more commit(s)")
+        lines.append(f"... and {len(commits) - 20} more commit(s)")
 
     lines.append("")
     if files:
@@ -267,7 +425,7 @@ def fetch_repo_activity(owner: str, repo: str, *, days: int) -> str:
             suffix = f" ({count} commits)" if count > 1 else ""
             lines.append(f"- {path}{suffix}")
         if len(files) > 60:
-            lines.append(f"… and {len(files) - 60} more file(s)")
+            lines.append(f"... and {len(files) - 60} more file(s)")
     else:
         lines.append("No file list available for these commits.")
 
@@ -277,7 +435,7 @@ def fetch_repo_activity(owner: str, repo: str, *, days: int) -> str:
 def fetch_activity_for_question(question: str) -> str | None:
     if not wants_github_repo_activity(question):
         return None
-    parsed = parse_github_repo(question)
+    parsed = resolve_repo(question)
     if not parsed:
         return None
     owner, repo = parsed
@@ -291,7 +449,7 @@ def fetch_activity_for_question(question: str) -> str | None:
 def route_command(text: str) -> str:
     if not wants_github_repo_activity(text):
         return ""
-    parsed = parse_github_repo(text)
+    parsed = resolve_repo(text)
     if not parsed:
         return ""
     owner, repo = parsed

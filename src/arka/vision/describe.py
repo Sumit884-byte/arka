@@ -954,8 +954,9 @@ def describe_source(source: str, prompt: str | None = None) -> str:
 
 _DESCRIBE_VERB = re.compile(
     r"(?i)^(?:please\s+)?(?:describe|caption|explain|identify|what(?:'|\s+)s\s+in|what\s+is\s+in|"
-    r"look\s+at|show\s+me)\s+(.+)$",
+    r"look\s+at)\s+(.+)$",
 )
+_SHOW_ME_VERB = re.compile(r"(?i)^(?:please\s+)?show\s+me\s+(.+)$")
 _EXT_TRY = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tif", ".tiff", ".heic")
 
 
@@ -1037,6 +1038,20 @@ def resolve_image_path(name: str) -> Path:
     )
 
 
+def _is_explicit_image_reference(text: str) -> bool:
+    """True when text is a path/URL/extension, not a generic listing noun."""
+    t = text.strip().strip("'\"")
+    if not t:
+        return False
+    if _is_url(t):
+        return True
+    if Path(t).suffix.lower() in IMAGE_EXTENSIONS:
+        return True
+    if t.startswith(("~", ".", "/")) or "/" in t or "\\" in t:
+        return True
+    return False
+
+
 def _has_describe_intent(text: str) -> bool:
     if re.search(
         r"(?i)\b(what\s+(?:do\s+)?you\s+think|your\s+(?:thoughts?|opinion|take)|think\s+about|opinion\s+on)\b",
@@ -1091,27 +1106,32 @@ def parse_describe_request(text: str) -> tuple[str | None, str]:
             question = _strip_describe_words(t, url) or DEFAULT_PROMPT
             return url, question
 
-    m = _DESCRIBE_VERB.match(t)
-    if m:
+    for verb in (_DESCRIBE_VERB, _SHOW_ME_VERB):
+        m = verb.match(t)
+        if not m:
+            continue
         rest = m.group(1).strip().strip("'\"")
-        if rest:
-            url_in_rest = re.match(r"(https?://\S+)", rest, re.I)
-            if url_in_rest:
-                url = url_in_rest.group(1).rstrip(".,)")
-                question = rest[len(url_in_rest.group(0)) :].strip() or DEFAULT_PROMPT
-                return url, question
-            path_m = re.match(
-                r"(\S+\.(?:png|jpe?g|webp|gif|bmp|tiff?|heic|svg))(?:\s+(.*))?$",
-                rest,
-                re.I,
-            )
-            if path_m:
-                q = (path_m.group(2) or "").strip() or _default_prompt_for_source(path_m.group(1))
-                return path_m.group(1), q
-            parts = rest.split(None, 1)
-            name = parts[0]
+        if not rest:
+            continue
+        url_in_rest = re.match(r"(https?://\S+)", rest, re.I)
+        if url_in_rest:
+            url = url_in_rest.group(1).rstrip(".,)")
+            question = rest[len(url_in_rest.group(0)) :].strip() or DEFAULT_PROMPT
+            return url, question
+        path_m = re.match(
+            r"(\S+\.(?:png|jpe?g|webp|gif|bmp|tiff?|heic|svg))(?:\s+(.*))?$",
+            rest,
+            re.I,
+        )
+        if path_m:
+            q = (path_m.group(2) or "").strip() or _default_prompt_for_source(path_m.group(1))
+            return path_m.group(1), q
+        parts = rest.split(None, 1)
+        name = parts[0]
+        if _is_explicit_image_reference(name):
             question = parts[1].strip() if len(parts) > 1 else _default_prompt_for_source(name)
             return name, question or _default_prompt_for_source(name)
+        break
 
     path_m = re.search(
         r'(?P<q>["\']?)(?P<p>(?:~|/|\./|\.\./)[^\s"\']+|[^\s"\']+\.(?:png|jpe?g|webp|gif|bmp|tiff?|heic|svg))\1',

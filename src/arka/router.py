@@ -230,6 +230,19 @@ def _route_remind(cmd: str) -> Route | None:
     return None
 
 
+def _route_github_repo(cmd: str) -> Route | None:
+    try:
+        from arka.agent.github_repo import route_command, wants_github_repo_activity
+
+        if wants_github_repo_activity(cmd):
+            skill = route_command(cmd)
+            if skill:
+                return Route(skill, source="offline")
+    except ImportError:
+        pass
+    return None
+
+
 def _route_offline(cmd: str) -> Route | None:
     clean = cmd.lower()
 
@@ -352,6 +365,10 @@ def _route_offline(cmd: str) -> Route | None:
     if chat_route:
         return chat_route
 
+    github_route = _route_github_repo(cmd)
+    if github_route:
+        return github_route
+
     if _is_investment_question(clean):
         topic = _strip_query_prefix(cmd)
         return Route(
@@ -441,11 +458,19 @@ def _is_investment_question(clean: str) -> bool:
     )
 
 
+_SHOW_ME_IMAGE_HINT = re.compile(
+    r"(?i)\b(?:image|photo|picture|pic|screenshot|snapshot|"
+    r"\.png|\.jpe?g|\.webp|\.gif|\.bmp|\.svg|\.heic|\.tiff?)\b",
+)
+
+
 def _is_knowledge_question(clean: str) -> bool:
     if _is_investment_question(clean):
         return False
     if re.search(r"\b(my|this pc|my computer|my mac|my macbook|my machine|should i)\b", clean):
         return False
+    if re.match(r"^show\s+me\s+", clean) and not _SHOW_ME_IMAGE_HINT.search(clean):
+        return True
     return bool(
         re.match(
             r"^(why |where |when |who |what |tell me |explain |describe |how old |how many |how much )",
