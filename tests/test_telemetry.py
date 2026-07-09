@@ -55,6 +55,22 @@ def test_otel_sdk_disabled_blocks_export(monkeypatch):
     assert spans_enabled() is False
 
 
+def test_collector_available_respects_otel_sdk_disabled(monkeypatch, capsys):
+    monkeypatch.setenv("OTEL_TRACES_ENABLED", "1")
+    monkeypatch.setenv("SIGNOZ_ENDPOINT", "http://localhost:4318")
+    monkeypatch.setenv("OTEL_SDK_DISABLED", "true")
+
+    from importlib import reload
+
+    import arka.telemetry._otlp as otlp
+
+    reload(otlp)
+    otlp.reset_collector_probe_cache()
+
+    assert otlp.collector_available() is False
+    assert "OTLP collector unreachable" not in capsys.readouterr().err
+
+
 def test_unreachable_endpoint_disables_setup(monkeypatch):
     monkeypatch.setenv("OTEL_TRACES_ENABLED", "1")
     monkeypatch.setenv("SIGNOZ_ENDPOINT", "http://localhost:4318")

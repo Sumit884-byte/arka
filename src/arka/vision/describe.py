@@ -113,11 +113,13 @@ def _describe_unavailable_message() -> str:
                 "",
                 "1) Gemini (easiest if you have a key):",
                 "   export GEMINI_API_KEY=your-key",
-                "   export DESCRIBE_IMAGE_BACKEND=gemini",
+                "   # auto mode prefers Gemini when the key is set",
                 "",
-                "2) Ollama vision (local):",
+                "2) Ollama vision (local, images auto-resized to fit context):",
                 "   brew install ollama && ollama pull llava",
+                "   # or smaller models: ollama pull moondream",
                 "   export DESCRIBE_IMAGE_BACKEND=ollama",
+                "   # if context errors persist: export DESCRIBE_IMAGE_MAX_EDGE=768",
                 "",
                 "3) vLLM-Metal (Apple Silicon GPU):",
                 "   curl -fsSL https://raw.githubusercontent.com/vllm-project/vllm-metal/main/install.sh | bash",
@@ -139,6 +141,27 @@ def _describe_unavailable_message() -> str:
         "\nArka auto-starts/stops local servers when LLM_AUTO_START_SERVERS=1 (default on)."
     )
     return "\n".join(lines)
+
+
+def _is_ollama_context_error(detail: str) -> bool:
+    low = detail.lower()
+    return (
+        "context size" in low
+        or "context length" in low
+        or "exceeds the available context" in low
+        or "prompt too long" in low
+    )
+
+
+def _ollama_context_hint() -> str:
+    return (
+        "Ollama vision context overflow — the screenshot was too large for this model.\n"
+        "Fixes (try in order):\n"
+        "  • export DESCRIBE_IMAGE_MAX_EDGE=768   (smaller resize; default is 1024)\n"
+        "  • ollama pull moondream                (smaller vision model)\n"
+        "  • export DESCRIBE_IMAGE_OLLAMA_NUM_CTX=8192  (if your model supports it)\n"
+        "  • export GEMINI_API_KEY=...            (auto mode prefers Gemini on macOS)"
+    )
 
 
 def _load_arka_env() -> None:
@@ -224,6 +247,8 @@ def _backend_ready(name: str) -> bool:
 
 def _auto_backend_order() -> list[str]:
     if platform.system() == "Darwin":
+        if _api_key():
+            return ["gemini", "ollama", "vllm"]
         return ["ollama", "vllm", "gemini"]
     return ["vllm", "ollama", "gemini"]
 
@@ -279,9 +304,30 @@ def _apply_vllm_defaults() -> None:
 
 def _max_edge() -> int:
     try:
-        return max(256, int(_env("DESCRIBE_IMAGE_MAX_EDGE", "2048")))
+        return max(256, int(_env("DESCRIBE_IMAGE_MAX_EDGE", "1024")))
     except ValueError:
-        return 2048
+        return 1024
+
+
+def _max_edge_for(backend: str | None = None) -> int:
+    if backend == "ollama":
+        raw = _env("DESCRIBE_IMAGE_OLLAMA_MAX_EDGE") or _env("DESCRIBE_IMAGE_MAX_EDGE", "1024")
+        try:
+            return max(256, int(raw))
+        except ValueError:
+            return 1024
+    return _max_edge()
+
+
+def _jpeg_quality() -> int:
+    try:
+        return max(50, min(int(_env("DESCRIBE_IMAGE_JPEG_QUALITY", "82")), 95))
+    except ValueError:
+        return 82
+
+
+def _prefer_jpeg() -> bool:
+    return _env("DESCRIBE_IMAGE_FORCE_JPEG", "1") not in {"0", "false", "no", "off"}
 
 
 def _require_pillow():
@@ -316,28 +362,41 @@ def _guess_mime(path_or_url: str) -> str:
     return mapping.get(ext, "image/jpeg")
 
 
-def _resize_image(data: bytes, mime: str) -> tuple[bytes, str]:
+def _resize_image(
+    data: bytes,
+    mime: str,
+    *,
+    max_edge: int | None = None,
+    prefer_jpeg: bool | None = None,
+) -> tuple[bytes, str]:
     _require_pillow()
     from PIL import Image
 
     img = Image.open(io.BytesIO(data))
     if img.mode not in ("RGB", "RGBA"):
         img = img.convert("RGB")
-    max_edge = _max_edge()
+    edge = max_edge if max_edge is not None else _max_edge()
     w, h = img.size
-    if max(w, h) > max_edge:
-        scale = max_edge / max(w, h)
+    if max(w, h) > edge:
+        scale = edge / max(w, h)
         img = img.resize((int(w * scale), int(h * scale)), Image.Resampling.LANCZOS)
-    out_mime = "image/png" if mime == "image/svg+xml" else mime
+    use_jpeg = _prefer_jpeg() if prefer_jpeg is None else prefer_jpeg
     buf = io.BytesIO()
-    fmt = "PNG" if out_mime == "image/png" else ("JPEG" if out_mime == "image/jpeg" else "PNG")
-    if fmt == "JPEG" and img.mode == "RGBA":
-        img = img.convert("RGB")
-    img.save(buf, format=fmt, optimize=True)
-    if fmt == "JPEG":
+    if mime == "image/svg+xml" or not use_jpeg:
+        out_mime = "image/png" if mime == "image/svg+xml" else mime
+        fmt = "PNG" if out_mime == "image/png" else ("JPEG" if out_mime == "image/jpeg" else "PNG")
+        if fmt == "JPEG" and img.mode == "RGBA":
+            img = img.convert("RGB")
+        img.save(buf, format=fmt, optimize=True)
+        if fmt == "JPEG":
+            out_mime = "image/jpeg"
+        elif fmt == "PNG":
+            out_mime = "image/png"
+    else:
+        if img.mode == "RGBA":
+            img = img.convert("RGB")
+        img.save(buf, format="JPEG", quality=_jpeg_quality(), optimize=True)
         out_mime = "image/jpeg"
-    elif fmt == "PNG":
-        out_mime = "image/png"
     return buf.getvalue(), out_mime
 
 
@@ -519,6 +578,59 @@ def _gemini_describe(
     raise BackendError("gemini", (last_err or "Gemini vision failed for all models.") + hint, recoverable=auth_failed or bool(last_err))
 
 
+def _ollama_describe_once(
+    data: bytes,
+    mime: str,
+    prompt: str,
+    *,
+    model: str,
+    max_tokens: int,
+) -> str:
+    options: dict[str, int | float] = {"num_predict": max_tokens, "temperature": 0.2}
+    num_ctx_raw = _env("DESCRIBE_IMAGE_OLLAMA_NUM_CTX")
+    if num_ctx_raw:
+        try:
+            options["num_ctx"] = max(2048, int(num_ctx_raw))
+        except ValueError:
+            pass
+    payload = {
+        "model": model,
+        "messages": [
+            {
+                "role": "user",
+                "content": prompt.strip() or DEFAULT_PROMPT,
+                "images": [base64.b64encode(data).decode("ascii")],
+            }
+        ],
+        "stream": False,
+        "options": options,
+    }
+    url = f"{_ollama_host()}/api/chat"
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=300) as resp:
+            result = json.loads(resp.read().decode())
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode(errors="replace")[:800]
+        recoverable = exc.code >= 500 or _is_ollama_context_error(detail)
+        message = f"Ollama vision request failed ({exc.code}): {detail}"
+        if _is_ollama_context_error(detail):
+            message += f"\n{_ollama_context_hint()}"
+        raise BackendError("ollama", message, recoverable=recoverable) from exc
+    except urllib.error.URLError as exc:
+        raise BackendError("ollama", f"Ollama request failed: {exc}", recoverable=True) from exc
+    message = result.get("message") or {}
+    answer = (message.get("content") or "").strip()
+    if not answer:
+        raise BackendError("ollama", f"Unexpected Ollama response: {result!r}", recoverable=False)
+    return answer
+
+
 def _ollama_describe(data: bytes, mime: str, prompt: str, *, max_tokens: int | None = None) -> str:
     from arka.llm.servers import LlmServerSession
 
@@ -526,7 +638,7 @@ def _ollama_describe(data: bytes, mime: str, prompt: str, *, max_tokens: int | N
     if not model:
         raise BackendError(
             "ollama",
-            "No Ollama vision model found. Install one: ollama pull llava",
+            "No Ollama vision model found. Install one: ollama pull llava (or moondream for smaller context)",
             recoverable=True,
         )
     if max_tokens is None:
@@ -539,42 +651,37 @@ def _ollama_describe(data: bytes, mime: str, prompt: str, *, max_tokens: int | N
                 "Ollama is not running. Start it: ollama serve — or install from https://ollama.com",
                 recoverable=True,
             )
-        payload = {
-            "model": model,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": prompt.strip() or DEFAULT_PROMPT,
-                    "images": [base64.b64encode(data).decode("ascii")],
-                }
-            ],
-            "stream": False,
-            "options": {"num_predict": max_tokens, "temperature": 0.2},
-        }
-        url = f"{_ollama_host()}/api/chat"
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(payload).encode(),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=300) as resp:
-                result = json.loads(resp.read().decode())
-        except urllib.error.HTTPError as exc:
-            detail = exc.read().decode(errors="replace")[:800]
-            raise BackendError(
-                "ollama",
-                f"Ollama vision request failed ({exc.code}): {detail}",
-                recoverable=exc.code >= 500,
-            ) from exc
-        except urllib.error.URLError as exc:
-            raise BackendError("ollama", f"Ollama request failed: {exc}", recoverable=True) from exc
-        message = result.get("message") or {}
-        answer = (message.get("content") or "").strip()
-        if not answer:
-            raise BackendError("ollama", f"Unexpected Ollama response: {result!r}", recoverable=False)
-        return answer
+        shrink_edges: list[int | None] = [None]
+        ollama_edge = _max_edge_for("ollama")
+        for fallback in (ollama_edge, 768, 512):
+            if fallback < _max_edge() and fallback not in shrink_edges:
+                shrink_edges.append(fallback)
+
+        last_err = ""
+        for edge in shrink_edges:
+            img_data, img_mime = (
+                (data, mime)
+                if edge is None
+                else _resize_image(data, mime, max_edge=edge, prefer_jpeg=True)
+            )
+            try:
+                return _ollama_describe_once(
+                    img_data,
+                    img_mime,
+                    prompt,
+                    model=model,
+                    max_tokens=max_tokens,
+                )
+            except BackendError as exc:
+                last_err = exc.message
+                if _is_ollama_context_error(exc.message) and edge != shrink_edges[-1]:
+                    print(
+                        f"describe_image: ollama context overflow at {edge or 'default'}px — retrying smaller",
+                        file=sys.stderr,
+                    )
+                    continue
+                raise
+        raise BackendError("ollama", last_err or "Ollama vision failed.", recoverable=True)
     finally:
         session.close()
 
@@ -949,6 +1056,8 @@ def describe_source(source: str, prompt: str | None = None) -> str:
     msg = _describe_unavailable_message()
     if errors:
         msg += "\n\nAttempts:\n" + "\n".join(f"  • {line}" for line in errors)
+        if any(_is_ollama_context_error(line) for line in errors):
+            msg += "\n\n" + _ollama_context_hint()
     raise SystemExit(msg)
 
 
@@ -1204,6 +1313,7 @@ def cmd_formats(_args: argparse.Namespace) -> int:
     print("Env: DESCRIBE_IMAGE_CHART_VISUAL=auto|structured|vision")
     print("Requires: Pillow")
     print("Env: DESCRIBE_IMAGE_TWO_LAYER=1, DESCRIBE_IMAGE_OCR=1, GEMINI_API_KEY, VLLM_START_CMD")
+    print("Resize: DESCRIBE_IMAGE_MAX_EDGE=1024, DESCRIBE_IMAGE_FORCE_JPEG=1, DESCRIBE_IMAGE_JPEG_QUALITY=82")
     print("Search dirs: CHART_OUTPUT_DIR, ~/Pictures/arka-generated, cwd, Downloads")
     return 0
 

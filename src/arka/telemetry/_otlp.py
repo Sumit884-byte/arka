@@ -144,6 +144,9 @@ def _host_port_from_url(url: str) -> tuple[str, int]:
 def collector_available(endpoint_url: str | None = None) -> bool:
     """Probe OTLP collector once per process; cache result."""
     global _collector_available
+    if otel_sdk_disabled():
+        _collector_available = False
+        return False
     if _collector_available is not None:
         return _collector_available
     url = endpoint_url or signal_endpoint("traces")
@@ -175,6 +178,8 @@ def endpoint_reachable(endpoint_url: str, *, timeout: float | None = None) -> bo
 
 
 def warn_endpoint_unreachable(endpoint_url: str) -> None:
+    if otel_sdk_disabled():
+        return
     if endpoint_url in _warned_unreachable:
         return
     _warned_unreachable.add(endpoint_url)
