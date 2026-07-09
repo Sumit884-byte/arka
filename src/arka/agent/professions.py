@@ -74,6 +74,8 @@ ROLE_TO_DOMAIN: dict[str, str] = {
     "psychologist": "counselor",
     "chef": "chef",
     "cook": "chef",
+    "product reviewer": "product",
+    "ingredient analyst": "product",
 }
 
 
@@ -215,6 +217,17 @@ BUILTIN_DOMAINS: tuple[Domain, ...] = (
             "kitchen", "prep", "seasoning", "food safety", "mise en place",
         ),
         "",
+    ),
+    Domain(
+        "product",
+        "Product Review & Ingredients",
+        ("product reviewer", "ingredient analyst"),
+        (
+            "ingredients", "ingredient list", "product review", "allergen",
+            "vegan", "cruelty-free", "sensitive skin", "incidecoder",
+            "shampoo", "skincare", "cosmetic", "supplement",
+        ),
+        "General product information — not medical or dermatological advice. Patch-test new products.",
     ),
 )
 
@@ -409,6 +422,10 @@ def profession_ask(domain_id: str, question: str, *, deep: bool = False) -> int:
         question,
     ):
         return _dispatch_skill(f"study_agent {shlex.quote(question)}")
+
+    # Product: ingredient review uses deep web research via product_reviewer skill.
+    if domain_id == "product":
+        return _dispatch_skill(f"product_reviewer {shlex.quote(question)}")
 
     return _ask_from_sources(dom, question, deep=deep or _needs_deep_sources(domain_id, question))
 

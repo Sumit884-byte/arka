@@ -1798,7 +1798,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         agent_remember agent_recall agent_memory agent_trace agent_why agent_last \
         agent_resume agent_research agent_nudge agent_watch agent_routine agent_fanout \
         agent_code agent_handoff agent_browser transcript_ask media_ask \
-        meeting_agent study_agent inbox_agent compare_agent profession pr_check github_repo \
+        meeting_agent study_agent inbox_agent compare_agent product_reviewer profession pr_check github_repo \
         arka_ask semantic_memory supermemory speak_research voice_session handoff_notify remind routines predictions stock \
         rag_setup rag_status voice_agent wake_control \
         agent_ask web_answer deep_web_answer web_essay calc chat_reset set_location files_preference_help google \
@@ -10468,6 +10468,14 @@ function compare_agent --description "Compare two topics with web research"
     _arka_agent compare $argv[1] $argv[2]
 end
 
+function product_reviewer --description "Review product ingredients with web research"
+    if test (count $argv) -eq 0
+        echo "Usage: product_reviewer <ingredients or product name> [what you want to know]"
+        return 1
+    end
+    _arka_agent product-reviewer (string join " " $argv)
+end
+
 function rag_setup --description "Install Firmamento TurboQuant for unified RAG"
     argparse q/quiet -- $argv
     or return 1
@@ -11554,6 +11562,21 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         test -n "$topic"; and echo "skill|study_agent $topic|Study agent"
         test -n "$topic"; and return
         echo "skill|study_agent|Study agent"
+        return
+    end
+    if string match -qr '(?i)\b(?:product\s+reviewer|review\s+this\s+product|check\s+(?:the\s+)?ingredients|ingredient\s+check|analyze\s+ingredients|ingredients?\s+review)\b' "$clean"
+        set -l query (string replace -r -i '^(?:product\s+reviewer|review\s+this\s+product|check\s+(?:the\s+)?ingredients|ingredient\s+check|analyze\s+ingredients|ingredients?\s+review)\s*' '' "$cmd" | string trim)
+        test -n "$query"; and echo "skill|product_reviewer $query|Product reviewer"
+        test -n "$query"; and return
+        echo "skill|product_reviewer|Product reviewer"
+        return
+    end
+    if string match -qr '(?i)\b(?:is\s+this|are\s+these)\s+.+\s+good\s+for\s+' "$clean"
+        echo "skill|product_reviewer $cmd|Product reviewer"
+        return
+    end
+    if string match -qr '(?i)\bis\s+.+\s+(?:vegan|cruelty[- ]free|safe\s+for\s+sensitive\s+skin)\b' "$clean"
+        echo "skill|product_reviewer $cmd|Product reviewer"
         return
     end
     if string match -qr '(?i)\bsupermemory\b' "$clean"
@@ -12837,6 +12860,8 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                                 _agent_dispatch_one "$ycmd"
                             case compare
                                 compare_agent $argv[3..-1]
+                            case product product-reviewer product_reviewer
+                                product_reviewer $argv[3..-1]
                             case ask
                                 arka_ask $argv[3..-1]
                             case speak-research speak_research yt-speak
@@ -14673,6 +14698,17 @@ function agent --description "Run commands safely: executes safe commands automa
         if test (count $cm) -ge 3
             set interpreted "compare_agent $cm[2] $cm[3]"
         end
+    else if string match -qr '(?i)\b(?:product\s+reviewer|review\s+this\s+product|check\s+(?:the\s+)?ingredients|ingredient\s+check|analyze\s+ingredients|ingredients?\s+review)\b' "$clean_cmd"
+        set -l pq (string replace -r -i '^(?:product\s+reviewer|review\s+this\s+product|check\s+(?:the\s+)?ingredients|ingredient\s+check|analyze\s+ingredients|ingredients?\s+review)\s*' '' "$cmd" | string trim)
+        if test -n "$pq"
+            set interpreted "product_reviewer $pq"
+        else
+            set interpreted "product_reviewer"
+        end
+    else if string match -qr '(?i)\b(?:is\s+this|are\s+these)\s+.+\s+good\s+for\s+' "$clean_cmd"
+        set interpreted "product_reviewer $cmd"
+    else if string match -qr '(?i)\bis\s+.+\s+(?:vegan|cruelty[- ]free|safe\s+for\s+sensitive\s+skin)\b' "$clean_cmd"
+        set interpreted "product_reviewer $cmd"
     else if _agent_matches_graphics_driver "$clean_cmd"
         set interpreted (_agent_route_graphics_driver "$cmd")
     else if string match -qr '(extract\s+this\s+and\s+run|extract\s+and\s+run|extract.*\brun\b|unzip.*\brun\b)' "$clean_cmd"

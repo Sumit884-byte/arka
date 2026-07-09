@@ -700,6 +700,13 @@ def _specialist_prompt(mode: str, question: str) -> tuple[str, str]:
             "Compare the topics factually. Use a table or bullet contrast. Cite sources when given.",
             question,
         ),
+        "product": (
+            "You are a product reviewer. The user gave product ingredients and/or a product name "
+            "and what they want to know (safety, vegan status, allergens, efficacy, alternatives). "
+            "Analyze using web sources: explain key ingredients, flag concerns, answer their goals, "
+            "and suggest alternatives when relevant. Be factual; cite sources when given.",
+            question,
+        ),
         "dev": (
             "You are a senior developer. Answer with code references when context is provided.",
             question,
@@ -730,13 +737,22 @@ def _research_web_context(question: str, *, deep: bool) -> str:
     return scrape_search_results(question, min_words=min_words, hard_limit=pages)
 
 
-def research(question: str, *, doc: str | None = None, path: str | None = None, deep: bool = False) -> None:
-    mode = _research_mode(question)
+def research(
+    question: str,
+    *,
+    doc: str | None = None,
+    path: str | None = None,
+    deep: bool = False,
+    force_mode: str | None = None,
+) -> None:
+    mode = force_mode or _research_mode(question)
+    if mode == "product":
+        deep = True
     contexts: list[str] = []
     web_ctx = ""
 
     # TurboQuant docs
-    if doc or mode in {"dev", "research", "compare"}:
+    if doc or mode in {"dev", "research", "compare", "product"}:
         try:
             from arka.stock.turboquant_rag import search_documents, use_turboquant
 
@@ -827,6 +843,15 @@ def compare_agent(a: str, b: str, *, context: str = "") -> None:
     if context:
         q += f"\n\nContext:\n{context}"
     research(q, deep=True)
+
+
+def product_reviewer(query: str) -> None:
+    """Review product ingredients and claims using deep web research."""
+    text = query.strip()
+    if not text:
+        print("Usage: product_reviewer <ingredients or product name> [what you want to know]")
+        return
+    research(text, deep=True, force_mode="product")
 
 
 # ── Code agent ────────────────────────────────────────────────────────────────
@@ -1073,6 +1098,9 @@ def main() -> int:
     p = sub.add_parser("inbox")
     p.add_argument("text", nargs="+")
 
+    p = sub.add_parser("product-reviewer")
+    p.add_argument("query", nargs="+")
+
     p = sub.add_parser("goal")
     p.add_argument("goal", nargs="*")
     p.add_argument("-n", "--max", type=int, default=None)
@@ -1178,6 +1206,8 @@ def main() -> int:
         research("study: " + " ".join(args.topic), deep=True)
     elif args.cmd == "inbox":
         research("inbox triage: " + " ".join(args.text), deep=False)
+    elif args.cmd == "product-reviewer":
+        product_reviewer(" ".join(args.query))
     elif args.cmd == "goal":
         from arka.agent.goal import DEFAULT_MAX, run_goal
         from arka.integrations.butterfish import launch_shell
