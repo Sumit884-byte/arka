@@ -378,6 +378,39 @@ def _fetch_via_gh_api(owner: str, repo: str, *, days: int) -> tuple[list[dict], 
     return commits, files
 
 
+_ROOT_DIR_LABEL = "(root)/"
+
+
+def _format_modified_files(
+    files: OrderedDict[str, int], *, max_files: int = 60
+) -> list[str]:
+    """Group modified file paths by parent directory for readable output."""
+    from collections import defaultdict
+
+    items = list(files.items())[:max_files]
+    groups: dict[str, list[tuple[str, int]]] = defaultdict(list)
+
+    for path, count in items:
+        parent = Path(path).parent
+        if parent == Path("."):
+            groups[_ROOT_DIR_LABEL].append((path, count))
+        else:
+            dir_key = f"{parent.as_posix()}/"
+            groups[dir_key].append((Path(path).name, count))
+
+    lines: list[str] = []
+    for dir_key in sorted(groups, key=lambda d: (d != _ROOT_DIR_LABEL, d.lower())):
+        lines.append(dir_key)
+        for name, count in sorted(groups[dir_key], key=lambda item: item[0].lower()):
+            suffix = f" ({count} commits)" if count > 1 else ""
+            lines.append(f"    \u2022 {name}{suffix}")
+
+    if len(files) > max_files:
+        lines.append(f"... and {len(files) - max_files} more file(s)")
+
+    return lines
+
+
 def fetch_repo_activity(owner: str, repo: str, *, days: int) -> str:
     commits: list[dict]
     files: OrderedDict[str, int]
@@ -420,12 +453,8 @@ def fetch_repo_activity(owner: str, repo: str, *, days: int) -> str:
     lines.append("")
     if files:
         lines.append(f"Files modified ({len(files)} unique):")
-        for path in list(files.keys())[:60]:
-            count = files[path]
-            suffix = f" ({count} commits)" if count > 1 else ""
-            lines.append(f"- {path}{suffix}")
-        if len(files) > 60:
-            lines.append(f"... and {len(files) - 60} more file(s)")
+        lines.append("")
+        lines.extend(_format_modified_files(files))
     else:
         lines.append("No file list available for these commits.")
 

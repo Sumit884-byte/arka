@@ -6663,6 +6663,23 @@ function _arka_print_answer --description "Pretty-print web/chat answer for the 
             continue
         end
 
+        if string match -qr '^[^\s\-*].+/$' -- "$trimmed"
+            set_color --bold cyan
+            echo "  $trimmed"
+            set_color normal
+            continue
+        end
+
+        set -l ibul (string match -r '^(\s+)•\s+(.+)$' -- "$lines[$i]")
+        if test (count $ibul) -ge 3
+            if _arka_is_source_line "$ibul[2]"
+                _arka_print_source_line "$ibul[2]"
+                continue
+            end
+            _pdf_bullet "$ibul[1]" "" "$ibul[2]"
+            continue
+        end
+
         set -l ubul (string match -r '^•\s+(.+)$' -- "$trimmed")
         if test (count $ubul) -ge 2
             if _arka_is_source_line "$ubul[2]"

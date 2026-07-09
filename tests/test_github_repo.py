@@ -94,6 +94,36 @@ class GithubRepoCloneDiscoveryTests(unittest.TestCase):
             self.assertIn(install.resolve(), [p.resolve() for p in roots])
 
 
+class GithubRepoFormatFilesTests(unittest.TestCase):
+    def test_format_groups_by_directory(self) -> None:
+        files = gr.OrderedDict(
+            [
+                (".env.example", 1),
+                ("bin/arka_github_repo.py", 2),
+                ("bin/arka_heartbeat.py", 1),
+                ("src/arka/agent/github_repo.py", 1),
+                ("src/arka/agent/goal.py", 1),
+                ("tests/test_llm_fallback.py", 1),
+            ]
+        )
+        lines = gr._format_modified_files(files)
+        text = "\n".join(lines)
+        self.assertIn("(root)/", text)
+        self.assertIn(".env.example", text)
+        self.assertIn("bin/", text)
+        self.assertIn("arka_github_repo.py (2 commits)", text)
+        self.assertIn("src/arka/agent/", text)
+        self.assertIn("github_repo.py", text)
+        self.assertIn("tests/", text)
+        self.assertLess(text.index("bin/"), text.index("src/arka/agent/"))
+        self.assertLess(text.index("(root)/"), text.index("bin/"))
+
+    def test_format_truncates_beyond_max(self) -> None:
+        files = gr.OrderedDict((f"dir/file{i}.py", 1) for i in range(65))
+        lines = gr._format_modified_files(files, max_files=60)
+        self.assertTrue(any("... and 5 more file(s)" in line for line in lines))
+
+
 class GithubRepoFetchTests(unittest.TestCase):
     def test_fetch_uses_local_clone_outside_cwd_repo(self) -> None:
         clone = Path("/tmp/arka-clone")
@@ -108,7 +138,8 @@ class GithubRepoFetchTests(unittest.TestCase):
         local_git.assert_called_once_with(clone, days=2)
         gh_api.assert_not_called()
         self.assertIn("Source: local git", out)
-        self.assertIn("src/foo.py", out)
+        self.assertIn("src/", out)
+        self.assertIn("foo.py", out)
 
     def test_unavailable_when_no_clone_and_gh_missing(self) -> None:
         with (
