@@ -14,7 +14,6 @@ from arka.agent.price_sources import (
     _dedupe_listings,
     _display_listings_for_output,
     _model_from_title,
-    _PRICE_CHECK_DISCLAIMER,
     build_price_search_queries,
     check_url_reachable,
     detect_price_product_category,
@@ -47,10 +46,6 @@ APPLE_NEWSROOM_URL = (
     "https://www.apple.com/in/newsroom/2024/10/apples-new-macbook-pro-features-m4-family-of-chips"
 )
 FLIPKART_URL = "https://www.flipkart.com/apple-macbook-pro-m4/p/itm1234567890abcd"
-
-
-def assert_price_disclaimer(test_case: unittest.TestCase, output: str) -> None:
-    test_case.assertIn(_PRICE_CHECK_DISCLAIMER, output)
 
 
 class PriceCheckRoutingTests(unittest.TestCase):
@@ -305,7 +300,6 @@ class PriceCheckCoreTests(unittest.TestCase):
         self.assertIn("Configure & see all options:", args[1])
         self.assertIn("/shop/buy-mac/macbook-air", args[1])
         self.assertNotIn("newsroom", args[1])
-        assert_price_disclaimer(self, args[1])
 
     def test_price_check_honest_when_no_prices(self) -> None:
         with mock.patch(
@@ -320,7 +314,6 @@ class PriceCheckCoreTests(unittest.TestCase):
         self.assertIn("No live prices found", args[1])
         self.assertNotIn("Apple India", args[1])
         self.assertIn("Amazon India", args[1])
-        assert_price_disclaimer(self, args[1])
 
     def test_price_check_empty_query_prints_usage(self) -> None:
         with mock.patch("arka.agent.price_sources.fetch_price_listings") as fetch:
@@ -401,7 +394,6 @@ class PriceCheckCoreTests(unittest.TestCase):
         self.assertIn("Configure & see all options:", output)
         self.assertIn(APPLE_MBP_LINE_URL, output)
         self.assertIn("Date retrieved: 2026-07-09", output)
-        assert_price_disclaimer(self, output)
 
     def test_format_price_check_output_shows_range_for_multiple_configs(self) -> None:
         listings = [
@@ -440,7 +432,6 @@ class PriceCheckCoreTests(unittest.TestCase):
         self.assertIn("14-inch MacBook Pro M5 Pro (Space Black) — ₹2,99,900", output)
         self.assertIn(f"   {APPLE_MBP_LINE_URL}", output)
         self.assertIn("Date retrieved: 2026-07-09", output)
-        assert_price_disclaimer(self, output)
 
     def test_format_price_check_output_includes_other_retailers(self) -> None:
         listings = [
@@ -468,7 +459,6 @@ class PriceCheckCoreTests(unittest.TestCase):
         self.assertIn("Also listed at other retailers:", output)
         self.assertIn("Flipkart", output)
         self.assertIn(FLIPKART_URL, output)
-        assert_price_disclaimer(self, output)
 
     def test_format_price_check_output_generic_shows_range_and_browse_links(self) -> None:
         listings = [
@@ -508,7 +498,6 @@ class PriceCheckCoreTests(unittest.TestCase):
         self.assertIn("Browse more options:", output)
         self.assertIn("amazon.in/s?k=electric+brush", output)
         self.assertIn("flipkart.com/search?q=electric+brush", output)
-        assert_price_disclaimer(self, output)
 
     def test_format_price_check_output_generic_per_item_urls(self) -> None:
         listings = [
@@ -546,7 +535,6 @@ class PriceCheckCoreTests(unittest.TestCase):
         self.assertIn("Oral B Pro 3 Electric Toothbrush — ₹6,499", output)
         self.assertIn("https://www.amazon.in/Oral-B-Pro-3-Electric-Toothbrush/dp/B08YYYY", output)
         self.assertNotIn("Replacement Brush Heads", output)
-        assert_price_disclaimer(self, output)
 
     def test_dedupe_listings_by_asin_keeps_lowest_price(self) -> None:
         url = "https://www.amazon.in/Oral-Vitality-Electric-Rechargeable-Toothbrush/dp/B07JL3W3KG"
@@ -596,7 +584,6 @@ class PriceCheckCoreTests(unittest.TestCase):
         self.assertNotIn("₹171", output)
         self.assertEqual(output.count(vitality_url), 1)
         self.assertIn("Oral-B Vitality — ₹1,126.25", output)
-        assert_price_disclaimer(self, output)
 
     def test_display_listings_for_output_dedupes_before_range(self) -> None:
         url = "https://www.amazon.in/dp/B07JL3W3KG"

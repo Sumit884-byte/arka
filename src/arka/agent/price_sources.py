@@ -841,11 +841,6 @@ def _format_price_range(amounts: list[int], *, region: str) -> str:
 
 _CONFIG_NOTE = "Prices depend on chip, RAM, and storage configuration."
 _GENERIC_CONFIG_NOTE = "Prices vary by brand and model."
-_PRICE_CHECK_DISCLAIMER = (
-    "Disclaimer: Prices are scraped from retailer pages and may be outdated, "
-    "inaccurate, or vary by seller/offer. Always verify the current price on "
-    "the retailer's website before purchasing."
-)
 
 
 def _retailer_browse_url(source_id: str, product: str, *, region: str) -> str | None:
@@ -1051,8 +1046,7 @@ def format_price_check_output(
             f"No live prices found for {product} ({region}).\n"
             f"Searched: {searched}\n"
             f"Date retrieved: {today}\n"
-            "Try a more specific model name or check retailer sites directly.\n"
-            f"⚠ {_PRICE_CHECK_DISCLAIMER}"
+            "Try a more specific model name or check retailer sites directly."
         )
 
     lines: list[str] = []
@@ -1131,7 +1125,6 @@ def format_price_check_output(
             lines.append("")
 
         lines.append(f"Date retrieved: {today}")
-        lines.append(f"⚠ {_PRICE_CHECK_DISCLAIMER}")
         return "\n".join(lines)
 
     if apple_listings:
@@ -1183,7 +1176,6 @@ def format_price_check_output(
         lines.append("")
 
     lines.append(f"Date retrieved: {today}")
-    lines.append(f"⚠ {_PRICE_CHECK_DISCLAIMER}")
     return "\n".join(lines)
 
 
