@@ -8,15 +8,29 @@ from unittest import mock
 
 from arka.agent.core import price_check
 from arka.agent.price_sources import (
+    PriceListing,
     build_price_search_queries,
+    check_url_reachable,
     detect_price_region,
+    extract_prices_from_content,
     extract_product_name,
+    fetch_price_listings,
     fetch_price_web_context,
+    format_price_check_output,
+    is_excluded_retail_url,
     is_price_check_query,
+    is_shop_product_url,
     parse_price_query,
+    retailer_for_url,
 )
 from arka.router import route
 from arka.routing.symbolic import route_price_check
+
+APPLE_SHOP_URL = "https://www.apple.com/in/shop/buy-mac/macbook-pro/14-inch-space-black"
+APPLE_NEWSROOM_URL = (
+    "https://www.apple.com/in/newsroom/2024/10/apples-new-macbook-pro-features-m4-family-of-chips"
+)
+FLIPKART_URL = "https://www.flipkart.com/apple-macbook-pro-m4/p/itm1234567890abcd"
 
 
 class PriceCheckRoutingTests(unittest.TestCase):
@@ -86,22 +100,22 @@ class PriceCheckParseTests(unittest.TestCase):
         self.assertFalse(is_price_check_query("how much disk space left"))
         self.assertFalse(is_price_check_query("bitcoin price"))
 
-    def test_build_queries_target_india_domains(self) -> None:
+    def test_build_queries_target_india_shop_domains(self) -> None:
         queries = build_price_search_queries("macbook air m3", region="india")
         combined = queries[0].query
-        self.assertIn("site:apple.com/in", combined)
-        self.assertIn("site:flipkart.com", combined)
-        self.assertIn("site:amazon.in", combined)
+        self.assertIn("site:apple.com/in/shop", combined)
+        self.assertIn("site:flipkart.com inurl:/p/", combined)
+        self.assertIn("site:amazon.in inurl:/dp/", combined)
         ids = {q.source_id for q in queries}
         self.assertIn("apple_in", ids)
         self.assertIn("flipkart", ids)
 
-    def test_build_queries_target_us_domains(self) -> None:
+    def test_build_queries_target_us_shop_domains(self) -> None:
         queries = build_price_search_queries("macbook air m3", region="us")
         combined = queries[0].query
-        self.assertIn("site:apple.com", combined)
-        self.assertIn("site:bestbuy.com", combined)
-        self.assertIn("site:amazon.com", combined)
+        self.assertIn("site:apple.com/shop", combined)
+        self.assertIn("site:bestbuy.com inurl:/site/", combined)
+        self.assertIn("site:amazon.com inurl:/dp/", combined)
 
     def test_parse_price_query(self) -> None:
         product, region = parse_price_query("iphone 16 price in india")
@@ -109,32 +123,88 @@ class PriceCheckParseTests(unittest.TestCase):
         self.assertEqual(region, "india")
 
 
-class PriceCheckCoreTests(unittest.TestCase):
-    def test_price_check_formats_output_from_scraped_context(self) -> None:
-        scraped = (
-            "[Apple India]\n"
-            "MacBook Air M3 13-inch — ₹1,14,900 — https://www.apple.com/in/shop/buy-mac/macbook-air"
-        )
-        with mock.patch(
-            "arka.agent.price_sources.fetch_price_web_context",
-            return_value=(scraped, ["Apple India", "Flipkart"]),
+class PriceUrlValidationTests(unittest.TestCase):
+    def test_rejects_newsroom_and_support_urls(self) -> None:
+        for url in (
+            APPLE_NEWSROOM_URL,
+            "https://www.apple.com/in/support/macbook-pro/",
+            "https://www.apple.com/newsroom/2024/10/macbook-pro",
+            "https://www.apple.com/in/news/macbook-pro",
         ):
-            with mock.patch("arka.agent.core._llm", return_value=(
-                "MacBook Air M3 13-inch | ₹1,14,900 | Apple India | "
-                "https://www.apple.com/in/shop/buy-mac/macbook-air\n"
-                "Date retrieved: 2026-07-09"
-            )) as llm:
+            with self.subTest(url=url):
+                self.assertTrue(is_excluded_retail_url(url))
+                self.assertIsNone(retailer_for_url(url))
+                self.assertFalse(is_shop_product_url(url))
+
+    def test_accepts_shop_and_product_urls(self) -> None:
+        self.assertEqual(retailer_for_url(APPLE_SHOP_URL), ("apple_in", "Apple India"))
+        self.assertTrue(is_shop_product_url(APPLE_SHOP_URL, "apple_in"))
+        self.assertEqual(
+            retailer_for_url("https://www.amazon.in/dp/B0DLH1GZDP"),
+            ("amazon_in", "Amazon India"),
+        )
+        self.assertEqual(
+            retailer_for_url(FLIPKART_URL),
+            ("flipkart", "Flipkart"),
+        )
+
+    def test_check_url_reachable_uses_head_or_get(self) -> None:
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.return_value.__enter__.return_value.status = 200
+            self.assertTrue(check_url_reachable(APPLE_SHOP_URL))
+        urlopen.assert_called()
+
+
+class PriceExtractionTests(unittest.TestCase):
+    def test_extract_inr_from_shop_page_html(self) -> None:
+        shop_html = (
+            "14-inch MacBook Pro - Space Black From ₹1,69,900 "
+            "or ₹14,158.33/month for 12 mo."
+        )
+        prices = extract_prices_from_content(shop_html, region="india")
+        self.assertEqual(prices, ["₹1,69,900"])
+
+    def test_extract_usd_from_shop_page_html(self) -> None:
+        shop_html = "MacBook Pro 14-inch From $1,599.00"
+        prices = extract_prices_from_content(shop_html, region="us")
+        self.assertEqual(prices, ["$1,599.00"])
+
+    def test_newsroom_page_without_price_returns_empty(self) -> None:
+        newsroom_html = (
+            "Apple introduces the new MacBook Pro with M4 family of chips. "
+            "Available starting November 8."
+        )
+        self.assertEqual(extract_prices_from_content(newsroom_html, region="india"), [])
+
+
+class PriceCheckCoreTests(unittest.TestCase):
+    def test_price_check_formats_output_from_validated_listings(self) -> None:
+        listings = [
+            PriceListing(
+                model="MacBook Air M3 13-inch",
+                price="₹1,14,900",
+                source="Apple India",
+                url=APPLE_SHOP_URL,
+            )
+        ]
+        with mock.patch(
+            "arka.agent.price_sources.fetch_price_listings",
+            return_value=(listings, ["Apple India", "Flipkart"]),
+        ):
+            with mock.patch("arka.agent.core._llm") as llm:
                 with mock.patch("arka.output.print_block") as print_block:
                     price_check("macbook air m3 price in india")
-        llm.assert_called_once()
+        llm.assert_not_called()
         args, _ = print_block.call_args
         self.assertEqual(args[0], "Price check")
         self.assertIn("₹1,14,900", args[1])
+        self.assertIn("/shop/", args[1])
+        self.assertNotIn("newsroom", args[1])
 
     def test_price_check_honest_when_no_prices(self) -> None:
         with mock.patch(
-            "arka.agent.price_sources.fetch_price_web_context",
-            return_value=("", ["Apple India", "Flipkart"]),
+            "arka.agent.price_sources.fetch_price_listings",
+            return_value=([], ["Apple India", "Flipkart"]),
         ):
             with mock.patch("arka.agent.core._llm") as llm:
                 with mock.patch("arka.output.print_block") as print_block:
@@ -142,22 +212,83 @@ class PriceCheckCoreTests(unittest.TestCase):
         llm.assert_not_called()
         args, _ = print_block.call_args
         self.assertIn("No live prices found", args[1])
+        self.assertIn("Apple India", args[1])
 
     def test_price_check_empty_query_prints_usage(self) -> None:
-        with mock.patch("arka.agent.price_sources.fetch_price_web_context") as fetch:
+        with mock.patch("arka.agent.price_sources.fetch_price_listings") as fetch:
             with mock.patch("builtins.print") as print_mock:
                 price_check("   ")
         fetch.assert_not_called()
         print_mock.assert_called_once()
         self.assertIn("Usage", print_mock.call_args[0][0])
 
-    def test_fetch_price_web_context_uses_scrape_pipeline(self) -> None:
-        with mock.patch("arka.agent.chat.scrape_search_results", return_value="page text") as scrape:
-            with mock.patch("arka.agent.chat.snippet_lookup", return_value=""):
-                ctx, labels = fetch_price_web_context("iphone 16", region="india", deep=True)
-        self.assertTrue(scrape.called)
-        self.assertIn("page text", ctx)
+    def test_fetch_price_listings_rejects_newsroom_and_requires_price(self) -> None:
+        search_results = [
+            {
+                "link": APPLE_NEWSROOM_URL,
+                "title": "Apple's new MacBook Pro features M4",
+                "snippet": "Apple today announced MacBook Pro with M4 chips.",
+            },
+            {
+                "link": APPLE_SHOP_URL,
+                "title": "Buy 14-inch MacBook Pro",
+                "snippet": "From ₹1,69,900",
+            },
+        ]
+        with mock.patch("arka.agent.chat.duckduckgo_search", return_value=search_results):
+            with mock.patch("arka.agent.price_sources.check_url_reachable", return_value=True):
+                with mock.patch(
+                    "arka.agent.chat.scrape_url",
+                    side_effect=lambda url: (
+                        "From ₹1,69,900"
+                        if "shop" in url
+                        else "Apple today announced MacBook Pro with M4 chips."
+                    ),
+                ):
+                    listings, labels = fetch_price_listings(
+                        "macbook pro", region="india", deep=True
+                    )
+        self.assertEqual(len(listings), 1)
+        self.assertIn("/shop/", listings[0].url)
+        self.assertEqual(listings[0].price, "₹1,69,900")
         self.assertTrue(labels)
+
+    def test_fetch_price_web_context_returns_validated_listings(self) -> None:
+        listings = [
+            PriceListing(
+                model="MacBook Pro 14-inch",
+                price="₹1,69,900",
+                source="Apple India",
+                url=APPLE_SHOP_URL,
+            )
+        ]
+        with mock.patch(
+            "arka.agent.price_sources.fetch_price_listings",
+            return_value=(listings, ["Apple India"]),
+        ):
+            ctx, labels = fetch_price_web_context("macbook pro", region="india", deep=True)
+        self.assertIn(APPLE_SHOP_URL, ctx)
+        self.assertIn("₹1,69,900", ctx)
+        self.assertEqual(labels, ["Apple India"])
+
+    def test_format_price_check_output_lists_only_shop_links(self) -> None:
+        output = format_price_check_output(
+            [
+                PriceListing(
+                    model="14-inch MacBook Pro (M4)",
+                    price="₹1,69,900",
+                    source="Apple India",
+                    url=APPLE_SHOP_URL,
+                )
+            ],
+            product="macbook pro",
+            region="india",
+            searched_labels=["Apple India", "Flipkart"],
+            retrieved_on="2026-07-09",
+        )
+        self.assertIn(APPLE_SHOP_URL, output)
+        self.assertIn("₹1,69,900", output)
+        self.assertIn("Date retrieved: 2026-07-09", output)
 
 
 if __name__ == "__main__":

@@ -885,9 +885,9 @@ def price_check(query: str) -> None:
         return
 
     from arka.agent.price_sources import (
-        fetch_price_web_context,
+        fetch_price_listings,
+        format_price_check_output,
         parse_price_query,
-        price_check_prompt,
     )
     from arka.output import print_block
 
@@ -896,27 +896,16 @@ def price_check(query: str) -> None:
         print("Usage: price_check <product> [e.g. macbook air m3 | iphone 16 price in india]")
         return
 
-    web_ctx, source_labels = fetch_price_web_context(product, region=region, deep=True)
+    listings, source_labels = fetch_price_listings(product, region=region, deep=True)
     today = date.today().isoformat()
-    if not web_ctx:
-        searched = ", ".join(source_labels) if source_labels else "Apple, Amazon, Flipkart/Best Buy"
-        print_block(
-            "Price check",
-            (
-                f"No live prices found for {product} ({region}).\n"
-                f"Searched: {searched}\n"
-                f"Date retrieved: {today}\n"
-                "Try a more specific model name or check retailer sites directly."
-            ),
-        )
-        return
-
-    system, user_q = price_check_prompt(product, region, web_ctx, source_labels, retrieved_on=today)
-    answer = _llm(system, user_q, temperature=0.1, task="agent")
-    if not answer:
-        print("Price check failed — check LLM / network.")
-        return
-    print_block("Price check", answer)
+    output = format_price_check_output(
+        listings,
+        product=product,
+        region=region,
+        searched_labels=source_labels,
+        retrieved_on=today,
+    )
+    print_block("Price check", output)
 
 
 # ── Code agent ────────────────────────────────────────────────────────────────
