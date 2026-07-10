@@ -18,7 +18,7 @@ venv-*/
 .env.local
 
 # IDE / local
-.cursor/mcp.json
+.cursor/
 .qoder/
 .skills_setup_done
 fish_variables
