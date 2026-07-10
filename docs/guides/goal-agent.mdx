@@ -1,0 +1,49 @@
+---
+title: "Running the autonomous goal agent"
+description: "Use Arka's goal agent to run autonomous multi-step terminal tasks — set up environments, debug, refactor, and run tests with step budgets and security gates."
+keywords: ["goal", "agent", "autonomous", "loop"]
+---
+
+The goal agent runs multi-step tasks autonomously — set up environments, debug, refactor, and run tests with a step budget and security gates.
+
+## Usage
+
+```bash
+arka goal set up a venv, install requests, and run pytest
+arka goal -y -n 30 debug why nginx fails
+arka goal --butterfish refactor this module and run tests
+```
+
+From zsh/bash (no fish required):
+
+```bash
+arka goal debug my nginx setup
+arka goal -b -y set up venv and run pytest
+```
+
+## Engines
+
+| Engine | Behavior |
+| ------ | -------- |
+| `auto` / `arka` | Built-in goal agent (default) |
+| `butterfish` | Launches Butterfish shell (`!goal`) |
+| `legacy` | Original JSON loop only |
+| `off` | Disables goal delegation |
+
+```env
+GOAL_ENGINE=auto
+GOAL_MAX_STEPS=25
+GOAL_AUTO_CONTINUE=1
+GOAL_OUTPUT_LIMIT=8000
+```
+
+## How it works
+
+The goal agent uses a Butterfish-style run/fix loop with shell history, file reads, and security gates. Each step can invoke any registered skill or safe shell command.
+
+Use `-y` to auto-confirm risky steps only when you trust the environment.
+
+## Related
+
+- `agent_plan` — upfront JSON planning (separate from reactive goal loop)
+- `arka loop` — alias for `arka goal` when `GOAL_ENGINE=auto`

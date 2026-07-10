@@ -1,0 +1,52 @@
+---
+title: "Connecting Gmail and Google Calendar via OAuth"
+description: "Read Gmail and Google Calendar from Arka after a one-time OAuth login, with commands for unread digests, daily summaries, and week-view scheduling."
+keywords: ["google", "gmail", "calendar", "oauth"]
+---
+
+Read Gmail and Google Calendar after a one-time browser OAuth sign-in.
+
+## Setup
+
+```bash
+arka google setup          # print Cloud Console steps
+# Add GOOGLE_OAUTH_CLIENT_ID + GOOGLE_OAUTH_CLIENT_SECRET to .env
+arka reload
+arka google login          # opens browser; stores token locally
+arka google status
+```
+
+Enable **Gmail API** and **Google Calendar API** in Google Cloud Console. Default redirect URI: `http://127.0.0.1:8766/oauth2callback`.
+
+## Commands
+
+| Command | Example |
+| ------- | ------- |
+| `google gmail --unread` | List unread mail |
+| `google gmail --summarize --unread` | AI digest of unread mail |
+| `google gmail --today` | Today's mail |
+| `google gmail --days 3` | Last 3 days |
+| `google calendar --today` | Today's events |
+| `google calendar --week` | This week's events |
+
+## Natural language
+
+```bash
+arka give unread emails
+arka summarize unread emails
+arka summarize emails within 3 days
+arka what's on my calendar today
+```
+
+Unread counts use Gmail's `resultSizeEstimate` for the header (e.g. `10 unread emails`).
+
+## Configuration
+
+```env
+GOOGLE_OAUTH_CLIENT_ID=....apps.googleusercontent.com
+GOOGLE_OAUTH_CLIENT_SECRET=...
+# GMAIL_MAX=500
+# GMAIL_SUMMARIZE_MAX=40
+```
+
+On macOS, calendar NL can merge **macOS Calendar.app** events when Google is unavailable.

@@ -1,0 +1,46 @@
+---
+title: "OpenTelemetry tracing and SigNoz observability"
+description: "Enable OpenTelemetry traces, metrics, and logs from Arka and ship them to SigNoz to monitor LLM provider calls, failover events, latency, and token usage."
+keywords: ["observability", "signoz", "opentelemetry", "tracing"]
+---
+
+Export traces, metrics, and logs to [SigNoz](https://signoz.io) when enabled. **Off by default.**
+
+## Quick start
+
+```bash
+python3 bin/arka_signoz.py status
+python3 bin/arka_signoz.py setup -y
+python3 bin/arka_signoz.py demo
+python3 arka_llm.py trace-status
+```
+
+## Configuration
+
+```env
+OTEL_TRACES_ENABLED=1
+SIGNOZ_ENDPOINT=http://localhost:4318
+SIGNOZ_UI_URL=http://localhost:8080
+OTEL_SERVICE_NAME=arka
+# SIGNOZ_API_KEY=               # for alerts / MCP
+```
+
+## What gets traced
+
+- LLM provider calls (model, latency, tokens, failover events)
+- Skill dispatch and routing decisions
+- MCP client calls
+- Supermemory operations
+
+## SigNoz MCP + Cursor
+
+```bash
+python3 bin/arka_signoz.py mcp tools
+python3 bin/arka_signoz.py cursor-setup
+```
+
+Hackathon assets (dashboards, alerts, demos) live in `hackathon/signoz/` in the repo.
+
+<Note>
+  Both `OTEL_TRACES_ENABLED=1` and `SIGNOZ_ENDPOINT` must be set for traces to export.
+</Note>

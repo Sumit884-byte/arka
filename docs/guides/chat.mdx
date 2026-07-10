@@ -1,0 +1,71 @@
+---
+title: "Chat, web search, and factual Q&A skills"
+description: "Answer questions through Arka's chat engine with web search, deep-scrape RAG, math, weather, nearby-place lookup, and location-aware session memory."
+keywords: ["chat", "web_answer", "search", "calc", "weather"]
+---
+
+Arka's chat engine handles factual questions, deep web research, math, weather, and location-aware search.
+
+## Core skills
+
+| Skill | Example |
+| ----- | ------- |
+| `web_answer` | `arka ask who won IPL 2025` |
+| `deep_web_answer` | `deep_web_answer latest AI regulation news` |
+| `calc` | `arka calc integrate sin(x) dx` |
+| `hyperlocal_weather` | `arka weather near me` |
+| `set_location` | `set_location Mumbai` |
+| `nearby_places` | `nearby_places Kolkata` |
+| `error_helper` | `error_helper <traceback>` |
+| `chat_reset` | Clear session + location context |
+
+## Forced deep search
+
+Prefix with `/` to force deep web search:
+
+```bash
+arka "/who won IPL 2025"
+```
+
+## Deep search queue
+
+Run background deep searches:
+
+```bash
+deep_queue add "who won the last IPL final"
+deep_queue list
+deep_queue run
+deep_queue results
+```
+
+## Session memory
+
+Answers are tagged `[FROM SEARCH]` or `[FROM MEMORY]` (stripped for TTS). Chat sessions persist context across follow-up questions within a session.
+
+```bash
+arka facing hair loss          # routes to web_answer with session
+chat_reset                     # clear context
+```
+
+## Location grounding
+
+Set your location for hyperlocal results:
+
+```bash
+set_location Mumbai
+hyperlocal_weather
+nearby_places
+map_download Kolkata           # cache city map to ~/.cache/arka/maps/
+```
+
+## Install chat extras
+
+```bash
+pip install "arka-agent[chat]"
+```
+
+Requires: Agno, ddgs, trafilatura, sympy, geopy.
+
+<Note>
+  Web queries pass through security checks before search. See [Security](/concepts/security).
+</Note>

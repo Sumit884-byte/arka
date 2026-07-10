@@ -1,0 +1,57 @@
+---
+title: "Posting to X (Twitter)"
+description: "Fetch a URL, LLM-shorten the content to a word limit, and publish to X/Twitter — with GitHub link safety and optional monitoring."
+keywords: ["x", "twitter", "post", "social"]
+---
+
+The `post_x` skill fetches a URL, summarizes it to a configurable word limit, and publishes to X/Twitter via the [Bird CLI](https://www.npmjs.com/package/@steipete/bird).
+
+## Natural language
+
+```bash
+arka post this on my X https://example.com/article
+arka shorten this linkedin post to 40 words and post on twitter
+arka share https://github.com/Sumit884-byte/arka on my x
+```
+
+## Word limits
+
+Specify a word cap in natural language:
+
+```bash
+arka post this article in 30 words on x
+arka shorten to 50 words and tweet on twitter
+```
+
+Default: **40 words**. Maximum: **200 words**.
+
+## Setup
+
+1. Install Node.js 18+.
+2. Authenticate Bird (follow prompts on first run):
+
+```bash
+npx @steipete/bird login
+```
+
+3. Ensure an LLM provider is configured in `.env` (Gemini, Groq, etc.) for summarization.
+
+Bird is auto-installed via `npx` on first use if not present globally.
+
+## CLI
+
+```bash
+post_x https://example.com/article
+post_x https://example.com/article --words 30
+post_x --dry-run https://example.com/article   # preview without posting
+```
+
+## Safety
+
+- GitHub URLs in tweets must appear in the source text — hallucinated repo paths are blocked.
+- LinkedIn and article URLs are fetched and summarized before posting.
+- Use `--dry-run` to preview the composed tweet.
+
+<Warning>
+  Posting requires valid X/Twitter credentials via Bird. Review tweet content before publishing in production accounts.
+</Warning>

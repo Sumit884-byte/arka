@@ -1,0 +1,52 @@
+---
+title: "ASCII art in the terminal"
+description: "Render text banners and convert images to ASCII art in the terminal using figlet, pyfiglet, or a built-in block font fallback."
+keywords: ["ascii", "art", "figlet", "terminal"]
+---
+
+Arka renders **ASCII art** from text or images directly in your terminal.
+
+## Text banners
+
+```bash
+arka make ascii art HELLO WORLD
+arka ascii banner Arka Agent
+arka figlet "Good morning"
+ascii_art Hello from Arka
+```
+
+Optional font (when `figlet` or `pyfiglet` is installed):
+
+```bash
+ascii_art --font slant "Ship it"
+```
+
+Default font: `standard`. List fonts with `figlet -f?` or `pyfiglet -l`.
+
+## Image to ASCII
+
+```bash
+arka ascii art from photo.jpg
+arka convert logo.png to ascii
+ascii_art --image screenshot.png
+```
+
+Images are downscaled and mapped to ASCII characters (`@%#*+=-:. `).
+
+## Fallback font
+
+If `figlet` and `pyfiglet` are unavailable, Arka uses a built-in 5-row block font for A–Z, 0–9, and spaces.
+
+## Install figlet (optional)
+
+```bash
+# macOS
+brew install figlet
+
+# Python
+pip install pyfiglet
+```
+
+<Tip>
+  Image ASCII works without figlet — only text banners benefit from external font libraries.
+</Tip>

@@ -1,0 +1,36 @@
+---
+title: "Long-term memory with Supermemory sync"
+description: "Persist facts across Arka sessions using Supermemory cloud sync with an automatic local cache fallback, plus natural-language remember and recall commands."
+keywords: ["memory", "supermemory", "remember", "recall"]
+---
+
+Arka remembers facts across sessions. With a [Supermemory](https://supermemory.ai) API key, memories sync to the cloud; otherwise Arka falls back to a local cache automatically.
+
+## Commands
+
+| Command | Example |
+| ------- | ------- |
+| `agent_remember` | `agent_remember I prefer Hindi TTS` |
+| `agent_recall` | `agent_recall what TTS do I prefer` |
+| `supermemory status` | Show backend mode (api / local) |
+| `supermemory remember` | Explicit cloud remember |
+| `supermemory recall` | Explicit cloud recall |
+| `semantic_memory reindex` | Rebuild semantic index on local cache |
+
+## Natural language
+
+```bash
+arka "remember that my dog is named Max"
+arka "what do you remember about Max"
+arka "I prefer Hindi TTS"    # auto-detected with MEMORY_AUTODETECT=1
+```
+
+## Configuration
+
+```env
+SUPERMEMORY_API_KEY=...
+MEMORY=auto                  # auto | supermemory | local
+MEMORY_AUTODETECT=1          # symbolic autodetect from chat/voice
+```
+
+Recalled context is injected into `arka ask`, research, and agent loops automatically.

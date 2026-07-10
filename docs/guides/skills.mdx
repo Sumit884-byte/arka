@@ -1,0 +1,158 @@
+---
+title: "Built-in skills catalog"
+description: "Catalog of Arka's 70+ built-in skills spanning media, web search, documents, system control, developer tools, and finance automation."
+keywords: ["skills", "automation", "features"]
+---
+
+Arka ships with **70+ built-in skills**. Say what you want in natural language and the router picks the right one.
+
+<CardGroup cols={3}>
+  <Card title="Chat & web" icon="message-circle" href="/guides/chat">Web answers, calc, weather</Card>
+  <Card title="Memory" icon="database" href="/guides/memory">Remember and recall facts</Card>
+  <Card title="PDF RAG" icon="file-text" href="/guides/pdf-rag">Ingest and query PDFs</Card>
+  <Card title="Charts" icon="chart-bar" href="/guides/charts">Line, bar, pie, scatter</Card>
+  <Card title="Vision" icon="eye" href="/guides/vision">Images and blueprints</Card>
+  <Card title="YouTube" icon="play" href="/guides/youtube">Research and downloads</Card>
+  <Card title="Google" icon="mail" href="/guides/google-workspace">Gmail and Calendar</Card>
+  <Card title="Stocks" icon="chart-line" href="/guides/stocks">Market intelligence</Card>
+  <Card title="Voice" icon="microphone" href="/guides/voice">Wake word and TTS</Card>
+  <Card title="Goal agent" icon="bot" href="/guides/goal-agent">Multi-step automation</Card>
+  <Card title="Plugins" icon="plug" href="/guides/plugins">Third-party skills</Card>
+  <Card title="CLI" icon="terminal" href="/guides/cli">Full command reference</Card>
+  <Card title="Route learn" icon="route" href="/guides/route-learn">Teach phrase → skill</Card>
+  <Card title="Competitions" icon="trophy" href="/guides/competitions">Hackathons & ML contests</Card>
+  <Card title="Daily brief" icon="newspaper" href="/guides/daily-brief">Morning tech headlines</Card>
+  <Card title="Select model" icon="cpu" href="/guides/select-model">Hardware-aware LLM picks</Card>
+  <Card title="Gemini CLI" icon="sparkles" href="/guides/gemini-cli">Google Gemini CLI</Card>
+  <Card title="Post to X" icon="share" href="/guides/post-x">Shorten & tweet URLs</Card>
+  <Card title="ASCII art" icon="image" href="/guides/ascii-art">Text & image banners</Card>
+</CardGroup>
+
+## Media
+
+| Skill | Example |
+| ----- | ------- |
+| `play_spotify` | `arka play bohemian rhapsody on spotify` |
+| `play_youtube` | `arka play lofi beats on youtube` |
+| `play_movie` | `arka play inception` |
+| `compose_video` | `arka compose a video about climate change` |
+| `generate_thumbnail` | `arka generate thumbnail for my video` |
+
+## YouTube
+
+Full guide: [YouTube research and downloads](/guides/youtube)
+
+| Skill | Example |
+| ----- | ------- |
+| `youtube_research` | `arka youtube research "python asyncio tutorial" --limit 5` |
+| `youtube_download` | `youtube_download <url> --audio` |
+| `youtube_bulk` | `youtube_bulk download PLxxx --wait` |
+| `youtube_transcript` | `youtube_transcript <url> --summarize` |
+| `find_videos` | `find_videos swimming tutorial` |
+| `playlist_summarize` | `arka summarize youtube PLxxx` |
+
+## Web and chat
+
+| Skill | Example |
+| ----- | ------- |
+| `web_answer` | `arka ask who won IPL 2025` |
+| `deep_web_answer` | `arka /latest AI regulation news` |
+| `search_web` | `arka search rust async tutorials` |
+| `calc` | `arka calc 2^10 + sqrt(144)` |
+| `hyperlocal_weather` | `arka weather near me` |
+
+## Documents and vision
+
+| Skill | Example |
+| ----- | ------- |
+| `pdf_ingest` | `pdf_ingest ~/Documents/resume.pdf` |
+| `pdf_ask` | `pdf_ask --doc resume.pdf "summarize skills"` |
+| `drawing_ask` | `drawing_ask plan.pdf "extract door schedule"` |
+| `describe_image` | `arka describe photo.jpg` |
+| `describe_screen` | `arka describe my screen` |
+
+## Productivity
+
+| Skill | Example |
+| ----- | ------- |
+| `google` | `arka google gmail --unread --summarize` |
+| `remind` | `arka remind me in 2 hours to call mom` |
+| `routines` | `routines add daily 9am "check email"` |
+| `todo` | `arka add buy milk to todo` |
+| `daily_brief` | `arka daily brief` |
+| `route_learn` | `arka teach route "ping ops" to system_monitor` |
+| `competitions` | `arka find hackathons for computer vision` |
+| `post_x` | `arka post this on my X https://example.com` |
+| `ascii_art` | `arka make ascii art HELLO` |
+| `select_model` | `arka select best model for my pc` |
+| `gemini_cli` | `arka gemini explain asyncio` |
+
+## System
+
+| Skill | Example |
+| ----- | ------- |
+| `weather` | `arka what's the weather` |
+| `system_monitor` | `arka system monitor` |
+| `disk_breakdown` | `arka how much disk is videos taking` |
+| `app_usage` | `arka usage report` |
+| `screenshot` | `arka screenshot` |
+
+## Development
+
+| Skill | Example |
+| ----- | ------- |
+| `install_uv` | `arka install uv` |
+| `install_app` | `arka install docker` |
+| `git_summary` | `arka git summary` |
+| `lint_python` | `arka lint this file` |
+| `github_repo` | `arka github repo stats for arka-agent/arka` |
+| `goal` | `arka goal set up venv and run pytest` |
+
+## Finance and stocks
+
+Full guide: [Stock intelligence](/guides/stocks)
+
+| Skill | Example |
+| ----- | ------- |
+| `stock` | `arka stock news` |
+| `stock` | `arka stock analyze AAPL` |
+| `stock` | `arka stock fundamentals RELIANCE.NS` |
+| `stock` | `arka stock invest "where to invest 3000 for 1 month"` |
+| `predictions` | `predictions --domain stocks --deep "banking sector"` |
+| `currency_convert` | `arka convert 100 USD to INR` |
+| `price_check` | `arka price check iPhone 16` |
+| `macro` | `arka stock macro 8` |
+| `emotion` | `arka stock emotion 20` |
+
+## Charts
+
+Full guide: [Charts and graphs](/guides/charts)
+
+Generate matplotlib PNG charts to `~/Pictures/arka-generated/`:
+
+```bash
+chart line AAPL TSLA --range 1y
+arka phone sales Apple 230 Samsung 210 Xiaomi 140
+```
+
+Supported types: line, bar, pie, scatter, histogram, pareto.
+
+## Memory
+
+Full guide: [Long-term memory](/guides/memory)
+
+| Skill | Example |
+| ----- | ------- |
+| `agent_remember` | `agent_remember I prefer Hindi TTS` |
+| `agent_recall` | `agent_recall what TTS do I prefer` |
+| `supermemory` | `supermemory status` |
+
+## Professions
+
+Full guide: [Profession domains](/guides/professions)
+
+12 profession domains with curated source registries: health, legal, journalism, architecture, and more. Each domain adds citation-aware research skills.
+
+<Tip>
+  Run `arka help` to see all available skills in your install. The list varies by platform mode and installed extras.
+</Tip>

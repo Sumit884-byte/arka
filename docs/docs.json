@@ -1,0 +1,145 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "Arka",
+  "colors": {
+    "primary": "#6366F1",
+    "light": "#818CF8",
+    "dark": "#4F46E5"
+  },
+  "favicon": "/favicon.svg",
+  "navigation": {
+    "groups": [
+      {
+        "group": "Getting started",
+        "icon": "rocket",
+        "pages": [
+          "index",
+          "quickstart"
+        ]
+      },
+      {
+        "group": "Core concepts",
+        "icon": "brain",
+        "pages": [
+          "concepts/routing",
+          "concepts/llm",
+          "concepts/security",
+          "guides/select-model"
+        ]
+      },
+      {
+        "group": "Using Arka",
+        "icon": "terminal",
+        "pages": [
+          "guides/cli",
+          "guides/skills",
+          "guides/route-learn",
+          "guides/competitions",
+          "guides/ascii-art"
+        ]
+      },
+      {
+        "group": "Chat & search",
+        "icon": "message-circle",
+        "pages": [
+          "guides/chat",
+          "guides/memory",
+          "guides/daily-brief"
+        ]
+      },
+      {
+        "group": "Documents & media",
+        "icon": "file-text",
+        "pages": [
+          "guides/pdf-rag",
+          "guides/charts",
+          "guides/vision",
+          "guides/youtube"
+        ]
+      },
+      {
+        "group": "Integrations",
+        "icon": "plug",
+        "pages": [
+          "guides/google-workspace",
+          "guides/plugins",
+          "guides/gemini-cli",
+          "guides/post-x"
+        ]
+      },
+      {
+        "group": "Finance",
+        "icon": "chart-line",
+        "pages": [
+          "guides/stocks"
+        ]
+      },
+      {
+        "group": "Agent & voice",
+        "icon": "bot",
+        "pages": [
+          "guides/voice",
+          "guides/goal-agent",
+          "guides/professions"
+        ]
+      },
+      {
+        "group": "Operations",
+        "icon": "wrench",
+        "pages": [
+          "guides/observability",
+          "guides/testing"
+        ]
+      },
+      {
+        "group": "Reference",
+        "icon": "list",
+        "pages": [
+          "reference/configuration",
+          "reference/aliases",
+          "reference/troubleshooting"
+        ]
+      }
+    ]
+  },
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg"
+  },
+  "navbar": {
+    "links": [
+      {
+        "href": "https://github.com/Sumit884-byte/arka",
+        "label": "GitHub"
+      },
+      {
+        "href": "https://pypi.org/project/arka-agent/",
+        "label": "PyPI"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Get started",
+      "href": "/quickstart"
+    }
+  },
+  "contextual": {
+    "options": [
+      "copy",
+      "view",
+      "chatgpt",
+      "claude",
+      "perplexity",
+      "mcp",
+      "cursor",
+      "vscode"
+    ]
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/Sumit884-byte/arka"
+    }
+  },
+  "description": "Documentation for Arka — a cross-platform AI agent for your terminal with 70+ local skills, voice, and 24-provider LLM failover."
+}

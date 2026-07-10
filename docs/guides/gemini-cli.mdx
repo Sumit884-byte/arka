@@ -1,0 +1,61 @@
+---
+title: "Google Gemini CLI integration"
+description: "Run Google's Gemini CLI from Arka — interactive sessions, one-shot prompts, and native subcommand passthrough."
+keywords: ["gemini", "google", "cli", "integration"]
+---
+
+Arka wraps Google's official [**Gemini CLI**](https://github.com/google-gemini/gemini-cli) (`@google/gemini-cli`) for terminal use alongside built-in Arka skills.
+
+## Usage
+
+```bash
+arka gemini                          # interactive session
+arka gemini explain asyncio in Python
+arka gemini -m gemini-2.5-flash "summarize this diff"
+arka gemini status                   # check install + auth
+arka gemini mcp                      # native subcommands (passthrough)
+arka gemini -- -p "hello" -m gemini-2.5-pro
+```
+
+From fish:
+
+```fish
+gemini_cli explain Rust ownership
+```
+
+## Install
+
+Node.js 18+ required:
+
+```bash
+npm install -g @google/gemini-cli
+# or one-shot:
+npx @google/gemini-cli
+```
+
+## Authentication
+
+Either:
+
+1. Run `gemini` once and sign in with Google (browser OAuth), or
+2. Set `GEMINI_API_KEY` in `~/.config/arka/.env` (Arka already uses this for built-in LLM calls).
+
+```bash
+arka gemini status
+```
+
+## Override binary
+
+```bash
+GEMINI_CLI=/path/to/gemini arka gemini status
+```
+
+## How it works
+
+- Bare prompts are wrapped as `gemini --skip-trust -p "<prompt>"` for headless use.
+- Flags and subcommands (`mcp`, `extensions`, `hooks`, etc.) pass through unchanged.
+- If `gemini` is not on PATH, Arka falls back to `npx @google/gemini-cli`.
+
+<Note>
+  The Gemini CLI is separate from Arka's built-in Gemini provider. Use it for Gemini-specific features (MCP, extensions, hooks) that the native CLI exposes.
+</Note>

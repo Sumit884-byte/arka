@@ -1,0 +1,162 @@
+---
+title: "Arka CLI command and flag reference"
+description: "Reference for the arka command-line interface, including primary commands, the agent alias, subcommands, and flags for terminal usage."
+keywords: ["cli", "commands", "terminal"]
+---
+
+The `arka` command is the main entry point. `agent` is an alias for the same router.
+
+## Primary commands
+
+| Command | Description |
+| ------- | ----------- |
+| `arka <request>` | Route natural language to the best skill |
+| `agent <request>` | Same router (alias) |
+| `arka ask <question>` | Web + AI answer |
+| `arka route <request>` | Preview routing without executing |
+| `arka goal <goal>` | Autonomous multi-step agent loop |
+| `arka setup` | Seed config dirs and dependencies |
+| `arka doctor` | Install diagnostics |
+| `arka reload` | Re-read `.env` and `config.fish` |
+| `arka refetch --install` | Git pull + sync + reinstall |
+| `arka help` | Skill overview |
+
+## YouTube commands
+
+See the full [YouTube guide](/guides/youtube).
+
+| Command | Description |
+| ------- | ----------- |
+| `arka youtube research <query>` | Search + transcript research digest |
+| `arka download <id-or-url>` | Download video, Shorts, or playlist |
+| `arka summarize youtube <id>` | Summarize video or playlist |
+| `youtube_download <url>` | Single video download (fish) |
+| `youtube_bulk download <url>` | Bulk playlist/channel download |
+
+## Stock commands
+
+See the full [Stock intelligence guide](/guides/stocks).
+
+| Command | Description |
+| ------- | ----------- |
+| `stock news` | Market news feeds |
+| `stock prices [TICKER…]` | Live prices |
+| `stock analyze TICKER` | AI backtest + ML signal |
+| `stock fundamentals TICKER…` | Ratios vs peers |
+| `stock invest <question>` | Deep investment research |
+| `predictions --domain stocks <topic>` | Opportunity analysis |
+
+## Voice and services
+
+| Command | Description |
+| ------- | ----------- |
+| `arka listen` | Wake-word listener ("hey arka, …") |
+| `arka start` / `arka stop` | Background services |
+| `arka serve` | Remote server for phone STT/TTS |
+| `arka speak-lang hi-IN` | Set voice language |
+| `arka reload --listen` | Reload config and restart listener |
+
+## LLM management
+
+| Command | Description |
+| ------- | ----------- |
+| `arka ai-models` | List providers and default models |
+| `arka ai-skill-model` | Per-skill model configuration |
+| `arka ai-skill-model profiles` | Task profiles (route, chat, summarize) |
+| `select_model` | Hardware-based model recommendations |
+| `select_model --apply` | Apply recommendations to skill profiles |
+
+See [Hardware-aware model selection](/guides/select-model).
+
+## Route learning
+
+| Command | Description |
+| ------- | ----------- |
+| `route_learn learn <phrase> <skill>` | Teach a phrase → skill mapping |
+| `route_learn learn --from-trace --correct <skill>` | Fix last routing mistake |
+| `route_learn list` | List learned routes |
+| `route_learn delete <id>` | Remove a learned route |
+| `route_learn test <phrase>` | Preview routing for a phrase |
+
+See [Teaching custom routes](/guides/route-learn).
+
+## Competitions
+
+| Command | Description |
+| ------- | ----------- |
+| `competitions sources` | List hackathon/ML competition sources |
+| `competitions search <topic>` | Search all sources |
+| `competitions search <topic> --source kaggle` | Search one platform |
+
+See [Hackathons and ML competitions](/guides/competitions).
+
+## Daily brief
+
+| Command | Description |
+| ------- | ----------- |
+| `daily_brief` | Personalized morning tech headlines |
+
+Natural language: `arka daily brief`, `arka morning tech brief`. See [Daily and tech brief](/guides/daily-brief).
+
+## Gemini CLI
+
+| Command | Description |
+| ------- | ----------- |
+| `arka gemini` | Interactive Google Gemini CLI |
+| `arka gemini <prompt>` | One-shot prompt |
+| `arka gemini status` | Install and auth check |
+
+See [Google Gemini CLI integration](/guides/gemini-cli).
+
+## Social & media
+
+| Command | Description |
+| ------- | ----------- |
+| `post_x <url>` | Fetch, shorten, and post to X/Twitter |
+| `ascii_art <text>` | Render ASCII art banner |
+| `ascii_art --image <path>` | Convert image to ASCII |
+
+## Google Workspace
+
+| Command | Description |
+| ------- | ----------- |
+| `arka google setup` | Configure Google OAuth |
+| `arka google login` | Authenticate Gmail + Calendar |
+| `arka google gmail --unread` | Fetch unread emails |
+| `arka google calendar --today` | Today's calendar events |
+
+## Plugins
+
+| Command | Description |
+| ------- | ----------- |
+| `arka skills list` | List installed plugins |
+| `arka skills install <url>` | Install from git URL |
+| `arka skills refresh` | Reload plugin registry |
+
+## Goal agent
+
+Run autonomous multi-step tasks with a step budget:
+
+```bash
+arka goal set up a venv, install requests, and run pytest
+arka goal -y -n 30 debug why nginx fails
+```
+
+Default step budget: `GOAL_MAX_STEPS=25`.
+
+## Fish shell helpers
+
+When using fish, these functions are available:
+
+```fish
+agent_route "play bohemian rhapsody"   # preview routing
+agent_trace                            # last routing decision
+agent_why                              # explain skill choice
+```
+
+## Apply config changes
+
+```bash
+arka reload              # re-read .env + config.fish
+arka reload --listen     # also restart wake listener
+```

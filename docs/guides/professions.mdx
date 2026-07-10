@@ -1,0 +1,36 @@
+---
+title: "Source-backed research across profession domains"
+description: "Get cited, evidence-first answers across 12 profession domains — health, legal, finance, engineering, and more — from Arka's curated source registries."
+keywords: ["professions", "research", "citations", "domains"]
+---
+
+Arka professions are **curated source registries** — not role-play prompts. The agent gathers evidence first, then synthesizes with citations.
+
+## Domains
+
+`health`, `nutrition`, `startup`, `investor`, `teacher`, `legal`, `engineer`, `journalism`, `marketing`, `finance`, `counselor`, `chef`
+
+## Commands
+
+```bash
+profession list
+profession sources journalism
+profession ask legal what is an NDA
+profession setup nutrition    # clone + index local repo
+```
+
+## Natural language
+
+```bash
+arka "as a news anchor how do I open a breaking story"
+```
+
+Routing is strict — generic questions like *symptoms of diabetes* stay on `web_answer`. Professions activate on explicit role mention or saved memory + keywords.
+
+## How it differs from web_answer
+
+| | web_answer | profession |
+| --- | --- | --- |
+| Sources | DuckDuckGo + scrape | Curated RSS, trusted web, local repos |
+| Citations | Optional | Required |
+| Activation | Default for facts | Explicit role/domain mention |

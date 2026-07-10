@@ -1,0 +1,89 @@
+---
+title: "Voice control with wake word, STT, and TTS"
+description: "Enable hands-free Arka usage with the wake-word listener, configurable speech-to-text engines, and text-to-speech replies for voice commands."
+keywords: ["voice", "stt", "tts", "wake word"]
+---
+
+Arka supports hands-free use with a wake-word listener, multiple STT engines, and TTS replies.
+
+## Quick start
+
+```bash
+arka listen
+# Say: "hey arka, what's the weather"
+```
+
+TTS replies are on by default (`AGENT_SPEAK=1`). Disable with `AGENT_SPEAK=0`.
+
+## Wake-word listener
+
+The listener is **off by default** until you run `arka listen`. For shell autostart on login:
+
+```env
+AGENT_WAKE_AUTO=1
+```
+
+Restart after config changes:
+
+```bash
+arka reload --listen
+```
+
+## STT engines
+
+Arka picks the best available engine automatically (`STT=auto`, `LISTEN_ENGINE=auto`):
+
+| Priority | Engine | Requires |
+| --- | --- | --- |
+| 1 | AssemblyAI | API key |
+| 2 | Sarvam | API key (Indian languages) |
+| 3 | Groq | API key |
+| 4 | Vosk | Local model (offline) |
+
+Override explicitly:
+
+```env
+STT=groq
+LISTEN_ENGINE=vosk
+```
+
+Install voice extras:
+
+```bash
+pip install "arka-agent[voice]"
+```
+
+## TTS backends
+
+Arka speaks replies using Edge TTS or Sarvam:
+
+```bash
+arka speak-lang hi-IN    # Hindi
+arka speak-lang en-US    # English
+```
+
+Sarvam supports Indian languages. Edge TTS works offline for most locales.
+
+## Remote server
+
+Use `arka serve` to run a remote STT/TTS server for phone-based interaction with your PC agent:
+
+```bash
+arka serve
+```
+
+## Multi-turn conversation
+
+Voice sessions maintain context across turns. Say "hey arka" followed by your request, then continue the conversation without repeating the wake word until the session times out.
+
+## Memory from voice
+
+With `MEMORY_AUTODETECT=1` (default), Arka automatically detects "remember that …" phrases from voice and chat:
+
+```text
+hey arka, remember that I prefer Hindi TTS
+```
+
+<Note>
+  Install fish shell and voice extras for the full voice experience. See the [Quickstart](/quickstart) for setup steps.
+</Note>

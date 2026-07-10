@@ -1,0 +1,108 @@
+---
+title: "LLM orchestration with multi-provider failover"
+description: "How Arka orchestrates 24 LLM providers with automatic failover, API key rotation, per-task profiles, and per-skill model overrides."
+keywords: ["llm", "providers", "failover", "models"]
+---
+
+Arka's `LlmFallbackEngine` manages all LLM calls across **24 providers** with automatic failover, API key rotation, and per-task or per-skill model overrides.
+
+## Supported providers
+
+Anthropic, OpenAI, Gemini, Groq, xAI, DeepSeek, Moonshot, Z.AI, MiniMax, Venice, Mistral, Cohere, Together, Fireworks, Perplexity, Hugging Face, OpenRouter, Bedrock, Azure, LiteLLM, Ollama, LM Studio, vLLM, and vLLM Cloud.
+
+## How failover works
+
+The orchestrator builds a candidate list in order:
+
+1. `AI_PREFERRED_PROVIDER` + `AI_PREFERRED_MODEL` (if set)
+2. Live model lists from each provider API (when keys allow)
+3. Built-in chain: Gemini 2.5/2.0 Flash → Groq Llama 3.3/3.1 → Ollama cloud/local
+
+On 429, 401, or timeout, Arka tries the next model. API key rotation (`API_KEY_ROTATION=1`) cycles backup keys before switching providers.
+
+```env
+AI_PREFERRED_PROVIDER=gemini
+AI_PREFERRED_MODEL=gemini-2.0-flash
+LLM_AUTO_FALLBACK=1
+API_KEY_ROTATION=1
+```
+
+## Per-task profiles
+
+| Task | Used for |
+| ---- | -------- |
+| `route` | Skill routing decisions |
+| `summarize` | Email and document summaries |
+| `chat` | Conversational replies |
+| `research` | Deep web research |
+| `agent` | Goal agent steps |
+| `pdf` | PDF question answering |
+| `predictions` | Stock and forecast analysis |
+| `compose_video` | Video script generation |
+
+Override per task:
+
+```env
+LLM_FALLBACK_ROUTE=gemini/gemini-2.0-flash,groq/llama-3.3-70b-versatile
+LLM_FALLBACK_SUMMARIZE=groq/llama-3.3-70b-versatile
+```
+
+## Per-skill models
+
+```bash
+arka ai-skill-model web_answer groq/llama-3.3-70b-versatile
+arka ai-skill-model profiles
+arka ai-models
+```
+
+Or edit `~/.config/arka/llm-skill-models.json`.
+
+## Shared exhaustion cache
+
+One session cache — exhausted models are skipped across skills until reset:
+
+```bash
+python3 arka_llm.py reset-exhaustion
+```
+
+Enable stderr notification on failover: `LLM_FALLBACK_NOTIFY=1`. Debug attempts: `LLM_VERBOSE=1`.
+
+## Local LLM servers
+
+```env
+OLLAMA_HOST=127.0.0.1:11434
+LLM_AUTO_START_SERVERS=1
+LLM_AUTO_STOP_SERVERS=1
+```
+
+## Why skills stay concise
+
+Arka does **not** ask the LLM to memorize 70 skill manuals. Skills are local programs — the model only picks the right name. On LLM route, Arka passes:
+
+- A **compact skill catalog** (registered names only)
+- **Curated routing rules** (high-signal patterns)
+- **Shell aliases** via `ROUTE_ALIASES` for your machine
+
+The route task uses low temperature and a dedicated chain so a fast/cheap model handles classification; heavy lifting runs inside the skill locally.
+
+## Inspect at runtime
+
+```bash
+arka ai-models
+python3 arka_llm.py models --task summarize
+python3 arka_llm.py models --skill web_answer
+python3 arka_llm.py active-model
+python3 arka_llm.py reset-exhaustion
+```
+
+<Note>
+  Set `SHOW_MODEL=1` (default) to display `Model: provider/name` under answers.
+</Note>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="settings" href="/reference/configuration">Env vars and API keys</Card>
+  <Card title="Chat & web" icon="message-circle" href="/guides/chat">Skills that use the orchestrator</Card>
+  <Card title="Troubleshooting" icon="wrench" href="/reference/troubleshooting">401, 429, and failover fixes</Card>
+</CardGroup>

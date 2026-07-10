@@ -35,6 +35,9 @@ pours/
 platform.json
 platform.env
 
+# Mintlify local dev (run `mint dev` from docs/)
+.mintlify/
+
 # Test / coverage (local dev harnesses — not committed)
 /local/
 test.py

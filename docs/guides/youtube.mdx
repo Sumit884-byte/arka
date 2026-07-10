@@ -1,0 +1,135 @@
+---
+title: "YouTube research and downloads"
+description: "Search YouTube from Arka, synthesize research from video transcripts, download individual videos with yt-dlp, and bulk-fetch entire playlists."
+keywords: ["youtube", "yt-dlp", "research", "download", "transcript"]
+---
+
+Arka ships several YouTube skills powered by **yt-dlp** for search, transcripts, downloads, and bulk playlist/channel fetching.
+
+## Prerequisites
+
+```bash
+brew install yt-dlp    # macOS
+apt install yt-dlp     # Linux
+```
+
+Videos save to `~/Videos/YoutubeDownloads/` by default. Override with `YOUTUBE_DOWNLOAD_DIR` or `YOUTUBE_BULK_DOWNLOAD_DIR` in `.env`.
+
+## YouTube research
+
+Search YouTube, fetch transcripts from multiple videos, and synthesize a unified research brief.
+
+```bash
+arka youtube research "how to fix hair loss"
+arka youtube research "python asyncio tutorial" --limit 5
+youtube_research "analyze 3 videos on react hooks"
+youtube_research "IPL 2025 highlights" --index --ask "who scored most runs"
+```
+
+| Flag | Purpose |
+| ---- | ------- |
+| `--limit N` | Number of videos to analyze (default: `2`, set `YT_RESEARCH_MAX` in `.env`) |
+| `--focus "question"` | Narrow the synthesis to a specific question |
+| `--index` | Save session for follow-up questions |
+| `--show-items` | Print per-video summaries |
+
+**Follow-up on indexed sessions:**
+
+```bash
+youtube_research list
+youtube_research ask <session-id> "what was the main recommendation"
+```
+
+Alias: `yt_research`, `arka research youtube <query>`.
+
+Natural language count parsing works inline:
+
+```
+"analyze 5 videos on rust async"
+"research two youtube videos about kubernetes"
+```
+
+## Play and find videos
+
+| Skill | Example |
+| ----- | ------- |
+| `play_youtube` | `arka play lofi beats on youtube` |
+| `find_videos` | `find_videos swimming tutorial` |
+| `youtube_transcript` | `youtube_transcript <url> --summarize` |
+
+## Single video download
+
+Download one video or Shorts link:
+
+```bash
+arka download dQw4w9WgXcQ
+arka download "https://youtube.com/watch?v=dQw4w9WgXcQ"
+youtube_download youtu.be/abc123 --audio
+yt_download <url> --quality 720
+```
+
+| Flag | Purpose |
+| ---- | ------- |
+| `--audio` | Save as MP3 instead of video |
+| `--quality 1080\|720\|480\|best` | Video quality |
+| `-o dir` | Output directory |
+
+Saves to `~/Videos/YoutubeDownloads/Singles/` by default.
+
+## Summarize videos and playlists
+
+```bash
+arka summarize youtube dQw4w9WgXcQ
+arka summarize youtube PLxxx          # playlist ID
+playlist_summarize <playlist-url>
+```
+
+Uses captions when available; falls back to STT when needed.
+
+## Bulk downloads
+
+Download entire playlists or channels with a web UI at `http://localhost:5000`:
+
+```bash
+youtube_bulk status
+youtube_bulk start
+youtube_bulk open
+youtube_bulk download "https://youtube.com/playlist?list=PLxxx" --wait
+yt_bulk download @mkbhd --channel --limit 5 --audio
+youtube_bulk download PLxxx --range 6-9 --wait
+youtube_bulk library
+```
+
+| Subcommand | Description |
+| ---------- | ----------- |
+| `status` | Server + download progress (default) |
+| `start` / `stop` / `open` | Manage bulk download web UI |
+| `download <url>` | Bulk download playlist or channel |
+| `library` | List downloaded folders and files |
+| `logs` | View download logs |
+
+**Download options:**
+
+| Flag | Purpose |
+| ---- | ------- |
+| `--channel` | Channel URL or `@handle` |
+| `--audio` | MP3 instead of video |
+| `--quality 1080\|720\|480` | Video quality |
+| `--limit N` | First N items |
+| `--range A-B` | Playlist slice, e.g. `6-9` |
+| `--wait` | Block until finished |
+
+Alias: `yt_bulk`.
+
+## Environment variables
+
+| Variable | Default | Purpose |
+| -------- | ------- | ------- |
+| `YT_RESEARCH_MAX` | `2` | Default videos for research |
+| `YT_RESEARCH_POOL` | auto | Search pool size when filling N captioned videos |
+| `YOUTUBE_DOWNLOAD_DIR` | `~/Videos/YoutubeDownloads/Singles` | Single downloads |
+| `YOUTUBE_BULK_DOWNLOAD_DIR` | `~/Videos/YoutubeDownloads` | Bulk downloads |
+
+<Tip>
+  Research caches transcripts in `~/.cache/fish-agent/youtube-research/`. Re-running the same query is faster on repeat.
+</Tip>

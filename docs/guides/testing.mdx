@@ -1,0 +1,120 @@
+---
+title: "Testing Arka with the pytest suite"
+description: "Run Arka's pytest suite locally and in CI, understand what the test coverage areas exercise, and add new tests when contributing skills or plugins."
+keywords: ["testing", "pytest", "ci", "development"]
+---
+
+Arka uses **pytest** for automated tests. The suite covers routing, LLM failover, vision, integrations, telemetry, and skill-specific behavior.
+
+## Run tests
+
+From a dev checkout:
+
+```bash
+cd arka
+pip install -e ".[dev]"
+pytest tests/
+```
+
+Run a single file or test:
+
+```bash
+pytest tests/test_llm_fallback.py
+pytest tests/test_router_show_me.py -v
+pytest tests/test_currency_convert.py::test_specific_case
+```
+
+Install dev extras (includes `pytest` and `ruff`):
+
+```bash
+pip install -e ".[dev]"
+```
+
+## Test suite overview
+
+The `tests/` directory contains **24 test modules** (~270 tests). They are organized by area:
+
+### Routing and NL parsing
+
+| Module | What it tests |
+| ------ | ------------- |
+| `test_router_show_me.py` | "Show me" queries must not route to `describe_image` |
+| `test_router_github_repo.py` | GitHub repo skill routing |
+| `test_router_find_files_by_size.py` | File-size search routing |
+
+### LLM and providers
+
+| Module | What it tests |
+| ------ | ------------- |
+| `test_llm_fallback.py` | Provider chain parsing, failover, per-skill models |
+| `test_vllm_cloud.py` | vLLM cloud provider integration |
+| `test_vllm_cross_platform.py` | vLLM on macOS/Linux/Windows |
+| `test_word_limit.py` | Output word-limit enforcement |
+
+### Vision and media
+
+| Module | What it tests |
+| ------ | ------------- |
+| `test_describe_image_resize.py` | Image resize before vision API calls |
+| `test_describe_image_ocr_output.py` | OCR output formatting |
+| `test_describe_screen.py` | Screen description skill |
+| `test_compose_video_captions.py` | Video composition captions |
+| `test_chart_fetch.py` | Chart external data fetch |
+
+### Integrations
+
+| Module | What it tests |
+| ------ | ------------- |
+| `test_currency_convert.py` | Currency conversion skill |
+| `test_price_check.py` | Price check skill |
+| `test_github_repo.py` | GitHub repo stats |
+| `test_gmail_draft.py` | Gmail draft creation |
+| `test_install_app_platform.py` | Cross-platform app install |
+| `test_product_reviewer.py` | Product review skill |
+| `test_memory_search_fallback.py` | Memory search fallback chain |
+| `test_openclaw_features.py` | OpenClaw compatibility features |
+
+### Observability
+
+| Module | What it tests |
+| ------ | ------------- |
+| `test_telemetry.py` | OpenTelemetry tracing setup |
+| `test_signoz_setup.py` | SigNoz configuration |
+| `test_supermemory_obs.py` | Supermemory observability hooks |
+| `test_mcp_obs.py` | MCP client observability |
+
+## Writing new tests
+
+Place tests in `tests/` with the `test_` prefix. Follow existing patterns:
+
+```python
+import pytest
+
+def test_my_skill_routes_correctly():
+    from arka.router import route
+    result = route("convert 100 USD to INR")
+    assert "currency" in result.lower()
+```
+
+For routing tests, use `arka.routing.symbolic` helpers or `arka.router.route()` directly. Mock external APIs (LLM, web search) when tests should not hit the network.
+
+## Linting
+
+```bash
+ruff check src/ tests/
+```
+
+`ruff` is included in the `[dev]` extra.
+
+## Local verification scripts
+
+Beyond pytest, the repo includes helper scripts:
+
+```bash
+python3 scripts/verify_features.py   # live feature smoke tests
+python3 scripts/sync_bundled.py      # sync bundled/ before wheel build
+```
+
+<Note>
+  Some tests require optional extras (`[chat]`, `[charts]`, `[drawings]`) or API keys. Tests that need network access are typically mocked — if a test fails on import, install the matching extra first.
+</Note>

@@ -1,0 +1,82 @@
+---
+title: "Installing and building Arka plugins"
+description: "Extend Arka by installing third-party plugin skills into ~/.config/arka/skills/ with skill.json trigger files that hook into the router."
+keywords: ["plugins", "skills", "extensions"]
+---
+
+Extend Arka with third-party skills installed to `~/.config/arka/skills/`.
+
+## Install a plugin
+
+```bash
+arka skills install https://github.com/user/my-skill.git
+arka skills refresh
+arka skills list
+```
+
+## skill.json format
+
+Every plugin needs a `skill.json` manifest:
+
+```json
+{
+  "name": "my_skill",
+  "description": "What it does",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": ["my skill", "do the thing"],
+  "voice_ack": "Running my skill."
+}
+```
+
+### Supported types
+
+| Type | Entry | Runs as |
+| --- | --- | --- |
+| `python` | `run.py` | Python script |
+| `fish` | `skill.fish` | Fish function |
+| `shell` | `run.sh` | Shell script |
+| `command` | `echo hello` | Direct command |
+
+## How triggers work
+
+Arka matches plugin triggers **before** AI routing. When you say something that matches a trigger, Arka runs the plugin immediately with zero LLM tokens.
+
+```json
+"triggers": ["weather in", "forecast for"]
+```
+
+Triggers are case-insensitive substring matches against the full user request.
+
+## Directory structure
+
+```text
+~/.config/arka/skills/
+└── my_skill/
+    ├── skill.json
+    ├── run.py
+    └── README.md
+```
+
+## Voice acknowledgment
+
+Set `voice_ack` to speak a confirmation when the plugin runs from voice:
+
+```json
+"voice_ack": "Checking the weather for you."
+```
+
+## Profession plugins
+
+Arka supports profession-domain plugins with curated source registries. See `src/arka/professions/examples/` in the repo for an architect example.
+
+## Refresh after changes
+
+```bash
+arka skills refresh
+arka reload
+```
+
+<Tip>
+  Keep triggers specific enough to avoid false matches. Test with `arka route "your trigger phrase"` before deploying.
+</Tip>

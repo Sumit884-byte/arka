@@ -1,0 +1,70 @@
+---
+title: "Teaching custom routes"
+description: "Teach Arka phrase-to-skill mappings that persist across sessions — correct routing mistakes, add shortcuts, and manage learned routes."
+keywords: ["routing", "learn", "custom", "teach"]
+---
+
+Arka can learn **persistent natural-language routes** — phrase → skill mappings stored in `~/.config/arka/learned_routes.json`. Learned routes are checked early in the router, before symbolic rules.
+
+## Teach a route
+
+```bash
+route_learn learn "deploy staging" "agent_code run deploy.sh"
+route_learn learn "my dashboard" system_monitor
+```
+
+Natural language:
+
+```bash
+arka teach route "deploy staging" to "agent_code run deploy.sh"
+arka learn that when I say "morning standup" means stock news
+arka remember route "check disk" as disk_breakdown
+```
+
+## Correct a routing mistake
+
+After a request routes incorrectly, fix it from the last trace:
+
+```bash
+route_learn learn --from-trace --correct "stock news"
+```
+
+This pairs the trace input with the skill you intended.
+
+## Manage routes
+
+| Command | Description |
+| ------- | ----------- |
+| `route_learn list` | List all learned routes |
+| `route_learn delete <id-or-phrase>` | Remove a route |
+| `route_learn test <phrase>` | Preview what a phrase would run |
+
+Natural language:
+
+```bash
+arka list learned routes
+```
+
+## Placeholders
+
+Use `{args}` in the skill line to capture trailing text:
+
+```bash
+route_learn learn "summarize repo" "github_repo activity {args}"
+# "summarize repo Sumit884-byte/arka" → github_repo activity Sumit884-byte/arka
+```
+
+## How matching works
+
+- Exact trigger matches run the skill line as-is.
+- Prefix matches append the remainder (`"check servers in prod"` → `system_monitor in prod`).
+- Longer triggers win over shorter ones.
+
+<Tip>
+  Learned routes use zero LLM tokens. They are ideal for team-specific shortcuts and correcting recurring misroutes.
+</Tip>
+
+## Related
+
+- [Routing concepts](/concepts/routing) — symbolic rules and LLM fallback
+- [CLI reference](/guides/cli) — `route_learn` subcommands

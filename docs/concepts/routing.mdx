@@ -1,0 +1,103 @@
+---
+title: "Symbolic and LLM routing pipeline"
+description: "How Arka's layered pipeline routes natural language to 120+ skill patterns using symbolic offline matching before falling back to an LLM."
+keywords: ["routing", "symbolic", "offline", "skills"]
+---
+
+Arka routes every request through a layered pipeline. Most requests never touch an LLM — symbolic rules in `config.fish` match 120+ skill patterns offline.
+
+## Routing pipeline
+
+<Steps>
+  <Step title="Direct skill name">
+    If the first token matches a registered skill, Arka runs it immediately. Zero tokens.
+
+    ```bash
+    arka weather
+    arka calc 2+2
+    demo_echo hello    # third-party plugin by name
+    ```
+  </Step>
+  <Step title="Plugin triggers">
+    Arka checks third-party skills in `~/.config/arka/skills/` next. Each plugin declares `triggers` in `skill.json`.
+  </Step>
+  <Step title="Offline symbolic rules">
+    The default path. `_agent_guess_route` and `_agent_offline_route_cmd` in `config.fish` match regex patterns for 120+ skills. No LLM call. You'll see `💡 [Offline routing]` and `→ Interpreted: …` when this fires.
+  </Step>
+  <Step title="LLM route">
+    When offline rules don't match, Arka sends a compact skill catalog to the LLM with `task=route`. The model picks the best skill.
+  </Step>
+  <Step title="Correction layer">
+    A deterministic correction layer fixes weak LLM picks without a second LLM call (e.g. `search_web` → `web_answer` for factual questions).
+  </Step>
+  <Step title="Dispatch">
+    `dispatch.py` executes the chosen skill script.
+  </Step>
+</Steps>
+
+## Token usage by layer
+
+| Layer | LLM tokens |
+| ----- | ---------- |
+| Direct skill name | **0** |
+| Symbolic routing | **0** |
+| Plugin triggers | **0** |
+| LLM route (fallback) | **small** (compact catalog only) |
+
+Default mode is `ROUTE_MODE=symbolic` — offline rules first, AI only when needed.
+
+## Ambiguous routing
+
+When two or more offline patterns could apply (common with play/media), Arka detects the collision and asks the LLM to choose:
+
+```
+💡 [AI routing — ambiguous play/media request]
+→ Interpreted: play_movie bohemian rhapsody
+```
+
+Clear one-sided requests still use offline routing with zero tokens.
+
+## Route modes
+
+| Mode | Behavior |
+| ---- | -------- |
+| `symbolic` | Offline rules first, LLM only when needed (default) |
+| `ai` | Prefer LLM routing |
+| `symbolic_only` | Never call LLM for routing |
+| `ai_only` | Always use LLM for routing |
+
+```env
+ROUTE_MODE=symbolic
+```
+
+## Inspect routing
+
+Preview what skill Arka would pick without running it:
+
+```bash
+arka route "summarize my unread emails"
+agent_route "play bohemian rhapsody on spotify"
+agent_trace          # last routing decision
+agent_why            # explain skill choice
+arka help            # full skill list
+arka tell your skills   # voice-friendly summary + active model
+```
+
+## Python fallback (no fish)
+
+When fish is not installed, Arka uses `src/arka/routing/symbolic.py` for the same offline-first behavior. The portable CLI still supports chat, web answers, passwords, calc, weather, sports, and plugins.
+
+Install [fish shell](https://fishshell.com) to unlock the full 70+ skill router.
+
+## Skill router vs orchestrator
+
+The **skill router** decides *which skill runs*. The **LLM orchestrator** (see [LLM orchestration](/concepts/llm)) powers completions *inside* skills — summarize, chat, research, PDF, predictions — with provider failover. They are separate systems.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Skills catalog" icon="puzzle-piece" href="/guides/skills">All routable skills</Card>
+  <Card title="CLI reference" icon="terminal" href="/guides/cli">`arka route` and `agent_route`</Card>
+  <Card title="Plugins" icon="plug" href="/guides/plugins">Third-party triggers</Card>
+  <Card title="Aliases" icon="list" href="/reference/aliases">Command and skill synonyms</Card>
+</CardGroup>

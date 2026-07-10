@@ -1,0 +1,58 @@
+---
+title: "Image description, OCR, and screen capture"
+description: "Use Arka's vision skills to describe photos, extract text via OCR, analyze blueprints, and capture your screen with Gemini, Ollama llava, or vLLM backends."
+keywords: ["vision", "describe_image", "drawing_ask", "ocr", "screen"]
+---
+
+Arka supports vision tasks: photo description, blueprint analysis, and screen capture.
+
+## Describe images
+
+Two-layer analysis: OCR extracts exact text; vision describes layout and colors.
+
+```bash
+arka describe photo.jpg
+describe_image ~/Downloads/chart.png
+```
+
+Backends (auto-selected): Gemini, Ollama (llava), vLLM.
+
+```env
+DESCRIBE_IMAGE_BACKEND=auto   # auto | gemini | ollama | vllm
+GEMINI_API_KEY=...
+# DESCRIBE_IMAGE_TWO_LAYER=1
+# DESCRIBE_IMAGE_OCR=1
+```
+
+```bash
+pip install "arka-agent[vision]"
+brew install tesseract    # OCR layer
+```
+
+## Drawings and blueprints
+
+Analyze floor plans, elevations, MEP schematics, and scanned contracts with Gemini vision:
+
+```bash
+drawing_ask plan.pdf "extract door schedule and room dimensions"
+drawing_ask --pages 1-3 specs.pdf "summarize payment terms"
+```
+
+```bash
+pip install "arka-agent[drawings]"
+```
+
+```env
+# DRAWING_MODEL=gemini-2.5-flash
+# DRAWING_MAX_PAGES=8
+```
+
+## Screen capture
+
+10-second countdown, full-display capture, vision describe:
+
+```bash
+describe_screen
+arka describe my screen
+describe_screen what app is in focus
+```

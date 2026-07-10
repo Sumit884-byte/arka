@@ -1,0 +1,77 @@
+---
+title: "Troubleshooting Arka: LLM, routing, voice, and RAG fixes"
+description: "Diagnose and fix common Arka issues covering API key errors, LLM failover, skill routing, PDF RAG, voice wake-word, and third-party service integrations."
+keywords: ["troubleshooting", "errors", "fixes", "debug"]
+---
+
+## LLM and API keys
+
+| Issue | Fix |
+| ----- | --- |
+| `Could not generate an answer` / `401` | Check API keys; `arka ai-models`; set `AI_PREFERRED_PROVIDER=groq`; `python3 arka_llm.py reset-exhaustion` |
+| Gemini 429 / slow responses | Orchestrator auto-fails over with `LLM_AUTO_FALLBACK=1`; prefer Groq via `AI_PREFERRED_PROVIDER=groq` |
+| Wrong model picked | `arka ai-skill-model web_answer groq/llama-3.3-70b-versatile` |
+
+## Routing
+
+| Issue | Fix |
+| ----- | --- |
+| `uv pip install am` on random text | Use `arka`, not raw shell, for NL |
+| Plugin not routing | `arka skills refresh`; check `skill.json` triggers; `arka route "your trigger phrase"` |
+| Config changes not picked up | `arka reload` or new shell; `arka reload --listen` for wake listener |
+
+## PDF RAG
+
+| Issue | Fix |
+| ----- | --- |
+| PDF ask fails | `arka pdf status`; ensure Qdrant Docker is up |
+
+## Web search
+
+| Issue | Fix |
+| ----- | --- |
+| Deep search empty | `pip install ddgs trafilatura beautifulsoup4` |
+| Map download timeout | Retry `map_download <city>` later (Overpass API) |
+
+## Voice
+
+| Issue | Fix |
+| ----- | --- |
+| Wake word missed / wrong STT | Set `ASSEMBLYAI_API_KEY`; or `SARVAM_API_KEY` + `SARVAM_STT_MODE=translit` |
+| Devanagari breaks routing | Fixed via `arka_stt_map.py`; try `LISTEN_STT_LANG=en-IN` |
+| Listener crashes | `python3 arka_wake.py --check` then `arka doctor` |
+| Wrong microphone | Linux: `pactl list sources short` → set `MIC_DEVICE` in `.env` |
+
+## Charts
+
+| Issue | Fix |
+| ----- | --- |
+| Chart defaults not applied | Edit `~/.config/arka/charts.yaml`; set `CHARTS_CONFIG` for custom path |
+| Fetch-style chart NL not routing | Use inline label:value pairs; external fetch wiring in progress |
+
+## Observability
+
+| Issue | Fix |
+| ----- | --- |
+| SigNoz traces not appearing | Set `OTEL_TRACES_ENABLED=1` (not just `SIGNOZ_ENDPOINT`); `python3 bin/arka_signoz.py status` |
+
+## Memory
+
+| Issue | Fix |
+| ----- | --- |
+| Supermemory not used | `supermemory status`; set `SUPERMEMORY_API_KEY`; `MEMORY=auto` |
+
+## Logs
+
+```
+~/.cache/arka/*.log
+~/.cache/fish-agent/*.log    # legacy fish installs
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="settings" href="/reference/configuration">Env vars and defaults</Card>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">Fresh install checklist</Card>
+  <Card title="CLI reference" icon="terminal" href="/guides/cli">`arka doctor` and diagnostics</Card>
+</CardGroup>

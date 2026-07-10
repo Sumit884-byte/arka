@@ -1,0 +1,54 @@
+---
+title: "Daily and tech brief"
+description: "Get a personalized morning tech brief with today's headlines, source URLs, OpenAI changelog awareness, and memory-informed topic selection."
+keywords: ["brief", "news", "headlines", "tech"]
+---
+
+The daily brief skill delivers a **personalized news digest** — tech-focused by default, with clickable source URLs and stale-date filtering.
+
+## Natural language
+
+```bash
+arka daily brief
+arka morning tech brief
+arka today's tech brief personalized for me
+arka daily tech brief
+arka news brief
+arka morning brief
+```
+
+Headline-style requests also route here:
+
+```bash
+arka give me 10 concise tech news headlines
+arka bullet headlines for AI startups
+```
+
+## What you get
+
+- Headlines from **today only** — stale dates and old years are filtered out.
+- Each bullet includes a **source URL** after an em dash when available.
+- **OpenAI changelog** items prefer official URLs at `platform.openai.com/docs/changelog`.
+- **Personalization** from Supermemory context when available (interests, past brief preferences).
+- No preamble lines like "Here are 10 headlines" — bullets only.
+
+## Configuration
+
+```env
+# Max words when fetching URL content for brief enrichment (default 30)
+BRIEF_URL_WORDS=30
+
+# Enable URL content fetching for brief items (default off)
+BRIEF_URL_LIMIT_ENABLED=1
+```
+
+## How routing works
+
+Phrases like `daily brief`, `tech brief`, `morning brief`, and `news brief` route to `daily_brief` — not generic `web_answer`.
+
+Unrelated uses of "brief" (e.g. "brief summary of kubernetes") stay on the general web answer path.
+
+## Related
+
+- [Chat and search](/guides/chat) — `web_answer` and deep search
+- [Long-term memory](/guides/memory) — personalization context

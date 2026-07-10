@@ -1,0 +1,37 @@
+---
+title: "Querying PDFs with PrivateGPT and Qdrant RAG"
+description: "Ingest PDFs into a local vector store and ask natural-language questions using Arka's PrivateGPT and Qdrant-powered retrieval-augmented generation pipeline."
+keywords: ["pdf", "rag", "privategpt", "qdrant"]
+---
+
+Ask questions about your PDFs using PrivateGPT + Qdrant vector search.
+
+## Commands
+
+| Command | Example |
+| ------- | ------- |
+| `pdf_ingest` | `pdf_ingest ~/Documents/resume.pdf` |
+| `pdf_list` | List ingested documents |
+| `pdf_ask` | `pdf_ask --doc resume.pdf "summarize skills"` |
+
+## Natural language
+
+```bash
+arka "ask Profile.pdf about main skills"
+arka "summarize ENGLSH-2 weeks 1 to 3"
+```
+
+## Setup
+
+Requires [PrivateGPT](https://github.com/zylon-ai/private-gpt) and Docker for Qdrant. Arka auto-starts services when `PDF_RAG_AUTO_START=1`.
+
+```env
+PDF_RAG_URL=http://127.0.0.1:8080
+PRIVATEGPT_HOME=~/Projects/private-gpt
+PDF_RAG_AUTO_START=1
+```
+
+```bash
+pip install "arka-agent[pdf]"
+arka pdf status    # check PrivateGPT + Qdrant
+```

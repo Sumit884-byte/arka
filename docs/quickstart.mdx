@@ -1,0 +1,152 @@
+---
+title: "Quickstart: install Arka and run your first command"
+description: "Install Arka on macOS, Linux, or Windows, configure API keys, and run your first natural-language terminal command in under five minutes."
+---
+
+Get Arka running on macOS, Linux, or Windows. After you complete this guide, you will have installed the agent, configured API keys, and run your first natural-language command.
+
+## Before you begin
+
+Arka uses a docs-as-code approach — this site is built on [Mintlify](https://mintlify.com) and deployed at [arka-agent.mintlify.site](https://arka-agent.mintlify.site). To use Arka itself, you need:
+
+- **Python 3.11\+**
+- At least one LLM API key (Gemini or Groq recommended for free tiers)
+- [**fish shell**](https://fishshell.com) for the full 70\+ skill router (optional but recommended)
+
+## Install
+
+<Tabs>
+  <Tab title="Git clone">
+    Best for development or staying on the latest `main` branch.
+
+    ```bash
+    git clone https://github.com/Sumit884-byte/arka.git
+    cd arka
+    ./scripts/refetch.sh --install
+    ```
+  </Tab>
+  <Tab title="PyPI / pipx">
+    Best for a standalone install without cloning the repo.
+
+    ```bash
+    pipx install "arka-agent[chat]"
+    arka setup
+    ```
+  </Tab>
+  <Tab title="Editable dev">
+    For contributors working inside the repo.
+
+    ```bash
+    git clone https://github.com/Sumit884-byte/arka.git && cd arka
+    python3 scripts/sync_bundled.py
+    pip install -e ".[chat]"
+    arka setup
+    ```
+  </Tab>
+</Tabs>
+
+## Get started
+
+<Steps>
+  <Step title="Configure API keys">
+    Copy the example env file and add at least one provider key.
+
+    ```bash
+    cp .env.example ~/.config/arka/.env
+    ```
+
+    Minimum `.env` for a quick start:
+
+    ```env
+    GEMINI_API_KEY=your_key_here
+    GROQ_API_KEY=your_key_here
+    AI_PREFERRED_PROVIDER=gemini
+    AI_PREFERRED_MODEL=gemini-2.0-flash
+    AGENT_SPEAK=1
+    ```
+
+    <Note>
+      Config paths vary by OS. Linux uses `~/.config/arka/`, macOS uses `~/Library/Application Support/arka/`, and Windows uses `%APPDATA%\arka\`.
+    </Note>
+  </Step>
+  <Step title="Verify the install">
+    Run diagnostics to confirm dependencies and API keys.
+
+    ```bash
+    arka doctor
+    ```
+  </Step>
+  <Step title="Run your first command">
+    Ask a question and see Arka route it to the web answer skill.
+
+    ```bash
+    arka ask "what is Rust?"
+    ```
+
+    Try a few more:
+
+    ```bash
+    arka "convert 100 USD to INR"
+    arka route "play bohemian rhapsody on spotify"
+    arka help
+    ```
+  </Step>
+  <Step title="Install fish shell (optional)">
+    Fish unlocks the full 70\+ skill router. The pip package ships `config.fish`.
+
+    ```bash
+    # macOS
+    brew install fish
+    
+    # Linux
+    apt install fish
+    
+    # Windows
+    scoop install fish
+    ```
+  </Step>
+</Steps>
+
+## Optional extras
+
+| Extra | Adds |
+| --- | --- |
+| `[chat]` | Agno, web search, trafilatura, sympy, geopy |
+| `[voice]` | vosk, sounddevice |
+| `[pdf]` | PrivateGPT client |
+| `[charts]` | matplotlib |
+| `[all]` | Everything above |
+
+```bash
+pip install "arka-agent[all]"
+```
+
+## Next steps
+
+Follow the sidebar in order, or jump to what you need:
+
+<CardGroup cols={2}>
+  <Card title="CLI reference" icon="terminal" href="/guides/cli">
+    All commands, aliases, and subcommands.
+  </Card>
+
+  <Card title="Skills catalog" icon="puzzle-piece" href="/guides/skills">
+    What you can ask Arka to do.
+  </Card>
+
+  <Card title="How routing works" icon="route" href="/concepts/routing">
+    Offline rules, LLM fallback, and correction layer.
+  </Card>
+
+  <Card title="LLM configuration" icon="brain" href="/concepts/llm">
+    Providers, failover, and per-skill models.
+  </Card>
+
+  <Card title="Configuration" icon="settings" href="/reference/configuration">
+    Env vars, precedence, and built-in defaults.
+  </Card>
+
+  <Card title="Voice" icon="microphone" href="/guides/voice">
+    Wake word, STT, and TTS setup.
+  </Card>
+</CardGroup>

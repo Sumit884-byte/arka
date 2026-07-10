@@ -1,0 +1,99 @@
+---
+title: "Introduction to Arka"
+description: "Arka is a cross-platform AI terminal agent that routes plain-English requests to 70+ local skills, with voice replies and offline symbolic routing."
+---
+
+Arka is a **cross-platform AI agent** for your terminal. Say what you want in plain English — Arka routes your request to the right local skill, runs it, and speaks the answer back if you want.
+
+Commands run locally. LLM calls go through a **fallback orchestrator** across **24 providers** — no Docker required for daily use.
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Install and run your first command in under five minutes.
+  </Card>
+  <Card title="Skills catalog" icon="puzzle-piece" href="/guides/skills">
+    70+ built-in skills for media, web, docs, system, dev, and finance.
+  </Card>
+  <Card title="Routing" icon="route" href="/concepts/routing">
+    Zero LLM tokens for most requests via offline symbolic rules.
+  </Card>
+  <Card title="Security" icon="shield-check" href="/concepts/security">
+    Prompt-injection blocks, risky-action prompts, destructive shell hard-blocks.
+  </Card>
+</CardGroup>
+
+## What Arka does
+
+```bash
+arka ask "what is Rust?"
+arka "convert 100 USD to INR"
+arka youtube research "python asyncio tutorial"
+arka stock invest "where to invest 3000 for 1 month"
+arka goal set up a venv and run pytest
+arka listen    # "hey arka, what's the weather"
+```
+
+## Key capabilities
+
+- **70+ local skills** — media, web, PDF RAG, Google Workspace, charts, stocks, YouTube, voice
+- **Offline-first routing** — 120+ symbolic rules; LLM only when needed
+- **24-provider LLM failover** — Gemini, Groq, OpenAI, Anthropic, Ollama, vLLM, OpenRouter, and more
+- **Voice** — wake-word listener, multi-turn conversation, TTS replies
+- **Security gates** — on by default
+- **Plugins** — extend with `skill.json` triggers
+
+## Platform modes
+
+| Platform | Mode |
+| -------- | ---- |
+| **All (macOS, Windows, Linux)** | Full 70+ skills via pip + [fish shell](https://fishshell.com) |
+| **Without fish** | Portable Python: chat, web, calc, weather, plugins |
+| **Linux + fish login shell** | Full skills + voice autostart + systemd units |
+
+## Documentation map
+
+### Using Arka
+
+<CardGroup cols={2}>
+  <Card title="CLI reference" icon="terminal" href="/guides/cli">Commands, aliases, and subcommands</Card>
+  <Card title="Skills catalog" icon="puzzle-piece" href="/guides/skills">Full built-in skill list</Card>
+</CardGroup>
+
+### Chat & search
+
+<CardGroup cols={2}>
+  <Card title="Chat & web answers" icon="message-circle" href="/guides/chat">Web search, calc, weather, maps</Card>
+  <Card title="Memory" icon="database" href="/guides/memory">Supermemory and local recall</Card>
+</CardGroup>
+
+### Documents & media
+
+<CardGroup cols={2}>
+  <Card title="PDF RAG" icon="file-text" href="/guides/pdf-rag">Ingest and query PDFs</Card>
+  <Card title="Charts" icon="chart-bar" href="/guides/charts">Matplotlib PNG charts</Card>
+  <Card title="Vision" icon="eye" href="/guides/vision">Images, blueprints, screen capture</Card>
+  <Card title="YouTube" icon="play" href="/guides/youtube">Research, download, bulk</Card>
+</CardGroup>
+
+### Integrations & finance
+
+<CardGroup cols={2}>
+  <Card title="Google Workspace" icon="mail" href="/guides/google-workspace">Gmail and Calendar</Card>
+  <Card title="Plugins" icon="plug" href="/guides/plugins">Third-party skill.json extensions</Card>
+  <Card title="Stock intelligence" icon="chart-line" href="/guides/stocks">Market news, fundamentals, sentiment</Card>
+</CardGroup>
+
+### Agent & operations
+
+<CardGroup cols={2}>
+  <Card title="Voice" icon="microphone" href="/guides/voice">Wake word, STT, TTS</Card>
+  <Card title="Goal agent" icon="bot" href="/guides/goal-agent">Autonomous multi-step tasks</Card>
+  <Card title="Professions" icon="briefcase" href="/guides/professions">Source-backed domain answers</Card>
+  <Card title="Observability" icon="activity" href="/guides/observability">SigNoz and OpenTelemetry</Card>
+  <Card title="Testing" icon="flask" href="/guides/testing">pytest suite</Card>
+  <Card title="Configuration" icon="settings" href="/reference/configuration">Env vars and defaults</Card>
+</CardGroup>
+
+<Note>
+  Open source under GPL-2.0. PyPI package: `arka-agent`.
+</Note>

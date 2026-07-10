@@ -1,0 +1,64 @@
+---
+title: "Command aliases, subcommand synonyms, and skill names"
+description: "Reference for Arka's command aliases, agent name overrides, subcommand synonyms, and skill-name equivalents that let you invoke the same feature multiple ways."
+keywords: ["aliases", "commands", "synonyms"]
+---
+
+Arka uses aliases at several levels: the main command name, helper functions, subcommand synonyms, and skill-name equivalents.
+
+## Main command
+
+| Command | What it is |
+| ------- | ---------- |
+| `arka` | Default entry point |
+| `agent` | Always available; same NL router |
+| Custom name | Set `AGENT_NAME=mybot` in `.env` |
+
+Wake phrases include the agent name: **"hey arka, …"**
+
+## Subcommand synonyms
+
+| Synonyms | Maps to |
+| -------- | ------- |
+| `reload` / `refresh` / `relink` | Reload config |
+| `start` / `up` | Start services |
+| `stop` / `down` | Stop services |
+| `youtube` / `yt` | YouTube commands |
+| `youtube_bulk` / `yt_bulk` | Bulk downloads |
+| `youtube_download` / `yt_download` | Single download |
+| `youtube_research` / `yt_research` | YouTube research |
+| `predict` / `predictions` / `forecast` | Predictions talent |
+| `stock` / `stocks` / `market` | Stock intelligence |
+| `skills` / `plugins` / `extensions` | Plugin management |
+| `supermemory` / `sm` / `memory-cloud` | Cloud memory |
+| `pdf` / `document` / `docs` | PDF RAG |
+| `download` / `dl` | Download media |
+
+## Skill-name equivalents
+
+| Names | Notes |
+| ----- | ----- |
+| `stock` / `stock_analysis` | Market bridge |
+| `pass` / `generate_password` | Password vault |
+| `doc_*` / `pdf_*` | Document RAG |
+| `macro` | Alias for `stock macro` |
+| `emotion` | Alias for `stock emotion` |
+
+## Fish shell helpers
+
+| Function | Equivalent |
+| -------- | ---------- |
+| `agent_route` | Preview routing without executing |
+| `agent_trace` | Last routing decision |
+| `agent_why` | Explain skill choice |
+| `yt_research` | `youtube_research` |
+| `yt_bulk` | `youtube_bulk` |
+| `yt_download` | `youtube_download` |
+
+## Discover on your machine
+
+```bash
+arka help
+arka skills list
+grep AGENT_NAME ~/.config/arka/.env
+```

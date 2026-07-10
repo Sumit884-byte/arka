@@ -1,0 +1,62 @@
+---
+title: "Hardware-aware model selection"
+description: "Probe your CPU, RAM, GPU, and disk to recommend per-task LLM models — then optionally apply them to ai-skill-model profiles."
+keywords: ["llm", "model", "hardware", "ollama"]
+---
+
+The model advisor probes your machine and recommends **per-task LLM models** for Arka's skill profiles (`route`, `chat`, `summarize`, etc.).
+
+## Natural language
+
+```bash
+arka select best model for my pc
+arka what llm model should I use
+arka optimize models for my hardware
+arka best models for my mac
+arka auto configure models from my hardware --apply
+```
+
+## CLI
+
+```bash
+select_model                    # show recommendations
+select_model --apply            # write to llm-skill-models.json
+select_model --json             # machine-readable output
+select_model probe              # hardware snapshot only
+```
+
+## Hardware tiers
+
+| Tier | Typical hardware | Strategy |
+| ---- | ---------------- | -------- |
+| `minimal` | Low RAM, no GPU | Cloud-only, tiny/fast models |
+| `cloud_light` | Laptop, no local LLM | Fast cloud APIs |
+| `balanced` | 8–16 GB RAM | Cloud primary, optional small local |
+| `local_capable` | 16+ GB RAM, GPU | Mix Ollama + cloud for heavy tasks |
+| `local_heavy` | 32+ GB RAM, strong GPU | Prefer local Ollama models |
+
+The advisor checks CPU cores, RAM, GPU (CUDA/MPS/Metal), disk space, battery status, and installed Ollama models.
+
+## Apply recommendations
+
+```bash
+select_model --apply
+# or
+arka auto apply models for my hardware
+```
+
+This writes to `~/.config/arka/llm-skill-models.json`. Override individual profiles anytime:
+
+```bash
+arka ai-skill-model chat gemini/gemini-2.0-flash
+```
+
+## Requirements
+
+- At least one cloud API key (`GEMINI_API_KEY`, `GROQ_API_KEY`, etc.) for cloud tiers.
+- `ollama serve` running with pulled models for local tiers.
+
+## Related
+
+- [LLM concepts](/concepts/llm) — providers and failover
+- [Configuration reference](/reference/configuration) — `ai-skill-model` settings
