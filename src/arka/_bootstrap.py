@@ -20,6 +20,7 @@ LEGACY_MODULES: dict[str, str] = {
     "arka_usage": "arka.core.usage",
     "arka_memory_detect": "arka.core.memory_detect",
     "arka_session_memory": "arka.core.session_memory",
+    "arka_unified_memory": "arka.core.unified_memory",
     "arka_llm": "arka.llm.cli",
     "arka_llm_fallback": "arka.llm.fallback",
     "arka_llm_servers": "arka.llm.servers",

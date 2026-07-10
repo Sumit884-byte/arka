@@ -1766,6 +1766,15 @@ def build_session_context(question: str | None = None) -> str:
     return "\n".join(parts)
 
 
+def _unified_memory_enabled() -> bool:
+    try:
+        from arka.core.unified_memory import _enabled
+
+        return _enabled()
+    except ImportError:
+        return False
+
+
 def _begin_channel_session(question: str, *, use_session: bool) -> str:
     if not use_session:
         return ""
@@ -1781,8 +1790,10 @@ def _begin_channel_session(question: str, *, use_session: bool) -> str:
         if not _enabled():
             return ""
         ch, cid = cli_channel(), cli_chat_id()
-        ctx = context_for(ch, cid)
         push(ch, cid, "user", question)
+        if _unified_memory_enabled():
+            return ""
+        ctx = context_for(ch, cid)
         return ctx
     except ImportError:
         return ""

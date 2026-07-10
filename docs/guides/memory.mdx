@@ -73,3 +73,26 @@ flowchart LR
 - **Chat session** — ephemeral in-memory history for the current `arka ask` run
 
 See [Channel sessions](/guides/hermes-features) and [Session memory](/guides/openclaw-features) for setup.
+
+## Unified memory
+
+When `UNIFIED_MEMORY=1` (default), Arka routes recall through a single facade that aggregates facts, session notes, and channel turns — without duplicating channel context in `arka ask`.
+
+| Command | Example |
+| ------- | ------- |
+| `unified_memory remember` | `unified_memory remember I prefer dark mode` |
+| `unified_memory remember` | `unified_memory remember "note: standup at 9am" --layer note` |
+| `unified_memory recall` | `unified_memory recall "what theme do I prefer"` |
+| `unified_memory status` | Show counts across all layers |
+
+```env
+UNIFIED_MEMORY=1    # default on; set 0 to use legacy per-layer recall only
+```
+
+Layer routing with `--layer auto` (default):
+
+- **Facts** — preferences, stable knowledge → Supermemory / `memory.json`
+- **Notes** — journaling, meetings → `session_memory` markdown
+- **Channel** — conversation turns → `message_session` JSON
+
+Existing commands (`agent_remember`, `session_memory`, `message_session`) still work independently.

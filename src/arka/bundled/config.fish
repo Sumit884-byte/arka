@@ -12254,6 +12254,34 @@ function message_session --description "Per-channel message sessions (cross-plat
     end
 end
 
+function unified_memory --description "Unified memory facade (facts + notes + channel turns)"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        $py (_arka_py_script arka_unified_memory.py) status
+        echo ""
+        echo "Usage: unified_memory remember|recall|status [text|goal] [--layer fact|note|channel|auto]"
+        return 0
+    end
+    switch $argv[1]
+        case remember store save
+            if test (count $argv) -lt 2
+                echo "Usage: unified_memory remember <text> [--layer fact|note|channel|auto] [--long-term]"
+                return 1
+            end
+            $py (_arka_py_script arka_unified_memory.py) remember (string join " " $argv[2..-1])
+        case recall context ctx
+            if test (count $argv) -lt 2
+                echo "Usage: unified_memory recall <goal>"
+                return 1
+            end
+            $py (_arka_py_script arka_unified_memory.py) recall (string join " " $argv[2..-1])
+        case status
+            $py (_arka_py_script arka_unified_memory.py) status
+        case '*'
+            $py (_arka_py_script arka_unified_memory.py) $argv
+    end
+end
+
 function subagent --description "Isolated sub-agent delegation (background tasks)"
     set -l py (_arka_python)
     if test (count $argv) -eq 0

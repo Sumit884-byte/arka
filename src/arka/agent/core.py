@@ -220,6 +220,17 @@ def memory_forget(ref: str) -> None:
 
 def memory_context_for(goal: str, *, limit: int = 3) -> str:
     try:
+        from arka.core.unified_memory import _enabled as unified_enabled
+        from arka.core.unified_memory import recall as unified_recall
+
+        if unified_enabled():
+            ctx = unified_recall(goal, limit_chars=3500, include_channel=True)
+            if ctx:
+                return ctx
+    except ImportError:
+        pass
+
+    try:
         from arka.integrations.supermemory import context_for
 
         ctx = context_for(goal, limit_chars=3500)
