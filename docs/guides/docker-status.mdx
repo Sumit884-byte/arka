@@ -1,0 +1,27 @@
+---
+title: "Docker status"
+description: "List Docker containers and images, tail logs, and check daemon health from the terminal."
+keywords: ["docker", "containers", "logs", "devops"]
+---
+
+Quick Docker visibility without memorizing `docker ps` flags.
+
+## Natural language
+
+```bash
+arka show docker containers
+arka docker logs for api
+arka list docker images
+arka docker health
+```
+
+## CLI commands
+
+| Command | Description |
+| ------- | ----------- |
+| `docker_status ps` | Running containers with status and ports |
+| `docker_status images` | Local images with size and age |
+| `docker_status logs <container> [--tail N]` | Tail container logs (default 50 lines) |
+| `docker_status health` | Daemon health summary |
+
+Requires the `docker` CLI. Start Docker Desktop (or the daemon) before running checks.

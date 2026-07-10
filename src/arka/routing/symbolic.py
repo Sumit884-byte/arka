@@ -310,6 +310,42 @@ def route_competitions(cmd: str) -> str | None:
     return route or None
 
 
+def route_bookmarks(cmd: str) -> str | None:
+    try:
+        from arka.agent.bookmarks import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
+
+
+def route_repo_health(cmd: str) -> str | None:
+    try:
+        from arka.agent.repo_health import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
+
+
+def route_docker_status(cmd: str) -> str | None:
+    try:
+        from arka.integrations.docker_status import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
+
+
+def route_clipboard_history(cmd: str) -> str | None:
+    try:
+        from arka.integrations.clipboard_history import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
+
+
 def route_model_select(cmd: str) -> str | None:
     try:
         from arka.llm.model_advisor import is_model_select_query, nl_to_argv
@@ -329,6 +365,10 @@ def route_offline_extras(cmd: str) -> str | None:
     for fn in (
         route_learned,
         route_competitions,
+        route_bookmarks,
+        route_repo_health,
+        route_docker_status,
+        route_clipboard_history,
         route_daily_brief,
         route_model_select,
         route_gmail_draft,

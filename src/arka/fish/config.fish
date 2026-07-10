@@ -1856,6 +1856,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         agent_resume agent_research agent_nudge agent_watch agent_routine agent_fanout \
         agent_code agent_handoff agent_browser transcript_ask media_ask \
         meeting_agent study_agent inbox_agent compare_agent product_reviewer price_check profession pr_check github_repo competitions route_learn \
+        bookmarks repo_health docker_status clipboard_history \
         arka_ask semantic_memory supermemory speak_research voice_session handoff_notify remind routines predictions stock \
         rag_setup rag_status voice_agent wake_control \
         agent_ask web_answer deep_web_answer web_essay platform_howto calc chat_reset set_location files_preference_help google \
@@ -6540,6 +6541,46 @@ function route_learn --description "Teach and manage learned NL routing rules"
     $py $script $argv
 end
 
+function bookmarks --description "Save, search, and recall URL bookmarks with tags"
+    set -l py (_arka_python)
+    set -l script (_arka_py_script arka_bookmarks.py)
+    if test (count $argv) -eq 0
+        $py $script list
+        return $status
+    end
+    $py $script $argv
+end
+
+function repo_health --description "Detect and run quick lint/test checks for the current repo"
+    set -l py (_arka_python)
+    set -l script (_arka_py_script arka_repo_health.py)
+    if test (count $argv) -eq 0
+        $py $script scan
+        return $status
+    end
+    $py $script $argv
+end
+
+function docker_status --description "Docker containers, images, logs, and daemon health"
+    set -l py (_arka_python)
+    set -l script (_arka_py_script arka_docker_status.py)
+    if test (count $argv) -eq 0
+        $py $script ps
+        return $status
+    end
+    $py $script $argv
+end
+
+function clipboard_history --description "Save, list, and restore clipboard history entries"
+    set -l py (_arka_python)
+    set -l script (_arka_py_script arka_clipboard_history.py)
+    if test (count $argv) -eq 0
+        $py $script list
+        return $status
+    end
+    $py $script $argv
+end
+
 function disk_usage --description "Analyze disk usage of current or specified directory"
     set -l target "."
     if test (count $argv) -gt 0
@@ -9244,6 +9285,54 @@ function _agent_route_competitions --description "Build competitions invocation 
     echo $route
 end
 
+function _agent_is_bookmarks_request --description "True if user wants bookmark manager (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_bookmarks.py) route "$argv[1]" 2>/dev/null | string trim)
+    test -n "$route"
+end
+
+function _agent_route_bookmarks --description "Build bookmarks invocation from NL (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_bookmarks.py) route "$argv[1]" 2>/dev/null | string trim)
+    echo "$route"
+end
+
+function _agent_is_repo_health_request --description "True if user wants repo health checks (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_repo_health.py) route "$argv[1]" 2>/dev/null | string trim)
+    test -n "$route"
+end
+
+function _agent_route_repo_health --description "Build repo_health invocation from NL (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_repo_health.py) route "$argv[1]" 2>/dev/null | string trim)
+    echo "$route"
+end
+
+function _agent_is_docker_status_request --description "True if user wants docker status/logs (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_docker_status.py) route "$argv[1]" 2>/dev/null | string trim)
+    test -n "$route"
+end
+
+function _agent_route_docker_status --description "Build docker_status invocation from NL (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_docker_status.py) route "$argv[1]" 2>/dev/null | string trim)
+    echo "$route"
+end
+
+function _agent_is_clipboard_history_request --description "True if user wants clipboard history (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_clipboard_history.py) route "$argv[1]" 2>/dev/null | string trim)
+    test -n "$route"
+end
+
+function _agent_route_clipboard_history --description "Build clipboard_history invocation from NL (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_clipboard_history.py) route "$argv[1]" 2>/dev/null | string trim)
+    echo "$route"
+end
+
 function _agent_route_github_repo --description "Build github_repo invocation from NL (internal)"
     set -l py (_arka_python)
     set -l route ($py (_arka_py_script arka_github_repo.py) route "$argv[1]" 2>/dev/null | string trim)
@@ -9661,6 +9750,18 @@ function _agent_is_knowledge_question --description "True if user wants a factua
         return 1
     end
     if _agent_is_competitions_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_bookmarks_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_repo_health_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_docker_status_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_clipboard_history_request "$argv[1]"
         return 1
     end
     if _agent_is_route_learn_request "$argv[1]"
@@ -12546,7 +12647,15 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         echo "skill|stock $stock_cmd|Stock analysis project"
         return
     end
+    if _agent_is_repo_health_request "$cmd"
+        set -l rh (_agent_route_repo_health "$cmd")
+        if test -n "$rh"
+            echo "skill|$rh|Repo health scan and checks"
+            return
+        end
+    end
     if string match -qr '(?i)^(analyze|check)\s+(?:stock\s+)?([A-Z][A-Z0-9.-]{1,12})\b' "$clean"
+        and not _agent_is_repo_health_request "$cmd"
         set -l ticker (string upper (string match -r '(?i)([A-Z][A-Z0-9.-]{1,12})\s*$' "$cmd")[2])
         echo "skill|stock analyze $ticker|AI stock strategy backtest"
         return
@@ -12645,6 +12754,34 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         set -l cr (_agent_route_competitions "$cmd")
         if test -n "$cr"
             echo "skill|$cr|Search hackathons and ML competitions"
+            return
+        end
+    end
+    if _agent_is_bookmarks_request "$cmd"
+        set -l br (_agent_route_bookmarks "$cmd")
+        if test -n "$br"
+            echo "skill|$br|Bookmark manager"
+            return
+        end
+    end
+    if _agent_is_repo_health_request "$cmd"
+        set -l rh (_agent_route_repo_health "$cmd")
+        if test -n "$rh"
+            echo "skill|$rh|Repo health scan and checks"
+            return
+        end
+    end
+    if _agent_is_docker_status_request "$cmd"
+        set -l dr (_agent_route_docker_status "$cmd")
+        if test -n "$dr"
+            echo "skill|$dr|Docker status and logs"
+            return
+        end
+    end
+    if _agent_is_clipboard_history_request "$cmd"
+        set -l ch (_agent_route_clipboard_history "$cmd")
+        if test -n "$ch"
+            echo "skill|$ch|Clipboard history"
             return
         end
     end
@@ -14438,6 +14575,38 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                                 return $status
                             end
                         end
+                        if _agent_is_bookmarks_request "$raw"
+                            set -l br (_agent_route_bookmarks "$raw")
+                            if test -n "$br"
+                                echo (set_color yellow)"💡 [Bookmarks]"(set_color normal)
+                                _agent_dispatch_one "$br"
+                                return $status
+                            end
+                        end
+                        if _agent_is_repo_health_request "$raw"
+                            set -l rh (_agent_route_repo_health "$raw")
+                            if test -n "$rh"
+                                echo (set_color yellow)"💡 [Repo health]"(set_color normal)
+                                _agent_dispatch_one "$rh"
+                                return $status
+                            end
+                        end
+                        if _agent_is_docker_status_request "$raw"
+                            set -l dr (_agent_route_docker_status "$raw")
+                            if test -n "$dr"
+                                echo (set_color yellow)"💡 [Docker status]"(set_color normal)
+                                _agent_dispatch_one "$dr"
+                                return $status
+                            end
+                        end
+                        if _agent_is_clipboard_history_request "$raw"
+                            set -l ch (_agent_route_clipboard_history "$raw")
+                            if test -n "$ch"
+                                echo (set_color yellow)"💡 [Clipboard history]"(set_color normal)
+                                _agent_dispatch_one "$ch"
+                                return $status
+                            end
+                        end
                         set -l q $raw
                         set q (string replace -r -i '^me\s+about\s+' '' "$q")
                         set q (string replace -r -i '^me\s+' '' "$q")
@@ -15541,7 +15710,11 @@ function agent --description "Run commands safely: executes safe commands automa
         if test -n "$interpreted"
             set route_source offline
         end
+    else if _agent_is_repo_health_request "$cmd"
+        set interpreted (_agent_route_repo_health "$cmd")
+        set route_source offline
     else if string match -qr '(?i)^(analyze|check)\s+(?:stock\s+)?[A-Z][A-Z0-9.-]{1,12}\b' "$clean_cmd"
+        and not _agent_is_repo_health_request "$cmd"
         set -l stock_ticker (string upper (string match -r '(?i)([A-Z][A-Z0-9.-]{1,12})\s*$' "$cmd")[2])
         set interpreted "stock analyze $stock_ticker"
     else if string match -qr '(?i)(predict|prediction|forecast|opportunit).*(antique|stock|market|strategy|invest|collectible|portfolio)|^(predict|forecast)\s+' "$clean_cmd"
@@ -15714,6 +15887,18 @@ function agent --description "Run commands safely: executes safe commands automa
         set route_source offline
     else if _agent_is_competitions_request "$cmd"
         set interpreted (_agent_route_competitions "$cmd")
+        set route_source offline
+    else if _agent_is_bookmarks_request "$cmd"
+        set interpreted (_agent_route_bookmarks "$cmd")
+        set route_source offline
+    else if _agent_is_repo_health_request "$cmd"
+        set interpreted (_agent_route_repo_health "$cmd")
+        set route_source offline
+    else if _agent_is_docker_status_request "$cmd"
+        set interpreted (_agent_route_docker_status "$cmd")
+        set route_source offline
+    else if _agent_is_clipboard_history_request "$cmd"
+        set interpreted (_agent_route_clipboard_history "$cmd")
         set route_source offline
     else if _agent_is_route_learn_request "$cmd"
         set interpreted (_agent_route_learn_management "$cmd")

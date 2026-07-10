@@ -1,0 +1,36 @@
+---
+title: "Repo health"
+description: "Detect and run quick lint and test checks for the current git project."
+keywords: ["repo", "health", "tests", "lint", "ci"]
+---
+
+Scan the current repo for common test and lint tools, then run a fast health check.
+
+## Natural language
+
+```bash
+arka check repo health
+arka run project tests
+arka scan what checks are available
+```
+
+## CLI commands
+
+| Command | Description |
+| ------- | ----------- |
+| `repo_health scan [path]` | Detect available checks (no execution) |
+| `repo_health run [path]` | Run all detected checks |
+| `repo_health run --test` | Run test checks only |
+| `repo_health run --lint` | Run lint checks only |
+
+## Detected tools
+
+Arka looks for:
+
+- **Python:** `pytest`, `unittest`, `ruff`, `flake8`
+- **Node:** `npm test`, `npm run lint` from `package.json` scripts
+- **Rust:** `cargo test`, `cargo clippy`
+- **Go:** `go test ./...`
+- **Make:** `make test` when a `Makefile` defines a `test` target
+
+Runs from the current git root when inside a repository, otherwise the current directory.

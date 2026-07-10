@@ -1,0 +1,32 @@
+---
+title: "Clipboard history"
+description: "Save, list, and restore recent clipboard entries from the terminal."
+keywords: ["clipboard", "history", "paste", "copy"]
+---
+
+Keep a rolling history of clipboard snippets — useful when you copy-paste across terminals and apps.
+
+## Natural language
+
+```bash
+arka save clipboard to history
+arka show clipboard history
+arka paste clipboard entry 2
+arka clear clipboard history
+```
+
+## CLI commands
+
+| Command | Description |
+| ------- | ----------- |
+| `clipboard_history save` | Save current clipboard to history |
+| `clipboard_history list` | List recent entries (newest first) |
+| `clipboard_history paste <index>` | Restore entry to system clipboard |
+| `clipboard_history paste <index> --stdout` | Print entry to stdout |
+| `clipboard_history clear` | Wipe history |
+
+Uses platform clipboard tools (`pbcopy`/`pbpaste` on macOS, `xclip` or `wl-copy` on Linux). Stores up to 50 entries in your Arka config directory.
+
+<Note>
+  The basic `clipboard` fish skill still copies or shows the current clipboard. Use `clipboard_history` when you want persistent recall.
+</Note>

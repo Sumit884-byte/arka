@@ -1,0 +1,29 @@
+---
+title: "Bookmark manager"
+description: "Save, search, and recall URLs with tags and notes from the terminal."
+keywords: ["bookmarks", "urls", "links", "saved"]
+---
+
+Save links you care about and recall them later — no browser sync required.
+
+## Natural language
+
+```bash
+arka save bookmark https://docs.python.org --tags docs
+arka list my bookmarks
+arka search bookmarks for python
+arka open bookmark 1
+```
+
+## CLI commands
+
+| Command | Description |
+| ------- | ----------- |
+| `bookmarks save <url> [--title T] [--tags a,b] [--note N]` | Save a URL |
+| `bookmarks list [--tag TAG]` | List saved bookmarks |
+| `bookmarks search <keywords>` | Search title, URL, tags, notes |
+| `bookmarks get <index>` | Print URL by list index |
+| `bookmarks open <index>` | Open in default browser |
+| `bookmarks delete <index>` | Remove a bookmark |
+
+Bookmarks are stored in your Arka config directory (`bookmarks.json`).
