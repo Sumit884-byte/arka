@@ -2,7 +2,7 @@
 
 A cross-platform, **extensible** AI agent for your terminal. Route plain English to **70+ local skills** — with **deterministic** offline routing, voice, 24-provider LLM failover, and security gates on by default.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![PyPI](https://img.shields.io/pypi/v/arka-agent.svg)](https://pypi.org/project/arka-agent/)
 
@@ -66,4 +66,4 @@ Look for the **good first issue** label on [GitHub Issues](https://github.com/Su
 
 ## License
 
-Distributed under the **MIT License**. See [LICENSE](LICENSE) for more information.
+Distributed under the **GNU General Public License v2.0**. See [LICENSE](LICENSE) for more information.

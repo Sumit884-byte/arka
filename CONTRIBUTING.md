@@ -53,6 +53,8 @@ High-impact areas we are actively improving:
 
 Check open issues and discussions for the latest priorities before starting large work.
 
+By contributing, you agree that your contributions will be licensed under the project's **GPL-2.0** license.
+
 ## Questions
 
 - **Docs:** [arka-agent.mintlify.site](https://arka-agent.mintlify.site)
