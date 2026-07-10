@@ -50,6 +50,52 @@ PLUGIN_TRIGGERS: dict[str, list[str]] = {
 }
 
 
+def search_pubmed(query: str, *, retmax: int = 8) -> list[dict[str, str]]:
+    """Search PubMed via NCBI E-utilities; returns paper metadata rows."""
+    params = urllib.parse.urlencode(
+        {"db": "pubmed", "term": query, "retmax": retmax, "retmode": "json"}
+    )
+    url = f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?{params}"
+    with urllib.request.urlopen(url, timeout=20) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+    ids = data.get("esearchresult", {}).get("idlist") or []
+    if not ids:
+        return []
+    summary_params = urllib.parse.urlencode(
+        {"db": "pubmed", "id": ",".join(ids), "retmode": "xml"}
+    )
+    summary_url = (
+        f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?{summary_params}"
+    )
+    with urllib.request.urlopen(summary_url, timeout=20) as resp:
+        root = ET.fromstring(resp.read())
+    rows: list[dict[str, str]] = []
+    for doc in root.findall(".//DocSum"):
+        uid = (doc.findtext("Id") or "").strip()
+        title = ""
+        journal = ""
+        year = ""
+        for item in doc.findall("Item"):
+            name = item.attrib.get("Name", "")
+            if name == "Title":
+                title = (item.text or "").strip()
+            elif name == "FullJournalName":
+                journal = (item.text or "").strip()
+            elif name == "PubDate":
+                year = (item.text or "").strip()[:4]
+        if uid and title:
+            rows.append(
+                {
+                    "pmid": uid,
+                    "title": title,
+                    "journal": journal,
+                    "year": year,
+                    "url": f"https://pubmed.ncbi.nlm.nih.gov/{uid}/",
+                }
+            )
+    return rows
+
+
 def _skill_root() -> Path:
     return Path(__file__).resolve().parent
 

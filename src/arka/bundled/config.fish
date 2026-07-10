@@ -6640,13 +6640,13 @@ function repo_health --description "Detect and run quick lint/test checks for th
     $py $script $argv
 end
 
-function generate_data --description "Generate sample CSV, JSON, TSV, and other fake datasets"
+function generate_data --description "Generate sample or real-world datasets (CSV, JSON, World Bank, PubMed, URL)"
     set -l py (_arka_python)
     set -l script (_arka_py_script arka_generate_data.py)
     $py $script $argv
 end
 
-function data_gen --description "Alias for generate_data — fake sample datasets"
+function data_gen --description "Alias for generate_data — fake or real datasets"
     generate_data $argv
 end
 

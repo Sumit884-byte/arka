@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate fake or sample datasets in CSV, JSON, TSV, and other formats."""
+"""Generate fake or sample datasets, or fetch rows from real-world sources."""
 
 from __future__ import annotations
 
@@ -13,6 +13,8 @@ import secrets
 import shlex
 import string
 import sys
+import urllib.error
+import urllib.request
 import uuid
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -41,6 +43,10 @@ SUPPORTED_FORMATS = (
     "xlsx",
 )
 
+REAL_SOURCES = frozenset({"worldbank", "pubmed", "url", "web"})
+MAX_REAL_ROWS = 500
+_USER_AGENT = "Mozilla/5.0 (compatible; Arka-GenerateData/1.0)"
+
 PRESET_FIELDS: dict[str, list[str]] = {
     "users": ["id", "name", "email", "age", "phone"],
     "user": ["name", "email", "age"],
@@ -64,13 +70,25 @@ _DEPARTMENTS = ("Engineering", "Sales", "Marketing", "Support", "Finance", "HR")
 
 _TRIGGER_RE = re.compile(
     r"(?i)\b("
-    r"(?:generate|create|make|mock|fake|sample)\s+(?:\d+\s+)?(?:rows?\s+of\s+)?"
-    r"(?:fake\s+|sample\s+|test\s+|mock\s+)?(?:\w+\s+){0,4}(?:data|dataset|records?|rows?)|"
-    r"(?:generate|create)\s+\d+\s+\w+\s+(?:as|in|to)\s+(?:csv|json|jsonl|tsv|yaml|xml|xlsx|sql|markdown)|"
+    r"(?:generate|create|make|mock|fake|sample|fetch|get)\s+(?:\d+\s+)?(?:rows?\s+of\s+)?"
+    r"(?:fake\s+|sample\s+|test\s+|mock\s+|real\s+|actual\s+|live\s+)?(?:\w+\s+){0,6}(?:data|dataset|records?|rows?|papers?)|"
+    r"(?:generate|create|fetch|get)\s+\d+\s+\w+\s+(?:as|in|to)\s+(?:csv|json|jsonl|tsv|yaml|xml|xlsx|sql|markdown)|"
+    r"(?:generate|create|fetch|get)\s+(?:real|actual|live)\s+|"
+    r"(?:generate|create|fetch|get)\s+\d+\s+pubmed\b|"
+    r"(?:generate|create|fetch|get).*\bworld\s*bank\b|"
+    r"(?:generate|create|fetch|get).*\bpubmed\b.*\bpapers?\b|"
+    r"(?:generate|create|fetch|get)\s+(?:data\s+)?from\s+https?://|"
     r"data_gen|generate_data|"
     r"fake\s+(?:users?|emails?|customers?|products?|sales|orders?|data|records?)|"
     r"sample\s+(?:csv|json|jsonl|tsv|yaml|xml|xlsx|sql|markdown)\s+data"
     r")\b"
+)
+
+_FAKE_CUE_RE = re.compile(r"(?i)\b(?:fake|mock|sample|test)\b")
+_REAL_CUE_RE = re.compile(
+    r"(?i)\b(?:real|actual|live)\b|\bworld\s*bank\b|\bfrom\s+https?://"
+    r"|\b(?:generate|create|fetch|get)\s+\d+\s+pubmed\b"
+    r"|\b(?:generate|create|fetch|get).*\bpubmed\b.*\bpapers?\b"
 )
 
 _EXCLUDE_RE = re.compile(
@@ -175,14 +193,45 @@ def route_command(text: str) -> str:
     fmt = _extract_format(clean) or "csv"
     fields = _extract_fields(clean)
     preset = _extract_preset(clean)
+    source = _detect_source(clean) if _wants_real_source(clean) else None
 
     parts = ["generate_data"]
-    if preset and preset in PRESET_FIELDS:
+    if source:
+        parts.extend(["--source", source])
+        if source == "worldbank":
+            indicator = _extract_indicator(clean)
+            country = _extract_country_code(clean)
+            y0, y1 = _extract_year_bounds(clean)
+            if indicator:
+                parts.extend(["--indicator", indicator])
+            if country:
+                parts.extend(["--country", country])
+            if y0 is not None:
+                parts.extend(["--year-from", str(y0)])
+            if y1 is not None:
+                parts.extend(["--year-to", str(y1)])
+        elif source == "pubmed":
+            query = _extract_pubmed_query(clean)
+            if query:
+                parts.append("--query")
+                parts.append(query)
+        elif source == "url":
+            url = _extract_url(clean)
+            if url:
+                parts.extend(["--url", url])
+        elif source == "web":
+            query = _extract_pubmed_query(clean) or clean
+            parts.append("--query")
+            parts.append(query)
+        if count > MAX_REAL_ROWS:
+            count = MAX_REAL_ROWS
+    elif preset and preset in PRESET_FIELDS:
         parts.append(preset)
+
     parts.extend(["--count", str(count), "--format", fmt])
-    if fields:
+    if fields and not source:
         parts.extend(["--fields", fields])
-    return " ".join(parts)
+    return shlex.join(parts)
 
 
 def nl_to_argv(text: str) -> list[str]:
@@ -190,6 +239,326 @@ def nl_to_argv(text: str) -> list[str]:
     if not route:
         return []
     return shlex.split(route)[1:]  # drop skill name
+
+
+def _wants_real_source(text: str) -> bool:
+    clean = (text or "").strip()
+    if not clean or _FAKE_CUE_RE.search(clean):
+        return False
+    return bool(_REAL_CUE_RE.search(clean))
+
+
+def _detect_source(text: str) -> str | None:
+    clean = (text or "").strip()
+    if re.search(r"(?i)\b(?:world\s*bank|worldbank)\b", clean):
+        return "worldbank"
+    if re.search(r"(?i)\b(?:generate|create|fetch|get).*\bpubmed\b", clean):
+        return "pubmed"
+    if re.search(r"(?i)https?://", clean):
+        return "url"
+    if _wants_real_source(clean):
+        try:
+            from arka.charts.data import detect_topic
+
+            if detect_topic(clean):
+                return "worldbank"
+        except ImportError:
+            pass
+        if re.search(r"(?i)\bpapers?\b", clean):
+            return "pubmed"
+    return None
+
+
+def _extract_url(text: str) -> str | None:
+    m = re.search(r'https?://[^\s"\']+', text or "")
+    return m.group(0).rstrip(".,;)]}") if m else None
+
+
+def _extract_pubmed_query(text: str) -> str | None:
+    clean = (text or "").strip()
+    for pat in (
+        r'(?i)(?:papers?\s+on|about|for|search(?:ing)?)\s+["\']([^"\']+)["\']',
+        r'(?i)(?:papers?\s+on|about|for)\s+(.+?)(?:\s+as\s+|\s+in\s+|\s+to\s+|\s+--|\s*$)',
+        r'(?i)pubmed\s+(?:papers?\s+)?(?:on|about|for)\s+(.+?)(?:\s+as\s+|\s+in\s+|\s+to\s+|\s+--|\s*$)',
+    ):
+        m = re.search(pat, clean)
+        if m:
+            q = m.group(1).strip().strip('"\'')
+            if q:
+                return q
+    m = re.search(r'(?i)["\']([^"\']{3,})["\']', clean)
+    if m:
+        return m.group(1).strip()
+    return None
+
+
+def _extract_indicator(text: str) -> str | None:
+    try:
+        from arka.charts.data import INDICATORS, detect_topic
+
+        key = detect_topic(text or "")
+        if key and key in INDICATORS:
+            return key
+    except ImportError:
+        pass
+    m = re.search(r"(?i)--indicator\s+(\w+)", text or "")
+    return m.group(1).lower() if m else None
+
+
+def _extract_country_code(text: str) -> str | None:
+    m = re.search(r"(?i)--country\s+([A-Za-z]{2,3})\b", text or "")
+    if m:
+        return m.group(1).upper()
+    try:
+        from arka.charts.data import COUNTRY_CODES, extract_countries
+
+        codes = extract_countries(text or "")
+        if codes:
+            return codes[0]
+        low = (text or "").lower()
+        for name, code in COUNTRY_CODES.items():
+            if re.search(rf"\b{re.escape(name)}\b", low):
+                return code
+    except ImportError:
+        pass
+    return None
+
+
+def _extract_year_bounds(text: str) -> tuple[int | None, int | None]:
+    try:
+        from arka.charts.data import extract_year_range
+
+        return extract_year_range(text or "")
+    except ImportError:
+        return (None, None)
+
+
+def _infer_real_source(
+    *,
+    url: str | None = None,
+    indicator: str | None = None,
+    country: str | None = None,
+    query: str | None = None,
+    text: str = "",
+) -> str:
+    if url:
+        return "url"
+    if indicator or country:
+        return "worldbank"
+    if query and re.search(r"(?i)\bpubmed\b|\bpapers?\b", text or query):
+        return "pubmed"
+    if query:
+        return "web"
+    detected = _detect_source(text)
+    if detected:
+        return detected
+    raise RuntimeError(
+        "Real data source required. Use --source (worldbank, pubmed, url, web) "
+        "or include hints like GDP, PubMed papers, or a URL."
+    )
+
+
+def fetch_worldbank_rows(
+    *,
+    indicator: str,
+    country: str | None = None,
+    year_from: int | None = None,
+    year_to: int | None = None,
+    text: str = "",
+    max_rows: int = MAX_REAL_ROWS,
+) -> list[dict[str, Any]]:
+    try:
+        from arka.charts.data import INDICATORS, fetch_worldbank
+    except ImportError as exc:
+        raise RuntimeError("World Bank support requires arka.charts.data") from exc
+
+    indicator_key = indicator.lower().strip()
+    if indicator_key not in INDICATORS:
+        raise RuntimeError(
+            f"Unknown indicator '{indicator}'. "
+            f"Choose: {', '.join(sorted(INDICATORS))}"
+        )
+    ind_code, ind_label, _ylabel = INDICATORS[indicator_key]
+
+    codes: list[str]
+    if country:
+        codes = [country.upper()]
+    else:
+        from arka.charts.data import extract_countries
+
+        codes = extract_countries(text) or ["IN"]
+
+    y0, y1 = _extract_year_bounds(text)
+    if year_from is not None:
+        y0 = year_from
+    if year_to is not None:
+        y1 = year_to
+    if y0 is None:
+        y0 = 2000
+    if y1 is None:
+        y1 = date.today().year - 1
+
+    data = fetch_worldbank(codes, ind_code, y0, y1)
+    rows: list[dict[str, Any]] = []
+    for country_name, years in data.items():
+        code = country.upper() if country and len(codes) == 1 else ""
+        for year, value in sorted(years.items()):
+            row: dict[str, Any] = {
+                "country": country_name,
+                "indicator": indicator_key,
+                "indicator_label": ind_label,
+                "year": year,
+                "value": value,
+            }
+            if code:
+                row["country_code"] = code
+            rows.append(row)
+            if len(rows) >= max_rows:
+                return rows
+    if not rows:
+        raise RuntimeError(
+            f"No World Bank values for {indicator_key} ({codes}) in {y0}–{y1}."
+        )
+    return rows
+
+
+def _load_search_pubmed() -> Callable[..., list[dict[str, str]]]:
+    """Import search_pubmed from life_sciences lib (skills/ is not a Python package)."""
+    import importlib.util
+
+    lib_path = Path(__file__).resolve().parents[1] / "skills" / "life_sciences" / "lib.py"
+    if not lib_path.is_file():
+        raise RuntimeError("PubMed support requires life_sciences lib")
+    spec = importlib.util.spec_from_file_location("_life_sciences_lib", lib_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("PubMed support requires life_sciences lib")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    fn = getattr(mod, "search_pubmed", None)
+    if not callable(fn):
+        raise RuntimeError("PubMed support requires search_pubmed in life_sciences lib")
+    return fn
+
+
+def fetch_pubmed_rows(query: str, *, max_rows: int = MAX_REAL_ROWS) -> list[dict[str, Any]]:
+    if not query.strip():
+        raise RuntimeError("PubMed search requires a query (--query or NL phrase).")
+    search_pubmed = _load_search_pubmed()
+    try:
+        rows = search_pubmed(query.strip(), retmax=max_rows)
+    except (urllib.error.URLError, TimeoutError, ValueError) as exc:
+        raise RuntimeError(f"PubMed search failed: {exc}") from exc
+    if not rows:
+        raise RuntimeError(f"No PubMed results for: {query.strip()}")
+    return rows[:max_rows]
+
+
+def _normalize_json_to_rows(data: Any, max_rows: int) -> list[dict[str, Any]]:
+    if isinstance(data, list):
+        dict_rows = [r for r in data if isinstance(r, dict)]
+        if dict_rows:
+            return dict_rows[:max_rows]
+        raise RuntimeError("JSON array contains no objects.")
+    if isinstance(data, dict):
+        for key in ("results", "data", "items", "records", "rows", "entries"):
+            nested = data.get(key)
+            if isinstance(nested, list):
+                dict_rows = [r for r in nested if isinstance(r, dict)]
+                if dict_rows:
+                    return dict_rows[:max_rows]
+        return [data][:max_rows]
+    raise RuntimeError("JSON response is not tabular.")
+
+
+def fetch_url_rows(url: str, *, max_rows: int = MAX_REAL_ROWS) -> list[dict[str, Any]]:
+    if not url.strip():
+        raise RuntimeError("URL source requires --url.")
+    req = urllib.request.Request(url.strip(), headers={"User-Agent": _USER_AGENT})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            content_type = (resp.headers.get("Content-Type") or "").lower()
+            body = resp.read()
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise RuntimeError(f"URL fetch failed: {exc}") from exc
+
+    if "json" in content_type or body[:1] in (b"{", b"["):
+        try:
+            data = json.loads(body.decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise RuntimeError(f"URL did not return valid JSON: {exc}") from exc
+        rows = _normalize_json_to_rows(data, max_rows)
+        if not rows:
+            raise RuntimeError("URL JSON returned no rows.")
+        return rows
+
+    text = body.decode("utf-8", errors="replace")
+    if not text.strip():
+        raise RuntimeError("URL returned empty body.")
+    try:
+        reader = csv.DictReader(io.StringIO(text))
+        rows = [dict(r) for r in reader]
+    except csv.Error as exc:
+        raise RuntimeError(f"URL content is not JSON or CSV: {exc}") from exc
+    if not rows:
+        raise RuntimeError("URL CSV returned no rows.")
+    return rows[:max_rows]
+
+
+def fetch_web_rows(query: str, *, max_rows: int = MAX_REAL_ROWS) -> list[dict[str, Any]]:
+    if not query.strip():
+        raise RuntimeError("Web search requires a query (--query).")
+    try:
+        from arka.agent.chat import duckduckgo_search
+    except ImportError as exc:
+        raise RuntimeError("Web search requires arka.agent.chat") from exc
+    results = duckduckgo_search(query.strip(), max_results=max_rows)
+    if not results:
+        raise RuntimeError(f"No web search results for: {query.strip()}")
+    rows: list[dict[str, Any]] = []
+    for item in results[:max_rows]:
+        rows.append(
+            {
+                "title": item.get("title", ""),
+                "url": item.get("link", ""),
+                "snippet": item.get("snippet", ""),
+            }
+        )
+    return rows
+
+
+def fetch_real_rows(
+    source: str,
+    *,
+    count: int,
+    url: str | None = None,
+    indicator: str | None = None,
+    country: str | None = None,
+    year_from: int | None = None,
+    year_to: int | None = None,
+    query: str | None = None,
+    text: str = "",
+) -> list[dict[str, Any]]:
+    source = source.lower().strip()
+    max_rows = min(max(1, count), MAX_REAL_ROWS)
+    if source == "worldbank":
+        if not indicator:
+            indicator = _extract_indicator(text) or "gdp"
+        return fetch_worldbank_rows(
+            indicator=indicator,
+            country=country or _extract_country_code(text),
+            year_from=year_from,
+            year_to=year_to,
+            text=text,
+            max_rows=max_rows,
+        )
+    if source == "pubmed":
+        q = query or _extract_pubmed_query(text)
+        return fetch_pubmed_rows(q or "", max_rows=max_rows)
+    if source == "url":
+        return fetch_url_rows(url or _extract_url(text) or "", max_rows=max_rows)
+    if source == "web":
+        return fetch_web_rows(query or text, max_rows=max_rows)
+    raise RuntimeError(f"Unsupported real source '{source}'. Choose: {', '.join(sorted(REAL_SOURCES))}")
 
 
 def _parse_fields(fields: str | None, preset: str | None) -> list[str]:
@@ -434,13 +803,46 @@ def cmd_generate(args: argparse.Namespace) -> int:
         print(f"Unsupported format '{fmt}'. Choose: {', '.join(SUPPORTED_FORMATS)}", file=sys.stderr)
         return 1
 
-    rows = generate_rows(fields, count, seed=args.seed)
-    if args.llm:
-        llm_rows = _llm_generate_rows(fields, count)
-        if llm_rows:
-            rows = llm_rows
+    source = (getattr(args, "source", None) or "").lower().strip()
+    if getattr(args, "real", False) and not source:
+        try:
+            source = _infer_real_source(
+                url=getattr(args, "url", None),
+                indicator=getattr(args, "indicator", None),
+                country=getattr(args, "country", None),
+                query=getattr(args, "query", None),
+                text=getattr(args, "nl_text", "") or "",
+            )
+        except RuntimeError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
 
-    table = re.sub(r"[^a-zA-Z0-9_]", "_", (preset or "sample_data").lower())
+    if source and source in REAL_SOURCES:
+        count = min(count, MAX_REAL_ROWS)
+        try:
+            rows = fetch_real_rows(
+                source,
+                count=count,
+                url=getattr(args, "url", None),
+                indicator=getattr(args, "indicator", None),
+                country=getattr(args, "country", None),
+                year_from=getattr(args, "year_from", None),
+                year_to=getattr(args, "year_to", None),
+                query=getattr(args, "query", None),
+                text=getattr(args, "nl_text", "") or "",
+            )
+        except RuntimeError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+        count = len(rows)
+    else:
+        rows = generate_rows(fields, count, seed=args.seed)
+        if args.llm:
+            llm_rows = _llm_generate_rows(fields, count)
+            if llm_rows:
+                rows = llm_rows
+
+    table = re.sub(r"[^a-zA-Z0-9_]", "_", (preset or source or "sample_data").lower())
     out_path = args.output or _infer_output_path(getattr(args, "output_file", None), fmt)
     try:
         if fmt == "xlsx":
@@ -466,6 +868,30 @@ def cmd_generate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _add_real_source_args(p: argparse.ArgumentParser) -> None:
+    p.add_argument(
+        "--source",
+        choices=sorted(REAL_SOURCES),
+        default=None,
+        help="Real-world data source (default: synthetic fake data)",
+    )
+    p.add_argument(
+        "--real",
+        action="store_true",
+        help="Fetch real data; infers source from --indicator, --url, --query, etc.",
+    )
+    p.add_argument("--url", default=None, help="URL for --source url (JSON or CSV)")
+    p.add_argument(
+        "--indicator",
+        default=None,
+        help="World Bank indicator (gdp, population, life_expectancy, …)",
+    )
+    p.add_argument("--country", default=None, help="ISO country code for World Bank (e.g. IN, US)")
+    p.add_argument("--year-from", type=int, default=None, dest="year_from")
+    p.add_argument("--year-to", type=int, default=None, dest="year_to")
+    p.add_argument("--query", default=None, help="Search query for pubmed or web sources")
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Generate sample data in CSV, JSON, TSV, and more")
     sub = p.add_subparsers(dest="cmd")
@@ -489,6 +915,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_gen.add_argument("-o", "--output", default=None)
     p_gen.add_argument("--seed", type=int, default=None)
     p_gen.add_argument("--llm", action="store_true", help="Use LLM for complex custom schemas")
+    _add_real_source_args(p_gen)
     p_gen.set_defaults(func=cmd_generate)
 
     return p
@@ -522,6 +949,7 @@ def _build_generate_parser() -> argparse.ArgumentParser:
     p.add_argument("-o", "--output", default=None)
     p.add_argument("--seed", type=int, default=None)
     p.add_argument("--llm", action="store_true", help="Use LLM for complex custom schemas")
+    _add_real_source_args(p)
     return p
 
 
@@ -552,14 +980,17 @@ def main(argv: list[str] | None = None) -> int:
         argv = argv[1:]
 
     # NL passthrough: "generate 100 users as csv"
+    nl_text = ""
     if argv and not any(a.startswith("-") for a in argv[:1]) and wants_generate_data(" ".join(argv)):
-        nl_args = nl_to_argv(" ".join(argv))
+        nl_text = " ".join(argv)
+        nl_args = nl_to_argv(nl_text)
         if nl_args:
             argv = nl_args
 
     args = _parse_generate_argv(argv)
     if args.rows is not None:
         args.count = args.rows
+    args.nl_text = nl_text
     return cmd_generate(args)
 
 

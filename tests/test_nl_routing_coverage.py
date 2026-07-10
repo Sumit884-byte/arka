@@ -12,6 +12,8 @@ from arka.routing.symbolic import route_offline_extras
 
 NL_CASES: tuple[tuple[str, str], ...] = (
     ("generate 50 users as csv", "generate_data"),
+    ("generate real world bank gdp india as csv", "generate_data"),
+    ("generate 20 pubmed papers on mRNA vaccines as csv", "generate_data"),
     ("ask data in reports folder", "data_ask"),
     ("analyze csv files in data/", "data_ask"),
     ("list mcp servers", "mcp"),
