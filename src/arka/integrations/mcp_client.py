@@ -34,6 +34,7 @@ class McpHttpClient:
     server: str = "signoz"
     url: str = ""
     api_key: str = ""
+    headers: dict[str, str] = field(default_factory=dict)
     timeout: float = DEFAULT_TIMEOUT
     session_id: str = ""
     _request_id: int = 0
@@ -53,8 +54,10 @@ class McpHttpClient:
             "Content-Type": "application/json",
             "Accept": "application/json, text/event-stream",
         }
+        if self.headers:
+            headers.update(self.headers)
         if self.api_key:
-            headers["SIGNOZ-API-KEY"] = self.api_key
+            headers.setdefault("SIGNOZ-API-KEY", self.api_key)
         if include_session and self.session_id:
             headers["Mcp-Session-Id"] = self.session_id
         return headers
@@ -292,6 +295,11 @@ class McpHttpClient:
                 if current is not None and mark_error is not None:
                     mark_error(current, str(exc)[:500])
                 raise
+
+
+    def close(self) -> None:
+        """No persistent HTTP connection to tear down."""
+        self.session_id = ""
 
 
 def _parse_mcp_body(raw: str) -> dict[str, Any]:

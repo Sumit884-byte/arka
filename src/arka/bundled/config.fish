@@ -16,8 +16,9 @@ function ac --description "Run command and auto-copy output to clipboard"
     
     # Copy to clipboard if there's output
     if test -n "$output"
-        printf '%s' "$output" | xclip -selection clipboard
-        echo "Output copied to clipboard"
+        if _arka_copy_to_clipboard "$output"
+            echo "Output copied to clipboard"
+        end
     end
     
     return $cmd_status
@@ -323,7 +324,7 @@ function _arka_open --description "Open URL or file with the system default hand
     return 1
 end
 
-function _arka_copy_to_clipboard --description "Copy text to system clipboard (macOS/Linux)"
+function _arka_copy_to_clipboard --description "Copy text to system clipboard (cross-platform)"
     set -l text "$argv[1]"
     test -z "$text"; and return 1
     if set -q CLIPBOARD_COPY; and test -n "$CLIPBOARD_COPY"
@@ -344,6 +345,82 @@ function _arka_copy_to_clipboard --description "Copy text to system clipboard (m
     end
     if command -v xclip >/dev/null
         printf '%s' "$text" | xclip -selection clipboard 2>/dev/null
+        return 0
+    end
+    if command -v xsel >/dev/null
+        printf '%s' "$text" | xsel --clipboard --input 2>/dev/null
+        return 0
+    end
+    if _arka_is_windows; and command -v clip.exe >/dev/null
+        printf '%s' "$text" | clip.exe
+        return 0
+    end
+    return 1
+end
+
+function _arka_paste_from_clipboard --description "Read text from system clipboard (cross-platform)"
+    if set -q CLIPBOARD_PASTE; and test -n "$CLIPBOARD_PASTE"
+        if test "$CLIPBOARD_PASTE" = xclip
+            xclip -selection clipboard -o 2>/dev/null
+            return $status
+        end
+        if test "$CLIPBOARD_PASTE" = xsel
+            xsel --clipboard --output 2>/dev/null
+            return $status
+        end
+        $CLIPBOARD_PASTE
+        return $status
+    end
+    if _arka_is_macos; and command -v pbpaste >/dev/null
+        pbpaste
+        return 0
+    end
+    if command -v wl-paste >/dev/null
+        wl-paste --no-newline
+        return 0
+    end
+    if command -v xclip >/dev/null
+        xclip -selection clipboard -o 2>/dev/null
+        return 0
+    end
+    if command -v xsel >/dev/null
+        xsel --clipboard --output 2>/dev/null
+        return 0
+    end
+    if _arka_is_windows; and command -v powershell.exe >/dev/null
+        powershell.exe -NoProfile -Command "Get-Clipboard -Raw" 2>/dev/null
+        return 0
+    end
+    return 1
+end
+
+function _arka_copy_stdin_to_clipboard --description "Pipe stdin to system clipboard (cross-platform)"
+    if set -q CLIPBOARD_COPY; and test -n "$CLIPBOARD_COPY"
+        if test "$CLIPBOARD_COPY" = xclip
+            xclip -selection clipboard 2>/dev/null
+            return $status
+        end
+        $CLIPBOARD_COPY
+        return $status
+    end
+    if _arka_is_macos; and command -v pbcopy >/dev/null
+        pbcopy
+        return 0
+    end
+    if command -v wl-copy >/dev/null
+        wl-copy
+        return 0
+    end
+    if command -v xclip >/dev/null
+        xclip -selection clipboard 2>/dev/null
+        return 0
+    end
+    if command -v xsel >/dev/null
+        xsel --clipboard --input 2>/dev/null
+        return 0
+    end
+    if _arka_is_windows; and command -v clip.exe >/dev/null
+        clip.exe
         return 0
     end
     return 1
@@ -1856,7 +1933,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         agent_resume agent_research agent_nudge agent_watch agent_routine agent_fanout \
         agent_code agent_handoff agent_browser transcript_ask media_ask \
         meeting_agent study_agent inbox_agent compare_agent product_reviewer price_check profession pr_check github_repo competitions route_learn \
-        bookmarks repo_health docker_status clipboard_history \
+        bookmarks repo_health docker_status clipboard_history mcp \
         arka_ask semantic_memory supermemory speak_research voice_session handoff_notify remind routines predictions stock \
         rag_setup rag_status voice_agent wake_control \
         agent_ask web_answer deep_web_answer web_essay platform_howto calc chat_reset set_location files_preference_help google \
@@ -7406,17 +7483,27 @@ end
 
 function clipboard --description "Copy text to clipboard or show clipboard contents"
     if test (count $argv) -gt 0
-        # Copy arguments to clipboard
-        printf '%s' (string join " " $argv) | xclip -selection clipboard 2>/dev/null
-        echo (set_color --bold green)"✓ Copied to clipboard"(set_color normal)
+        if _arka_copy_to_clipboard (string join " " $argv)
+            echo (set_color --bold green)"✓ Copied to clipboard"(set_color normal)
+        else
+            echo (set_color red)"Clipboard copy unavailable on this platform"(set_color normal) >&2
+            return 1
+        end
     else if not isatty stdin
-        # Pipe mode: copy stdin to clipboard
-        xclip -selection clipboard 2>/dev/null
-        echo (set_color --bold green)"✓ Copied from pipe to clipboard"(set_color normal)
+        if _arka_copy_stdin_to_clipboard
+            echo (set_color --bold green)"✓ Copied from pipe to clipboard"(set_color normal)
+        else
+            echo (set_color red)"Clipboard copy unavailable on this platform"(set_color normal) >&2
+            return 1
+        end
     else
-        # Show clipboard contents
         echo (set_color --bold blue)"━━━ Clipboard ━━━"(set_color normal)
-        xclip -selection clipboard -o 2>/dev/null; or echo "(empty)"
+        set -l clip (_arka_paste_from_clipboard)
+        if test $status -eq 0; and test -n "$clip"
+            echo $clip
+        else
+            echo "(empty)"
+        end
     end
 end
 
@@ -9322,6 +9409,23 @@ function _agent_route_docker_status --description "Build docker_status invocatio
 end
 
 function _agent_is_clipboard_history_request --description "True if user wants clipboard history (internal)"
+    set -l cmd (string lower (string trim -- "$argv[1]"))
+    test -z "$cmd"; and return 1
+    if string match -qr '(?i)\b(clipboard\s+history|clip\s+history|clipboard\s+manager|saved?\s+clipboard|paste\s+from\s+history|clipboard\s+entries)\b' "$cmd"
+        return 0
+    end
+    if string match -qr '(?i)\b(?:save|store|remember)\s+(?:this\s+)?(?:clipboard|clip)\b' "$cmd"
+        return 0
+    end
+    if string match -qr '(?i)\b(?:list|show)\s+(?:clipboard\s+)?history\b' "$cmd"
+        return 0
+    end
+    if string match -qr '(?i)\b(?:paste|restore)\s+(?:clipboard\s+)?(?:entry|item)\b' "$cmd"
+        return 0
+    end
+    if string match -qr '(?i)\b(?:clear|wipe)\s+clipboard\s+history\b' "$cmd"
+        return 0
+    end
     set -l py (_arka_python)
     set -l route ($py (_arka_py_script arka_clipboard_history.py) route "$argv[1]" 2>/dev/null | string trim)
     test -n "$route"
@@ -10270,6 +10374,13 @@ function _agent_offline_route_cmd --description "Full symbolic NL to skill comma
         echo $g
         return 0
     end
+    if _agent_is_mcp_request "$cmd"
+        set -l mcp_cmd (_agent_route_mcp "$cmd")
+        if test -n "$mcp_cmd"
+            echo $mcp_cmd
+            return 0
+        end
+    end
     if _agent_is_post_x_request "$cmd"
         echo (_agent_build_post_x_cmd "$cmd")
         return 0
@@ -10281,6 +10392,10 @@ function _agent_offline_route_cmd --description "Full symbolic NL to skill comma
     if _agent_is_investment_question "$cmd"
         set -l topic (_agent_strip_query_prefix "$cmd")
         echo "predictions --domain stocks --deep "(string escape --style=script -- $topic)
+        return 0
+    end
+    if _agent_is_clipboard_history_request "$cmd"
+        echo (_agent_route_clipboard_history "$cmd")
         return 0
     end
     set -l prev $ROUTE_MODE
@@ -10487,6 +10602,21 @@ end
 
 function _agent_is_google_calendar_request --description "True if user wants Google Calendar (internal)"
     string match -qr '(?i)(google\s+calendar|my\s+calendar|calendar\s+today|calendar\s+this\s+week|what(?:'\''s|\s+is)\s+on\s+my\s+calendar|meetings?\s+today|schedule\s+today|events?\s+today|upcoming\s+meetings?)' "$argv[1]"
+end
+
+function _agent_is_mcp_request --description "True if user wants MCP server/tool management (internal)"
+    string match -qr '(?i)(\bmcp\b|model\s+context\s+protocol|mcp\s+(?:list|status|tools?|call|add|connect))' "$argv[1]"
+end
+
+function _agent_route_mcp --description "Map NL to mcp subcommand (internal)"
+    set -l cmd "$argv[1]"
+    set -l py (_arka_python)
+    set -l rest ($py (_arka_py_script arka_mcp.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
+    if test (count $rest) -gt 0
+        echo $rest
+        return 0
+    end
+    return 1
 end
 
 function _agent_route_google --description "Map NL to google subcommand (internal)"
@@ -11424,6 +11554,15 @@ function google --description "Google Calendar and Gmail — login, status, mail
     $py (_arka_py_script arka_google.py) $argv
 end
 
+function mcp --description "Model Context Protocol — list, add, tools, call, status"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        $py (_arka_py_script arka_mcp.py) help
+        return $status
+    end
+    $py (_arka_py_script arka_mcp.py) $argv
+end
+
 function gemini_cli --description "Google Gemini CLI agent (@google/gemini-cli)"
     set -l py (_arka_python)
     if test (count $argv) -eq 0
@@ -12347,6 +12486,22 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         set -l px_cmd (_agent_build_post_x_cmd "$cmd")
         if test -n "$px_cmd"
             echo "skill|$px_cmd|Shorten URL and post to X/Twitter"
+            return
+        end
+    end
+
+    if _agent_is_clipboard_history_request "$cmd"
+        set -l ch (_agent_route_clipboard_history "$cmd")
+        if test -n "$ch"
+            echo "skill|$ch|Clipboard history"
+            return
+        end
+    end
+
+    if _agent_is_mcp_request "$cmd"
+        set -l mcp_cmd (_agent_route_mcp "$cmd")
+        if test -n "$mcp_cmd"
+            echo "skill|$mcp_cmd|MCP server tools and status"
             return
         end
     end
@@ -15317,6 +15472,8 @@ function agent --description "Run commands safely: executes safe commands automa
         echo "  classify_files         - Auto-sort files by extension (images, docs, code)"
         echo "  google setup|login     - Google Calendar + Gmail (browser OAuth sign-in)"
         echo "  google gmail|calendar  - Read mail or list events (after login)"
+        echo "  mcp list|status|tools  - Model Context Protocol servers and tools"
+        echo "  arka mcp add <name>    - Add stdio or HTTP MCP server"
         echo "  gemini_cli <prompt>    - Google Gemini CLI agent (npm @google/gemini-cli)"
         echo "  arka gemini status     - Check Gemini CLI install (same as gemini_cli status)"
         echo "  cleanup_downloads      - Remove .zip/.deb/.tar.gz clutter from Downloads"
@@ -15474,6 +15631,11 @@ function agent --description "Run commands safely: executes safe commands automa
 
     if test -z "$interpreted"; and _agent_is_download_request "$cmd"
         set interpreted (_agent_build_download_cmd "$cmd")
+        set route_source offline
+    end
+
+    if test -z "$interpreted"; and _agent_is_clipboard_history_request "$cmd"
+        set interpreted (_agent_route_clipboard_history "$cmd")
         set route_source offline
     end
 

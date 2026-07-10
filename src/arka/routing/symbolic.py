@@ -360,9 +360,22 @@ def route_model_select(cmd: str) -> str | None:
     return "select_model " + " ".join(shlex.quote(a) for a in argv)
 
 
+def route_mcp(cmd: str) -> str | None:
+    try:
+        from arka.integrations.mcp_manager import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "mcp " + " ".join(shlex.quote(a) for a in argv)
+
+
 def route_offline_extras(cmd: str) -> str | None:
     """Try supplemental NL routes not always available via fish bridge."""
     for fn in (
+        route_mcp,
+        route_clipboard_history,
         route_learned,
         route_competitions,
         route_bookmarks,

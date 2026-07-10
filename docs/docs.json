@@ -66,6 +66,7 @@
           "guides/plugins",
           "guides/life-sciences",
           "guides/gemini-cli",
+          "guides/mcp",
           "guides/post-x"
         ]
       },

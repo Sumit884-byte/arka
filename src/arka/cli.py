@@ -132,6 +132,9 @@ def main(argv: list[str] | None = None) -> int:
     if args[0] == "gemini":
         return run_script("arka_gemini.py", args[1:])
 
+    if args[0] == "mcp":
+        return run_script("arka_mcp.py", args[1:])
+
     if args[0] == "remind":
         rest = args[1:]
         if not rest:

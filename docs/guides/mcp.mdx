@@ -1,0 +1,114 @@
+---
+title: "MCP integration"
+description: "Connect Arka to any Model Context Protocol (MCP) server — stdio or HTTP — list tools, call tools, and check health."
+keywords: ["mcp", "model context protocol", "integration", "tools"]
+---
+
+Arka can connect to **any MCP server** from the terminal — the same [Model Context Protocol](https://modelcontextprotocol.io) used by Cursor, Claude Desktop, and other AI clients.
+
+Config lives at `~/.config/arka/mcp.json` in Cursor-compatible `mcpServers` format.
+
+## Quick start
+
+```bash
+# List configured servers
+arka mcp list
+
+# Add a stdio MCP server (command + args)
+arka mcp add filesystem npx -y @modelcontextprotocol/server-filesystem /tmp
+
+# Add an HTTP/SSE MCP server
+arka mcp add signoz --url http://localhost:8000/mcp \
+  --header SIGNOZ-API-KEY=$SIGNOZ_API_KEY
+
+# List tools from a server
+arka mcp tools signoz
+
+# Call a tool
+arka mcp call signoz signoz_ask --args '{"question":"error rate last hour"}'
+
+# Check connection health
+arka mcp status
+```
+
+From fish:
+
+```fish
+mcp list
+mcp status
+mcp tools signoz
+```
+
+Natural language (agent routing):
+
+```fish
+agent "list mcp servers"
+agent "mcp status"
+agent "list mcp tools from signoz"
+```
+
+## Config format
+
+`~/.config/arka/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
+    },
+    "signoz": {
+      "url": "http://localhost:8000/mcp",
+      "headers": {
+        "SIGNOZ-API-KEY": "<your-api-key>"
+      }
+    }
+  }
+}
+```
+
+Stdio servers use `command` + `args`. Remote servers use `url` + optional `headers`. Optional `env` values support `${env:VAR_NAME}` substitution.
+
+## Transports
+
+| Transport | Config | Example |
+|-----------|--------|---------|
+| **stdio** | `command` + `args` | `npx -y @modelcontextprotocol/server-filesystem /tmp` |
+| **HTTP/SSE** | `url` + `headers` | SigNoz MCP at `http://localhost:8000/mcp` |
+
+Arka reuses the existing HTTP MCP client for remote servers and a built-in newline-delimited JSON-RPC client for stdio — no extra dependencies required.
+
+## Optional Python SDK
+
+```bash
+pip install mcp
+```
+
+Arka works without the SDK. If it is installed, Arka detects it (`arka mcp status` shows `sdk on`).
+
+## SigNoz MCP
+
+For SigNoz specifically, Arka also ships traced helpers (`arka signoz status`, goal self-heal). Generic `arka mcp` works with any MCP server — not only SigNoz.
+
+```bash
+arka mcp add signoz --url http://localhost:8000/mcp --header SIGNOZ-API-KEY=$SIGNOZ_API_KEY
+arka mcp tools signoz
+```
+
+## Commands reference
+
+| Command | Description |
+|---------|-------------|
+| `arka mcp list` | List configured MCP servers |
+| `arka mcp add <name> <command> [args...]` | Add stdio server |
+| `arka mcp add <name> --url <url>` | Add HTTP/SSE server |
+| `arka mcp add <name> --url <url> --header KEY=VAL` | Add HTTP server with auth header |
+| `arka mcp remove <name>` | Remove a server |
+| `arka mcp tools <server>` | List tools from a server |
+| `arka mcp call <server> <tool> [--args '{}']` | Call a tool |
+| `arka mcp status` | Connection health for all servers |
+
+<Note>
+  MCP tool calls open a fresh connection per invocation. For high-frequency use, prefer keeping servers local (stdio) or on a low-latency HTTP endpoint.
+</Note>
