@@ -47,3 +47,9 @@ htmlcov/
 .chart-test-output/
 .mpl-cache/
 test-output/
+
+# Hackathon / Agents of SigNoz (local only — not published)
+hackathon/
+casting.yaml
+casting.yaml.lock
+bin/arka_signoz.py
