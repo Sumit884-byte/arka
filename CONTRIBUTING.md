@@ -55,6 +55,41 @@ Check open issues and discussions for the latest priorities before starting larg
 
 By contributing, you agree that your contributions will be licensed under the project's **GPL-2.0** license.
 
+## Publishing to PyPI
+
+The package name on PyPI is **`arka-agent`**. Publishing is handled by GitHub Actions (`.github/workflows/publish.yml`) on pushed tags matching `v*`, or manually via `scripts/publish_pypi.sh`.
+
+### First-time PyPI setup (maintainers)
+
+1. Register the project on [pypi.org](https://pypi.org/) (or claim `arka-agent` if reserved).
+2. Configure **trusted publishing** for this repository:
+   - PyPI → Account settings → Publishing → Add a new pending publisher
+   - Owner: `Sumit884-byte`, repository: `arka`, workflow: `publish.yml`, environment: `pypi`
+3. In GitHub: Settings → Environments → create **`pypi`** (no secrets required when using trusted publishing).
+
+### Release checklist
+
+1. Confirm the version is not already on PyPI: `pip index versions arka-agent`
+2. Bump `version` in `pyproject.toml` and `__version__` in `src/arka/__init__.py`
+3. Merge the version bump PR, then tag and push:
+
+```bash
+git checkout main && git pull origin main
+git tag -a v0.1.0 -m "Release v0.1.0"
+git push origin v0.1.0
+```
+
+4. Watch the **Publish** workflow on GitHub Actions.
+5. Verify: `pipx install "arka-agent[chat]"` and `arka doctor`
+
+### Manual publish (fallback)
+
+```bash
+./scripts/publish_pypi.sh          # build + twine check (dry run)
+export PYPI_TOKEN='pypi-...'       # or UV_PUBLISH_TOKEN with uv installed
+./scripts/publish_pypi.sh --upload
+```
+
 ## Questions
 
 - **Docs:** [arka-agent.mintlify.site](https://arka-agent.mintlify.site)

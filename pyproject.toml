@@ -47,6 +47,12 @@ voice = [
 pdf = [
     "requests",
 ]
+pdf-tools = [
+    "pypdf>=4.0",
+    "Pillow>=10.0",
+    "reportlab>=4.0",
+    "pymupdf>=1.24",
+]
 charts = [
     "matplotlib>=3.8",
 ]
@@ -64,6 +70,7 @@ drawings = [
 video = [
     "Pillow>=10.0",
     "edge-tts>=6.1",
+    "python-pptx>=1.0",
 ]
 vision = [
     "Pillow>=10.0",
@@ -73,19 +80,23 @@ whatsapp = [
     "pywhatkit>=5.4",
 ]
 dev = [
+    "build>=1.2",
     "ruff",
     "pytest",
+    "twine>=5.0",
 ]
 all = [
-    "arka-agent[chat,voice,pdf,whatsapp,charts,drawings,video]",
+    "arka-agent[chat,voice,pdf,pdf-tools,whatsapp,charts,drawings,video]",
 ]
 
 [project.scripts]
 arka = "arka.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/arka-agent/arka"
+Homepage = "https://github.com/Sumit884-byte/arka"
+Repository = "https://github.com/Sumit884-byte/arka"
 Documentation = "https://arka-agent.mintlify.site"
+Issues = "https://github.com/Sumit884-byte/arka/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
