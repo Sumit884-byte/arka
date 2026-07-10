@@ -1766,6 +1766,47 @@ def build_session_context(question: str | None = None) -> str:
     return "\n".join(parts)
 
 
+def _begin_channel_session(question: str, *, use_session: bool) -> str:
+    if not use_session:
+        return ""
+    try:
+        from arka.integrations.message_sessions import (
+            _enabled,
+            cli_channel,
+            cli_chat_id,
+            context_for,
+            push,
+        )
+
+        if not _enabled():
+            return ""
+        ch, cid = cli_channel(), cli_chat_id()
+        ctx = context_for(ch, cid)
+        push(ch, cid, "user", question)
+        return ctx
+    except ImportError:
+        return ""
+
+
+def _end_channel_session(answer: str, *, use_session: bool) -> None:
+    if not use_session or not answer:
+        return
+    try:
+        from arka.integrations.message_sessions import (
+            _enabled,
+            cli_channel,
+            cli_chat_id,
+            is_silence_token,
+            push,
+        )
+
+        if not _enabled() or is_silence_token(answer):
+            return
+        push(cli_channel(), cli_chat_id(), "assistant", answer)
+    except ImportError:
+        pass
+
+
 def answer_question(
     question: str,
     *,
@@ -1775,6 +1816,7 @@ def answer_question(
 ) -> tuple[str, str]:
     """Returns (provenance, answer_text). provenance: search|memory|calc|weather|error"""
     question = normalize_question(" ".join(question.split()))
+    channel_ctx = _begin_channel_session(question, use_session=use_session)
     try:
         from arka.core.security import sanitize_web_context, verify_web_query
     except ImportError:
@@ -1788,6 +1830,7 @@ def answer_question(
             if use_session:
                 session_append("user", question)
                 session_append("assistant", msg)
+            _end_channel_session(msg, use_session=use_session)
             return "blocked", msg
 
     action, data = get_intent(question)
@@ -1811,6 +1854,7 @@ def answer_question(
         if use_session:
             session_append("user", question)
             session_append("assistant", answer)
+        _end_channel_session(answer or "Could not analyze error.", use_session=use_session)
         return "error", answer or "Could not analyze error."
 
     if action == "CALC":
@@ -1823,6 +1867,7 @@ def answer_question(
         if use_session:
             session_append("user", question)
             session_append("assistant", answer)
+        _end_channel_session(answer, use_session=use_session)
         return "calc", answer
 
     if action == "WEATHER":
@@ -1835,9 +1880,13 @@ def answer_question(
         if use_session:
             session_append("user", question)
             session_append("assistant", answer)
+        _end_channel_session(answer, use_session=use_session)
         return "weather", answer
 
     context_block = build_session_context(question) if use_session else ""
+    if channel_ctx:
+        prefix = f"[Channel session]\n{channel_ctx}"
+        context_block = f"{prefix}\n\n{context_block}".strip() if context_block else prefix
     web_context = ""
 
     snippet = snippet_lookup(question)
@@ -2049,6 +2098,7 @@ def answer_question(
         session_append("user", question)
         session_append("assistant", answer)
 
+    _end_channel_session(answer, use_session=use_session)
     return prov, answer
 
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Hermes-style per-channel message sessions — cross-platform continuity and idle reset."""
+"""Per-channel message sessions — cross-platform continuity and idle reset."""
 
 from __future__ import annotations
 
@@ -29,8 +29,18 @@ SILENCE_TOKENS = frozenset({"[silent]", "silent", "no_reply", "no reply"})
 SESSION_KEY_RE = re.compile(r"^[a-z][a-z0-9_-]{0,31}:[a-zA-Z0-9_.@-]{1,64}$")
 
 
+def _env(primary: str, legacy: str, default: str = "") -> str:
+    val = os.environ.get(primary, "").strip()
+    if val:
+        return val
+    val = os.environ.get(legacy, "").strip()
+    if val:
+        return val
+    return default
+
+
 def _enabled() -> bool:
-    return os.environ.get("HERMES_SESSIONS", "1").strip().lower() not in (
+    return _env("MESSAGE_SESSIONS", "HERMES_SESSIONS", "1").lower() not in (
         "0",
         "false",
         "no",
@@ -39,23 +49,31 @@ def _enabled() -> bool:
 
 
 def sessions_root() -> Path:
-    if raw := os.environ.get("HERMES_SESSIONS_DIR", "").strip():
+    if raw := _env("MESSAGE_SESSIONS_DIR", "HERMES_SESSIONS_DIR", ""):
         return Path(raw).expanduser()
     return config_dir() / "message-sessions"
 
 
 def _idle_minutes() -> int:
     try:
-        return max(0, int(os.environ.get("HERMES_SESSION_IDLE_MINUTES", "0")))
+        return max(0, int(_env("MESSAGE_SESSION_IDLE_MINUTES", "HERMES_SESSION_IDLE_MINUTES", "0")))
     except ValueError:
         return 0
 
 
 def _max_turns() -> int:
     try:
-        return max(4, int(os.environ.get("HERMES_SESSION_MAX_TURNS", "40")))
+        return max(4, int(_env("MESSAGE_SESSION_MAX_TURNS", "HERMES_SESSION_MAX_TURNS", "40")))
     except ValueError:
         return 40
+
+
+def cli_channel() -> str:
+    return _env("MESSAGE_SESSION_CHANNEL", "HERMES_SESSION_CHANNEL", "cli") or "cli"
+
+
+def cli_chat_id() -> str:
+    return _env("MESSAGE_SESSION_CHAT_ID", "HERMES_SESSION_CHAT_ID", "default") or "default"
 
 
 def session_key(channel: str, chat_id: str) -> str:
@@ -179,7 +197,7 @@ def push(
     try:
         from arka.integrations.heartbeat import ping
 
-        ping(f"session.{role}", source=f"hermes:{channel}")
+        ping(f"session.{role}", source=f"channel:{channel}")
     except Exception:
         pass
     return 0, None
@@ -289,7 +307,7 @@ def status(channel: str | None = None, chat_id: str | None = None) -> dict:
 
 def print_status(channel: str | None = None, chat_id: str | None = None) -> None:
     info = status(channel, chat_id)
-    print(f"Hermes sessions: {'on' if info['enabled'] else 'off'}")
+    print(f"Message sessions: {'on' if info['enabled'] else 'off'}")
     print(f"  Root: {info['root']}")
     print(f"  Stored sessions: {info['sessions']}")
     print(f"  Idle reset: {info['idle_minutes']} min (0 = never)")
@@ -300,7 +318,7 @@ def print_status(channel: str | None = None, chat_id: str | None = None) -> None
 
 def main() -> int:
     load_env_file()
-    parser = argparse.ArgumentParser(description="Hermes-style per-channel message sessions")
+    parser = argparse.ArgumentParser(description="Per-channel message sessions")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     p = sub.add_parser("push", help="Append a turn to a channel session")

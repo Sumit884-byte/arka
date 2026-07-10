@@ -54,7 +54,7 @@ def _routine_count() -> int:
     return 0
 
 
-def _hermes_stats() -> dict[str, int]:
+def _channel_stats() -> dict[str, int]:
     stats = {"message_sessions": 0, "subagents_running": 0, "subagents_total": 0}
     try:
         from arka.integrations.message_sessions import list_sessions, sessions_root
@@ -75,6 +75,9 @@ def _hermes_stats() -> dict[str, int]:
     except ImportError:
         pass
     return stats
+
+
+_hermes_stats = _channel_stats  # backward compat for JSON readers
 
 
 def _memory_stats() -> dict[str, int]:
@@ -117,7 +120,8 @@ def ping(activity: str, *, source: str = "arka") -> None:
             },
             "routines_enabled": _routine_count(),
             "memory": _memory_stats(),
-            "hermes": _hermes_stats(),
+            "channels": _channel_stats(),
+            "hermes": _channel_stats(),
         }
     )
     _save(data)
@@ -146,11 +150,11 @@ def status(*, json_out: bool = False) -> int:
         f"session_daily={mem.get('session_daily', 0)} "
         f"longterm_lines={mem.get('longterm_lines', 0)}"
     )
-    hermes = data.get("hermes") or {}
+    channels = data.get("channels") or data.get("hermes") or {}
     print(
-        f"Hermes: sessions={hermes.get('message_sessions', 0)} "
-        f"subagents_running={hermes.get('subagents_running', 0)} "
-        f"subagents_total={hermes.get('subagents_total', 0)}"
+        f"Channels: sessions={channels.get('message_sessions', 0)} "
+        f"subagents_running={channels.get('subagents_running', 0)} "
+        f"subagents_total={channels.get('subagents_total', 0)}"
     )
     return 0
 

@@ -240,7 +240,9 @@ def memory_context_for(goal: str, *, limit: int = 3) -> str:
 
     items = load_json(MEMORY_FILE, [])
     if not isinstance(items, list) or not items:
-        return session_ctx
+        if session_ctx:
+            return session_ctx
+        return _channel_memory_fallback()
     q = goal.lower()
     scored: list[tuple[float, str]] = []
     for row in items:
@@ -250,12 +252,33 @@ def memory_context_for(goal: str, *, limit: int = 3) -> str:
             scored.append((score, text))
     scored.sort(key=lambda x: x[0], reverse=True)
     if not scored:
-        return session_ctx
+        if session_ctx:
+            return session_ctx
+        return _channel_memory_fallback()
     lines = [t for _, t in scored[:limit]]
     local = "Relevant memories:\n" + "\n".join(f"- {l}" for l in lines)
     if session_ctx:
         return session_ctx + "\n\n" + local
     return local
+
+
+def _channel_memory_fallback() -> str:
+    try:
+        from arka.integrations.message_sessions import (
+            _enabled,
+            cli_channel,
+            cli_chat_id,
+            context_for,
+        )
+
+        if not _enabled():
+            return ""
+        ctx = context_for(cli_channel(), cli_chat_id())
+        if ctx:
+            return "Channel session (recent turns):\n" + ctx
+    except ImportError:
+        pass
+    return ""
 
 
 # ── Trace ─────────────────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-"""Tests for Hermes-inspired Arka features (message sessions, sub-agents, skill gates)."""
+"""Tests for channel sessions and sub-agents (Hermes-inspired features)."""
 
 from __future__ import annotations
 
@@ -14,9 +14,9 @@ class MessageSessionTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        os.environ["HERMES_SESSIONS_DIR"] = self.tmp.name
-        os.environ["HERMES_SESSIONS"] = "1"
-        os.environ["HERMES_SESSION_IDLE_MINUTES"] = "0"
+        os.environ["MESSAGE_SESSIONS_DIR"] = self.tmp.name
+        os.environ["MESSAGE_SESSIONS"] = "1"
+        os.environ["MESSAGE_SESSION_IDLE_MINUTES"] = "0"
 
     def test_push_and_context(self) -> None:
         from arka.integrations.message_sessions import context_for, push, session_key
@@ -27,6 +27,16 @@ class MessageSessionTests(unittest.TestCase):
         self.assertIn("Deploy checklist", ctx)
         self.assertIn("Run tests", ctx)
         self.assertEqual(session_key("cli", "default"), "cli:default")
+
+    def test_legacy_hermes_env_aliases(self) -> None:
+        from arka.integrations import message_sessions as ms
+
+        os.environ.pop("MESSAGE_SESSIONS", None)
+        os.environ["HERMES_SESSIONS"] = "1"
+        os.environ.pop("MESSAGE_SESSIONS_DIR", None)
+        os.environ["HERMES_SESSIONS_DIR"] = self.tmp.name
+        self.assertTrue(ms._enabled())
+        self.assertEqual(str(ms.sessions_root()), self.tmp.name)
 
     def test_blocks_injection(self) -> None:
         from arka.integrations.message_sessions import push
@@ -57,7 +67,7 @@ class MessageSessionIdleResetTests(unittest.TestCase):
         from arka.integrations.message_sessions import maybe_idle_reset
 
         data = {"turns": [{"role": "user", "text": "hi"}], "last_activity": time.time() - 120}
-        os.environ["HERMES_SESSION_IDLE_MINUTES"] = "1"
+        os.environ["MESSAGE_SESSION_IDLE_MINUTES"] = "1"
         self.assertTrue(maybe_idle_reset(data))
         self.assertEqual(data["turns"], [])
 
@@ -66,10 +76,10 @@ class SubagentTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        os.environ["HERMES_SUBAGENT_DIR"] = self.tmp.name
-        os.environ["HERMES_SUBAGENT"] = "1"
-        os.environ["HERMES_SUBAGENT_SYNC"] = "1"
-        os.environ["HERMES_SUBAGENT_MAX"] = "5"
+        os.environ["SUBAGENT_DIR"] = self.tmp.name
+        os.environ["SUBAGENT_ENABLED"] = "1"
+        os.environ["SUBAGENT_SYNC"] = "1"
+        os.environ["SUBAGENT_MAX"] = "5"
 
     def test_spawn_sync(self) -> None:
         from arka.integrations.subagent import spawn
@@ -81,6 +91,27 @@ class SubagentTests(unittest.TestCase):
         self.assertEqual(data["status"], "done")
         self.assertEqual(data["result"], "done")
 
+    def test_run_agent_uses_python_path(self) -> None:
+        from arka.integrations.subagent import _run_agent
+
+        with mock.patch(
+            "arka.agent.chat.answer_question",
+            return_value=("memory", "python answer"),
+        ):
+            out, code = _run_agent("hello")
+        self.assertEqual(out, "python answer")
+        self.assertEqual(code, 0)
+
+    def test_legacy_hermes_subagent_env(self) -> None:
+        from arka.integrations import subagent as sa
+
+        os.environ.pop("SUBAGENT_ENABLED", None)
+        os.environ["HERMES_SUBAGENT"] = "1"
+        os.environ.pop("SUBAGENT_DIR", None)
+        os.environ["HERMES_SUBAGENT_DIR"] = self.tmp.name
+        self.assertTrue(sa._enabled())
+        self.assertEqual(str(sa.subagents_root()), self.tmp.name)
+
     def test_blocks_injection(self) -> None:
         from arka.integrations.subagent import spawn
 
@@ -91,7 +122,7 @@ class SubagentTests(unittest.TestCase):
     def test_max_concurrent(self) -> None:
         from arka.integrations import subagent
 
-        os.environ["HERMES_SUBAGENT_MAX"] = "1"
+        os.environ["SUBAGENT_MAX"] = "1"
         agent_path = Path(self.tmp.name) / "running.json"
         agent_path.write_text(
             json.dumps({"id": "running", "status": "running", "task": "x", "created": 1}),
@@ -136,6 +167,30 @@ class HermesSkillManifestTests(unittest.TestCase):
             self.assertEqual(sk["requires"]["env"], ["HERMES_TEST_ENV"])
             self.assertEqual(sk["os"], ["linux"])
             self.assertEqual(sk["permissions"], ["read"])
+
+
+class CliChannelSessionTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        os.environ["MESSAGE_SESSIONS_DIR"] = self.tmp.name
+        os.environ["MESSAGE_SESSIONS"] = "1"
+
+    def test_answer_question_records_cli_session(self) -> None:
+        from arka.agent import chat
+
+        with mock.patch.object(chat, "get_intent", return_value=("CALC", "2+2")):
+            with mock.patch.object(chat, "math_from_question", return_value="4"):
+                with mock.patch.object(chat, "llm_complete", return_value="Four"):
+                    with mock.patch.object(chat, "session_append"):
+                        prov, answer = chat.answer_question("what is 2+2", use_session=True)
+        self.assertEqual(prov, "calc")
+        self.assertEqual(answer, "Four")
+        from arka.integrations.message_sessions import context_for
+
+        ctx = context_for("cli", "default")
+        self.assertIn("2+2", ctx)
+        self.assertIn("Four", ctx)
 
 
 class WebhookSessionTests(unittest.TestCase):

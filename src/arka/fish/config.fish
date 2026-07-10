@@ -12208,7 +12208,7 @@ function webhook --description "Verified webhook ingress for external channels (
     end
 end
 
-function message_session --description "Hermes-style per-channel message sessions (cross-platform continuity)"
+function message_session --description "Per-channel message sessions (cross-platform continuity)"
     set -l py (_arka_python)
     if test (count $argv) -eq 0
         $py (_arka_py_script arka_message_sessions.py) status
@@ -12254,7 +12254,7 @@ function message_session --description "Hermes-style per-channel message session
     end
 end
 
-function subagent --description "Hermes-style isolated sub-agent delegation (background tasks)"
+function subagent --description "Isolated sub-agent delegation (background tasks)"
     set -l py (_arka_python)
     if test (count $argv) -eq 0
         $py (_arka_py_script arka_subagent.py) status

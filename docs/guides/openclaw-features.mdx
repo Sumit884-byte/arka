@@ -64,9 +64,9 @@ Third-party plugins can declare **OpenClaw-style gates** in `skill.json`. Arka a
 }
 ```
 
-### `metadata.openclaw` (or `metadata.arka`)
+### `metadata.openclaw` (or `metadata.arka` / `metadata.hermes`)
 
-The same fields can live under `metadata.openclaw` for compatibility with OpenClaw-style manifests:
+The same fields can live under `metadata.openclaw`, `metadata.arka`, or `metadata.hermes` for compatibility with OpenClaw- and Hermes-style manifests:
 
 ```json
 {
@@ -81,7 +81,7 @@ The same fields can live under `metadata.openclaw` for compatibility with OpenCl
 }
 ```
 
-Arka merges `metadata.openclaw` into the top-level `requires`, `os`, and `permissions` fields at parse time.
+Arka merges any of these metadata blocks into the top-level `requires`, `os`, and `permissions` fields at parse time.
 
 ### Gate behavior
 

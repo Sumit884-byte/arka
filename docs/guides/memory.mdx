@@ -34,3 +34,42 @@ MEMORY_AUTODETECT=1          # symbolic autodetect from chat/voice
 ```
 
 Recalled context is injected into `arka ask`, research, and agent loops automatically.
+
+## Context layers
+
+Arka uses several complementary context stores. Pick the layer that matches your use case:
+
+| Layer | Command / store | When to use |
+| ----- | --------------- | ----------- |
+| Facts (long-term) | `agent_remember`, Supermemory | Preferences, stable knowledge across weeks |
+| Session notes | `session_memory` | Markdown notes, daily journaling (`MEMORY.md`) |
+| Channel turns | `message_session` | Per chat/thread continuity (webhook, CLI, Telegram bridge) |
+| Chat session | automatic in `arka ask` | Current conversation window in-process |
+
+```mermaid
+flowchart LR
+  subgraph ingress [Ingress]
+    Webhook[Webhook POST]
+    CLI[arka ask / agent]
+  end
+  subgraph stores [Stores]
+    Channel[message_session JSON]
+    Facts[Supermemory / memory.json]
+    Notes[session_memory markdown]
+  end
+  subgraph agent [Agent prompt]
+    Prompt[LLM context]
+  end
+  Webhook --> Channel
+  CLI --> Channel
+  Facts --> Prompt
+  Notes --> Prompt
+  Channel --> Prompt
+```
+
+- **Facts** — searched by goal text; highest priority in `memory_context_for()`
+- **Session notes** — markdown files under `~/.config/arka/agent-memory/`
+- **Channel turns** — JSON per `channel:chat_id`; shared between webhook and CLI when IDs match
+- **Chat session** — ephemeral in-memory history for the current `arka ask` run
+
+See [Channel sessions](/guides/hermes-features) and [Session memory](/guides/openclaw-features) for setup.

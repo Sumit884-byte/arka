@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Hermes-style isolated sub-agent delegation — parallel background agent tasks."""
+"""Isolated sub-agent delegation — parallel background agent tasks."""
 
 from __future__ import annotations
 
@@ -28,8 +28,18 @@ except ImportError:
         pass
 
 
+def _env(primary: str, legacy: str, default: str = "") -> str:
+    val = os.environ.get(primary, "").strip()
+    if val:
+        return val
+    val = os.environ.get(legacy, "").strip()
+    if val:
+        return val
+    return default
+
+
 def _enabled() -> bool:
-    return os.environ.get("HERMES_SUBAGENT", "1").strip().lower() not in (
+    return _env("SUBAGENT_ENABLED", "HERMES_SUBAGENT", "1").lower() not in (
         "0",
         "false",
         "no",
@@ -38,21 +48,21 @@ def _enabled() -> bool:
 
 
 def subagents_root() -> Path:
-    if raw := os.environ.get("HERMES_SUBAGENT_DIR", "").strip():
+    if raw := _env("SUBAGENT_DIR", "HERMES_SUBAGENT_DIR", ""):
         return Path(raw).expanduser()
     return cache_dir() / "subagents"
 
 
 def _max_concurrent() -> int:
     try:
-        return max(1, int(os.environ.get("HERMES_SUBAGENT_MAX", "3")))
+        return max(1, int(_env("SUBAGENT_MAX", "HERMES_SUBAGENT_MAX", "3")))
     except ValueError:
         return 3
 
 
 def _timeout() -> int:
     try:
-        return max(30, int(os.environ.get("HERMES_SUBAGENT_TIMEOUT", "600")))
+        return max(30, int(_env("SUBAGENT_TIMEOUT", "HERMES_SUBAGENT_TIMEOUT", "600")))
     except ValueError:
         return 600
 
@@ -66,9 +76,9 @@ def _security_gate(task: str) -> tuple[bool, str]:
     task = (task or "").strip()
     if not task:
         return False, "empty task"
-    if len(task) > int(os.environ.get("HERMES_SUBAGENT_MAX_CHARS", "4000")):
+    if len(task) > int(_env("SUBAGENT_MAX_CHARS", "HERMES_SUBAGENT_MAX_CHARS", "4000")):
         return False, "task too long"
-    if os.environ.get("HERMES_SUBAGENT_SECURITY", "1").strip().lower() in ("0", "false", "no"):
+    if _env("SUBAGENT_SECURITY", "HERMES_SUBAGENT_SECURITY", "1").lower() in ("0", "false", "no"):
         return True, ""
     try:
         from arka.core.security import verify_user_prompt
@@ -117,8 +127,6 @@ def _running_count() -> int:
 
 
 def _run_agent(task: str, *, session_channel: str = "", session_chat_id: str = "") -> tuple[str, int]:
-    env = os.environ.copy()
-    env["AGENT_SPEAK"] = "0"
     prefix = ""
     if session_channel:
         try:
@@ -130,6 +138,15 @@ def _run_agent(task: str, *, session_channel: str = "", session_chat_id: str = "
         except ImportError:
             pass
     prompt = prefix + task.strip()
+    try:
+        from arka.agent.chat import answer_question
+
+        _, answer = answer_question(prompt, deep=False, use_session=False, cleanup=True)
+        return answer or "(no output)", 0
+    except ImportError:
+        pass
+    env = os.environ.copy()
+    env["AGENT_SPEAK"] = "0"
     cmd = f"agent {shlex.quote(prompt)}"
     try:
         proc = subprocess.run(
@@ -204,7 +221,7 @@ def spawn(
         "when": datetime.now().isoformat(timespec="seconds"),
     }
     _save(data)
-    if background and os.environ.get("HERMES_SUBAGENT_SYNC", "").strip().lower() not in (
+    if background and _env("SUBAGENT_SYNC", "HERMES_SUBAGENT_SYNC", "").lower() not in (
         "1",
         "true",
         "yes",
@@ -279,7 +296,7 @@ def status_summary() -> dict:
 
 def print_status() -> None:
     info = status_summary()
-    print(f"Hermes sub-agents: {'on' if info['enabled'] else 'off'}")
+    print(f"Sub-agents: {'on' if info['enabled'] else 'off'}")
     print(f"  Root: {info['root']}")
     print(f"  Running: {info['running']} / {info['max_concurrent']}")
     print(f"  Stored: {info['total']}")
@@ -290,7 +307,7 @@ def print_status() -> None:
 
 def main() -> int:
     load_env_file()
-    parser = argparse.ArgumentParser(description="Hermes-style isolated sub-agent delegation")
+    parser = argparse.ArgumentParser(description="Isolated sub-agent delegation")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     p = sub.add_parser("spawn", help="Spawn a background sub-agent for a task")
@@ -310,7 +327,7 @@ def main() -> int:
     args = parser.parse_args()
     if args.cmd == "spawn":
         if args.sync:
-            os.environ["HERMES_SUBAGENT_SYNC"] = "1"
+            os.environ["SUBAGENT_SYNC"] = "1"
         data, err = spawn(
             args.task,
             session_channel=args.session_channel,
