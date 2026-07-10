@@ -593,6 +593,13 @@ def _is_knowledge_question(clean: str) -> bool:
             return False
     except ImportError:
         pass
+    try:
+        from arka.agent.data_ask import wants_data_ask
+
+        if wants_data_ask(clean):
+            return False
+    except ImportError:
+        pass
     if _is_investment_question(clean):
         return False
     if re.search(r"[\w.+-]+@[\w.-]+\.\w+", clean) and re.search(

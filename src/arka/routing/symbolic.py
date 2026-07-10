@@ -337,6 +337,15 @@ def route_generate_data(cmd: str) -> str | None:
     return route or None
 
 
+def route_data_ask(cmd: str) -> str | None:
+    try:
+        from arka.agent.data_ask import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
+
+
 def route_docker_status(cmd: str) -> str | None:
     try:
         from arka.integrations.docker_status import route_command
@@ -390,6 +399,7 @@ def route_offline_extras(cmd: str) -> str | None:
         route_bookmarks,
         route_repo_health,
         route_generate_data,
+        route_data_ask,
         route_docker_status,
         route_clipboard_history,
         route_daily_brief,

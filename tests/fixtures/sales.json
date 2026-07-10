@@ -1,0 +1,7 @@
+[
+  {"category": "Electronics", "product": "Phone", "revenue": 45000},
+  {"category": "Books", "product": "Guide", "revenue": 12000},
+  {"category": "Electronics", "product": "Laptop", "revenue": 82000},
+  {"category": "Clothing", "product": "Jacket", "revenue": 18000},
+  {"category": "Books", "product": "Novel", "revenue": 9000}
+]

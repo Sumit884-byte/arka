@@ -1933,7 +1933,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         agent_resume agent_research agent_nudge agent_watch agent_routine agent_fanout \
         agent_code agent_handoff agent_browser transcript_ask media_ask \
         meeting_agent study_agent inbox_agent compare_agent product_reviewer price_check profession pr_check github_repo competitions route_learn \
-        bookmarks repo_health generate_data data_gen docker_status clipboard_history mcp \
+        bookmarks repo_health generate_data data_gen data_ask ask_data query_data analyze_data docker_status clipboard_history mcp \
         arka_ask semantic_memory supermemory speak_research voice_session handoff_notify remind routines predictions stock \
         rag_setup rag_status voice_agent wake_control \
         agent_ask web_answer deep_web_answer web_essay platform_howto calc chat_reset set_location files_preference_help google \
@@ -2262,6 +2262,8 @@ function skills --description "Show what commands the agent can auto-run"
                 echo (set_color green)"  pdf_ingest / doc_ingest"(set_color normal)" <path> — ingest PDF/Office/text/code"
             case pdf_ask doc_ask
                 echo (set_color green)"  pdf_ask / doc_ask   "(set_color normal)"[--doc DOC] <question> — Q&A / summarize"
+            case data_ask ask_data query_data analyze_data
+                echo (set_color green)"  data_ask / query_data"(set_color normal)" <file> [question] — Q&A over CSV/JSON/TSV"
             case drawing_ask
                 echo (set_color green)"  drawing_ask     "(set_color normal)"<file.pdf|image> <question> — vision analysis (Gemini)"
             case describe_image
@@ -6648,6 +6650,56 @@ function data_gen --description "Alias for generate_data — fake sample dataset
     generate_data $argv
 end
 
+function data_ask --description "Ask questions about CSV, JSON, TSV, and other data files"
+    if test (count $argv) -eq 0
+        echo "Usage: data_ask <file> [question]"
+        echo "Example: data_ask users.csv how many rows?"
+        echo "Example: query_data sales.json what is total revenue by category?"
+        echo "NL: agent \"summarize this csv data/products.csv\""
+        return 1
+    end
+    set -l py (_arka_python)
+    set -l script (_arka_py_script arka_data_ask.py)
+    set -l file $argv[1]
+    set -l question $argv[2..-1]
+    if test -z "$file"
+        echo "Usage: data_ask <file> [question]"
+        return 1
+    end
+    echo (set_color --bold blue)"━━━ 📊 $file ━━━"(set_color normal)
+    if test (count $question) -gt 0
+        set_color brblack
+        echo "  "(string join " " $question)
+        set_color normal
+    end
+    echo "  🔍 Analyzing data…" >&2
+    set -l answer
+    if test (count $question) -gt 0
+        set answer ($py $script $file $question | string collect)
+    else
+        set answer ($py $script $file | string collect)
+    end
+    set -l st $status
+    if test $st -ne 0
+        echo (set_color red)"$answer"(set_color normal)
+        return $st
+    end
+    echo ""
+    _pdf_print_answer "$answer"
+end
+
+function ask_data --description "Alias for data_ask — Q&A over data files"
+    data_ask $argv
+end
+
+function query_data --description "Alias for data_ask — query tabular or JSON data"
+    data_ask $argv
+end
+
+function analyze_data --description "Alias for data_ask — summarize or analyze data files"
+    data_ask $argv
+end
+
 function docker_status --description "Docker containers, images, logs, and daemon health"
     set -l py (_arka_python)
     set -l script (_arka_py_script arka_docker_status.py)
@@ -9418,6 +9470,18 @@ function _agent_route_generate_data --description "Build generate_data invocatio
     echo "$route"
 end
 
+function _agent_is_data_ask_request --description "True if user wants data file Q&A (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_data_ask.py) route "$argv[1]" 2>/dev/null | string trim)
+    test -n "$route"
+end
+
+function _agent_route_data_ask --description "Build data_ask invocation from NL (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_data_ask.py) route "$argv[1]" 2>/dev/null | string trim)
+    echo "$route"
+end
+
 function _agent_is_docker_status_request --description "True if user wants docker status/logs (internal)"
     set -l py (_arka_python)
     set -l route ($py (_arka_py_script arka_docker_status.py) route "$argv[1]" 2>/dev/null | string trim)
@@ -9885,6 +9949,9 @@ function _agent_is_knowledge_question --description "True if user wants a factua
         return 1
     end
     if _agent_is_generate_data_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_data_ask_request "$argv[1]"
         return 1
     end
     if _agent_is_docker_status_request "$argv[1]"
@@ -12844,6 +12911,13 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         echo "skill|generate_thumbnail|YouTube thumbnail — Unsplash photo + title overlay"
         return
     end
+    if _agent_is_data_ask_request "$cmd"
+        set -l da (_agent_route_data_ask "$cmd")
+        if test -n "$da"
+            echo "skill|$da|Ask questions about data files"
+            return
+        end
+    end
     if _agent_is_generate_data_request "$cmd"
         set -l gd (_agent_route_generate_data "$cmd")
         if test -n "$gd"
@@ -12955,6 +13029,13 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         set -l rh (_agent_route_repo_health "$cmd")
         if test -n "$rh"
             echo "skill|$rh|Repo health scan and checks"
+            return
+        end
+    end
+    if _agent_is_data_ask_request "$cmd"
+        set -l da (_agent_route_data_ask "$cmd")
+        if test -n "$da"
+            echo "skill|$da|Ask questions about data files"
             return
         end
     end
@@ -14785,6 +14866,14 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                                 return $status
                             end
                         end
+                        if _agent_is_data_ask_request "$raw"
+                            set -l da (_agent_route_data_ask "$raw")
+                            if test -n "$da"
+                                echo (set_color yellow)"💡 [Data Q&A]"(set_color normal)
+                                _agent_dispatch_one "$da"
+                                return $status
+                            end
+                        end
                         if _agent_is_generate_data_request "$raw"
                             set -l gd (_agent_route_generate_data "$raw")
                             if test -n "$gd"
@@ -15445,6 +15534,7 @@ function agent --description "Run commands safely: executes safe commands automa
         echo "  doc_ingest / pdf_ingest <file>  - Ingest PDF, Office, text, code, …"
         echo "  doc_list / pdf_list               - List ingested documents"
         echo "  doc_ask / pdf_ask [--doc DOC] <q> - Ask or summarize any ingested file"
+        echo "  data_ask / query_data <file> [q] - Ask questions about CSV, JSON, TSV, etc."
         echo "  drawing_ask <file> <q>           - Vision analysis of blueprints, drawings, scans"
         echo "  describe_image <path|url> [q]    - Describe photos via local vLLM vision"
         echo "  describe_screen [question]       - 10s countdown, capture display, describe"
@@ -15922,6 +16012,9 @@ function agent --description "Run commands safely: executes safe commands automa
     else if _agent_is_repo_health_request "$cmd"
         set interpreted (_agent_route_repo_health "$cmd")
         set route_source offline
+    else if _agent_is_data_ask_request "$cmd"
+        set interpreted (_agent_route_data_ask "$cmd")
+        set route_source offline
     else if _agent_is_generate_data_request "$cmd"
         set interpreted (_agent_route_generate_data "$cmd")
         set route_source offline
@@ -16105,6 +16198,9 @@ function agent --description "Run commands safely: executes safe commands automa
         set route_source offline
     else if _agent_is_repo_health_request "$cmd"
         set interpreted (_agent_route_repo_health "$cmd")
+        set route_source offline
+    else if _agent_is_data_ask_request "$cmd"
+        set interpreted (_agent_route_data_ask "$cmd")
         set route_source offline
     else if _agent_is_generate_data_request "$cmd"
         set interpreted (_agent_route_generate_data "$cmd")

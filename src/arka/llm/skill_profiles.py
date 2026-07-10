@@ -102,6 +102,10 @@ SKILL_TASK_MAP: dict[str, str] = {
     # PDF / RAG
     "pdf_ask": "pdf",
     "doc_ask": "pdf",
+    "data_ask": "chat",
+    "ask_data": "chat",
+    "query_data": "chat",
+    "analyze_data": "chat",
     "pdf_ingest": "pdf",
     "doc_ingest": "pdf",
     # Predictions / stocks

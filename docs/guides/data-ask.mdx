@@ -1,0 +1,57 @@
+---
+title: "Data Q&A"
+description: "Ask natural-language questions about CSV, JSON, TSV, YAML, XML, Parquet, Excel, and SQL dump files."
+keywords: ["data", "csv", "json", "analyze", "query", "ask", "tsv"]
+---
+
+Ask questions about local data files — row counts, totals, top values, summaries, and more.
+
+## Natural language
+
+```bash
+arka ask data users.csv "how many rows?"
+arka query_data sales.json "what is total revenue by category?"
+arka "summarize this csv" data/products.csv
+arka data_ask employees.tsv "who has highest salary?"
+arka analyze data report.jsonl
+```
+
+## CLI commands
+
+| Command | Description |
+| ------- | ----------- |
+| `data_ask users.csv "how many rows?"` | Ask a question about a file |
+| `ask_data sales.json "total by category"` | Alias for `data_ask` |
+| `query_data report.tsv` | Summarize when no question is given |
+| `analyze_data data.jsonl "top 5 products"` | Alias for `data_ask` |
+
+## Supported formats
+
+`csv`, `json`, `jsonl`, `tsv`, `yaml`, `xml`, `parquet`, `xlsx`, `sql`
+
+Optional dependencies for richer parsing:
+
+| Format | Package |
+| ------ | ------- |
+| Parquet | `pyarrow` or `pandas` |
+| Excel (xlsx) | `openpyxl` or `pandas` |
+| YAML | `pyyaml` |
+
+Without pandas, tabular files still load via the Python standard library (`csv`, `json`).
+
+## How it works
+
+1. Detects the file format from the extension
+2. Loads rows (full file up to 500 rows, otherwise a sample plus column stats)
+3. Sends structured context to the LLM with your question
+4. Prints the answer in the terminal
+
+This skill is for **querying existing files**. To create fake sample datasets, use [Generate data](/guides/generate-data).
+
+## Examples
+
+```bash
+data_ask ~/Downloads/orders.csv "what are the top 3 products by quantity?"
+query_data metrics.jsonl "average latency by region"
+analyze_data inventory.parquet
+```
