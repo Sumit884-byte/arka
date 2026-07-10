@@ -272,6 +272,9 @@ def nl_to_argv(text: str) -> list[str]:
     ):
         return []
 
+    if re.search(r"(?i)\bascii\s+(?:art|banner)\b", t) or re.search(r"(?i)\bfiglet\b", t):
+        return []
+
     if re.search(
         r"(?i)(?:^|\b)(?:generate|create|make|draw|paint|sketch|design)\s+(?:an?\s+)?"
         r"(?:image|picture|photo|art|drawing|sketch|painting|illustration|portrait|landscape)\b",

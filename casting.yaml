@@ -1,0 +1,18 @@
+# SigNoz Foundry casting — reproducible local stack for Agents of SigNoz judges.
+# Docs: https://signoz.io/docs/install/docker/
+# Regenerate lock: foundryctl forge -f casting.yaml
+apiVersion: v1alpha1
+kind: Installation
+metadata:
+  name: signoz
+  annotations:
+    arka.hackathon: agents-of-signoz
+    arka.track: "01-ai-agent-observability"
+spec:
+  deployment:
+    flavor: compose
+    mode: docker
+  # Enable SigNoz MCP server (port 8000) for SRE Sidekick / Cursor integration.
+  mcp:
+    spec:
+      enabled: true

@@ -214,6 +214,17 @@ def route_compose_video(cmd: str) -> str | None:
     return "compose_video " + " ".join(shlex.quote(a) for a in argv)
 
 
+def route_ascii_art(cmd: str) -> str | None:
+    try:
+        from arka.agent.ascii_art import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "ascii_art " + " ".join(shlex.quote(a) for a in argv)
+
+
 def route_generate_image(cmd: str) -> str | None:
     try:
         from arka.generate.image import nl_to_argv
@@ -239,9 +250,89 @@ def route_generate_thumbnail(cmd: str) -> str | None:
 from arka.routing.file_size import route_find_files_by_size  # noqa: F401 — re-export
 
 
+def route_gmail_draft(cmd: str) -> str | None:
+    try:
+        from arka.integrations.google_workspace import build_gmail_draft_argv_from_nl
+    except ImportError:
+        return None
+    argv = build_gmail_draft_argv_from_nl(cmd)
+    if not argv:
+        return None
+    return " ".join(shlex.quote(a) for a in argv)
+
+
+def route_post_x(cmd: str) -> str | None:
+    try:
+        from arka.integrations.x_post import build_post_x_argv_from_nl
+    except ImportError:
+        return None
+    argv = build_post_x_argv_from_nl(cmd)
+    if not argv:
+        return None
+    return "post_x " + " ".join(shlex.quote(a) for a in argv)
+
+
+def route_learned(cmd: str) -> str | None:
+    try:
+        from arka.routing.learned import match_learned, route_management_command, wants_route_management
+    except ImportError:
+        return None
+    if wants_route_management(cmd):
+        managed = route_management_command(cmd)
+        return managed or None
+    hit = match_learned(cmd)
+    return hit or None
+
+
+_BRIEF_RE = re.compile(
+    r"(?i)\b("
+    r"(?:daily|morning|news)\s+brief|"
+    r"today['']?s\s+(?:tech\s+)?brief|"
+    r"(?:daily|morning|news|today['']?s)\s+tech\s+brief|"
+    r"tech\s+brief(?:\s+(?:personalized(?:\s+for\s+me)?|for\s+me))?|"
+    r"personalized\s+(?:tech\s+)?brief"
+    r")\b"
+)
+
+
+def route_daily_brief(cmd: str) -> str | None:
+    if _BRIEF_RE.search(cmd):
+        return "daily_brief"
+    return None
+
+
+def route_competitions(cmd: str) -> str | None:
+    try:
+        from arka.agent.competitions import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
+
+
+def route_model_select(cmd: str) -> str | None:
+    try:
+        from arka.llm.model_advisor import is_model_select_query, nl_to_argv
+    except ImportError:
+        return None
+    clean = cmd.strip()
+    if not is_model_select_query(clean):
+        return None
+    argv = nl_to_argv(clean)
+    if not argv:
+        return "select_model"
+    return "select_model " + " ".join(shlex.quote(a) for a in argv)
+
+
 def route_offline_extras(cmd: str) -> str | None:
     """Try supplemental NL routes not always available via fish bridge."""
     for fn in (
+        route_learned,
+        route_competitions,
+        route_daily_brief,
+        route_model_select,
+        route_gmail_draft,
+        route_post_x,
         route_find_files_by_size,
         route_currency_convert,
         route_remind,
@@ -251,6 +342,7 @@ def route_offline_extras(cmd: str) -> str | None:
         route_describe_screen,
         route_describe_image,
         route_generate_thumbnail,
+        route_ascii_art,
         route_generate_image,
         route_download,
         route_compose_video,

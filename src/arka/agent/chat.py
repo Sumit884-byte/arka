@@ -893,8 +893,29 @@ def looks_like_unknown_answer(text: str) -> bool:
 
 def gather_web_context(question: str, *, snippet: str = "") -> str:
     """Scrape/search the web; returns context text or empty string."""
-    search_q = ground_search_query(question)
-    raw_web = scrape_search_results(search_q)
+    scrape_kwargs: dict[str, int] = {}
+    try:
+        from arka.agent.daily_brief import (
+            headlines_scrape_kwargs,
+            headlines_search_query,
+            is_headlines_bullet_request,
+        )
+
+        if is_headlines_bullet_request(question):
+            search_q = headlines_search_query(question)
+            scrape_kwargs = headlines_scrape_kwargs()
+        else:
+            search_q = ground_search_query(question)
+    except ImportError:
+        search_q = ground_search_query(question)
+    raw_web = scrape_search_results(search_q, **scrape_kwargs)
+    try:
+        from arka.agent.daily_brief import filter_stale_brief_context, is_headlines_bullet_request
+
+        if is_headlines_bullet_request(question):
+            raw_web = filter_stale_brief_context(raw_web)
+    except ImportError:
+        pass
     web_context = ""
     if raw_web:
         try:
@@ -1183,6 +1204,16 @@ def _score_search_result(query: str, result: dict) -> int:
             score += 1
     if "points table" in title or "tracker" in title:
         score -= 5
+    try:
+        from arka.agent.daily_brief import brief_search_date_boost
+
+        score += brief_search_date_boost(
+            query,
+            result.get("title") or "",
+            result.get("snippet") or "",
+        )
+    except ImportError:
+        pass
     return score
 
 
@@ -1201,6 +1232,33 @@ def _looks_like_raw_scrape(text: str) -> bool:
 
 
 def scrape_url(url: str, timeout: int = 12) -> str:
+    text, _ = _scrape_page(url, timeout=timeout)
+    return text
+
+
+def _scrape_openai_article(url: str, timeout: int = 12) -> tuple[str, str]:
+    """Scrape OpenAI news/index pages and return (text, publication date hint)."""
+    headers = {"User-Agent": "Mozilla/5.0 (compatible; arka-chat/1.0; +https://github.com/Sumit884-byte/arka)"}
+    try:
+        from bs4 import BeautifulSoup  # type: ignore
+
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            html = resp.read().decode("utf-8", errors="replace")
+        soup = BeautifulSoup(html, "html.parser")
+        pub_date = ""
+        time_el = soup.find("time")
+        if time_el is not None:
+            pub_date = (time_el.get("datetime") or time_el.get_text(strip=True) or "")[:32]
+        text = " ".join(p.get_text() for p in soup.find_all("p")).strip()
+        if text:
+            return text, pub_date
+    except Exception:
+        pass
+    return _scrape_page(url, timeout=timeout)
+
+
+def _scrape_page(url: str, timeout: int = 12) -> tuple[str, str]:
     headers = {"User-Agent": "Mozilla/5.0 (compatible; arka-chat/1.0; +https://github.com/Sumit884-byte/arka)"}
     try:
         import trafilatura  # type: ignore
@@ -1209,7 +1267,7 @@ def scrape_url(url: str, timeout: int = 12) -> str:
         if downloaded:
             text = trafilatura.extract(downloaded)
             if text:
-                return text.strip()
+                return text.strip(), ""
     except ImportError:
         pass
     except Exception:
@@ -1221,9 +1279,9 @@ def scrape_url(url: str, timeout: int = 12) -> str:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             html = resp.read().decode("utf-8", errors="replace")
         soup = BeautifulSoup(html, "html.parser")
-        return " ".join(p.get_text() for p in soup.find_all("p")).strip()
+        return " ".join(p.get_text() for p in soup.find_all("p")).strip(), ""
     except Exception:
-        return ""
+        return "", ""
 
 
 _URL_RE = re.compile(r"https?://[^\s\"'<>]+", re.I)
@@ -1286,30 +1344,83 @@ def _linked_page_answer_instructions(question: str, *, list_extra: str) -> str:
     )
 
 
-def scrape_search_results(query: str, min_words: int = 400, hard_limit: int = 8) -> str:
+def scrape_search_results(
+    query: str,
+    min_words: int = 400,
+    hard_limit: int = 8,
+    *,
+    per_page_words: int | None = None,
+) -> str:
     query = normalize_question(query)
     grounded = ground_search_query(query)
     results = duckduckgo_search(grounded, max_results=hard_limit)
     if not results:
         return ""
 
+    truncate_page_words = None
+    if per_page_words is not None:
+        try:
+            from arka.agent.daily_brief import truncate_words
+
+            truncate_page_words = truncate_words
+        except ImportError:
+            truncate_page_words = lambda text, n: " ".join(text.split()[:n])  # noqa: E731
+
     ranked = sorted(results, key=lambda r: _score_search_result(query, r), reverse=True)
     merged: list[str] = []
     seen: set[str] = set()
+    is_brief_query = bool(re.search(r"\b(headlines?|tech\s+news)\b", query, re.I))
     for res in ranked[:hard_limit]:
         link = res.get("link") or ""
         if not link or link in seen:
             continue
-        seen.add(link)
         title = res.get("title") or link
         snippet = res.get("snippet") or ""
-        header = f"Source: {title}\n{snippet}".strip()
-        page = scrape_url(link)
-        if page:
-            merged.append(f"{header}\n\n{page[:3500]}")
-        elif snippet:
+        if is_brief_query:
+            try:
+                from arka.agent.daily_brief import headline_looks_stale, is_changelog_exempt_url
+
+                if not is_changelog_exempt_url(link) and headline_looks_stale(
+                    title,
+                    context=snippet,
+                    url=link,
+                ):
+                    continue
+            except ImportError:
+                pass
+        seen.add(link)
+        header = f"Source: {title}\nURL: {link}\n{snippet}".strip()
+        if per_page_words is not None and per_page_words <= 0:
             merged.append(header)
-        if len(" ".join(merged).split()) >= min_words:
+        else:
+            low_link = link.lower()
+            if "openai.com/news" in low_link or "openai.com/index" in low_link:
+                page, pub_date = _scrape_openai_article(link)
+            else:
+                page, pub_date = _scrape_page(link)
+            if pub_date:
+                header = f"{header}\nPublished: {pub_date}"
+                if is_brief_query:
+                    try:
+                        from arka.agent.daily_brief import headline_looks_stale, is_changelog_exempt_url
+
+                        if not is_changelog_exempt_url(link) and headline_looks_stale(
+                            title,
+                            context=f"{snippet}\nPublished: {pub_date}",
+                            url=link,
+                        ):
+                            continue
+                    except ImportError:
+                        pass
+            if page:
+                if per_page_words is not None and per_page_words > 0 and truncate_page_words is not None:
+                    page = truncate_page_words(page, per_page_words)
+                else:
+                    page = page[:3500]
+                merged.append(f"{header}\n\n{page}")
+            elif snippet:
+                merged.append(header)
+        if min_words > 0 and len(" ".join(merged).split()) >= min_words:
             break
     return "\n\n".join(merged)[:12000]
 
@@ -1760,6 +1871,23 @@ def answer_question(
     elif not web_context:
         web_context = ""
 
+    headline_extra = ""
+    is_headlines = False
+    try:
+        from arka.agent.daily_brief import (
+            enrich_headlines_web_context,
+            format_headlines_response,
+            headline_answer_instructions,
+            is_headlines_bullet_request,
+        )
+
+        is_headlines = is_headlines_bullet_request(question)
+        web_context = enrich_headlines_web_context(question, web_context)
+        headline_extra = headline_answer_instructions(question, web_context)
+    except ImportError:
+        format_headlines_response = None  # type: ignore[assignment,misc]
+        pass
+
     if sanitize_web_context is not None:
         if web_context:
             web_context, _san_warnings = sanitize_web_context(web_context)
@@ -1791,7 +1919,11 @@ def answer_question(
             length_hint = _linked_page_answer_instructions(question, list_extra=list_extra) + memory_hint
             page_label = "PAGE CONTENT"
         else:
-            length_hint = (list_extra or "\nGive a direct answer using the search results.") + memory_hint
+            length_hint = (
+                list_extra
+                or headline_extra
+                or "\nGive a direct answer using the search results."
+            ) + memory_hint
             page_label = "SEARCH RESULTS"
         user = (
             f"{context_block}\n\n"
@@ -1835,7 +1967,24 @@ def answer_question(
                         file=sys.stderr,
                     )
             if fallback_ctx:
-                length_hint = (list_extra or "\nGive a direct answer using the search results.") + memory_hint
+                try:
+                    from arka.agent.daily_brief import (
+                        enrich_headlines_web_context,
+                        format_headlines_response,
+                        headline_answer_instructions,
+                        is_headlines_bullet_request,
+                    )
+
+                    is_headlines = is_headlines_bullet_request(question)
+                    fallback_ctx = enrich_headlines_web_context(question, fallback_ctx)
+                    headline_extra = headline_answer_instructions(question, fallback_ctx)
+                except ImportError:
+                    pass
+                length_hint = (
+                    list_extra
+                    or headline_extra
+                    or "\nGive a direct answer using the search results."
+                ) + memory_hint
                 user = (
                     f"{context_block}\n\n"
                     f"SEARCH RESULTS:\n---\n{fallback_ctx}\n---\n\n"
@@ -1882,8 +2031,12 @@ def answer_question(
         if prior_items:
             answer = merge_prior_list_details(answer, prior_items)
 
+    if is_headlines and answer and format_headlines_response is not None:
+        answer = format_headlines_response(answer, web_context=web_context)
+
     if (
         cleanup
+        and not is_headlines
         and not github_activity_context
         and len(answer) > 300
         and not _looks_like_raw_scrape(answer)

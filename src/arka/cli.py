@@ -69,15 +69,50 @@ def main(argv: list[str] | None = None) -> int:
         code = delegate_subcommand(args[0], args[1:])
         return code if code is not None else 1
 
+    if args[0] == "ai-skill-model":
+        return _cmd_ai_skill_model(args[1:])
+
+    if args[0] == "ai-models":
+        return _cmd_ai_models()
+
+    if args[0] in ("ai-pref", "ai-status") and has_full_fish_agent():
+        code = delegate_fish_function(args[0], args[1:])
+        return code if code is not None else 1
+
+    if args[0] in ("ai-pref", "ai-status"):
+        print(f"{args[0]} requires fish shell — install fish or use: arka ai-skill-model", file=sys.stderr)
+        return 1
+
     if args[0] in ("youtube", "yt"):
         return _cmd_youtube(args[1:])
 
     if args[0] == "route":
+        if len(args) >= 2 and args[1] in (
+            "learn",
+            "list",
+            "delete",
+            "test",
+            "teach",
+            "show",
+            "from-trace",
+        ):
+            rest = args[2:]
+            if args[1] == "teach":
+                return run_script("arka_route_learn.py", ["learn", *rest])
+            if args[1] == "from-trace":
+                return run_script("arka_route_learn.py", ["learn", "--from-trace", *rest])
+            return run_script("arka_route_learn.py", [args[1], *rest])
         text = " ".join(args[1:]).strip()
         if not text:
             print("Usage: arka route <request>", file=sys.stderr)
             return 1
         return _cmd_route_preview(text)
+
+    if args[0] == "teach":
+        if len(args) >= 2 and args[1] == "route":
+            return run_script("arka_route_learn.py", ["learn", *args[2:]])
+        print("Usage: arka teach route <phrase> <skill>", file=sys.stderr)
+        return 1
 
     # Subcommands that map to Python scripts
     if args[0] == "chat":
@@ -94,11 +129,17 @@ def main(argv: list[str] | None = None) -> int:
     if args[0] == "google":
         return run_script("arka_google.py", args[1:])
 
+    if args[0] == "gemini":
+        return run_script("arka_gemini.py", args[1:])
+
     if args[0] == "remind":
         rest = args[1:]
         if not rest:
             return run_script("arka_remind.py", ["status"])
         return run_script("arka_remind.py", rest)
+
+    if args[0] in ("ascii", "ascii_art"):
+        return run_script("arka_ascii_art.py", args[1:])
 
     if args[0] in ("ask", "web"):
         q = " ".join(args[1:]).strip()
@@ -626,6 +667,43 @@ def _cmd_doctor() -> int:
     return 0
 
 
+def _cmd_ai_models() -> int:
+    if has_full_fish_agent():
+        code = delegate_fish_function("ai-models", [])
+        if code is not None:
+            return code
+    return run_script("arka_llm.py", ["providers", "--models"])
+
+
+def _cmd_ai_skill_model(rest: list[str]) -> int:
+    script_args = ["skill-models"]
+    if not rest:
+        script_args.append("list")
+    elif rest[0].lower() == "profiles":
+        script_args.extend(["list", "--profiles-only"])
+    elif rest[0].lower() == "show":
+        if len(rest) < 2:
+            print("Usage: arka ai-skill-model show <skill|profile>", file=sys.stderr)
+            return 1
+        script_args.extend(["show", rest[1]])
+    elif rest[0].lower() == "clear":
+        if len(rest) < 2:
+            print("Usage: arka ai-skill-model clear <skill|profile>", file=sys.stderr)
+            return 1
+        script_args.extend(["clear", rest[1]])
+    elif rest[0].lower() == "path":
+        script_args.append("path")
+    elif len(rest) >= 2:
+        script_args.extend(["set", rest[0], rest[1]])
+    else:
+        print(
+            "Usage: arka ai-skill-model [profiles|show <name>|clear <name>|<skill> <model>]",
+            file=sys.stderr,
+        )
+        return 1
+    return run_script("arka_llm.py", script_args)
+
+
 def _cmd_help() -> int:
     print(
         """Arka — cross-platform AI agent
@@ -654,9 +732,20 @@ Usage:
   arka google setup               # Google Calendar + Gmail OAuth setup
   arka google login               # sign in via browser URL
   arka google gmail --unread      # list unread mail
+  arka google gmail --draft --to you@example.com --about "topic"
   arka google calendar --today    # today's events
+  arka gemini <prompt>            # Google Gemini CLI (npm @google/gemini-cli)
+  arka gemini status              # check Gemini CLI install
   arka chat calc integrate sin(x) # SymPy
+  arka ascii "HELLO"              # ASCII banner (figlet / pyfiglet)
+  arka ascii --from-image cat.jpg # image → ASCII art
   arka route <request>            # preview routing (no run)
+  arka route learn "phrase" "skill"  # teach NL → CLI mapping
+  arka route list                 # show learned routes
+  arka teach route "phrase" "skill"  # alias for route learn
+  arka ai-models                  # list LLM providers and models
+  arka ai-skill-model profiles    # per-skill model choices by profile
+  arka ai-skill-model web_answer groq/llama-3.3-70b-versatile
   arka doctor                     # install diagnostics
 
 Platforms:

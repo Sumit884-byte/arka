@@ -143,6 +143,17 @@ def normalize_action(task: str) -> str:
     if not t:
         return ""
     low = t.lower()
+    if re.search(
+        r"(?i)\b("
+        r"(?:daily|morning|news)\s+brief|"
+        r"today['']?s\s+(?:tech\s+)?brief|"
+        r"(?:daily|morning|news|today['']?s)\s+tech\s+brief|"
+        r"tech\s+brief(?:\s+(?:personalized(?:\s+for\s+me)?|for\s+me))?|"
+        r"personalized\s+(?:tech\s+)?brief"
+        r")\b",
+        low,
+    ):
+        return "daily_brief"
     if low in {"daily brief", "morning brief", "news brief", "today's brief"}:
         return "daily_brief"
     if re.match(

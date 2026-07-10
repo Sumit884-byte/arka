@@ -69,6 +69,12 @@ def run_skill(skill_line: str) -> int:
 
             price_check(" ".join(rest))
             code = 0
+        elif head in ("select_model", "model_select", "best_model", "model_advisor"):
+            from arka.llm.model_advisor import main as model_advisor_main
+
+            code = model_advisor_main(rest or None)
+        elif head == "google":
+            code = run_script("arka_google.py", rest)
         elif head.endswith(".py") and script_path(head).is_file():
             code = run_script(head, rest)
         else:

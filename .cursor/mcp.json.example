@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "signoz": {
+      "url": "http://localhost:8000/mcp",
+      "headers": {
+        "SIGNOZ-API-KEY": "<your-signoz-api-key>"
+      }
+    }
+  }
+}

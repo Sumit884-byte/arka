@@ -200,6 +200,67 @@ def test_skill_models_inline_json(monkeypatch: pytest.MonkeyPatch):
     assert route_chain[0] == ("groq", "llama-3.1-8b-instant")
 
 
+def test_per_skill_model_prepend(monkeypatch: pytest.MonkeyPatch):
+    _clear_fallback_env(monkeypatch)
+    monkeypatch.setenv("SKILL_MODEL_WEB_ANSWER", "groq/llama-3.3-70b-versatile")
+    monkeypatch.setenv("SKILL_MODEL_CHAT", "gemini/gemini-2.5-flash")
+
+    from importlib import reload
+
+    import arka.llm.fallback as fb
+
+    reload(fb)
+
+    skill_chain = fb.build_default_chain(task="chat", skill="web_answer")
+    assert skill_chain[0] == ("groq", "llama-3.3-70b-versatile")
+
+    chat_chain = fb.build_default_chain(task="chat", skill="talk")
+    assert chat_chain[0] == ("gemini", "gemini-2.5-flash")
+
+
+def test_skill_models_file_per_skill(tmp_path, monkeypatch: pytest.MonkeyPatch):
+    _clear_fallback_env(monkeypatch)
+    cfg = tmp_path / "skill-models.json"
+    cfg.write_text(
+        json.dumps(
+            {
+                "_profiles": {"chat": "gemini/gemini-2.0-flash"},
+                "pdf_ask": "anthropic/claude-sonnet-4-20250514",
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("LLM_SKILL_MODELS", str(cfg))
+
+    from importlib import reload
+
+    import arka.llm.fallback as fb
+
+    reload(fb)
+    fb._SKILL_MODELS_CACHE = None
+
+    pdf_chain = fb.build_default_chain(task="pdf", skill="pdf_ask")
+    assert pdf_chain[0] == ("anthropic", "claude-sonnet-4-20250514")
+
+    chat_chain = fb.build_default_chain(task="chat", skill="web_answer")
+    assert chat_chain[0] == ("gemini", "gemini-2.0-flash")
+
+
+def test_resolve_llm_context_from_skill(monkeypatch: pytest.MonkeyPatch):
+    _clear_fallback_env(monkeypatch)
+    monkeypatch.setenv("ARKA_SKILL", "pdf_ask")
+
+    from importlib import reload
+
+    import arka.llm.fallback as fb
+
+    reload(fb)
+
+    task, skill = fb.resolve_llm_context()
+    assert task == "pdf"
+    assert skill == "pdf_ask"
+
+
 def test_builtin_tail_chain_matches_default():
     from arka.llm.fallback import DEFAULT_CHAIN, builtin_tail_chain
 

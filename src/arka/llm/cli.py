@@ -60,6 +60,7 @@ def llm_complete(
     temperature: float = 0.2,
     *,
     task: str | None = None,
+    skill: str | None = None,
     skip_security: bool = False,
 ) -> str:
     if not skip_security:
@@ -81,7 +82,7 @@ def llm_complete(
             span,
         )
     except ImportError:
-        return _fallback_complete(system, user, temperature, task=task)
+        return _fallback_complete(system, user, temperature, task=task, skill=skill)
 
     attrs = {
         "gen_ai.system": "arka",
@@ -89,9 +90,11 @@ def llm_complete(
         "gen_ai.request.temperature": temperature,
         "arka.llm.prompt_chars": len(system) + len(user),
     }
+    if skill:
+        attrs["arka.skill"] = skill
     with span("arka.llm.complete", attributes=attrs) as current:
         try:
-            text = _fallback_complete(system, user, temperature, task=task)
+            text = _fallback_complete(system, user, temperature, task=task, skill=skill)
         except Exception as exc:
             code = parse_http_status_code(exc)
             if code is not None:
@@ -186,6 +189,15 @@ def llm_route(cmd: str, available_skills: str, aliases_list: str) -> str:
     with ctx as current:
         if not aliases_list:
             aliases_list = env("ROUTE_ALIASES")
+        learned_hint = ""
+        try:
+            from arka.routing.learned import prompt_summary
+
+            learned_hint = prompt_summary()
+            if learned_hint:
+                learned_hint = learned_hint + "\n"
+        except ImportError:
+            pass
         plat = _host_platform()
         plat_hint = _platform_hint(plat)
         system = (
@@ -200,6 +212,7 @@ def llm_route(cmd: str, available_skills: str, aliases_list: str) -> str:
             "Unrelated or loose matches must not be mapped to skills "
             "(e.g., do NOT map 'tell me year' to 'system_info', use date or date +%Y instead).\n"
             f"Available Shell Aliases:\n{aliases_list}\n"
+            f"{learned_hint}"
             "Use symbolic reasoning to match and use the most appropriate shell alias if one exists.\n"
             "CRITICAL NOTE ON ALIASES:\n"
             "- ls is aliased to eza. eza does NOT support standard ls sorting flags like -t, -ltr, or -lt. "
@@ -258,7 +271,7 @@ def llm_route(cmd: str, available_skills: str, aliases_list: str) -> str:
             "YouTube/local playlist digest -> playlist_summarize --url URL | --folder DIR. "
             "Codebase Q&A -> codebase_ingest <project-dir> [-n name]; then doc_ask --doc codebase-NAME <question>. "
             "Summarize web page -> summarize_url <url>. "
-            "Daily brief -> daily_brief. Wi-Fi info -> wifi_info. "
+            "Daily/tech brief -> daily_brief. Wi-Fi info -> wifi_info. "
             "Simple queries: shell commands (date, df)."
         )
         result = llm_complete(system, user, temperature=0.1, task="route")
@@ -285,7 +298,13 @@ def cmd_active_model(_args: argparse.Namespace) -> int:
 
 
 def cmd_complete(args: argparse.Namespace) -> int:
-    text = llm_complete(args.system, args.user, args.temperature, task=args.task or None)
+    text = llm_complete(
+        args.system,
+        args.user,
+        args.temperature,
+        task=args.task or None,
+        skill=getattr(args, "skill", None) or None,
+    )
     if not text:
         err = llm_last_error()
         if err:
@@ -309,7 +328,11 @@ def cmd_stream(args: argparse.Namespace) -> int:
             pass
     got = False
     for delta in _fallback_stream(
-        args.system, args.user, args.temperature, task=args.task or None
+        args.system,
+        args.user,
+        args.temperature,
+        task=args.task or None,
+        skill=getattr(args, "skill", None) or None,
     ):
         got = True
         print(delta, end="", flush=True)
@@ -346,7 +369,10 @@ def cmd_models(args: argparse.Namespace) -> int:
         for model_id in live:
             print(f"ollama\t{model_id}\tlive")
         return 0
-    for provider, model_id in ordered_model_candidates(task=args.task or None):
+    for provider, model_id in ordered_model_candidates(
+        task=args.task or None,
+        skill=getattr(args, "skill", None) or None,
+    ):
         ok = provider_available(provider)
         mark = "ok" if ok else "skip"
         ex = "exhausted" if _model_exhausted(provider, model_id) else "ready"
@@ -354,8 +380,20 @@ def cmd_models(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_providers(_args: argparse.Namespace) -> int:
-    from arka.llm.providers import provider_specs
+def cmd_providers(args: argparse.Namespace) -> int:
+    from arka.llm.providers import provider_catalog_models, provider_specs
+
+    show_models = getattr(args, "models", False)
+    if show_models:
+        print("slug\tdisplay_name\tconfigured\tkind\tdefault_model\tmodels")
+        for spec in provider_specs():
+            ok = "yes" if provider_available(spec.slug) else "no"
+            models = ",".join(provider_catalog_models(spec))
+            print(
+                f"{spec.slug}\t{spec.display_name}\t{ok}\t{spec.kind}\t"
+                f"{spec.default_model}\t{models}"
+            )
+        return 0
 
     print("slug\tdisplay_name\tconfigured\tdefault_model\tenv_keys")
     for spec in provider_specs():
@@ -430,6 +468,64 @@ def cmd_vllm_status(_args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_skill_models(args: argparse.Namespace) -> int:
+    from arka.llm.skill_models import (
+        clear_skill_model,
+        effective_model_for_skill,
+        list_skill_model_rows,
+        set_skill_model,
+        skill_models_path,
+    )
+
+    if args.skill_models_cmd == "path":
+        print(skill_models_path())
+        return 0
+
+    if args.skill_models_cmd == "set":
+        if not args.target or not args.model:
+            print("Usage: skill-models set <skill|profile> <provider/model>", file=sys.stderr)
+            return 1
+        try:
+            path = set_skill_model(args.target, args.model)
+        except ValueError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+        print(f"Saved {args.target} → {args.model} in {path}")
+        return 0
+
+    if args.skill_models_cmd == "clear":
+        if not args.target:
+            print("Usage: skill-models clear <skill|profile>", file=sys.stderr)
+            return 1
+        path = clear_skill_model(args.target)
+        print(f"Cleared {args.target} in {path}")
+        return 0
+
+    if args.skill_models_cmd == "show":
+        if not args.target:
+            print("Usage: skill-models show <skill|profile>", file=sys.stderr)
+            return 1
+        model = effective_model_for_skill(args.target)
+        if model:
+            print(model)
+            return 0
+        print(f"No model configured for {args.target}", file=sys.stderr)
+        return 1
+
+    print(f"path\t{skill_models_path()}")
+    print("kind\tname\tprofile\tconfigured\tsuggested\tdescription")
+    for row in list_skill_model_rows():
+        if args.profile and row["kind"] != "profile":
+            continue
+        if args.skill_only and row["kind"] != "skill":
+            continue
+        print(
+            f"{row['kind']}\t{row['name']}\t{row['profile']}\t{row['configured']}\t"
+            f"{row['suggested']}\t{row['description']}"
+        )
+    return 0
+
+
 def cmd_route(args: argparse.Namespace) -> int:
     text = llm_route(args.cmd, args.skills, env("ROUTE_ALIASES"))
     if not text:
@@ -448,6 +544,7 @@ def main() -> int:
     p_complete.add_argument("--user", "-u", required=True)
     p_complete.add_argument("--temperature", "-t", type=float, default=0.2)
     p_complete.add_argument("--task", help="Task profile: summarize|route|chat|research|agent|pdf|predictions")
+    p_complete.add_argument("--skill", help="Skill name for per-skill model selection (e.g. web_answer)")
     p_complete.set_defaults(func=cmd_complete)
 
     p_stream = sub.add_parser("stream", help="Stream system + user completion (stdout deltas)")
@@ -455,6 +552,7 @@ def main() -> int:
     p_stream.add_argument("--user", "-u", required=True)
     p_stream.add_argument("--temperature", "-t", type=float, default=0.2)
     p_stream.add_argument("--task", help="Task profile: summarize|route|chat|research|agent|pdf|predictions")
+    p_stream.add_argument("--skill", help="Skill name for per-skill model selection")
     p_stream.add_argument("--skip-security", action="store_true", help=argparse.SUPPRESS)
     p_stream.set_defaults(func=cmd_stream, skip_security=False)
 
@@ -465,6 +563,7 @@ def main() -> int:
 
     p_models = sub.add_parser("models", help="List provider/model fallback chain")
     p_models.add_argument("--task", help="Task profile for chain")
+    p_models.add_argument("--skill", help="Skill name for per-skill chain")
     p_models.add_argument(
         "--gemini-live",
         action="store_true",
@@ -490,7 +589,32 @@ def main() -> int:
     p_reset.set_defaults(func=cmd_reset)
 
     p_providers = sub.add_parser("providers", help="List supported LLM providers and env keys")
+    p_providers.add_argument(
+        "--models",
+        action="store_true",
+        help="Include default model catalog per provider",
+    )
     p_providers.set_defaults(func=cmd_providers)
+
+    p_skill_models = sub.add_parser("skill-models", help="Per-skill / per-profile model choices")
+    p_skill_models_sub = p_skill_models.add_subparsers(dest="skill_models_cmd")
+    p_skill_models_list = p_skill_models_sub.add_parser("list", help="List skill/profile model map")
+    p_skill_models_list.add_argument("--profiles-only", dest="profile", action="store_true")
+    p_skill_models_list.add_argument("--skills-only", dest="skill_only", action="store_true")
+    p_skill_models_list.set_defaults(func=cmd_skill_models, skill_models_cmd="list", target="", model="")
+    p_skill_models_show = p_skill_models_sub.add_parser("show", help="Effective model for one skill/profile")
+    p_skill_models_show.add_argument("target")
+    p_skill_models_show.set_defaults(func=cmd_skill_models, skill_models_cmd="show", model="")
+    p_skill_models_set = p_skill_models_sub.add_parser("set", help="Set model for skill or profile")
+    p_skill_models_set.add_argument("target")
+    p_skill_models_set.add_argument("model")
+    p_skill_models_set.set_defaults(func=cmd_skill_models, skill_models_cmd="set")
+    p_skill_models_clear = p_skill_models_sub.add_parser("clear", help="Remove skill/profile override")
+    p_skill_models_clear.add_argument("target")
+    p_skill_models_clear.set_defaults(func=cmd_skill_models, skill_models_cmd="clear", model="")
+    p_skill_models_path = p_skill_models_sub.add_parser("path", help="Show config file path")
+    p_skill_models_path.set_defaults(func=cmd_skill_models, skill_models_cmd="path", target="", model="")
+    p_skill_models.set_defaults(func=cmd_skill_models, skill_models_cmd="list", target="", model="", profile=False, skill_only=False)
 
     p_vllm = sub.add_parser("vllm", help="Local vLLM status (reachability, env, fallback chain)")
     p_vllm_sub = p_vllm.add_subparsers(dest="vllm_cmd")

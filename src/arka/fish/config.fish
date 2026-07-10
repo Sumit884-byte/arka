@@ -512,6 +512,8 @@ if status is-interactive
         echo "ai-models   -> List AI providers and limits"
         echo "ai-status   -> Show current AI provider and model"
         echo "ai-pref     -> Set preferred AI provider/model"
+        echo "ai-skill-model -> Per-skill / per-profile model choices"
+        echo "select_model   -> Recommend LLM models from PC resources"
         echo "rplay       -> Play media in current folder"
         echo "mkalias     -> Create and persist a new alias"
         echo ""
@@ -1676,6 +1678,23 @@ function _arka_match_third_party_skill --description "Match NL text to third-par
     $py (_arka_py_script arka_skills.py) match "$argv[1]" 2>/dev/null
 end
 
+function _arka_match_learned_route --description "Match NL text to user-learned route (internal)"
+    set -l py (_arka_python)
+    $py (_arka_py_script arka_route_learn.py) match "$argv[1]" 2>/dev/null | string trim
+end
+
+function _agent_is_route_learn_request --description "True if user wants to teach/list learned routes (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_route_learn.py) route "$argv[1]" 2>/dev/null | string trim)
+    test -n "$route"
+end
+
+function _agent_route_learn_management --description "Build route_learn management command from NL (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_route_learn.py) route "$argv[1]" 2>/dev/null | string trim)
+    echo $route
+end
+
 function _arka_is_builtin_skill --description "True if built-in fish skill name (internal)"
     contains -- "$argv[1]" (_agent_all_skills)
 end
@@ -1712,6 +1731,11 @@ function _agent_is_skill --description "True if word is a registered agent skill
     contains -- "$word" (_agent_available_skills)
 end
 
+function _agent_shlex_split --description "Shell-safe argv split for google dispatch (internal)"
+    set -l py (_arka_python)
+    $py -c "import shlex,sys; print('\n'.join(shlex.split(sys.argv[1])))" (string escape --style=script -- $argv[1])
+end
+
 function _agent_strip_quotes --description "Strip wrapping single/double quotes (internal)"
     set -l t "$argv[1]"
     set t (string trim -c "'" -- "$t")
@@ -1732,6 +1756,18 @@ function _agent_dispatch_one --description "Run one skill by name or shell via _
     end
     set -l tokens $cleaned
     set -l first $tokens[1]
+    if test "$first" = google
+        echo (set_color cyan)"▶ Running skill: $cmd_trim"(set_color normal)
+        set -lx ARKA_SKILL google
+        set -l py (_arka_python)
+        set -l gargv (_agent_shlex_split "$cmd_trim")
+        if test (count $gargv) -lt 2
+            return 1
+        end
+        set -e gargv[1]
+        $py (_arka_py_script arka_google.py) $gargv
+        return $status
+    end
     if _arka_is_builtin_skill "$first"
         if test "$first" = pdf_ask
             echo (set_color brblack)"▶ "(set_color --bold cyan)"PDF ask"(set_color brblack)" — "(set_color normal)"$cmd_trim"
@@ -1746,6 +1782,7 @@ function _agent_dispatch_one --description "Run one skill by name or shell via _
             echo (set_color cyan)"▶ Running skill: $cmd_trim"(set_color normal)
         end
         set -e tokens[1]
+        set -lx ARKA_SKILL $first
         if test (count $tokens) -gt 0
             $first -- $tokens
         else
@@ -1800,16 +1837,17 @@ function _agent_all_skills --description "Canonical registered agent skill names
         calculate_bmi send_whatsapp whatsapp_listen search_stores download_file extract_and_run \
         create_desktop_app fix_graphics_driver install_app install_apt install_brew install_flatpak \
         install_snap install_package install_uv stock_analysis stock macro emotion \
-        auto_click auto_copy decrypt_pdf classify_files cleanup_downloads watch_zip monitor_x \
-        generate_image generate_thumbnail generate_video compose_video chart youtube_transcript youtube_download yt_download media_transcript transcribe_media summarize_url daily_brief wifi_info \
+        auto_click auto_copy decrypt_pdf classify_files cleanup_downloads watch_zip monitor_x post_x \
+        generate_image generate_thumbnail generate_video compose_video chart ascii_art youtube_transcript youtube_download yt_download media_transcript transcribe_media summarize_url daily_brief wifi_info \
         folder_summarize playlist_summarize youtube_research yt_research find_videos codebase_ingest \
         agent_remember agent_recall agent_memory agent_trace agent_why agent_last \
         agent_resume agent_research agent_nudge agent_watch agent_routine agent_fanout \
         agent_code agent_handoff agent_browser transcript_ask media_ask \
-        meeting_agent study_agent inbox_agent compare_agent product_reviewer price_check profession pr_check github_repo \
+        meeting_agent study_agent inbox_agent compare_agent product_reviewer price_check profession pr_check github_repo competitions route_learn \
         arka_ask semantic_memory supermemory speak_research voice_session handoff_notify remind routines predictions stock \
         rag_setup rag_status voice_agent wake_control \
         agent_ask web_answer deep_web_answer web_essay calc chat_reset set_location files_preference_help google \
+        select_model model_select best_model model_advisor \
         nearby_places map_download error_helper deep_queue app_usage internet_enhance aie \
         youtube_bulk yt_bulk
 end
@@ -1968,18 +2006,28 @@ function _agent_llm_complete --description "LLM system+user prompt via modular a
     set -l user_text $argv[2]
     set -l temperature 0.2
     set -l task default
+    set -l skill ""
     if test (count $argv) -ge 3
         set temperature $argv[3]
     end
     if test (count $argv) -ge 4
         set task $argv[4]
     end
+    if test (count $argv) -ge 5
+        set skill $argv[5]
+    else if test -n "$ARKA_SKILL"
+        set skill $ARKA_SKILL
+    end
     if test -z "$system_text" -o -z "$user_text"
         return 1
     end
 
     set -l py (_arka_python)
-    set -l out ($py (_arka_py_script arka_llm.py) complete --system "$system_text" --user "$user_text" --temperature $temperature --task $task 2>/dev/null)
+    set -l cmd (_arka_py_script arka_llm.py) complete --system "$system_text" --user "$user_text" --temperature $temperature --task $task
+    if test -n "$skill"
+        set -a cmd --skill $skill
+    end
+    set -l out ($py $cmd 2>/dev/null)
     if test -n "$out"
         _agent_clean_llm_output "$out"
         return 0
@@ -2222,8 +2270,11 @@ function skills --description "Show what commands the agent can auto-run"
                 echo (set_color green)"  youtube_bulk / yt_bulk"(set_color normal)" [status|start|download|library] — bulk YouTube playlist/channel downloads"
             case summarize_url
                 echo (set_color green)"  summarize_url  "(set_color normal)"<url> — summarize a web page"
+            case post_x
+                echo (set_color green)"  post_x         "(set_color normal)"<url> [--words N] [--dry-run] [--post] — shorten URL; auto-post only with X auth"
+                echo (set_color green)"  post_x install "(set_color normal)"— install @steipete/bird CLI (needed only for --post with bird cookies)"
             case daily_brief
-                echo (set_color green)"  daily_brief    "(set_color normal)"Weather + top news headlines"
+                echo (set_color green)"  daily_brief    "(set_color normal)"Weather + news headlines (--url-limit / BRIEF_URL_LIMIT_ENABLED for excerpts)"
             case sports_score live_scores
                 echo (set_color green)"  sports_score   "(set_color normal)"[ipl|nfl|nba|epl|cricket|…] — live match scores (ESPN)"
             case currency_convert convert currency
@@ -2236,6 +2287,10 @@ function skills --description "Show what commands the agent can auto-run"
                 echo (set_color green)"  generate_thumbnail "(set_color normal)"--topic 'ai' — YouTube thumbnail (Unsplash + title overlay)"
             case chart
                 echo (set_color green)"  chart          "(set_color normal)"line | bar | pie | scatter — matplotlib PNG charts"
+            case select_model model_select best_model model_advisor
+                echo (set_color green)"  select_model   "(set_color normal)"--apply — recommend LLM profiles from PC resources"
+            case ascii_art
+                echo (set_color green)"  ascii_art      "(set_color normal)"<text> | --from-image photo.jpg — figlet banner / image ASCII"
             case generate_video
                 echo (set_color green)"  generate_video "(set_color normal)"<prompt> — real AI video (Pollinations/Gemini; needs API key or billing)"
             case compose_video
@@ -2812,7 +2867,7 @@ function ai-models --description "List available AI models, providers, and limit
     echo (set_color --bold blue)"AI Provider Reference"(set_color normal)
     echo ""
     if test -f "$script"
-        $py $script providers 2>/dev/null | while read -l line
+        $py $script providers --models 2>/dev/null | while read -l line
             set -l parts (string split \t "$line")
             if test (count $parts) -lt 2
                 echo $line
@@ -2826,15 +2881,20 @@ function ai-models --description "List available AI models, providers, and limit
             if test "$parts[3]" = yes
                 set mark (set_color green)"✓"(set_color normal)
             end
-            echo "  $mark $parts[2] ($parts[1]) — default: $parts[4]"
+            echo "  $mark $parts[2] ($parts[1]) — default: $parts[5]"
+            if test (count $parts) -ge 6 -a -n "$parts[6]"
+                echo (set_color brblack)"      models: $parts[6]"(set_color normal)
+            end
         end
     else
         echo "  anthropic, openai, gemini, groq, xai, deepseek, moonshot, zai,"
-        echo "  minimax, venice, bedrock, azure, openrouter, litellm, ollama, lmstudio"
+        echo "  minimax, venice, bedrock, azure, openrouter, mistral, cohere,"
+        echo "  together, fireworks, perplexity, huggingface, litellm, ollama,"
+        echo "  lmstudio, vllm, vllm-cloud"
     end
     echo ""
     echo (set_color cyan)"Chain:"(set_color normal) $py $script models"
-    echo (set_color cyan)"Live Gemini:"(set_color normal) $py $script models --gemini-live"
+    echo (set_color cyan)"Live lists:"(set_color normal) $py $script models --gemini-live | --groq-live | --ollama-live"
 end
 
 function ai-status --description "Show current AI provider and model in use"
@@ -2896,6 +2956,9 @@ function ai-pref --description "Set preferred AI provider and model"
     if test "$arg1" = google
         set arg1 gemini
     end
+    if test "$arg1" = hf
+        set arg1 huggingface
+    end
     
     # Clear preference
     if test "$arg1" = clear
@@ -2943,6 +3006,79 @@ function ai-pref --description "Set preferred AI provider and model"
     end
 
     echo (set_color --bold green)"✓ Preference set & saved permanently: $provider → $model"(set_color normal)
+end
+
+function ai-skill-model --description "Set or list per-skill / per-profile LLM model choices"
+    set -l py (_arka_python)
+    set -l script (_arka_py_script arka_llm.py)
+    if test (count $argv) -eq 0
+        if test -f "$script"
+            $py $script skill-models list
+        else
+            echo "Usage: ai-skill-model <skill|profile> <provider/model>"
+            echo "       ai-skill-model show <skill|profile>"
+            echo "       ai-skill-model clear <skill|profile>"
+            echo "       ai-skill-model profiles"
+        end
+        return 0
+    end
+
+    set -l arg1 (string lower $argv[1])
+    if test "$arg1" = profiles
+        if test -f "$script"
+            $py $script skill-models list --profiles-only
+        end
+        return 0
+    end
+    if test "$arg1" = show
+        if test (count $argv) -lt 2
+            echo "Usage: ai-skill-model show <skill|profile>"
+            return 1
+        end
+        $py $script skill-models show $argv[2]
+        return $status
+    end
+    if test "$arg1" = clear
+        if test (count $argv) -lt 2
+            echo "Usage: ai-skill-model clear <skill|profile>"
+            return 1
+        end
+        $py $script skill-models clear $argv[2]
+        return $status
+    end
+    if test (count $argv) -lt 2
+        echo "Usage: ai-skill-model <skill|profile> <provider/model>"
+        echo "Examples:"
+        echo "  ai-skill-model web_answer groq/llama-3.3-70b-versatile"
+        echo "  ai-skill-model chat gemini/gemini-2.5-flash"
+        echo "  ai-skill-model pdf_ask anthropic/claude-sonnet-4-20250514"
+        return 1
+    end
+    $py $script skill-models set $argv[1] $argv[2]
+end
+
+function select_model --description "Recommend LLM models based on PC CPU, RAM, GPU, and disk"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        echo "Usage: select_model [--apply] [--json]"
+        echo "       select_model recommend [--apply]"
+        echo "       select_model probe"
+        echo ""
+        echo "NL: arka select best model for my pc"
+        echo "    arka optimize models for my hardware"
+        echo "    arka apply best model for my laptop"
+        return 1
+    end
+    $py (_arka_py_script arka_model_advisor.py) $argv
+    return $status
+end
+
+function model_select --description "Alias for select_model"
+    select_model $argv
+end
+
+function best_model --description "Alias for select_model"
+    select_model $argv
 end
 
 # --- Virtual Environment Skills ---
@@ -5644,6 +5780,23 @@ function chart --description "Draw line, bar, pie, scatter, histogram, or pareto
     return $status
 end
 
+function ascii_art --description "Render text or images as ASCII art (figlet / pyfiglet)"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        echo "Usage: ascii_art <text> [--font standard] [-o path.txt]"
+        echo "       ascii_art --from-image photo.jpg [--width 80]"
+        echo ""
+        echo "NL: arka make ascii art of HELLO"
+        echo "    arka ascii banner welcome"
+        echo "    arka ascii art from logo.png"
+        echo ""
+        echo "Optional: pip install pyfiglet  |  brew install figlet"
+        return 1
+    end
+    $py (_arka_py_script arka_ascii_art.py) $argv
+    return $status
+end
+
 function drawing_ask --description "Vision analysis for blueprints, drawings, scanned specs (Gemini)"
     set -l py (_arka_python)
     if test (count $argv) -eq 0
@@ -5938,17 +6091,110 @@ function summarize_url --description "Summarize a web page or article URL"
     $py (_arka_py_script arka_summarize.py) $argv
 end
 
+function post_x --description "Fetch a URL, shorten to <=40 words; post to X only when auth is configured"
+    set -l py (_arka_python)
+    set -l script (_arka_py_script arka_x_post.py)
+    if test (count $argv) -eq 1; and string match -qr '(?i)(post|share|tweet|shorten|linkedin|twitter|\bx\b)' -- "$argv[1]"
+        set -l parsed (_agent_build_post_x_cmd "$argv[1]")
+        if test -n "$parsed"
+            set argv (string split " " -- $parsed)
+            set -e argv[1]
+        end
+    end
+    if test (count $argv) -lt 1
+        echo "Usage: post_x <url> [--words N] [--dry-run] [--post]"
+        echo "       post_x --from-session [--words N] [--dry-run] [--post]"
+        echo "Example: post_x https://www.linkedin.com/posts/... --words 40"
+        echo "NL: arka post this https://linkedin.com/... on my x"
+        echo "Default: draft only (copy/paste). Auto-post needs X_AUTH_TOKEN + X_CT0 or TWITTER_* API keys."
+        echo "Use --post to force publish when credentials are configured."
+        return 1
+    end
+    $py "$script" $argv
+end
+
+function _agent_is_daily_brief_request --description "True if user wants a daily/morning/tech brief (internal)"
+    set -l clean (string lower "$argv[1]")
+    string match -qr '(?i)\b(?:(?:daily|morning|news)\s+brief|today.?s\s+(?:tech\s+)?brief|(?:daily|morning|news|today.?s)\s+tech\s+brief|tech\s+brief(?:\s+(?:personalized(?:\s+for\s+me)?|for\s+me))?|personalized\s+(?:tech\s+)?brief)\b' "$clean"
+end
+
 function daily_brief --description "Morning brief: local weather + top news headlines"
     if not _arka_ensure_venv
         return 1
     end
-    _arka_ui_header "Daily Brief" info
+    set -l args $argv
+    set -l url_limit ""
+    while test (count $args) -gt 0
+        switch $args[1]
+            case --url-limit
+                set url_limit 1
+                set args $args[2..-1]
+            case --no-url-limit
+                set url_limit 0
+                set args $args[2..-1]
+            case -h --help
+                echo "Usage: daily_brief [--url-limit|--no-url-limit] [tech] [personalized]"
+                echo "  --url-limit      Include a short excerpt under each headline (BRIEF_URL_WORDS, default 30)"
+                echo "  --no-url-limit   Headlines only: - Title — URL (no excerpt)"
+                echo "Env: BRIEF_URL_LIMIT_ENABLED=1|0  BRIEF_URL_WORDS=30"
+                return 0
+            case '*'
+                break
+        end
+    end
+    set -l query (string join " " $args)
+    set -l clean (string lower "$query")
+    set -l tech_focus 0
+    set -l personalized 0
+    if string match -qr '(?i)\btech\b' "$clean"
+        set tech_focus 1
+    end
+    if string match -qr '(?i)\b(personalized|for\s+me|my\s+interests)\b' "$clean"
+        set personalized 1
+    end
+
+    if test $tech_focus -eq 1
+        _arka_ui_header "Tech Brief" info
+    else
+        _arka_ui_header "Daily Brief" info
+    end
     echo ""
-    _arka_ui_header "Weather" section
-    hyperlocal_weather
-    echo ""
+    if test $tech_focus -ne 1
+        _arka_ui_header "Weather" section
+        hyperlocal_weather
+        echo ""
+    end
     _arka_ui_header "Headlines" section
-    web_answer --no-session "Give 5 brief top news headlines for today in bullet points, India and world mix"
+
+    set -l mem_ctx ""
+    if test $personalized -eq 1
+        set -l py (_arka_python)
+        set mem_ctx ($py (_arka_py_script arka_daily_brief.py) mem-ctx "tech interests and career" 2>/dev/null | string trim)
+    end
+
+    set -l py (_arka_python)
+    set -l prompt_args prompt
+    test $tech_focus -eq 1; and set -a prompt_args --tech-focus
+    if test -n "$mem_ctx"
+        set -a prompt_args --mem-ctx "$mem_ctx"
+    end
+    set -l prompt ($py (_arka_py_script arka_daily_brief.py) $prompt_args 2>/dev/null | string trim)
+    if test -z "$prompt"
+        if test $tech_focus -eq 1
+            set prompt "Give 5-7 concise tech news headlines for today in bullet points covering AI, startups, developer tools, and major tech industry news. For each bullet include the source URL after an em dash."
+            if test -n "$mem_ctx"
+                set prompt "$prompt Personalize headline selection to: $mem_ctx"
+            end
+        else if test -n "$mem_ctx"
+            set prompt "Give 5 brief top news headlines for today in bullet points, India and world mix. Personalize to: $mem_ctx. For each bullet include the source URL after an em dash."
+        else
+            set prompt "Give 5 brief top news headlines for today in bullet points, India and world mix. For each bullet include the source URL after an em dash."
+        end
+    end
+    if test -n "$url_limit"
+        set -lx BRIEF_URL_LIMIT_ENABLED $url_limit
+    end
+    web_answer --no-session "$prompt"
 end
 
 function _arka_wifi_iface --description "Wi-Fi device name (macOS, internal)"
@@ -6245,6 +6491,34 @@ function github_repo --description "Recent GitHub repo commits and modified file
     _arka_print_answer_block "$answer" "GitHub activity"
 end
 
+function competitions --description "Search hackathons and ML competitions across curated sources"
+    set -l py (_arka_python)
+    set -l script (_arka_py_script arka_competitions.py)
+    if test (count $argv) -eq 0
+        $py $script sources
+        return $status
+    end
+    set -l answer (_arka_capture_output $py $script $argv)
+    set -l st $status
+    if test $st -ne 0
+        return $st
+    end
+    if test -z "$answer"
+        return 1
+    end
+    _arka_print_answer_block "$answer" "Competitions"
+end
+
+function route_learn --description "Teach and manage learned NL routing rules"
+    set -l py (_arka_python)
+    set -l script (_arka_py_script arka_route_learn.py)
+    if test (count $argv) -eq 0
+        $py $script list
+        return $status
+    end
+    $py $script $argv
+end
+
 function disk_usage --description "Analyze disk usage of current or specified directory"
     set -l target "."
     if test (count $argv) -gt 0
@@ -6445,6 +6719,12 @@ text = sys.stdin.read().strip()
 text = re.sub(r"\s+#{2,3}\s+", r"\n\n## ", text)
 text = re.sub(r"\s+---\s+", r"\n\n---\n\n", text)
 text = re.sub(r"\s+•\s+", r"\n* ", text)
+# Split concatenated headline bullets: "Title — URL - Next headline"
+text = re.sub(
+    r"(https?://\S+)(?:\.\.\.)?(?:[)\].,;]*)?\s*-\s+(?=\S)",
+    r"\1\n- ",
+    text,
+)
 text = re.sub(r"(\*\*.+?\*\*)\s+(\d+)\.", r"\1\n\2.", text)
 text = re.sub(r"\.\s+(\d+)\.\s+", r".\n\1. ", text)
 # Only split numbered lists at line boundaries — not "item #5" mid-sentence.
@@ -8931,6 +9211,18 @@ function _agent_is_github_repo_request --description "True if user wants GitHub 
     test -n "$route"
 end
 
+function _agent_is_competitions_request --description "True if user wants hackathon/competition search (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_competitions.py) route "$argv[1]" 2>/dev/null | string trim)
+    test -n "$route"
+end
+
+function _agent_route_competitions --description "Build competitions invocation from NL (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_competitions.py) route "$argv[1]" 2>/dev/null | string trim)
+    echo $route
+end
+
 function _agent_route_github_repo --description "Build github_repo invocation from NL (internal)"
     set -l py (_arka_python)
     set -l route ($py (_arka_py_script arka_github_repo.py) route "$argv[1]" 2>/dev/null | string trim)
@@ -9145,6 +9437,9 @@ function _agent_is_essay_request --description "True if user wants an essay/arti
     if _agent_is_usage_question "$argv[1]"
         return 1
     end
+    if _agent_is_gmail_draft_request "$argv[1]"
+        return 1
+    end
     set -l clean (string lower "$argv[1]")
     if string match -qr '(?i)(write|draft|compose)\s+(a\s+)?(script|python|code|function|file|program|shell|fish|bash|skill|to\s+(file|disk|clipboard))' "$clean"
         return 1
@@ -9311,6 +9606,9 @@ function _agent_route_system_info --description "Route to system_info or system_
 end
 
 function _agent_is_knowledge_question --description "True if user wants a factual answer, not a browser search"
+    if _agent_is_daily_brief_request "$argv[1]"
+        return 1
+    end
     if _agent_is_price_check_request "$argv[1]"
         return 1
     end
@@ -9341,10 +9639,19 @@ function _agent_is_knowledge_question --description "True if user wants a factua
     if _agent_is_github_repo_request "$argv[1]"
         return 1
     end
+    if _agent_is_competitions_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_route_learn_request "$argv[1]"
+        return 1
+    end
     if _agent_is_survival_lang_request "$argv[1]"
         return 1
     end
     if _agent_is_currency_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_post_x_request "$argv[1]"
         return 1
     end
     if _agent_is_google_calendar_request "$argv[1]"
@@ -9352,6 +9659,29 @@ function _agent_is_knowledge_question --description "True if user wants a factua
         return 1
     end
     set -l clean (string lower "$argv[1]")
+    # Email compose/send with an address — Gmail draft, not web_answer
+    if string match -qr '(?i)[\w.+-]+@[\w.-]+\.\w+' "$clean"
+        and string match -qr '(?i)\b(send|email|draft|compose|write)\b' "$clean"
+        return 1
+    end
+    # Gift / life advice / general recommendations — web lookup, not shell context
+    if string match -qr '(?i)\b(birthday|anniversary|wedding|valentine|christmas|holiday|gift|gifts|present|presents)\b' "$clean"
+        and not string match -qr '(?i)\b(this\s+(pc|computer|system|machine|mac|macbook|laptop)|my\s+(cpu|gpu|ram|disk|pc|computer|system|mac|macbook|machine|laptop))\b' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)^what\s+to\s+(give|buy|get|choose|pick|wear|say|cook|make|bring|serve)\b' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)^what\s+(should|can|could)\s+i\s+(give|buy|get|choose|pick)\b' "$clean"
+        and not string match -qr '(?i)\b(this\s+(pc|computer|system|machine|mac|macbook|laptop)|my\s+(cpu|gpu|ram|disk|pc|computer|system|mac|macbook|machine|laptop))\b' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)^(gift|present)\s+ideas?\b' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)\bideas\s+for\s+(a\s+)?(gift|present|birthday)\b' "$clean"
+        return 0
+    end
     if string match -qr '(?i)(google|search\s+(the\s+)?web|search\s+online|look\s+up\s+online|open\s+.*search|\bsearch\s+for\b|\bfind\s+on\s+google\b)' "$clean"
         return 1
     end
@@ -9365,7 +9695,11 @@ function _agent_is_knowledge_question --description "True if user wants a factua
         return 0
     end
     # Personal / system questions belong in agent_ask or system_info, not web_answer
-    if string match -qr '(?i)\b(my|should\s+i|can\s+i|do\s+i|am\s+i|this\s+(pc|computer|system|machine|mac|macbook|laptop)|my\s+(cpu|gpu|ram|disk|pc|computer|system|driver|terminal|shell|mac|macbook|machine|laptop))\b' "$clean"
+    if string match -qr '(?i)\b(this\s+(pc|computer|system|machine|mac|macbook|laptop)|my\s+(cpu|gpu|ram|disk|pc|computer|system|driver|terminal|shell|mac|macbook|machine|laptop))\b' "$clean"
+        return 1
+    end
+    if string match -qr '(?i)\b(my|should\s+i|can\s+i|do\s+i|am\s+i)\b' "$clean"
+        and string match -qr '(?i)\b(outdated|too\s+old|too\s+slow|good\s+enough|worth\s+upgrad|bottleneck|malware|infected|hacked|compromised|specs?\s+for\s+my|upgrade|gaming|cpu|gpu|ram|disk|system|pc|computer|mac|macbook|machine|laptop)\b' "$clean"
         return 1
     end
     if string match -qr '(?i)(outdated|too\s+old|too\s+slow|good\s+enough|worth\s+upgrad|bottleneck|malware|infected|hacked|compromised|specs?\s+for\s+my)' "$clean"
@@ -9454,8 +9788,9 @@ function _agent_is_advisory_question --description "True if user wants an opinio
     if string match -qr '(?i)(outdated|too\s+old|too\s+slow|good\s+enough|worth\s+(it|upgrading)|should\s+i\s+(upgrade|buy|get|replace)|enough\s+for|capable\s+of|can\s+i\s+run|will\s+it\s+run|recommend|comparison|compare|better\s+than|\bvs\.?\b|versus|bottleneck|specs?\s+for)' "$clean"
         return 0
     end
-    # Open-ended questions (not simple factual shell lookups)
+    # Open-ended questions about this machine (need local context)
     if string match -qr '(?i)^(is|are|am|should|can|could|would|will|how|why|what|which|who|do|does|did|where|when)\s+' "$clean"
+        and string match -qr '(?i)\b(my|this\s+(pc|computer|system|machine|mac|macbook|laptop)|my\s+(cpu|gpu|ram|disk|pc|computer|system|mac|macbook|machine|laptop|terminal|shell|driver|software|app|browser|wifi|network|battery|storage|malware|infected|hacked|compromised))\b' "$clean"
         and not string match -qr '(?i)^(what\s+(is\s+)?(the\s+)?(weather|time|date|ip|my\s+ip)|how\s+(much|many)\s+(disk|space|memory|ram)\s+(left|free|used))' "$clean"
         return 0
     end
@@ -9465,6 +9800,7 @@ function _agent_is_advisory_question --description "True if user wants an opinio
         return 0
     end
     if string match -qr '\?$' "$clean"
+        and string match -qr '(?i)\b(my|this\s+(pc|computer|system|machine|mac|macbook|laptop)|my\s+(cpu|gpu|ram|disk|pc|computer|system|mac|macbook|machine|laptop|terminal|shell|driver|malware|infected|hacked|compromised|outdated|upgrade))\b' "$clean"
         return 0
     end
     return 1
@@ -9498,7 +9834,7 @@ function _agent_is_general_chat --description "True if plain conversational inpu
     if _agent_is_youtube_download_request "$argv[1]"
         return 1
     end
-    if string match -qr '(?i)^(install|play|open|run|create|download|search|list|show|fix|set|take|timer|remind|weather|pdf|ingest|screenshot|spotify|whatsapp|send|loop|agent_|generate_image|generate_video|generate_password|chart|graph|plot|predictions|stock|translate|survive_lang|pr_check|cheat|excuse|bored)\b' "$clean"
+    if string match -qr '(?i)^(install|play|open|run|create|download|search|list|show|fix|set|take|timer|remind|weather|pdf|ingest|screenshot|spotify|whatsapp|send|loop|agent_|generate_image|generate_video|generate_password|chart|ascii|ascii_art|figlet|graph|plot|predictions|stock|translate|survive_lang|pr_check|cheat|excuse|bored)\b' "$clean"
         return 1
     end
     if string match -qr '(?i)^(routines?\b|every\s+day|each\s+day|daily\s+at|every\s+morning|every\s+evening|every\s+hour|schedule\s+daily)\b' "$clean"
@@ -9562,6 +9898,32 @@ end
 
 function _agent_is_google_login_request --description "True if user wants Google OAuth sign-in (internal)"
     string match -qr '(?i)(google\s+(?:login|sign[\s-]?in|connect|auth|setup|status|logout)|connect\s+(?:my\s+)?(?:google|gmail|calendar)|sign[\s-]?in\s+(?:to\s+)?(?:google|gmail|calendar)|link\s+(?:my\s+)?google|oauth\s+google)' "$argv[1]"
+end
+
+function _agent_is_post_x_request --description "True if user wants to post/share URL content on X/Twitter (internal)"
+    set -l py (_arka_python)
+    $py (_arka_py_script arka_x_post.py) parse (string escape --style=script -- $argv[1]) >/dev/null 2>&1
+end
+
+function _agent_build_post_x_cmd --description "Build post_x args from NL (internal)"
+    set -l py (_arka_python)
+    set -l rest ($py (_arka_py_script arka_x_post.py) parse (string escape --style=script -- $argv[1]) 2>/dev/null)
+    if test (count $rest) -gt 0
+        echo "post_x $rest"
+    end
+end
+
+function _agent_is_gmail_draft_request --description "True if user wants a Gmail draft (internal)"
+    set -l py (_arka_python)
+    $py (_arka_py_script arka_google.py) parse-draft (string escape --style=script -- $argv[1]) >/dev/null 2>&1
+end
+
+function _agent_build_gmail_draft_cmd --description "Build google gmail --draft args from NL (internal)"
+    set -l py (_arka_python)
+    set -l rest ($py (_arka_py_script arka_google.py) parse-draft (string escape --style=script -- $argv[1]) 2>/dev/null)
+    if test (count $rest) -gt 0
+        echo "google $rest"
+    end
 end
 
 function _agent_is_gmail_summarize_request --description "True if user wants AI summary of Gmail (internal)"
@@ -9739,6 +10101,14 @@ function _agent_offline_route_cmd --description "Full symbolic NL to skill comma
         echo (_agent_build_chart_cmd "$cmd")
         return 0
     end
+    if _agent_is_model_select_request "$cmd"
+        echo (_agent_build_model_select_cmd "$cmd")
+        return 0
+    end
+    if _agent_is_ascii_art_request "$cmd"
+        echo (_agent_build_ascii_art_cmd "$cmd")
+        return 0
+    end
     if _agent_is_drawing_ask_request "$cmd"
         echo (_agent_build_drawing_ask_cmd "$cmd")
         return 0
@@ -9771,6 +10141,10 @@ function _agent_offline_route_cmd --description "Full symbolic NL to skill comma
         echo $g
         return 0
     end
+    if _agent_is_post_x_request "$cmd"
+        echo (_agent_build_post_x_cmd "$cmd")
+        return 0
+    end
     if _agent_is_gmail_summarize_request "$cmd"
         echo (_agent_build_gmail_cmd "$cmd" summarize)
         return 0
@@ -9795,12 +10169,38 @@ function _agent_is_chart_request --description "True if user wants a data chart 
     test -n "$(_agent_build_chart_cmd "$argv[1]")"
 end
 
+function _agent_build_model_select_cmd --description "Build select_model args from NL (internal)"
+    set -l cmd "$argv[1]"
+    set -l py (_arka_python)
+    set -l rest ($py (_arka_py_script arka_model_advisor.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
+    if test (count $rest) -gt 0
+        echo "select_model $rest"
+    end
+end
+
+function _agent_is_model_select_request --description "True if user wants hardware-based model advice (internal)"
+    test -n "$(_agent_build_model_select_cmd "$argv[1]")"
+end
+
 function _agent_build_chart_cmd --description "Build chart args from NL (internal)"
     set -l cmd "$argv[1]"
     set -l py (_arka_python)
     set -l rest ($py (_arka_py_script arka_chart.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
     if test (count $rest) -gt 0
         echo "chart $rest"
+    end
+end
+
+function _agent_is_ascii_art_request --description "True if user wants ASCII art (internal)"
+    test -n "$(_agent_build_ascii_art_cmd "$argv[1]")"
+end
+
+function _agent_build_ascii_art_cmd --description "Build ascii_art args from NL (internal)"
+    set -l cmd "$argv[1]"
+    set -l py (_arka_python)
+    set -l rest ($py (_arka_py_script arka_ascii_art.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
+    if test (count $rest) -gt 0
+        echo "ascii_art $rest"
     end
 end
 
@@ -9962,6 +10362,10 @@ end
 
 function _agent_route_google --description "Map NL to google subcommand (internal)"
     set -l cmd "$argv[1]"
+    if _agent_is_gmail_draft_request "$cmd"
+        echo (_agent_build_gmail_draft_cmd "$cmd")
+        return 0
+    end
     if _agent_is_google_login_request "$cmd"
         if string match -qr '(?i)\b(setup|configure|config)\b' "$cmd"
             echo "google setup"
@@ -10142,6 +10546,9 @@ end
 function _agent_chat_intent_route --description "Map question to chat skill via arka_chat intent (internal)"
     set -l cmd (string trim -- "$argv[1]")
     test -z "$cmd"; and return 1
+    if _agent_is_daily_brief_request "$cmd"
+        return 1
+    end
     if string match -qr '(?i)(password|passcode)' "$cmd"
         and not string match -qr '(?i)(decrypt|protected|pdf)' "$cmd"
         return 1
@@ -10324,6 +10731,8 @@ $out_store
     if test $gathered -eq 0
         if _agent_is_knowledge_question "$question"
             printf '%s%s%s\n' (set_color brblack) "  General knowledge — no system probes needed." (set_color normal) >&2
+        else if test -n "$step_why"; and string match -qr '(?i)(subjective|personal context|general knowledge|not system|no system|cannot help|does not require|doesn'\''t require|not.*system facts)' "$step_why"
+            printf '%s%s%s\n' (set_color brblack) "  Not a system question — skipping probes." (set_color normal) >&2
         else if _arka_is_macos
             printf '%s%s%s\n' (set_color brblack) "  Using default macOS system probes..." (set_color normal) >&2
             for cmd in \
@@ -10882,6 +11291,15 @@ function google --description "Google Calendar and Gmail — login, status, mail
         return $status
     end
     $py (_arka_py_script arka_google.py) $argv
+end
+
+function gemini_cli --description "Google Gemini CLI agent (@google/gemini-cli)"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        $py (_arka_py_script arka_gemini.py) --help
+        return $status
+    end
+    $py (_arka_py_script arka_gemini.py) $argv
 end
 
 function voice_agent --description "Multi-turn voice chat via wake listener"
@@ -11573,6 +11991,10 @@ function agent_ask --description "Answer advisory questions: AI gathers context 
     _arka_ui_header "$question" chat
 
     set -l facts (_agent_ask_gather_context "$question" 6)
+    if test -z (string trim -- "$facts"); and not _agent_is_system_info_question "$question"
+        web_answer $argv
+        return $status
+    end
     echo ""
 
     set -l plat (_arka_agent_platform_label)
@@ -11674,7 +12096,11 @@ function _agent_skill_matches_request --description "True if skill fits the user
         case send_whatsapp
             string match -qr '(?i)whatsapp' "$cmd"
         case monitor_x
-            string match -qr '(?i)(twitter|tweet|\bx\.com\b)' "$cmd"
+            string match -qr '(?i)(monitor|watch|track|notify).*(twitter|tweet|\bx\.com\b|\bx\b)' "$cmd"
+            or string match -qr '(?i)(twitter|tweet).*(monitor|watch|track|notify)' "$cmd"
+        case post_x
+            string match -qr '(?i)\b(?:post|share|tweet|publish).*(?:on\s+(?:my\s+)?(?:x|twitter)|to\s+(?:my\s+)?(?:x|twitter))\b' "$cmd"
+            or string match -qr '(?i)\b(?:shorten|summarize).*(?:linkedin|post).*(?:post|tweet|share).*(?:x|twitter)\b' "$cmd"
         case internet_enhance aie
             string match -qr '(?i)(artificial\s+internet\s+enhance(?:ment?s?)?|internet\s+enhance(?:ment?s?)?|\baie\b)' "$cmd"
         case youtube_bulk yt_bulk
@@ -11688,7 +12114,7 @@ function _agent_skill_matches_request --description "True if skill fits the user
         case summarize_url
             string match -qr '(?i)(summarize (this |the )?(url|page|article|website|link)|summarize https?://|summary of https?://)' "$cmd"
         case daily_brief
-            string match -qr '(?i)(daily brief|morning brief|news brief|today.s brief)' "$cmd"
+            _agent_is_daily_brief_request "$cmd"
         case wifi_info
             string match -qr '(?i)(wifi|wi-fi|wireless).*(info|network|signal|ssid)|what wifi|am i on wifi' "$cmd"
         case generate_thumbnail
@@ -11697,6 +12123,10 @@ function _agent_skill_matches_request --description "True if skill fits the user
             _agent_is_generate_image_request "$cmd"
         case chart
             _agent_is_chart_request "$cmd"
+        case select_model model_select best_model model_advisor
+            _agent_is_model_select_request "$cmd"
+        case ascii_art
+            _agent_is_ascii_art_request "$cmd"
         case drawing_ask
             _agent_is_drawing_ask_request "$cmd"
         case describe_screen
@@ -11744,6 +12174,14 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
     if string match -qr '(?i)^speak\s+' "$clean"
         set cmd (string replace -r -i '^speak\s+' '' "$cmd")
         set clean (string lower "$cmd")
+    end
+
+    if _agent_is_post_x_request "$cmd"
+        set -l px_cmd (_agent_build_post_x_cmd "$cmd")
+        if test -n "$px_cmd"
+            echo "skill|$px_cmd|Shorten URL and post to X/Twitter"
+            return
+        end
     end
 
     set -l route_mode (_arka_route_mode)
@@ -11885,6 +12323,20 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         set -l parts (_agent_build_chart_cmd "$cmd")
         if test -n "$parts"
             echo "skill|$parts|Line, bar, pie, or scatter chart (matplotlib PNG)"
+            return
+        end
+    end
+    if _agent_is_model_select_request "$cmd"
+        set -l parts (_agent_build_model_select_cmd "$cmd")
+        if test -n "$parts"
+            echo "skill|$parts|Recommend LLM models from PC resources"
+            return
+        end
+    end
+    if _agent_is_ascii_art_request "$cmd"
+        set -l parts (_agent_build_ascii_art_cmd "$cmd")
+        if test -n "$parts"
+            echo "skill|$parts|ASCII banner or image-to-ASCII art (figlet)"
             return
         end
     end
@@ -12037,7 +12489,16 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         echo "skill|generate_thumbnail|YouTube thumbnail — Unsplash photo + title overlay"
         return
     end
+    if _agent_is_ascii_art_request "$cmd"
+        set -l parts (_agent_build_ascii_art_cmd "$cmd")
+        if test -n "$parts"
+            echo "skill|$parts|ASCII banner or image-to-ASCII art (figlet)"
+            return
+        end
+    end
     if string match -qr '(?i)^(generate|create|make|draw|paint|sketch|show)\s+(?:an?\s+)?(?:image|picture|photo|art|drawing|sketch|painting|illustration|portrait|landscape)\b|^(draw|paint|sketch)\s+' "$clean"
+        and not string match -qr '(?i)\bascii\s+(?:art|banner)\b' "$clean"
+        and not string match -qr '(?i)\bfiglet\b' "$clean"
         echo "skill|generate_image|Generate images with Gemini API (gemini-2.5-flash-image)"
         return
     end
@@ -12113,6 +12574,25 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
             echo "skill|$gr|GitHub repo commits and modified files"
             return
         end
+    end
+    if _agent_is_competitions_request "$cmd"
+        set -l cr (_agent_route_competitions "$cmd")
+        if test -n "$cr"
+            echo "skill|$cr|Search hackathons and ML competitions"
+            return
+        end
+    end
+    if _agent_is_route_learn_request "$cmd"
+        set -l lr (_agent_route_learn_management "$cmd")
+        if test -n "$lr"
+            echo "skill|$lr|Learned route management"
+            return
+        end
+    end
+    set -l learned (_arka_match_learned_route "$cmd")
+    if test -n "$learned"
+        echo "skill|$learned|Learned route"
+        return
     end
     if _agent_is_survival_lang_request "$cmd"
         set -l sl (_agent_build_survival_lang_cmd "$cmd")
@@ -12232,6 +12712,13 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         end
         return
     end
+    if _agent_is_post_x_request "$cmd"
+        set -l px_cmd (_agent_build_post_x_cmd "$cmd")
+        if test -n "$px_cmd"
+            echo "skill|$px_cmd|Shorten URL and post to X/Twitter"
+            return
+        end
+    end
     if string match -qr '(?i)(summarize (this |the )?(url|page|article|website|link)|summarize https?://|summary of https?://)' "$clean"
         set -l page_url (string match -r 'https?://[^\s]+' "$cmd")
         if test (count $page_url) -ge 1
@@ -12252,13 +12739,18 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         end
     end
     set -l py (_arka_python)
+    set -l learned ($py (_arka_py_script arka_route_learn.py) match "$cmd" 2>/dev/null | string trim)
+    if test -n "$learned"
+        echo "skill|$learned|Learned route"
+        return
+    end
     set -l tp ($py (_arka_py_script arka_skills.py) match "$cmd" 2>/dev/null)
     if test -n "$tp"
         echo "skill|$tp|Third-party plugin"
         return
     end
-    if string match -qr '(?i)(daily brief|morning brief|news brief|today.s brief)' "$clean"
-        echo "skill|daily_brief|Weather + news headlines"
+    if _agent_is_daily_brief_request "$cmd"
+        echo "skill|daily_brief $cmd|Weather + news headlines"
         return
     end
     if string match -qr '(?i)(wifi|wi-fi|wireless).*(info|network|signal|ssid)|what wifi|am i on wifi' "$clean"
@@ -12380,6 +12872,16 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         test -n "$parts"; and echo "skill|$parts|Line, bar, pie, or scatter chart (matplotlib PNG)"
         return
     end
+    if _agent_is_model_select_request "$cmd"
+        set -l parts (_agent_build_model_select_cmd "$cmd")
+        test -n "$parts"; and echo "skill|$parts|Recommend LLM models from PC resources"
+        return
+    end
+    if _agent_is_ascii_art_request "$cmd"
+        set -l parts (_agent_build_ascii_art_cmd "$cmd")
+        test -n "$parts"; and echo "skill|$parts|ASCII banner or image-to-ASCII art (figlet)"
+        return
+    end
     if _agent_is_drawing_ask_request "$cmd"
         set -l parts (_agent_build_drawing_ask_cmd "$cmd")
         test -n "$parts"; and echo "skill|$parts|Vision analysis of blueprints, drawings, and scanned specs"
@@ -12465,6 +12967,16 @@ function _agent_correct_interpretation --description "Fix bad LLM skill picks us
 
     if _agent_is_chart_request "$cmd"
         echo (_agent_build_chart_cmd "$cmd")
+        return
+    end
+
+    if _agent_is_model_select_request "$cmd"
+        echo (_agent_build_model_select_cmd "$cmd")
+        return
+    end
+
+    if _agent_is_ascii_art_request "$cmd"
+        echo (_agent_build_ascii_art_cmd "$cmd")
         return
     end
 
@@ -13776,6 +14288,21 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                 case reload refresh relink
                     _arka_reload_command $argv[2..-1]
                     return $status
+                case ai-skill-model skill-model skill-models
+                    ai-skill-model $argv[2..-1]
+                    return $status
+                case select_model model_select best_model model_advisor
+                    select_model $argv[2..-1]
+                    return $status
+                case ai-models
+                    ai-models $argv[2..-1]
+                    return $status
+                case ai-pref
+                    ai-pref $argv[2..-1]
+                    return $status
+                case ai-status
+                    ai-status
+                    return $status
                 case stop down
                     if test (count $argv) -gt 1
                         agent $argv
@@ -13811,6 +14338,14 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                                 return $status
                             end
                         end
+                        if _agent_is_competitions_request "$raw"
+                            set -l cr (_agent_route_competitions "$raw")
+                            if test -n "$cr"
+                                echo (set_color yellow)"💡 [Competitions search]"(set_color normal)
+                                _agent_dispatch_one "$cr"
+                                return $status
+                            end
+                        end
                         set -l q $raw
                         set q (string replace -r -i '^me\s+about\s+' '' "$q")
                         set q (string replace -r -i '^me\s+' '' "$q")
@@ -13835,6 +14370,15 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                     return 1
                 case write draft compose essay
                     if test (count $argv) -ge 2
+                        set -l full_cmd (string join " " $argv[1..-1])
+                        if _agent_is_gmail_draft_request "$full_cmd"
+                            set -l gcmd (_agent_build_gmail_draft_cmd "$full_cmd")
+                            if test -n "$gcmd"
+                                echo (set_color yellow)"💡 [Gmail draft]"(set_color normal)
+                                _agent_dispatch_one "$gcmd"
+                                return $status
+                            end
+                        end
                         web_essay (_agent_normalize_essay_topic "write "(string join " " $argv[2..-1]))
                         return $status
                     end
@@ -14448,6 +14992,7 @@ function agent --description "Run commands safely: executes safe commands automa
         echo (set_color --bold yellow)"💻 System & Diagnostics:"(set_color normal)
         echo "  system_monitor         - Beautiful real-time resource usage card (CPU, RAM, Disk)"
         echo "  system_info            - Fast diagnostic overview of OS, kernel, CPU, GPU, memory, disk, IP"
+        echo "  select_model           - Recommend LLM profiles from PC resources (--apply to save)"
         echo "  ip_info                - Show public IP address and geolocation info"
         echo "  speedtest              - Perform a quick terminal internet speed test"
         echo "  port_scan              - Check what local network ports are currently in use"
@@ -14497,6 +15042,9 @@ function agent --description "Run commands safely: executes safe commands automa
         echo "  install_flatpak <app>  - Install app from Flathub"
         echo "  install_snap <app>     - Install app from Snap Store"
         echo "  agent_route <request>  - Preview skill/shell/LLM routing (no run)"
+        echo "  route_learn list       - Show learned NL → skill routes"
+        echo "  route_learn learn \"phrase\" \"skill\" - Teach a custom route"
+        echo "  NL: teach route \"phrase\" to \"skill\"  - Learn routing in plain English"
         echo "  download_file <url|name> - Download URL (resume) or check Downloads for file"
         echo "  extract_and_run <zip>   - Extract from Downloads and run (e.g. Unreal Editor)"
         echo "  create_desktop_app [unreal] - Add app menu launcher (.desktop) for Unreal Engine"
@@ -14508,6 +15056,8 @@ function agent --description "Run commands safely: executes safe commands automa
         echo "  classify_files         - Auto-sort files by extension (images, docs, code)"
         echo "  google setup|login     - Google Calendar + Gmail (browser OAuth sign-in)"
         echo "  google gmail|calendar  - Read mail or list events (after login)"
+        echo "  gemini_cli <prompt>    - Google Gemini CLI agent (npm @google/gemini-cli)"
+        echo "  arka gemini status     - Check Gemini CLI install (same as gemini_cli status)"
         echo "  cleanup_downloads      - Remove .zip/.deb/.tar.gz clutter from Downloads"
         echo "  watch_zip              - Watch a folder and auto-extract new .zip files"
         echo "  monitor_x <handle>     - Monitor a Twitter/X profile for new tweets"
@@ -14517,9 +15067,13 @@ function agent --description "Run commands safely: executes safe commands automa
         echo "  youtube_transcript     - Fetch/summarize YouTube video captions"
         echo "  media_transcript       - Transcribe/summarize local mp3, mp4, wav, …"
         echo "  summarize_url <url>    - Summarize a web page or article"
-        echo "  daily_brief            - Weather + top news headlines"
+        echo "  post_x <url>           - Shorten URL (<=40 words); draft by default, --post when authed"
+        echo "  post_x install         - Install bird CLI (@steipete/bird; for --post with bird cookies)"
+        echo "  daily_brief            - Weather + news headlines (--url-limit for excerpts)"
         echo "  wifi_info              - Current Wi-Fi network and signal"
         echo "  generate_image <prompt> - Generate images with Gemini"
+        echo "  ascii_art HELLO        - ASCII banner (figlet / pyfiglet)"
+        echo "  ascii_art --from-image photo.jpg - Image to ASCII art"
         echo "  chart line AAPL MSFT --range 3mo  - Stock price chart (matplotlib PNG)"
         echo "  chart bar --data 'Apple:230,Samsung:210' - Bar graph from numbers"
         echo "  drawing_ask plan.pdf <question>   - Blueprint/drawing vision (Gemini)"
@@ -14629,6 +15183,16 @@ function agent --description "Run commands safely: executes safe commands automa
 
     if test -z "$interpreted"; and _agent_is_chart_request "$cmd"
         set interpreted (_agent_build_chart_cmd "$cmd")
+        set route_source offline
+    end
+
+    if test -z "$interpreted"; and _agent_is_model_select_request "$cmd"
+        set interpreted (_agent_build_model_select_cmd "$cmd")
+        set route_source offline
+    end
+
+    if test -z "$interpreted"; and _agent_is_ascii_art_request "$cmd"
+        set interpreted (_agent_build_ascii_art_cmd "$cmd")
         set route_source offline
     end
 
@@ -14860,6 +15424,16 @@ function agent --description "Run commands safely: executes safe commands automa
         if test -n "$interpreted"
             set route_source offline
         end
+    else if _agent_is_model_select_request "$cmd"
+        set interpreted (_agent_build_model_select_cmd "$cmd")
+        if test -n "$interpreted"
+            set route_source offline
+        end
+    else if _agent_is_ascii_art_request "$cmd"
+        set interpreted (_agent_build_ascii_art_cmd "$cmd")
+        if test -n "$interpreted"
+            set route_source offline
+        end
     else if _agent_is_drawing_ask_request "$cmd"
         set interpreted (_agent_build_drawing_ask_cmd "$cmd")
         if test -n "$interpreted"
@@ -14896,6 +15470,9 @@ function agent --description "Run commands safely: executes safe commands automa
     else if _agent_is_generate_thumbnail_request "$clean_cmd"
         set interpreted (_agent_build_generate_thumbnail_cmd "$cmd")
         set route_source offline
+    else if _agent_is_ascii_art_request "$clean_cmd"
+        set interpreted (_agent_build_ascii_art_cmd "$cmd")
+        set route_source offline
     else if _agent_is_generate_image_request "$clean_cmd"
         set interpreted (_agent_build_generate_image_cmd "$cmd")
         set route_source offline
@@ -14910,6 +15487,8 @@ function agent --description "Run commands safely: executes safe commands automa
             set interpreted "generate_video"
         end
     else if string match -qr '(?i)^(generate|create|make|draw|paint|sketch|show)\s+(?:an?\s+)?(?:image|picture|photo|art|drawing|sketch|painting|illustration|portrait|landscape)\b|^(draw|paint|sketch)\s+' "$clean_cmd"
+        and not string match -qr '(?i)\bascii\s+(?:art|banner)\b' "$clean_cmd"
+        and not string match -qr '(?i)\bfiglet\b' "$clean_cmd"
         set -l img_prompt (string replace -r -i '^(?:generate|create|draw|paint|make|sketch)\s+(?:an?\s+)?(?:image|picture|photo|art|drawing|painting|sketch|illustration|portrait|landscape)?\s*(?:of)?\s*' '' "$cmd" | string trim)
         if test -n "$img_prompt"
             set interpreted "generate_image "(string escape --style=script -- $img_prompt)
@@ -14956,6 +15535,9 @@ function agent --description "Run commands safely: executes safe commands automa
         else
             set interpreted "youtube_transcript"
         end
+    else if _agent_is_post_x_request "$cmd"
+        set interpreted (_agent_build_post_x_cmd "$cmd")
+        set route_source offline
     else if string match -qr '(?i)(summarize (this |the )?(url|page|article|website|link)|summarize https?://|summary of https?://)' "$clean_cmd"
         set -l page_url (string match -r 'https?://[^\s]+' "$cmd")
         if test (count $page_url) -ge 1
@@ -14963,8 +15545,8 @@ function agent --description "Run commands safely: executes safe commands automa
         else
             set interpreted "summarize_url"
         end
-    else if string match -qr '(?i)(daily brief|morning brief|news brief|today.s brief)' "$clean_cmd"
-        set interpreted "daily_brief"
+    else if _agent_is_daily_brief_request "$cmd"
+        set interpreted "daily_brief $cmd"
     else if string match -qr '(?i)(wifi|wi-fi|wireless).*(info|network|signal|ssid)|what wifi|am i on wifi' "$clean_cmd"
         set interpreted "wifi_info"
     else if string match -qr '(?i)(live\s+(sports?\s+)?scores?|sports?\s+scores?|match\s+scores?|game\s+scores?|ipl\s+(live|score|scores)|nfl\s+scores?|nba\s+scores?|cricket\s+(live|score|scores)|soccer\s+scores?|football\s+scores?|who\s+is\s+winning|today\s*s?\s+(ipl|match|game)s?\s+score|what\s+(is|are)\s+(the\s+)?(live\s+)?(ipl|nfl|nba|cricket|soccer|football|sports?)\s+score)' "$clean_cmd"
@@ -15038,6 +15620,17 @@ function agent --description "Run commands safely: executes safe commands automa
     else if _agent_is_github_repo_request "$cmd"
         set interpreted (_agent_route_github_repo "$cmd")
         set route_source offline
+    else if _agent_is_competitions_request "$cmd"
+        set interpreted (_agent_route_competitions "$cmd")
+        set route_source offline
+    else if _agent_is_route_learn_request "$cmd"
+        set interpreted (_agent_route_learn_management "$cmd")
+        set route_source offline
+    else if set -l learned_match (_arka_match_learned_route "$cmd")
+        if test -n "$learned_match"
+            set interpreted $learned_match
+            set route_source learned
+        end
     else if _agent_is_survival_lang_request "$cmd"
         set interpreted (_agent_build_survival_lang_cmd "$cmd")
         set route_source offline
@@ -15480,6 +16073,14 @@ function agent --description "Run commands safely: executes safe commands automa
         set -l chart_cmd (_agent_build_chart_cmd "$cmd")
         echo (set_color yellow)"💡 [Chart → $chart_cmd]"(set_color normal)
         _agent_dispatch_one "$chart_cmd"
+    else if _agent_is_model_select_request "$cmd"
+        set -l model_cmd (_agent_build_model_select_cmd "$cmd")
+        echo (set_color yellow)"💡 [Model advisor → $model_cmd]"(set_color normal)
+        _agent_dispatch_one "$model_cmd"
+    else if _agent_is_ascii_art_request "$cmd"
+        set -l ascii_cmd (_agent_build_ascii_art_cmd "$cmd")
+        echo (set_color yellow)"💡 [ASCII → $ascii_cmd]"(set_color normal)
+        _agent_dispatch_one "$ascii_cmd"
     else if _agent_is_drawing_ask_request "$cmd"
         set -l drawing_cmd (_agent_build_drawing_ask_cmd "$cmd")
         echo (set_color yellow)"💡 [Drawing → $drawing_cmd]"(set_color normal)

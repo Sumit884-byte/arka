@@ -7,8 +7,10 @@ import argparse
 import base64
 import os
 import re
+import shlex
 import sys
 import webbrowser
+from email.message import EmailMessage
 from html import unescape as html_unescape
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -115,7 +117,7 @@ def cmd_status() -> int:
         return 1
     email = tokens.get("email") or "unknown"
     print(f"Signed in as {email}")
-    print(f"Scopes: Gmail (read/send), Calendar (read/events)")
+    print(f"Scopes: Gmail (read/compose/send), Calendar (read/events)")
     print(f"Token file: {oauth._token_file()}")
     return 0
 
@@ -637,6 +639,272 @@ def _parse_gmail_focus(text: str) -> str:
     return focus
 
 
+_DRAFT_TRIGGER = re.compile(
+    r"(?i)(?:"
+    r"\b(?:draft|compose|write)\s+(?:an?\s+)?email\b"
+    r"|\bemail\s+(?:to|for)\s+"
+    r"|\bsend\s+(?:an?\s+)?(?:email\s+)?to\s+"
+    r")"
+)
+_EMAIL_ADDR = re.compile(r"[\w.+-]+@[\w.-]+\.\w+")
+_BIRTHDAY_INTENT = re.compile(
+    r"(?i)^(?:happy\s+birthday|birthday\s+wishes?|birthday\s+greeting|wish(?:ing)?\s+(?:them\s+)?(?:a\s+)?happy\s+birthday)(?:[!.\s]*)$"
+)
+_THANK_YOU_INTENT = re.compile(r"(?i)^(?:thank\s+you|thanks)(?:\s+for\s+.+)?[!.\s]*$")
+
+
+def _sender_signoff(sender_email: str) -> str:
+    if not sender_email or "@" not in sender_email:
+        return "Best wishes,"
+    local = sender_email.split("@", 1)[0]
+    name = re.split(r"[._+-]", local)[0]
+    if len(name) >= 2 and not re.fullmatch(r"\d+", name):
+        return f"Best wishes,\n{name[:1].upper()}{name[1:]}"
+    return "Best wishes,"
+
+
+def _normalize_draft_about(about: str) -> str:
+    """Strip shell-quote damage from fish naive space-splitting."""
+    topic = about.strip().strip("'\"")
+    if topic.lower() == "happy":
+        return "happy birthday"
+    if topic.lower().startswith("happy ") and "birthday" not in topic.lower():
+        return f"{topic} birthday"
+    return topic
+
+
+def _draft_intent_template(about: str, *, sender_email: str = "") -> tuple[str, str] | None:
+    """Deterministic drafts for short, unambiguous intents (skip LLM drift)."""
+    topic = _normalize_draft_about(about)
+    if not topic:
+        return None
+    signoff = _sender_signoff(sender_email)
+    if _BIRTHDAY_INTENT.match(topic) or topic.lower() in {"birthday", "happy birthday"}:
+        return (
+            "Happy Birthday!",
+            f"Hi,\n\nWishing you a very happy birthday! Hope your day is filled with joy, laughter, and everything you love.\n\n{signoff}",
+        )
+    if _THANK_YOU_INTENT.match(topic):
+        detail = re.sub(r"(?i)^thank\s+you\s+", "", topic).strip() or "your help"
+        if detail.lower().startswith("for "):
+            detail = detail[4:].strip()
+        return (
+            "Thank you",
+            f"Hi,\n\nThank you for {detail}. I really appreciate it.\n\n{signoff}",
+        )
+    return None
+
+
+def parse_gmail_draft_request(text: str) -> dict[str, str] | None:
+    """Parse NL like ``draft an email to a@b.com about …``."""
+    t = text.strip()
+    if not t or not _DRAFT_TRIGGER.search(t):
+        return None
+    if re.search(r"(?i)\b(?:unread|inbox|summarize|check\s+(?:my\s+)?(?:mail|email|gmail))\b", t):
+        return None
+    emails = _EMAIL_ADDR.findall(t)
+    if not emails:
+        return None
+    to_addr = emails[0]
+    about = ""
+    for pat in (
+        r"(?i)\b(?:about|regarding|re:|on the topic of)\s+(.+)",
+        r"(?i)\b(?:to|for)\s+\S+@\S+\s+(?:about|regarding)\s+(.+)",
+    ):
+        match = re.search(pat, t)
+        if match:
+            about = match.group(1).strip()
+            break
+    if not about:
+        for pat in (
+            r"(?i)\b(?:to|for)\s+" + re.escape(to_addr) + r"\s+(.+)",
+        ):
+            match = re.search(pat, t)
+            if match:
+                about = match.group(1).strip()
+                break
+    if not about:
+        about = _DRAFT_TRIGGER.sub("", t).strip()
+        about = re.sub(r"(?i)\bto\s+" + re.escape(to_addr) + r"\b", "", about).strip()
+    about = about.strip(" .,-")
+    if len(about) < 3:
+        return None
+    return {"to": to_addr, "about": about}
+
+
+def build_gmail_draft_argv_from_nl(text: str) -> list[str]:
+    parsed = parse_gmail_draft_request(text)
+    if not parsed:
+        return []
+    return ["gmail", "--draft", "--to", parsed["to"], "--about", parsed["about"]]
+
+
+def _parse_compose_output(text: str) -> tuple[str, str]:
+    subject = ""
+    body_lines: list[str] = []
+    mode = "seek"
+    for line in text.splitlines():
+        stripped = line.strip()
+        if mode == "seek":
+            subj = re.match(r"(?i)^subject:\s*(.+)", stripped)
+            if subj:
+                subject = subj.group(1).strip()
+                mode = "body"
+                continue
+            if re.match(r"(?i)^body:\s*$", stripped):
+                mode = "body"
+                continue
+        if mode == "body":
+            if re.match(r"(?i)^body:\s*$", stripped):
+                continue
+            body_lines.append(line.rstrip())
+    body = "\n".join(body_lines).strip()
+    if not subject and not body:
+        lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+        if not lines:
+            return "", ""
+        if len(lines) == 1:
+            return lines[0][:120], lines[0]
+        return lines[0][:120], "\n".join(lines[1:]).strip()
+    return subject, body
+
+
+def compose_draft_email(*, to: str, about: str, sender_email: str = "") -> tuple[str, str, str]:
+    about = _normalize_draft_about(about)
+    templated = _draft_intent_template(about, sender_email=sender_email)
+    if templated:
+        return templated[0], templated[1], "built-in template (no LLM)"
+
+    from arka.llm.cli import llm_complete
+
+    sender = sender_email or "the sender"
+    system = (
+        "You write email drafts. The user's topic is the PRIMARY intent — follow it literally.\n"
+        "Match tone to the topic: warm/casual for birthdays and thanks, professional for work.\n"
+        "Output EXACTLY:\n"
+        "Subject: <one line that reflects the topic>\n"
+        "Body:\n<plain-text email body>\n\n"
+        "Rules: no markdown, no essay, no text after the body. Under 200 words unless needed. "
+        "Do not change or ignore the user's topic."
+    )
+    user = (
+        f"To: {to}\n"
+        f"From: {sender}\n"
+        f"Write an email about this topic (subject and body must match it): {about}"
+    )
+    raw = llm_complete(system, user, temperature=0.3, task="summarize").strip()
+    subject, body = _parse_compose_output(raw)
+    if not subject:
+        subject = about[:80].strip().rstrip(".") or "Message"
+    if not body:
+        body = raw.strip()
+    composer = "unknown model"
+    try:
+        from arka.output import active_model_label
+        from arka.llm.fallback import model_label
+
+        composer = active_model_label() or model_label(task="summarize") or composer
+    except Exception:
+        pass
+    return subject, body, composer
+
+
+def _encode_draft_raw(*, to: str, subject: str, body: str, sender: str = "") -> str:
+    msg = EmailMessage()
+    if sender:
+        msg["From"] = sender
+    msg["To"] = to
+    msg["Subject"] = subject
+    msg.set_content(body)
+    return base64.urlsafe_b64encode(msg.as_bytes()).decode().rstrip("=")
+
+
+def _gmail_draft_error_hint(exc: RuntimeError) -> str:
+    msg = str(exc).lower()
+    if "403" in msg and any(k in msg for k in ("insufficient", "scope", "permission", "access not configured")):
+        return "Tip: re-authorize Gmail compose — run: arka google login"
+    return ""
+
+
+def create_gmail_draft(*, to: str, subject: str, body: str, sender: str = "") -> str:
+    raw = _encode_draft_raw(to=to, subject=subject, body=body, sender=sender)
+    try:
+        result = oauth.api_request(
+            "https://gmail.googleapis.com/gmail/v1/users/me/drafts",
+            method="POST",
+            body={"message": {"raw": raw}},
+        )
+    except RuntimeError as exc:
+        hint = _gmail_draft_error_hint(exc)
+        if hint:
+            raise RuntimeError(f"{exc}\n{hint}") from exc
+        raise
+    draft_id = str(result.get("id") or "")
+    if not draft_id:
+        raise RuntimeError("Gmail API did not return a draft id")
+    return draft_id
+
+
+def cmd_gmail_draft(args: argparse.Namespace) -> int:
+    to = str(getattr(args, "to", None) or "").strip()
+    about = str(getattr(args, "about", None) or "").strip()
+    subject = str(getattr(args, "subject", None) or "").strip()
+    body = str(getattr(args, "body", None) or "").strip()
+    nl_text = " ".join(getattr(args, "draft_text", []) or []).strip()
+
+    if not to and nl_text:
+        parsed = parse_gmail_draft_request(nl_text)
+        if parsed:
+            to = parsed["to"]
+            about = parsed["about"]
+    if not to:
+        print(
+            "Usage: arka google gmail --draft --to EMAIL --about \"topic\"\n"
+            "       arka google gmail --draft \"email to you@example.com about …\"",
+            file=sys.stderr,
+        )
+        return 1
+    if not about and not body:
+        print("Provide --about or --body for the draft content.", file=sys.stderr)
+        return 1
+
+    email = oauth.signed_in_email() or ""
+    composer = ""
+    if not body:
+        gen_subject, gen_body, composer = compose_draft_email(to=to, about=about, sender_email=email)
+        if not subject:
+            subject = gen_subject
+        body = gen_body
+
+    if getattr(args, "dry_run", False):
+        print(f"To: {to}")
+        print(f"Subject: {subject}")
+        if composer:
+            print(f"Composer: {composer}")
+        print()
+        print(body)
+        return 0
+
+    draft_id = create_gmail_draft(to=to, subject=subject, body=body, sender=email)
+    print(f"✓ Gmail draft saved (id: {draft_id})")
+    print(f"  To: {to}")
+    print(f"  Subject: {subject}")
+    if composer:
+        print(f"  Composer: {composer}")
+    if email:
+        print(f"  Account: {email}")
+    print("  Open Gmail → Drafts to review before sending.")
+    return 0
+
+
+def cmd_parse_draft(args: argparse.Namespace) -> int:
+    argv = build_gmail_draft_argv_from_nl(" ".join(args.text))
+    if not argv:
+        return 1
+    print(" ".join(shlex.quote(a) for a in argv))
+    return 0
+
+
 def build_gmail_argv_from_nl(text: str, *, summarize: bool = False) -> list[str]:
     """Turn natural language into ``gmail`` CLI args."""
     t = text.strip()
@@ -669,6 +937,9 @@ def build_gmail_argv_from_nl(text: str, *, summarize: bool = False) -> list[str]
 
 
 def cmd_gmail(args: argparse.Namespace) -> int:
+    if getattr(args, "draft", False):
+        return cmd_gmail_draft(args)
+
     rows, query, range_label, estimate = _load_gmail_rows(args)
     email = oauth.signed_in_email()
 
@@ -1153,6 +1424,29 @@ def main(argv: list[str] | None = None) -> int:
         "--focus",
         help="Focus for --summarize (default: general inbox summary)",
     )
+    p_gmail.add_argument(
+        "--draft",
+        action="store_true",
+        help="Compose with AI and save a Gmail draft (requires login)",
+    )
+    p_gmail.add_argument("--to", help="Draft recipient email (with --draft)")
+    p_gmail.add_argument("--about", help="What the draft should say (with --draft)")
+    p_gmail.add_argument("--subject", help="Override draft subject (with --draft)")
+    p_gmail.add_argument("--body", help="Use this body instead of AI (with --draft)")
+    p_gmail.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print draft without saving to Gmail",
+    )
+    p_gmail.add_argument(
+        "draft_text",
+        nargs="*",
+        help="Natural-language draft request when using --draft without --to/--about",
+    )
+
+    p_parse_draft = sub.add_parser("parse-draft", help="Parse NL → gmail --draft args (internal)")
+    p_parse_draft.add_argument("text", nargs="+")
+    p_parse_draft.set_defaults(func=cmd_parse_draft)
 
     p_cal = sub.add_parser("calendar", aliases=["cal"], help="List calendar events")
     p_cal.add_argument("--today", action="store_true", help="Events today (default)")
@@ -1184,6 +1478,9 @@ def main(argv: list[str] | None = None) -> int:
     if not args.cmd or args.cmd == "help":
         parser.print_help()
         return 0
+
+    if args.cmd == "parse-draft":
+        return cmd_parse_draft(args)
 
     if args.cmd == "setup":
         _setup_instructions(open_console=not getattr(args, "no_browser", False))

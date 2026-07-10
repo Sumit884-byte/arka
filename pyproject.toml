@@ -50,6 +50,9 @@ pdf = [
 charts = [
     "matplotlib>=3.8",
 ]
+ascii = [
+    "pyfiglet>=1.0.0",
+]
 drawings = [
     "Pillow>=10.0",
     "pymupdf>=1.24",

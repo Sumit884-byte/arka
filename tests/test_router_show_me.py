@@ -32,7 +32,7 @@ class DescribeImageParseTests(unittest.TestCase):
 
 
 class RouterShowMeTests(unittest.TestCase):
-    def test_routes_kaggle_competitions_to_web_answer(self) -> None:
+    def test_routes_kaggle_competitions_to_competitions(self) -> None:
         for query in (
             "show me competitions available on kaggle",
             "show me competetions available on kaggle",
@@ -42,7 +42,7 @@ class RouterShowMeTests(unittest.TestCase):
                     result = route(query)
                 self.assertIsNotNone(result)
                 assert result is not None
-                self.assertEqual(result.skill.split()[0], "web_answer")
+                self.assertEqual(result.skill.split()[0], "competitions")
                 self.assertIn("kaggle", result.skill.lower())
 
     def test_does_not_route_kaggle_competitions_to_describe_image(self) -> None:

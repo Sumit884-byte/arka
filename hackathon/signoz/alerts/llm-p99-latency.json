@@ -1,0 +1,81 @@
+{
+  "alert": "Arka LLM p99 latency high",
+  "alertType": "TRACES_BASED_ALERT",
+  "ruleType": "threshold_rule",
+  "version": "v5",
+  "schemaVersion": "v2alpha1",
+  "evalWindow": "5m0s",
+  "frequency": "1m0s",
+  "description": "p99 LLM attempt latency exceeded {{$threshold}}ms (current: {{$value}}ms). Check model inference vs network.",
+  "summary": "Arka LLM p99 latency degraded",
+  "disabled": false,
+  "labels": {
+    "severity": "warning",
+    "team": "arka",
+    "pillar": "e2e-tracing"
+  },
+  "condition": {
+    "compositeQuery": {
+      "queryType": "builder",
+      "panelType": "graph",
+      "unit": "ms",
+      "queries": [
+        {
+          "type": "builder_query",
+          "spec": {
+            "name": "A",
+            "signal": "traces",
+            "stepInterval": 60,
+            "aggregations": [
+              {
+                "expression": "p99(arka.llm.duration_ms)"
+              }
+            ],
+            "filter": {
+              "expression": "service.name = 'arka' AND name = 'arka.llm.attempt'"
+            },
+            "groupBy": [
+              {
+                "name": "gen_ai.provider.name",
+                "fieldContext": "attribute",
+                "fieldDataType": "string"
+              }
+            ],
+            "legend": "{{gen_ai.provider.name}}"
+          }
+        }
+      ]
+    },
+    "selectedQueryName": "A",
+    "thresholds": {
+      "kind": "basic",
+      "spec": [
+        {
+          "name": "warning",
+          "op": "above",
+          "matchType": "at_least_once",
+          "target": 30000,
+          "targetUnit": "ms",
+          "recoveryTarget": null,
+          "channels": []
+        }
+      ]
+    }
+  },
+  "evaluation": {
+    "kind": "rolling",
+    "spec": {
+      "evalWindow": "5m0s",
+      "frequency": "1m0s"
+    }
+  },
+  "notificationSettings": {
+    "groupBy": ["gen_ai.provider.name"],
+    "renotify": {
+      "enabled": true,
+      "interval": "30m0s",
+      "alertStates": ["firing"]
+    },
+    "usePolicy": false
+  }
+}

@@ -264,7 +264,18 @@ def infer_provider_from_model(model_id: str) -> str | None:
         return "minimax"
     if low.startswith("venice-"):
         return "venice"
+    if low.startswith("mistral-") or low.startswith("codestral"):
+        return "mistral"
+    if low.startswith("command-"):
+        return "cohere"
+    if low.startswith("sonar"):
+        return "perplexity"
+    if low.startswith("accounts/fireworks/"):
+        return "fireworks"
     if "/" in mid and not mid.startswith(("http://", "https://")):
+        pref = (env("AI_PREFERRED_PROVIDER") or env("LLM_PROVIDER")).lower()
+        if pref in {"together", "fireworks", "huggingface", "hf", "openrouter"}:
+            return "huggingface" if pref == "hf" else pref
         return "openrouter"
     if ":" in mid or low.startswith(("qwen", "llama3", "minimax-m", "mistral", "phi")):
         return "ollama"
@@ -303,6 +314,13 @@ def parse_chain(raw: str) -> list[tuple[str, str]]:
                 "openrouter",
                 "litellm",
                 "lmstudio",
+                "mistral",
+                "cohere",
+                "together",
+                "fireworks",
+                "perplexity",
+                "huggingface",
+                "hf",
             }:
                 provider, model_id = head, tail
             else:
@@ -380,10 +398,13 @@ def _skill_models_from_data(data: Any) -> dict[str, list[tuple[str, str]]]:
         return {}
     out: dict[str, list[tuple[str, str]]] = {}
     for key, value in data.items():
-        task_key = normalize_task(str(key))
+        key_raw = str(key).strip()
+        if not key_raw or key_raw.startswith("_"):
+            continue
+        key_norm = key_raw.lower().replace("-", "_")
         entries = _parse_skill_model_value(value)
         if entries:
-            out[task_key] = entries
+            out[key_norm] = entries
     return out
 
 
@@ -442,6 +463,14 @@ def _load_skill_models_config() -> dict[str, list[tuple[str, str]]]:
             return inline
 
     file_map = _skill_models_from_data(data)
+    profiles = data.get("_profiles") if isinstance(data, dict) else None
+    if isinstance(profiles, dict):
+        for profile_key, value in profiles.items():
+            key_norm = str(profile_key).strip().lower().replace("-", "_")
+            entries = _parse_skill_model_value(value)
+            if key_norm and entries:
+                file_map[key_norm] = _dedupe_chain(file_map.get(key_norm, []) + entries)
+
     merged = dict(inline)
     for task_key, entries in file_map.items():
         merged[task_key] = _dedupe_chain(merged.get(task_key, []) + entries)
@@ -457,21 +486,67 @@ def _route_model_entries() -> list[tuple[str, str]]:
     return parse_chain(raw)
 
 
-def _skill_model_entries(task: str) -> list[tuple[str, str]]:
-    """Per-task model guidance — prepended to the auto-built chain.
+def _active_skill_name() -> str:
+    try:
+        from arka.llm.skill_profiles import normalize_skill_name
+
+        return normalize_skill_name(env("ARKA_SKILL"))
+    except ImportError:
+        return normalize_skill_name_local(env("ARKA_SKILL"))
+
+
+def normalize_skill_name_local(skill: str | None) -> str:
+    raw = (skill or "").strip().lower()
+    if not raw:
+        return ""
+    return raw.replace("-", "_")
+
+
+def resolve_llm_context(*, task: str | None = None, skill: str | None = None) -> tuple[str, str]:
+    """Return (task_profile, skill_name) for model chain resolution."""
+    try:
+        from arka.llm.skill_profiles import normalize_skill_name, skill_task_profile
+    except ImportError:
+        skill_key = normalize_skill_name_local(skill) or normalize_skill_name_local(env("ARKA_SKILL"))
+        if task:
+            return normalize_task(task), skill_key
+        if skill_key:
+            return "default", skill_key
+        return normalize_task(None), ""
+
+    skill_key = normalize_skill_name(skill) or _active_skill_name()
+    if task:
+        return normalize_task(task), skill_key
+    if skill_key:
+        return skill_task_profile(skill_key), skill_key
+    return normalize_task(None), ""
+
+
+def _skill_model_entries(task: str, *, skill: str | None = None) -> list[tuple[str, str]]:
+    """Per-skill and per-task model guidance — prepended to the auto-built chain.
 
     Precedence (first wins at attempt time; all are prepended in this order):
-      1. SKILL_MODEL_<TASK> env
-      2. SKILL_MODELS / LLM_SKILL_MODELS map entries for this task
-      3. ROUTE_MODEL / ROUTING_MODEL (route task only)
+      1. SKILL_MODEL_<SKILL> env (e.g. SKILL_MODEL_WEB_ANSWER)
+      2. SKILL_MODELS / LLM_SKILL_MODELS map entry for this skill name
+      3. Profile default from llm-skill-models.json "_profiles" for the task profile
+      4. SKILL_MODEL_<TASK> env
+      5. SKILL_MODELS / LLM_SKILL_MODELS map entries for task profile
+      6. ROUTE_MODEL / ROUTING_MODEL (route task only)
     """
     task_key = normalize_task(task)
     task_upper = task_key.upper()
+    skill_key = normalize_skill_name_local(skill) or _active_skill_name()
     entries: list[tuple[str, str]] = []
 
-    entries.extend(parse_chain(env(f"SKILL_MODEL_{task_upper}")))
+    if skill_key:
+        skill_upper = skill_key.upper()
+        entries.extend(parse_chain(env(f"SKILL_MODEL_{skill_upper}")))
 
     file_map = _load_skill_models_config()
+    if skill_key:
+        entries.extend(file_map.get(skill_key, []))
+
+    entries.extend(parse_chain(env(f"SKILL_MODEL_{task_upper}")))
     entries.extend(file_map.get(task_key, []))
 
     if task_key == "route":
@@ -861,7 +936,7 @@ def _expand_provider_models(
             add(provider, model_id)
 
 
-def build_default_chain(*, task: str = "default") -> list[tuple[str, str]]:
+def build_default_chain(*, task: str = "default", skill: str | None = None) -> list[tuple[str, str]]:
     explicit = _explicit_fallback_chain(task)
     if explicit:
         return explicit
@@ -924,7 +999,7 @@ def build_default_chain(*, task: str = "default") -> list[tuple[str, str]]:
         ordered = pref_first + pref_rest
 
     guidance = _guidance_entries()
-    skill_models = _skill_model_entries(task)
+    skill_models = _skill_model_entries(task, skill=skill)
     if skill_models or guidance:
         ordered = _prepend_chain(skill_models + guidance, ordered)
 
@@ -1161,13 +1236,14 @@ class LlmFallbackEngine:
     """Try providers/models in order until one succeeds."""
 
     task: str = "default"
+    skill: str = ""
     chain: list[tuple[str, str]] | None = None
     store: ExhaustionStore = field(default_factory=lambda: EXHAUSTION)
 
     def candidates(self) -> list[tuple[str, str]]:
         if self.chain:
             return list(self.chain)
-        return build_default_chain(task=self.task)
+        return build_default_chain(task=self.task, skill=self.skill or None)
 
     def complete(self, system: str, user: str, *, temperature: float = 0.2) -> CompletionResult:
         from agno.agent import Agent
@@ -1463,11 +1539,14 @@ def llm_complete(
     temperature: float = 0.2,
     *,
     task: str | None = None,
+    skill: str | None = None,
     chain: list[tuple[str, str]] | None = None,
 ) -> str:
-    if task or chain:
+    resolved_task, resolved_skill = resolve_llm_context(task=task, skill=skill)
+    if task or skill or chain:
         engine = LlmFallbackEngine(
-            task=normalize_task(task) if task else "default",
+            task=resolved_task,
+            skill=resolved_skill,
             chain=chain,
         )
     else:
@@ -1482,11 +1561,14 @@ def llm_stream_complete(
     temperature: float = 0.2,
     *,
     task: str | None = None,
+    skill: str | None = None,
     chain: list[tuple[str, str]] | None = None,
 ) -> Iterator[str]:
-    if task or chain:
+    resolved_task, resolved_skill = resolve_llm_context(task=task, skill=skill)
+    if task or skill or chain:
         engine = LlmFallbackEngine(
-            task=normalize_task(task) if task else "default",
+            task=resolved_task,
+            skill=resolved_skill,
             chain=chain,
         )
     else:
@@ -1502,8 +1584,9 @@ def llm_last_model() -> tuple[str, str] | None:
     return _LAST_MODEL
 
 
-def ordered_model_candidates(*, task: str | None = None) -> list[tuple[str, str]]:
-    return build_default_chain(task=normalize_task(task))
+def ordered_model_candidates(*, task: str | None = None, skill: str | None = None) -> list[tuple[str, str]]:
+    resolved_task, resolved_skill = resolve_llm_context(task=task, skill=skill)
+    return build_default_chain(task=resolved_task, skill=resolved_skill or None)
 
 
 def builtin_tail_chain() -> list[tuple[str, str]]:
@@ -1516,11 +1599,12 @@ def reset_llm_exhaustion() -> None:
     reset_key_rotators()
 
 
-def model_label(*, prefer_last: bool = True, task: str | None = None) -> str:
+def model_label(*, prefer_last: bool = True, task: str | None = None, skill: str | None = None) -> str:
     if prefer_last and _LAST_MODEL:
         provider, model_id = _LAST_MODEL
         return f"{provider}/{model_id}"
-    for provider, model_id in ordered_model_candidates(task=task):
+    resolved_task, resolved_skill = resolve_llm_context(task=task, skill=skill)
+    for provider, model_id in ordered_model_candidates(task=resolved_task, skill=resolved_skill or None):
         if not provider_available(provider):
             continue
         if EXHAUSTION.exhausted(provider, model_id):

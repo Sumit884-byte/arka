@@ -32,8 +32,17 @@ def provider_specs() -> tuple[ProviderSpec, ...]:
     return PROVIDERS
 
 
+PROVIDER_SLUG_ALIASES = {
+    "hf": "huggingface",
+    "kimi": "moonshot",
+    "google": "gemini",
+    "glm": "zai",
+}
+
+
 def get_provider(slug: str) -> ProviderSpec | None:
     key = (slug or "").strip().lower()
+    key = PROVIDER_SLUG_ALIASES.get(key, key)
     for spec in PROVIDERS:
         if spec.slug == key:
             return spec
@@ -72,6 +81,15 @@ def provider_api_key(spec: ProviderSpec) -> str:
         if val:
             return val
     return ""
+
+
+def provider_catalog_models(spec: ProviderSpec) -> list[str]:
+    """Default model catalog for a provider (env overrides not applied)."""
+    if spec.default_models:
+        return list(spec.default_models)
+    if spec.default_model:
+        return [spec.default_model]
+    return []
 
 
 def provider_model_ids(spec: ProviderSpec) -> list[str]:
@@ -236,6 +254,85 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
         default_base_url="https://openrouter.ai/api/v1",
         models_env="OPENROUTER_MODELS",
         default_models=("anthropic/claude-3.5-sonnet", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini"),
+    ),
+    ProviderSpec(
+        slug="mistral",
+        display_name="Mistral AI",
+        env_keys=("MISTRAL_API_KEY", "MISTRAL_API_KEYS"),
+        api_key_env="MISTRAL_API_KEY",
+        default_model="mistral-small-latest",
+        kind="openai_compatible",
+        base_url_env="MISTRAL_API_BASE",
+        default_base_url="https://api.mistral.ai/v1",
+        models_env="MISTRAL_MODELS",
+        default_models=("mistral-small-latest", "mistral-large-latest", "codestral-latest"),
+    ),
+    ProviderSpec(
+        slug="cohere",
+        display_name="Cohere",
+        env_keys=("COHERE_API_KEY", "COHERE_API_KEYS"),
+        api_key_env="COHERE_API_KEY",
+        default_model="command-r-plus-08-2024",
+        kind="openai_compatible",
+        base_url_env="COHERE_API_BASE",
+        default_base_url="https://api.cohere.com/compatibility/v1",
+        models_env="COHERE_MODELS",
+        default_models=("command-r-plus-08-2024", "command-r-08-2024", "command-a-03-2025"),
+    ),
+    ProviderSpec(
+        slug="together",
+        display_name="Together AI",
+        env_keys=("TOGETHER_API_KEY", "TOGETHER_API_KEYS"),
+        api_key_env="TOGETHER_API_KEY",
+        default_model="meta-llama/Llama-3.3-70B-Instruct-Turbo",
+        kind="openai_compatible",
+        base_url_env="TOGETHER_API_BASE",
+        default_base_url="https://api.together.xyz/v1",
+        models_env="TOGETHER_MODELS",
+        default_models=(
+            "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+            "deepseek-ai/DeepSeek-R1",
+            "Qwen/Qwen2.5-72B-Instruct-Turbo",
+        ),
+    ),
+    ProviderSpec(
+        slug="fireworks",
+        display_name="Fireworks AI",
+        env_keys=("FIREWORKS_API_KEY", "FIREWORKS_API_KEYS"),
+        api_key_env="FIREWORKS_API_KEY",
+        default_model="accounts/fireworks/models/llama-v3p3-70b-instruct",
+        kind="openai_compatible",
+        base_url_env="FIREWORKS_API_BASE",
+        default_base_url="https://api.fireworks.ai/inference/v1",
+        models_env="FIREWORKS_MODELS",
+        default_models=(
+            "accounts/fireworks/models/llama-v3p3-70b-instruct",
+            "accounts/fireworks/models/deepseek-r1",
+        ),
+    ),
+    ProviderSpec(
+        slug="perplexity",
+        display_name="Perplexity",
+        env_keys=("PERPLEXITY_API_KEY", "PERPLEXITY_API_KEYS"),
+        api_key_env="PERPLEXITY_API_KEY",
+        default_model="sonar",
+        kind="openai_compatible",
+        base_url_env="PERPLEXITY_API_BASE",
+        default_base_url="https://api.perplexity.ai",
+        models_env="PERPLEXITY_MODELS",
+        default_models=("sonar", "sonar-pro", "sonar-reasoning"),
+    ),
+    ProviderSpec(
+        slug="huggingface",
+        display_name="Hugging Face Inference",
+        env_keys=("HF_TOKEN", "HUGGINGFACE_API_KEY", "HF_API_KEY", "HUGGINGFACE_API_KEYS"),
+        api_key_env="HF_TOKEN",
+        default_model="meta-llama/Meta-Llama-3-8B-Instruct",
+        kind="openai_compatible",
+        base_url_env="HF_API_BASE",
+        default_base_url="https://api-inference.huggingface.co/v1",
+        models_env="HF_MODELS",
+        default_models=("meta-llama/Meta-Llama-3-8B-Instruct", "Qwen/Qwen2.5-7B-Instruct"),
     ),
     ProviderSpec(
         slug="litellm",

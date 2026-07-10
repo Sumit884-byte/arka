@@ -84,7 +84,7 @@ def route(text: str) -> Route | None:
                 )
             return fish_route
 
-        if fish_config() is not None and mode in ("ai_only", "symbolic_only"):
+        if fish_config() is not None and mode == "ai_only":
             return None
 
         if mode in ("ai", "ai_only"):
@@ -225,6 +225,19 @@ def _route_remind(cmd: str) -> Route | None:
         skill = route_remind(cmd)
         if skill:
             return Route(skill, source="offline")
+    except ImportError:
+        pass
+    return None
+
+
+def _route_competitions(cmd: str) -> Route | None:
+    try:
+        from arka.agent.competitions import route_command, wants_competitions_search
+
+        if wants_competitions_search(cmd):
+            skill = route_command(cmd)
+            if skill:
+                return Route(skill, source="offline")
     except ImportError:
         pass
     return None
@@ -389,6 +402,10 @@ def _route_offline(cmd: str) -> Route | None:
     if github_route:
         return github_route
 
+    competitions_route = _route_competitions(cmd)
+    if competitions_route:
+        return competitions_route
+
     if _is_investment_question(clean):
         topic = _strip_query_prefix(cmd)
         return Route(
@@ -397,11 +414,14 @@ def _route_offline(cmd: str) -> Route | None:
         )
 
     try:
-        from arka.routing.symbolic import route_currency_convert
+        from arka.routing.symbolic import route_currency_convert, route_daily_brief
 
         currency_route = route_currency_convert(cmd)
         if currency_route:
             return Route(currency_route, source="offline")
+        brief_route = route_daily_brief(cmd)
+        if brief_route:
+            return Route(brief_route, source="offline")
     except ImportError:
         pass
 
@@ -495,15 +515,67 @@ _SHOW_ME_IMAGE_HINT = re.compile(
 
 def _is_knowledge_question(clean: str) -> bool:
     try:
+        from arka.routing.symbolic import route_daily_brief
+
+        if route_daily_brief(clean):
+            return False
+    except ImportError:
+        pass
+    try:
         from arka.agent.price_sources import is_price_check_query
 
         if is_price_check_query(clean):
             return False
     except ImportError:
         pass
+    try:
+        from arka.agent.competitions import wants_competitions_search
+
+        if wants_competitions_search(clean):
+            return False
+    except ImportError:
+        pass
+    try:
+        from arka.routing.learned import match_learned, wants_route_management
+
+        if wants_route_management(clean) or match_learned(clean):
+            return False
+    except ImportError:
+        pass
     if _is_investment_question(clean):
         return False
-    if re.search(r"\b(my|this pc|my computer|my mac|my macbook|my machine|should i)\b", clean):
+    if re.search(r"[\w.+-]+@[\w.-]+\.\w+", clean) and re.search(
+        r"(?i)\b(send|email|draft|compose|write)\b",
+        clean,
+    ):
+        return False
+    if re.search(
+        r"(?i)\b(birthday|anniversary|wedding|valentine|christmas|holiday|gift|gifts|present|presents)\b",
+        clean,
+    ):
+        return True
+    if re.match(
+        r"(?i)^what\s+to\s+(give|buy|get|choose|pick|wear|say|cook|make|bring|serve)\b",
+        clean,
+    ):
+        return True
+    if re.match(
+        r"(?i)^what\s+(should|can|could)\s+i\s+(give|buy|get|choose|pick)\b",
+        clean,
+    ):
+        return True
+    if re.search(
+        r"\b(my|this pc|my computer|my mac|my macbook|my machine)\b",
+        clean,
+    ) and re.search(
+        r"(?i)\b(cpu|gpu|ram|disk|pc|computer|system|mac|macbook|machine|laptop|upgrade|outdated|gaming)\b",
+        clean,
+    ):
+        return False
+    if re.search(r"\bshould i\b", clean) and re.search(
+        r"(?i)\b(my|this pc|cpu|gpu|ram|disk|upgrade|install|buy a new (?:pc|laptop|mac))\b",
+        clean,
+    ):
         return False
     if re.match(r"^show\s+me\s+", clean) and not _SHOW_ME_IMAGE_HINT.search(clean):
         return True
