@@ -17,10 +17,12 @@ from typing import Any
 try:
     from arka.agent.profession_sources import DomainSources, RssSource
     from arka.agent.professions import BUILTIN_DOMAINS, Domain
-    from arka.paths import arka_home, cache_dir, config_dir, load_env_file
+    from arka.paths import arka_home, cache_dir, config_dir, load_env_file, package_dir
 
     load_env_file()
 except ImportError:
+    def package_dir() -> Path:
+        return Path(__file__).resolve().parent.parent
     BUILTIN_DOMAINS = ()  # type: ignore[misc, assignment]
 
     @dataclass(frozen=True)
@@ -80,6 +82,7 @@ def professions_search_paths() -> list[Path]:
         [
             config_dir() / "professions",
             arka_home() / "professions",
+            package_dir() / "professions",
             Path.home() / ".local" / "share" / "arka" / "professions",
         ]
     )

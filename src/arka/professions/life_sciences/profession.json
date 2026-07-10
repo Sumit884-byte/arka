@@ -1,0 +1,47 @@
+{
+  "id": "life_sciences",
+  "title": "Life Sciences & Biomedical Research",
+  "description": "Evidence-first biomedical research — PubMed, clinical trials, genomics, and drug discovery",
+  "version": "1.0.0",
+  "author": "Arka (Anthropic life-sciences marketplace)",
+  "aliases": [
+    "life scientist",
+    "biomedical researcher",
+    "bioinformatician",
+    "genomics researcher",
+    "drug discovery scientist"
+  ],
+  "keywords": [
+    "pubmed",
+    "biomedical",
+    "genomics",
+    "single-cell",
+    "rna-seq",
+    "clinical trial",
+    "drug target",
+    "bioinformatics",
+    "nextflow",
+    "chembl",
+    "biorxiv",
+    "preprint",
+    "scvi",
+    "allotrope",
+    "crispr"
+  ],
+  "disclaimer": "Research information only — not medical advice. Verify findings in primary literature.",
+  "search_bias": "peer-reviewed biomedical research site:pubmed.ncbi.nlm.nih.gov OR site:nih.gov OR site:ncbi.nlm.nih.gov OR site:clinicaltrials.gov",
+  "rss": [
+    {
+      "id": "nih-news",
+      "label": "NIH News",
+      "url": "https://www.nih.gov/news-events/news-releases/rss.xml",
+      "limit": 5
+    },
+    {
+      "id": "nature-biotech",
+      "label": "Nature Biotechnology",
+      "url": "https://www.nature.com/nbt.rss",
+      "limit": 4
+    }
+  ]
+}

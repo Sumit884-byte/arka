@@ -168,6 +168,7 @@ def voice_progress(skill: str) -> str:
     table = {
         "weather": "Checking the weather.",
         "hyperlocal_weather": "Checking the weather near you.",
+        "platform_howto": "Looking up the shortcut for your system.",
         "web_answer": "Searching for an answer.",
         "deep_web_answer": "Doing a deeper web search.",
         "agent_ask": "Thinking about that.",

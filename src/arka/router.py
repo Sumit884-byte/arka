@@ -277,6 +277,38 @@ def _route_offline(cmd: str) -> Route | None:
     if re.search(r"(?i)\b(list professions|profession list|what professions)\b", clean):
         return Route("profession list")
 
+    if re.search(r"(?i)\b(life[- ]sciences?)\s+(list|install|info|doctor)\b", clean):
+        m = re.search(r"(?i)\b(life[- ]sciences?)\s+(list|install|info|doctor)(?:\s+(\S+))?", cmd)
+        if m:
+            sub = m.group(2).lower()
+            extra = (m.group(3) or "").strip()
+            return Route(f"life_sciences {sub} {extra}".strip())
+
+    if re.search(r"(?i)\b(install|setup)\s+(pubmed|single[- ]cell|nextflow|scvi|life[- ]sciences?)\b", clean):
+        m = re.search(
+            r"(?i)\b(?:install|setup)\s+(pubmed|single[- ]cell(?:[- ]rna[- ]qc)?|nextflow(?:[- ]development)?|scvi(?:[- ]tools)?|life[- ]sciences?)\b",
+            cmd,
+        )
+        if m:
+            token = m.group(1).lower().replace(" ", "-")
+            mapping = {
+                "pubmed": "life_sciences install pubmed",
+                "single-cell": "life_sciences install single-cell-rna-qc",
+                "single-cell-rna-qc": "life_sciences install single-cell-rna-qc",
+                "nextflow": "life_sciences install nextflow-development",
+                "nextflow-development": "life_sciences install nextflow-development",
+                "scvi": "life_sciences install scvi-tools",
+                "scvi-tools": "life_sciences install scvi-tools",
+                "life-sciences": "life_sciences list",
+                "life-science": "life_sciences list",
+            }
+            route = mapping.get(token)
+            if route:
+                return Route(route)
+
+    if re.search(r"(?i)\b(life[- ]sciences?|biomedical research tools|bioinformatics tools)\b", clean):
+        return Route("life_sciences list")
+
     try:
         from arka.agent.professions import route_command
 
@@ -425,6 +457,9 @@ def _route_offline(cmd: str) -> Route | None:
     except ImportError:
         pass
 
+    if _is_platform_howto_question(clean):
+        return Route(f"platform_howto {cmd}", source="offline")
+
     if _is_knowledge_question(clean):
         return Route(f"web_answer {cmd}")
 
@@ -511,6 +546,15 @@ _SHOW_ME_IMAGE_HINT = re.compile(
     r"(?i)\b(?:image|photo|picture|pic|screenshot|snapshot|"
     r"\.png|\.jpe?g|\.webp|\.gif|\.bmp|\.svg|\.heic|\.tiff?)\b",
 )
+
+
+def _is_platform_howto_question(clean: str) -> bool:
+    try:
+        from arka.routing.platform_howto import is_platform_howto_question
+
+        return is_platform_howto_question(clean)
+    except ImportError:
+        return False
 
 
 def _is_knowledge_question(clean: str) -> bool:

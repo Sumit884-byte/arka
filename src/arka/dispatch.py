@@ -56,6 +56,16 @@ def run_skill(skill_line: str) -> int:
     with skill_ctx as current:
         if head in ("generate_password", "password", "pass"):
             code = run_password(rest)
+        elif head == "platform_howto":
+            from arka.agent.platform_howto import answer_platform_howto
+
+            answer = answer_platform_howto(" ".join(rest))
+            if answer:
+                print(answer)
+                code = 0
+            else:
+                print("Could not get an answer (check LLM API keys)", file=sys.stderr)
+                code = 1
         elif head == "web_answer":
             code = run_chat_ask(" ".join(rest))
         elif head == "deep_web_answer":

@@ -48,6 +48,7 @@ SKILL_TASK_MAP: dict[str, str] = {
     # Routing (set explicitly when calling route)
     "route": "route",
     # Chat / Q&A
+    "platform_howto": "chat",
     "web_answer": "chat",
     "deep_web_answer": "research",
     "web_essay": "chat",

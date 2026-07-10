@@ -15,10 +15,12 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from arka.paths import cache_dir, config_dir, load_env_file, arka_home
+    from arka.paths import cache_dir, config_dir, load_env_file, arka_home, package_dir
 
     load_env_file()
 except ImportError:
+    def package_dir() -> Path:
+        return Path(__file__).resolve().parent.parent
     def config_dir() -> Path:
         if env := os.environ.get("CONFIG_DIR", "").strip():
             return Path(env).expanduser()
@@ -47,6 +49,7 @@ def skills_search_paths() -> list[Path]:
         [
             config_dir() / "skills",
             arka_home() / "skills",
+            package_dir() / "skills",
             Path.home() / ".local" / "share" / "arka" / "skills",
         ]
     )

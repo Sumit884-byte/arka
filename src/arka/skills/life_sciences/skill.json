@@ -1,0 +1,22 @@
+{
+  "name": "life_sciences",
+  "description": "Anthropic life-sciences marketplace — install PubMed, single-cell QC, Nextflow, and other research plugins",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "life sciences",
+    "life science",
+    "life-sciences",
+    "install life sciences",
+    "life sciences list",
+    "life sciences install",
+    "biomedical research tools",
+    "bioinformatics tools",
+    "pubmed plugin",
+    "single cell rna qc plugin"
+  ],
+  "voice_ack": "Opening the life sciences marketplace.",
+  "permissions": ["network", "shell"]
+}

@@ -104,4 +104,6 @@ arka = [
     "requirements/*.txt",
     "pdf/privategpt/*",
     "env.example",
+    "skills/**/*",
+    "professions/**/*",
 ]

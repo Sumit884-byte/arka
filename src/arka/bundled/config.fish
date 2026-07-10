@@ -295,6 +295,18 @@ function _arka_agent_platform_hint --description "Platform-specific shell guidan
     end
 end
 
+function _arka_platform_ui_shortcuts --description "Platform UI/keyboard shortcut hints for how-to answers (internal)"
+    if _arka_is_macos
+        echo "macOS UI: red close button top-left; Cmd+W closes tab/window; Cmd+Q quits app; Cmd+Tab switches apps."
+    else if _arka_is_linux
+        echo "Linux UI: close/minimize/maximize usually top-right; Ctrl+W closes tab; Alt+F4 closes window."
+    else if _arka_is_windows
+        echo "Windows UI: X/minimize/maximize top-right; Ctrl+W closes tab; Alt+F4 closes window."
+    else
+        echo "Answer only for the user's current OS."
+    end
+end
+
 function _arka_open --description "Open URL or file with the system default handler (cross-platform)"
     set -l target $argv[1]
     test -z "$target"; and return 1
@@ -1846,7 +1858,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         meeting_agent study_agent inbox_agent compare_agent product_reviewer price_check profession pr_check github_repo competitions route_learn \
         arka_ask semantic_memory supermemory speak_research voice_session handoff_notify remind routines predictions stock \
         rag_setup rag_status voice_agent wake_control \
-        agent_ask web_answer deep_web_answer web_essay calc chat_reset set_location files_preference_help google \
+        agent_ask web_answer deep_web_answer web_essay platform_howto calc chat_reset set_location files_preference_help google \
         select_model model_select best_model model_advisor \
         nearby_places map_download error_helper deep_queue app_usage internet_enhance aie \
         youtube_bulk yt_bulk
@@ -5075,6 +5087,15 @@ function _agent_is_usage_question --description "True if user asks about their a
         return 0
     end
     return 1
+end
+
+function _agent_is_platform_howto_question --description "True for local OS/app UI how-to (close tab, shortcuts) (internal)"
+    set -l py (_arka_python)
+    $py -c "
+from arka.routing.platform_howto import is_platform_howto_question
+import sys
+sys.exit(0 if is_platform_howto_question(sys.argv[1]) else 1)
+" (string escape --style=script -- $argv[1])
 end
 
 function _agent_parse_usage_period --description "Parse today/week from usage question (internal)"
@@ -9812,6 +9833,9 @@ function _agent_is_general_chat --description "True if plain conversational inpu
     if _agent_is_files_preference_question "$argv[1]"; or _agent_is_desktop_organize_request "$argv[1]"
         return 1
     end
+    if _agent_is_platform_howto_question "$argv[1]"
+        return 1
+    end
     if _agent_is_system_info_question "$argv[1]"
         return 1
     end
@@ -9885,6 +9909,10 @@ end
 
 function _agent_route_general_chat --description "Pick web_answer vs agent_ask for conversational input (internal)"
     set -l cmd "$argv[1]"
+    if _agent_is_platform_howto_question "$cmd"
+        echo "platform_howto $cmd"
+        return
+    end
     if _agent_is_files_preference_question "$cmd"
         echo "files_preference_help $cmd"
     else if _agent_is_system_info_question "$cmd"
@@ -10809,7 +10837,9 @@ function _arka_web_answer_llm_fallback --description "Snippet + LLM when arka_ch
     set -l question "$argv[1]"
     set -l py (_arka_python)
     set -l snippet ($py (_arka_py_script web_answer.py) snippet "$question" 2>/dev/null)
-    set -l system_text "You are a helpful assistant. Answer clearly in 2-5 short sentences for TTS. Start with [FROM MEMORY] or [FROM SEARCH]. Be factual."
+    set -l plat (_arka_agent_platform_label)
+    set -l ui_hint (_arka_platform_ui_shortcuts)
+    set -l system_text "You are a helpful assistant. Answer clearly in 2-5 short sentences for TTS. Start with [FROM MEMORY] or [FROM SEARCH]. Be factual. The user is on $plat. $ui_hint When the question is about app/window UI, answer ONLY for $plat — do not list other OSes."
     set -l user_text "Question: $question"
     if test -n "$snippet"
         set user_text "Web snippet:\n$snippet\n\nQuestion: $question"
@@ -11820,6 +11850,36 @@ function _agent_trace_log --description "Log routing decision for agent_why (int
     _arka_agent trace-log --input "$input_text" --interpreted "$interpreted" --source "$source" --why "$why" 2>/dev/null
 end
 
+function platform_howto --description "Platform-specific app/window UI how-to (shortcuts, window chrome)"
+    if test (count $argv) -eq 0
+        echo "Usage: platform_howto <question>"
+        echo "Example: platform_howto how to close a window in Brave"
+        return 1
+    end
+    if not _arka_ensure_venv
+        return 1
+    end
+    set -l question (_agent_with_voice_context (string join " " $argv))
+    _arka_ui_header "$question" query
+    set -l py (_arka_python)
+    set -l answer ($py -m arka.agent.platform_howto $argv 2>/dev/null)
+    if test -n "$answer"
+        _arka_print_answer_block "$answer"
+        return 0
+    end
+    set -l plat (_arka_agent_platform_label)
+    set -l ui_hint (_arka_platform_ui_shortcuts)
+    set -l system_text "You are a helpful assistant on $plat. Answer UI/how-to questions ONLY for $plat. $ui_hint Do NOT mention Windows, Linux, or macOS alternatives unless the user explicitly asks. Give 2-4 short, direct sentences suitable for text-to-speech."
+    set -l user_text "Question: $question"
+    set answer (_arka_capture_output _agent_llm_complete "$system_text" "$user_text")
+    if test -n "$answer"
+        _arka_print_answer_block "$answer"
+        return 0
+    end
+    echo (set_color red)"Could not get an answer (check GEMINI_API_KEY or GROQ_API_KEY)"(set_color normal)
+    return 1
+end
+
 function web_answer --description "Answer factual questions via web lookup + AI (auto deep search when needed)"
     if test (count $argv) -eq 0
         echo "Usage: web_answer [--deep] [--no-session] <question>"
@@ -11979,6 +12039,10 @@ function agent_ask --description "Answer advisory questions: AI gathers context 
         files_preference_help $argv
         return $status
     end
+    if _agent_is_platform_howto_question "$question"
+        platform_howto $argv
+        return $status
+    end
     if _agent_is_knowledge_question "$question"
         web_answer $argv
         return $status
@@ -12033,6 +12097,8 @@ function _agent_skill_matches_request --description "True if skill fits the user
             or string match -qr '(?i)(classify.*file|sort.*file|organize.*file|auto.*sort)' "$cmd"
         case web_answer
             _agent_is_knowledge_question "$cmd"
+        case platform_howto
+            _agent_is_platform_howto_question "$cmd"
         case web_essay
             _agent_is_essay_request "$cmd"
         case app_usage
@@ -12612,6 +12678,11 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         echo "skill|price_check $pq|Product price lookup"
         return
     end
+    if _agent_is_platform_howto_question "$cmd"
+        echo "skill|platform_howto $cmd|Platform-specific app/UI how-to"
+        return
+    end
+
     if _agent_is_knowledge_question "$cmd"
         set -l kq (_agent_normalize_knowledge_q "$cmd")
         test -z "$kq"; and set kq $cmd
@@ -12906,6 +12977,10 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         echo "skill|classify_files|Auto-sort files in Downloads by type"
         return
     end
+    if _agent_is_platform_howto_question "$cmd"
+        echo "skill|platform_howto $cmd|Platform-specific app/UI how-to"
+        return
+    end
     if _agent_is_general_chat "$cmd"
         set -l route (_agent_route_general_chat "$cmd")
         echo "skill|$route|Conversational question via AI"
@@ -13044,6 +13119,10 @@ function _agent_correct_interpretation --description "Fix bad LLM skill picks us
             echo "files_preference_help $cmd"
             return
         end
+        if _agent_is_platform_howto_question "$cmd"
+            echo "platform_howto $cmd"
+            return
+        end
         if _agent_is_knowledge_question "$cmd"
             set -l kq (_agent_normalize_knowledge_q "$cmd")
             test -z "$kq"; and set kq $cmd
@@ -13085,9 +13164,17 @@ function _agent_correct_interpretation --description "Fix bad LLM skill picks us
             echo (_agent_route_system_info "$cmd")
             return
         end
+        if _agent_is_platform_howto_question "$cmd"
+            echo "platform_howto $cmd"
+            return
+        end
     end
 
     if string match -qr '(?i)^search_web\b' "$interpreted"
+        if _agent_is_platform_howto_question "$cmd"
+            echo "platform_howto $cmd"
+            return
+        end
         if _agent_is_knowledge_question "$cmd"
             set -l kq (_agent_normalize_knowledge_q "$cmd")
             test -z "$kq"; and set kq $cmd
@@ -13149,6 +13236,11 @@ function _agent_correct_interpretation --description "Fix bad LLM skill picks us
 
     if _agent_is_system_info_question "$cmd"
         echo (_agent_route_system_info "$cmd")
+        return
+    end
+
+    if _agent_is_platform_howto_question "$cmd"
+        echo "platform_howto $cmd"
         return
     end
 
@@ -15642,6 +15734,9 @@ function agent --description "Run commands safely: executes safe commands automa
         test -z "$pq"; and set pq $cmd
         set interpreted "price_check $pq"
         set route_source offline
+    else if _agent_is_platform_howto_question "$cmd"
+        set interpreted "platform_howto $cmd"
+        set route_source offline
     else if _agent_is_knowledge_question "$cmd"
         set -l kq (_agent_normalize_knowledge_q "$cmd")
         if test -z "$kq"
@@ -15913,6 +16008,34 @@ function agent --description "Run commands safely: executes safe commands automa
         set -l dl_cmd (_agent_build_download_cmd "$cmd")
         if test -n "$dl_cmd"
             set interpreted $dl_cmd
+            set route_source offline
+        end
+    else if string match -qr '(?i)\b(life[- ]sciences?)\s+(list|install|info|doctor)\b' "$clean_cmd"
+        set -l ls_m (string match -r '(?i)\b(life[- ]sciences?)\s+(list|install|info|doctor)(?:\s+(\S+))?' -- "$cmd")
+        if test (count $ls_m) -ge 3
+            set -l ls_extra ""
+            if test (count $ls_m) -ge 4
+                set ls_extra $ls_m[4]
+            end
+            set interpreted "life_sciences $ls_m[3] $ls_extra"
+            set route_source offline
+        else
+            set interpreted "life_sciences list"
+            set route_source offline
+        end
+    else if string match -qr '(?i)\b(install|setup)\s+(pubmed|single[- ]cell(?:[- ]rna[- ]qc)?|nextflow(?:[- ]development)?|scvi(?:[- ]tools)?)\b' "$clean_cmd"
+        set -l plug_m (string match -r '(?i)\b(?:install|setup)\s+(pubmed|single[- ]cell(?:[- ]rna[- ]qc)?|nextflow(?:[- ]development)?|scvi(?:[- ]tools)?)\b' -- "$cmd")
+        if test (count $plug_m) -ge 2
+            set -l plug (string lower -- $plug_m[2])
+            switch $plug
+                case "single-cell" "single cell" "single-cell-rna-qc" "single cell rna qc"
+                    set plug "single-cell-rna-qc"
+                case "nextflow" "nextflow-development"
+                    set plug "nextflow-development"
+                case "scvi" "scvi-tools"
+                    set plug "scvi-tools"
+            end
+            set interpreted "life_sciences install $plug"
             set route_source offline
         end
     else if string match -qr '(install|setup|download\s+and\s+install)' "$clean_cmd"

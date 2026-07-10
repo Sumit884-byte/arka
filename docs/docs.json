@@ -64,6 +64,7 @@
         "pages": [
           "guides/google-workspace",
           "guides/plugins",
+          "guides/life-sciences",
           "guides/gemini-cli",
           "guides/post-x"
         ]
