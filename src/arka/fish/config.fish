@@ -2263,7 +2263,7 @@ function skills --description "Show what commands the agent can auto-run"
             case pdf_ask doc_ask
                 echo (set_color green)"  pdf_ask / doc_ask   "(set_color normal)"[--doc DOC] <question> — Q&A / summarize"
             case data_ask ask_data query_data analyze_data
-                echo (set_color green)"  data_ask / query_data"(set_color normal)" <file> [question] — Q&A over CSV/JSON/TSV"
+                echo (set_color green)"  data_ask / query_data"(set_color normal)" <file|folder> [--format] [question] — Q&A over CSV/JSON/TSV"
             case drawing_ask
                 echo (set_color green)"  drawing_ask     "(set_color normal)"<file.pdf|image> <question> — vision analysis (Gemini)"
             case describe_image
@@ -6650,35 +6650,25 @@ function data_gen --description "Alias for generate_data — fake sample dataset
     generate_data $argv
 end
 
-function data_ask --description "Ask questions about CSV, JSON, TSV, and other data files"
+function data_ask --description "Ask questions about CSV, JSON, TSV, and other data files or folders"
     if test (count $argv) -eq 0
-        echo "Usage: data_ask <file> [question]"
+        echo "Usage: data_ask <file|folder> [--format csv] [--formats csv,json] [--question q] [question]"
         echo "Example: data_ask users.csv how many rows?"
-        echo "Example: query_data sales.json what is total revenue by category?"
-        echo "NL: agent \"summarize this csv data/products.csv\""
+        echo "Example: data_ask ./data/ --format csv average salary?"
+        echo "Example: data_ask folder ./exports --question how many records total?"
+        echo "NL: agent \"summarize csv files in data/\""
         return 1
     end
     set -l py (_arka_python)
     set -l script (_arka_py_script arka_data_ask.py)
-    set -l file $argv[1]
-    set -l question $argv[2..-1]
-    if test -z "$file"
-        echo "Usage: data_ask <file> [question]"
+    set -l target $argv[1]
+    if test -z "$target"
+        echo "Usage: data_ask <file|folder> [--format csv] [question]"
         return 1
     end
-    echo (set_color --bold blue)"━━━ 📊 $file ━━━"(set_color normal)
-    if test (count $question) -gt 0
-        set_color brblack
-        echo "  "(string join " " $question)
-        set_color normal
-    end
+    echo (set_color --bold blue)"━━━ 📊 $target ━━━"(set_color normal)
     echo "  🔍 Analyzing data…" >&2
-    set -l answer
-    if test (count $question) -gt 0
-        set answer ($py $script $file $question | string collect)
-    else
-        set answer ($py $script $file | string collect)
-    end
+    set -l answer ($py $script $argv | string collect)
     set -l st $status
     if test $st -ne 0
         echo (set_color red)"$answer"(set_color normal)
@@ -15534,7 +15524,7 @@ function agent --description "Run commands safely: executes safe commands automa
         echo "  doc_ingest / pdf_ingest <file>  - Ingest PDF, Office, text, code, …"
         echo "  doc_list / pdf_list               - List ingested documents"
         echo "  doc_ask / pdf_ask [--doc DOC] <q> - Ask or summarize any ingested file"
-        echo "  data_ask / query_data <file> [q] - Ask questions about CSV, JSON, TSV, etc."
+        echo "  data_ask / query_data <file|folder> [q] - Ask questions about CSV, JSON, TSV, etc."
         echo "  drawing_ask <file> <q>           - Vision analysis of blueprints, drawings, scans"
         echo "  describe_image <path|url> [q]    - Describe photos via local vLLM vision"
         echo "  describe_screen [question]       - 10s countdown, capture display, describe"

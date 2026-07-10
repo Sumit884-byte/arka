@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -13,6 +14,7 @@ from arka.router import route
 from arka.routing.symbolic import route_data_ask
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
+DATA_FOLDER = FIXTURES / "data_folder"
 
 
 class DataAskTests(unittest.TestCase):
@@ -21,6 +23,8 @@ class DataAskTests(unittest.TestCase):
         self.assertTrue(da.wants_data_ask("ask about sales.json total revenue by category"))
         self.assertTrue(da.wants_data_ask("summarize this csv data/products.csv"))
         self.assertTrue(da.wants_data_ask("analyze data report.jsonl"))
+        self.assertTrue(da.wants_data_ask("data_ask reports/ summarize all files"))
+        self.assertTrue(da.wants_data_ask("analyze csv files in data/ top 10 products"))
         self.assertFalse(da.wants_data_ask("generate 100 users as csv"))
         self.assertFalse(da.wants_data_ask("create sample json data"))
         self.assertFalse(da.wants_data_ask("how many files in this folder"))
@@ -38,6 +42,41 @@ class DataAskTests(unittest.TestCase):
             da.route_command("analyze data report.jsonl"),
             "data_ask report.jsonl",
         )
+        self.assertEqual(
+            da.route_command("data_ask ./data/ --format csv average salary?"),
+            "data_ask ./data --format csv --question 'average salary?'",
+        )
+        self.assertEqual(
+            da.route_command("analyze csv files in data/ top 10 products"),
+            "data_ask data --format csv --question 'top 10 products'",
+        )
+
+    def test_discover_data_files_single_file(self) -> None:
+        files = da.discover_data_files(FIXTURES / "users.csv")
+        self.assertEqual(files, [FIXTURES / "users.csv"])
+
+    def test_discover_data_files_folder(self) -> None:
+        files = da.discover_data_files(DATA_FOLDER)
+        names = {f.name for f in files}
+        self.assertEqual(names, {"team.csv", "notes.json"})
+
+    def test_discover_data_files_format_filter(self) -> None:
+        files = da.discover_data_files(DATA_FOLDER, formats=["csv"])
+        self.assertEqual([f.name for f in files], ["team.csv"])
+
+    def test_load_data_sources_folder(self) -> None:
+        datasets, skipped = da.load_data_sources(DATA_FOLDER)
+        self.assertEqual(len(datasets), 2)
+        self.assertEqual(skipped, 0)
+        names = {d.path.name for d in datasets}
+        self.assertEqual(names, {"team.csv", "notes.json"})
+
+    def test_build_multi_context(self) -> None:
+        datasets, _ = da.load_data_sources(DATA_FOLDER)
+        context = da.build_multi_context(datasets, source_path=DATA_FOLDER)
+        self.assertIn("Files loaded: 2", context)
+        self.assertIn("team.csv", context)
+        self.assertIn("notes.json", context)
 
     def test_load_csv(self) -> None:
         loaded = da.load_data(FIXTURES / "users.csv")
@@ -72,6 +111,16 @@ class DataAskTests(unittest.TestCase):
         with mock.patch("arka.llm.cli.llm_complete", return_value="There are 5 rows."):
             answer = da.answer_question(FIXTURES / "users.csv", "how many rows?")
         self.assertIn("5 rows", answer)
+
+    def test_answer_question_folder_mock_llm(self) -> None:
+        with mock.patch("arka.llm.cli.llm_complete", return_value="Two files loaded."):
+            answer = da.answer_question(DATA_FOLDER, "summarize all files")
+        self.assertIn("Two files", answer)
+
+    def test_answer_question_format_filter_mock_llm(self) -> None:
+        with mock.patch("arka.llm.cli.llm_complete", return_value="CSV only."):
+            answer = da.answer_question(DATA_FOLDER, "list columns", formats="csv")
+        self.assertIn("CSV", answer)
 
     def test_route_symbolic(self) -> None:
         hit = route_data_ask("ask data users.csv how many rows?")

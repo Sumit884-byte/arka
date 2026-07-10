@@ -1,19 +1,20 @@
 ---
 title: "Data Q&A"
-description: "Ask natural-language questions about CSV, JSON, TSV, YAML, XML, Parquet, Excel, and SQL dump files."
-keywords: ["data", "csv", "json", "analyze", "query", "ask", "tsv"]
+description: "Ask natural-language questions about CSV, JSON, TSV, YAML, XML, Parquet, Excel, and SQL dump files — single files or entire folders."
+keywords: ["data", "csv", "json", "analyze", "query", "ask", "tsv", "folder"]
 ---
 
-Ask questions about local data files — row counts, totals, top values, summaries, and more.
+Ask questions about local data files — row counts, totals, top values, summaries, and more. Query a single file, an entire folder, or only specific formats.
 
 ## Natural language
 
 ```bash
 arka ask data users.csv "how many rows?"
+arka ask data ./data/ "what is total revenue?"
+data_ask reports/ "summarize all files"
+data_ask folder ./exports --question "how many records total?"
+arka analyze csv files in data/ "top 10 products"
 arka query_data sales.json "what is total revenue by category?"
-arka "summarize this csv" data/products.csv
-arka data_ask employees.tsv "who has highest salary?"
-arka analyze data report.jsonl
 ```
 
 ## CLI commands
@@ -21,13 +22,16 @@ arka analyze data report.jsonl
 | Command | Description |
 | ------- | ----------- |
 | `data_ask users.csv "how many rows?"` | Ask a question about a file |
+| `data_ask ./data/ --format csv "average salary?"` | Query only CSV files in a folder |
+| `data_ask ./reports/ --formats csv,json "list all columns"` | Filter by multiple formats |
+| `data_ask folder ./exports --question "how many records total?"` | Explicit folder mode |
 | `ask_data sales.json "total by category"` | Alias for `data_ask` |
 | `query_data report.tsv` | Summarize when no question is given |
 | `analyze_data data.jsonl "top 5 products"` | Alias for `data_ask` |
 
 ## Supported formats
 
-`csv`, `json`, `jsonl`, `tsv`, `yaml`, `xml`, `parquet`, `xlsx`, `sql`
+`csv`, `json`, `jsonl`, `tsv`, `yaml`, `yml`, `xml`, `parquet`, `xlsx`, `xls`, `sql`
 
 Optional dependencies for richer parsing:
 
@@ -39,10 +43,20 @@ Optional dependencies for richer parsing:
 
 Without pandas, tabular files still load via the Python standard library (`csv`, `json`).
 
+## Folders and format filters
+
+When the path is a directory, Arka discovers data files by extension (non-recursive, top level only). Use `--format` or `--formats` to limit which types are loaded.
+
+Large folders are capped for context size:
+
+- Up to **5 files** per query
+- Up to **500 rows** total across loaded files
+- Per-file samples and column statistics when files are larger
+
 ## How it works
 
-1. Detects the file format from the extension
-2. Loads rows (full file up to 500 rows, otherwise a sample plus column stats)
+1. Detects file format(s) from extension(s), optionally filtered by `--format`
+2. Loads rows from one or more files (sample + stats when truncated)
 3. Sends structured context to the LLM with your question
 4. Prints the answer in the terminal
 
@@ -52,6 +66,8 @@ This skill is for **querying existing files**. To create fake sample datasets, u
 
 ```bash
 data_ask ~/Downloads/orders.csv "what are the top 3 products by quantity?"
+data_ask ./data/ --format csv "average salary?"
 query_data metrics.jsonl "average latency by region"
 analyze_data inventory.parquet
+data_ask reports/ "summarize all files"
 ```
