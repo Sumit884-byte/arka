@@ -126,14 +126,44 @@ class WebhookHandler(BaseHTTPRequestHandler):
             self._json(403, {"ok": False, "error": reason})
             return
         source = (data.get("source") or data.get("channel") or "webhook").strip()[:64]
+        chat_id = (data.get("chat_id") or data.get("session_id") or data.get("from") or "default").strip()[:64]
+        session_ctx = ""
+        try:
+            from arka.integrations.message_sessions import context_for, is_silence_token, push
+
+            push(source, chat_id, "user", text)
+            session_ctx = context_for(source, chat_id)
+        except ImportError:
+            is_silence_token = lambda _t: False  # noqa: E731
         try:
             from arka.integrations.heartbeat import ping
 
             ping(f"webhook.{source}", source="webhook")
         except ImportError:
             pass
-        output, code = _run_agent(text)
-        self._json(200, {"ok": code == 0, "exit_code": code, "output": output, "source": source})
+        agent_text = text
+        if session_ctx:
+            agent_text = f"[Session continuity]\n{session_ctx}\n\n[Message]\n{text}"
+        output, code = _run_agent(agent_text)
+        try:
+            from arka.integrations.message_sessions import is_silence_token, push
+
+            if output and not is_silence_token(output):
+                push(source, chat_id, "assistant", output)
+        except ImportError:
+            pass
+        silent = bool(output and is_silence_token(output))
+        self._json(
+            200,
+            {
+                "ok": code == 0,
+                "exit_code": code,
+                "output": "" if silent else output,
+                "silent": silent,
+                "source": source,
+                "chat_id": chat_id,
+            },
+        )
 
 
 def serve() -> int:

@@ -99,7 +99,7 @@ def _skill_from_manifest(manifest_path: Path) -> dict[str, Any] | None:
         requires = {}
     meta = data.get("metadata") or {}
     if isinstance(meta, dict):
-        oc = meta.get("openclaw") or meta.get("arka") or {}
+        oc = meta.get("openclaw") or meta.get("arka") or meta.get("hermes") or {}
         if isinstance(oc, dict):
             for key in ("requires", "os", "permissions"):
                 if key in oc and key not in data:

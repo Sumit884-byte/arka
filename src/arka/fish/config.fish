@@ -1927,7 +1927,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         create_desktop_app fix_graphics_driver install_app install_apt install_brew install_flatpak \
         install_snap install_package install_uv stock_analysis stock macro emotion \
         auto_click auto_copy decrypt_pdf classify_files cleanup_downloads watch_zip monitor_x post_x \
-        generate_image generate_thumbnail generate_video compose_video chart ascii_art youtube_transcript youtube_download yt_download media_transcript transcribe_media summarize_url daily_brief wifi_info \
+        generate_image generate_thumbnail generate_video compose_video compose_slides convert_media pdf_tools chart ascii_art youtube_transcript youtube_download yt_download media_transcript transcribe_media summarize_url daily_brief wifi_info \
         folder_summarize playlist_summarize youtube_research yt_research find_videos codebase_ingest \
         agent_remember agent_recall agent_memory agent_trace agent_why agent_last \
         agent_resume agent_research agent_nudge agent_watch agent_routine agent_fanout \
@@ -2387,6 +2387,12 @@ function skills --description "Show what commands the agent can auto-run"
                 echo (set_color green)"  generate_video "(set_color normal)"<prompt> — real AI video (Pollinations/Gemini; needs API key or billing)"
             case compose_video
                 echo (set_color green)"  compose_video   "(set_color normal)"--topic '…' [--llm] — YouTube info video (Unsplash + ffmpeg + TTS)"
+            case compose_slides
+                echo (set_color green)"  compose_slides  "(set_color normal)"compose|convert — deck build/export (pptx|pdf|html|md|json|all)"
+            case convert_media
+                echo (set_color green)"  convert_media   "(set_color normal)"<file> --to <format> | --format all — image/video/slide conversion"
+            case pdf_tools
+                echo (set_color green)"  pdf_tools       "(set_color normal)"merge|split|compress|ocr|protect|… — CLI PDF toolkit"
             case agent_ask
                 echo (set_color green)"  agent_ask      "(set_color normal)"<question> — advisory Q&A via shell context"
         end
@@ -5446,10 +5452,16 @@ end
 
 function decrypt_pdf --description "Decrypt password-protected PDF files"
     if test (count $argv) -lt 2
-        echo "Usage: decrypt_pdf <pdf_or_directory> <password> [output_path] [--recursive]"
+        echo "Usage: decrypt_pdf <pdf_or_directory> <password> [output_path]"
+        echo "Tip: pdf_tools unlock <file.pdf> --password <pw>  (same backend)"
         return 1
     end
-    python3 /home/s/Projects/python/products/automation/autodecrypt_financial_pdfs.py $argv
+    set -l py (_arka_python)
+    if test (count $argv) -ge 3
+        $py (_arka_py_script arka_pdf_tools.py) unlock $argv[1] --password $argv[2] -o $argv[3]
+    else
+        $py (_arka_py_script arka_pdf_tools.py) unlock $argv[1] --password $argv[2]
+    end
 end
 
 function files_preference_help --description "Explain where Arka saves images and how to change the folder"
@@ -6025,6 +6037,91 @@ function compose_video --description "Compose YouTube/info videos — Unsplash i
     end
     set -l py (_arka_python)
     $py (_arka_py_script arka_compose_video.py) $argv
+end
+
+function compose_slides --description "Compose presentation slide decks — stock photos, charts, LLM scripts"
+    if test (count $argv) -eq 0
+        echo "Usage: compose_slides compose --topic 'Python asyncio' [--llm] [-f pptx|pdf|html|md|json|all]"
+        echo "       compose_slides compose --script scenes.json [-o out.pptx] [-f format]"
+        echo "       compose_slides convert input.pptx -o output.pdf"
+        echo "       compose_slides convert input.html --format markdown"
+        echo "       compose_slides convert deck.pptx --format all"
+        echo "       compose_slides check"
+        echo ""
+        echo "NL: arka make slides about Rust memory safety"
+        echo "    arka convert slides.pptx to pdf"
+        echo "    arka convert deck.html to markdown"
+        echo ""
+        echo "Formats: pptx (default), pdf, html, md (Marp), json, all"
+        echo "Requires: Pillow; python-pptx for pptx; pymupdf optional for PDF input"
+        echo "Optional: LibreOffice (soffice) for direct pptx↔pdf"
+        echo "Output: ~/Documents/arka-slides/ by default (SLIDES_OUTPUT_DIR)"
+        return 1
+    end
+    set -l py (_arka_python)
+    $py (_arka_py_script arka_compose_slides.py) $argv
+end
+
+function convert_media --description "Convert images, video/audio, and slide decks between formats"
+    if test (count $argv) -eq 0
+        echo "Usage: convert_media photo.png --to webp"
+        echo "       convert_media clip.mp4 --to gif"
+        echo "       convert_media deck.pptx --to pdf"
+        echo "       convert_media input.png --format all"
+        echo "       convert_media check"
+        echo ""
+        echo "NL: arka convert video.mp4 to gif"
+        echo "    arka convert image.png to webp"
+        echo "    arka convert deck.pptx to pdf"
+        echo ""
+        echo "Images: png, jpg, webp, gif, bmp, tiff, ico (Pillow; HEIC/SVG optional)"
+        echo "Video: mp4, webm, mov, avi, mkv, gif, mp3, wav, aac (ffmpeg)"
+        echo "Slides: pptx, pdf, html, md, json (python-pptx, pymupdf optional)"
+        return 1
+    end
+    set -l py (_arka_python)
+    $py (_arka_py_script arka_convert_media.py) $argv
+end
+
+function pdf_tools --description "PDF toolkit — merge, split, compress, OCR, protect, convert, …"
+    if test (count $argv) -eq 0
+        echo "Usage: pdf_tools <command> [args]"
+        echo ""
+        echo "Commands:"
+        echo "  merge <a.pdf> <b.pdf> … [-o out.pdf]"
+        echo "  split <file.pdf> [--pages-per-file N]"
+        echo "  compress <file.pdf>"
+        echo "  edit <file.pdf> --text 'Note'"
+        echo "  sign <file.pdf> --image sig.png"
+        echo "  convert <doc.docx> [--to pdf|docx|png]"
+        echo "  images-to-pdf <img1.png> [img2.jpg …]"
+        echo "  pdf-to-images <file.pdf> [--format png] [--dpi 150]"
+        echo "  extract-images <file.pdf>"
+        echo "  protect <file.pdf> --password secret"
+        echo "  unlock <file.pdf> --password secret"
+        echo "  rotate <file.pdf> --degrees 90 [--pages 1,3-5]"
+        echo "  remove-pages <file.pdf> --pages 2,5-7"
+        echo "  extract-pages <file.pdf> --pages 1,3"
+        echo "  rearrange <file.pdf> --order 3,1,2"
+        echo "  webpage-to-pdf <url>"
+        echo "  ocr <file.pdf> [--language eng]"
+        echo "  watermark <file.pdf> --text DRAFT"
+        echo "  page-numbers <file.pdf>"
+        echo "  overlay <base.pdf> <overlay.pdf>"
+        echo "  compare <a.pdf> <b.pdf>"
+        echo "  web-optimize <file.pdf>"
+        echo "  redact <file.pdf> --text 'secret'"
+        echo "  create [--text 'Hello'] [--html-file page.html]"
+        echo "  check                           (operations + backends)"
+        echo ""
+        echo "NL: arka merge these pdfs a.pdf and b.pdf"
+        echo "    arka compress report.pdf"
+        echo "    arka pdf to images scan.pdf"
+        echo "    arka protect pdf with password secret"
+        return 1
+    end
+    set -l py (_arka_python)
+    $py (_arka_py_script arka_pdf_tools.py) $argv
 end
 
 function youtube_transcript --description "Fetch or summarize a YouTube video transcript"
@@ -10556,6 +10653,14 @@ function _agent_offline_route_cmd --description "Full symbolic NL to skill comma
         echo (_agent_build_generate_image_cmd "$cmd")
         return 0
     end
+    if _agent_is_compose_slides_request "$cmd"
+        echo (_agent_build_compose_slides_cmd "$cmd")
+        return 0
+    end
+    if _agent_is_convert_media_request "$cmd"
+        echo (_agent_build_convert_media_cmd "$cmd")
+        return 0
+    end
     if _agent_is_compose_video_request "$cmd"
         echo (_agent_build_compose_video_cmd "$cmd")
         return 0
@@ -10740,6 +10845,36 @@ end
 
 function _agent_is_generate_thumbnail_request --description "True if user wants YouTube thumbnail (internal)"
     test -n "$(_agent_build_generate_thumbnail_cmd "$argv[1]")"
+end
+
+function _agent_build_compose_slides_cmd --description "Build compose_slides args from NL (internal)"
+    set -l cmd "$argv[1]"
+    set -l name (_agent_call_name)
+    set cmd (string replace -r -i "^$name\\s+" '' "$cmd" | string trim)
+    set -l py (_arka_python)
+    set -l rest ($py (_arka_py_script arka_compose_slides.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
+    if test (count $rest) -gt 0
+        echo "compose_slides $rest"
+    end
+end
+
+function _agent_is_compose_slides_request --description "True if user wants presentation slides (internal)"
+    test -n "$(_agent_build_compose_slides_cmd "$argv[1]")"
+end
+
+function _agent_build_convert_media_cmd --description "Build convert_media args from NL (internal)"
+    set -l cmd "$argv[1]"
+    set -l name (_agent_call_name)
+    set cmd (string replace -r -i "^$name\\s+" '' "$cmd" | string trim)
+    set -l py (_arka_python)
+    set -l rest ($py (_arka_py_script arka_convert_media.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
+    if test (count $rest) -gt 0
+        echo "convert_media $rest"
+    end
+end
+
+function _agent_is_convert_media_request --description "True if user wants media format conversion (internal)"
+    test -n "$(_agent_build_convert_media_cmd "$argv[1]")"
 end
 
 function _agent_build_compose_video_cmd --description "Build compose_video args from NL (internal)"
@@ -12073,6 +12208,86 @@ function webhook --description "Verified webhook ingress for external channels (
     end
 end
 
+function message_session --description "Hermes-style per-channel message sessions (cross-platform continuity)"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        $py (_arka_py_script arka_message_sessions.py) status
+        echo ""
+        echo "Usage: message_session push|context|resume|reset|list|status [channel chat_id ...]"
+        return 0
+    end
+    switch $argv[1]
+        case push
+            if test (count $argv) -lt 5
+                echo "Usage: message_session push <channel> <chat_id> <user|assistant|system> <text>"
+                return 1
+            end
+            $py (_arka_py_script arka_message_sessions.py) push $argv[2] $argv[3] $argv[4] (string join " " $argv[5..-1])
+        case context ctx
+            if test (count $argv) -lt 3
+                echo "Usage: message_session context <channel> <chat_id>"
+                return 1
+            end
+            $py (_arka_py_script arka_message_sessions.py) context $argv[2] $argv[3]
+        case resume show
+            if test (count $argv) -lt 3
+                echo "Usage: message_session resume <channel> <chat_id>"
+                return 1
+            end
+            $py (_arka_py_script arka_message_sessions.py) resume $argv[2] $argv[3]
+        case reset new clear
+            if test (count $argv) -lt 3
+                echo "Usage: message_session reset <channel> <chat_id>"
+                return 1
+            end
+            $py (_arka_py_script arka_message_sessions.py) reset $argv[2] $argv[3]
+        case list ls
+            $py (_arka_py_script arka_message_sessions.py) list
+        case status
+            if test (count $argv) -ge 3
+                $py (_arka_py_script arka_message_sessions.py) status $argv[2] $argv[3]
+            else
+                $py (_arka_py_script arka_message_sessions.py) status
+            end
+        case '*'
+            $py (_arka_py_script arka_message_sessions.py) $argv
+    end
+end
+
+function subagent --description "Hermes-style isolated sub-agent delegation (background tasks)"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        $py (_arka_py_script arka_subagent.py) status
+        echo ""
+        echo "Usage: subagent spawn <task> | list | resume <id> | status [id]"
+        return 0
+    end
+    switch $argv[1]
+        case spawn background bg
+            if test (count $argv) -lt 2
+                echo "Usage: subagent spawn <task>"
+                return 1
+            end
+            $py (_arka_py_script arka_subagent.py) spawn (string join " " $argv[2..-1])
+        case list ls
+            $py (_arka_py_script arka_subagent.py) list
+        case resume show
+            if test (count $argv) -lt 2
+                echo "Usage: subagent resume <id>"
+                return 1
+            end
+            $py (_arka_py_script arka_subagent.py) resume $argv[2]
+        case status
+            if test (count $argv) -ge 2
+                $py (_arka_py_script arka_subagent.py) status $argv[2]
+            else
+                $py (_arka_py_script arka_subagent.py) status
+            end
+        case '*'
+            $py (_arka_py_script arka_subagent.py) $argv
+    end
+end
+
 function routines --description "Schedule daily or hourly tasks (launchd/systemd timers)"
     set -l py (_arka_python)
     if test (count $argv) -eq 0
@@ -12677,6 +12892,10 @@ function _agent_skill_matches_request --description "True if skill fits the user
             _agent_is_describe_screen_request "$cmd"
         case describe_image
             _agent_is_describe_image_request "$cmd"
+        case compose_slides
+            _agent_is_compose_slides_request "$cmd"
+        case convert_media
+            _agent_is_convert_media_request "$cmd"
         case compose_video
             _agent_is_compose_video_request "$cmd"
         case generate_video
@@ -13040,6 +13259,14 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         test -n "$loc"; and echo "skill|set_location $loc|Save location for weather/nearby"
         test -n "$loc"; and return
         echo "skill|set_location|Save location"
+        return
+    end
+    if _agent_is_compose_slides_request "$cmd"
+        echo "skill|"(_agent_build_compose_slides_cmd "$cmd")"|Presentation slides (pptx, pdf, html, md, json)"
+        return
+    end
+    if _agent_is_convert_media_request "$cmd"
+        echo "skill|"(_agent_build_convert_media_cmd "$cmd")"|Convert image/video/slide formats"
         return
     end
     if _agent_is_compose_video_request "$cmd"
@@ -15780,6 +16007,8 @@ function agent --description "Run commands safely: executes safe commands automa
         echo "  generate_image <prompt> - Generate images using Gemini API (gemini-2.5-flash-image)"
         echo "  generate_video <prompt> - Real AI video (needs POLLINATIONS_API_KEY or Gemini billing)"
         echo "  compose_video --topic '…' [--llm] - YouTube info video (Unsplash + ffmpeg + TTS)"
+        echo "  compose_slides --topic '…' [-f format] [--llm] - Presentation deck (pptx, pdf, html, md, json)"
+        echo "  convert_media <file> --to <fmt> - Convert images, video, or slides (Pillow/ffmpeg)"
         echo "  excuse                 - Get a hilarious offline programmer excuse"
         echo "  bored                  - Suggest a quick developer break task or exercise"
         echo "  create_skill <name> <desc> - Dynamically generate a new skill using AI"
@@ -15817,6 +16046,7 @@ function agent --description "Run commands safely: executes safe commands automa
         echo "  auto_click             - Auto-click when cursor shape changes (loading detection)"
         echo "  auto_copy              - Auto-copy text selections to clipboard on paste (X11)"
         echo "  decrypt_pdf <path> <pw> - Decrypt password-protected PDF files"
+        echo "  pdf_tools merge|split|… - Full PDF toolkit (merge, compress, OCR, protect, …)"
         echo "  classify_files         - Auto-sort files by extension (images, docs, code)"
         echo "  google setup|login     - Google Calendar + Gmail (browser OAuth sign-in)"
         echo "  google gmail|calendar  - Read mail or list events (after login)"
@@ -16256,6 +16486,12 @@ function agent --description "Run commands safely: executes safe commands automa
         set route_source offline
     else if _agent_is_generate_image_request "$clean_cmd"
         set interpreted (_agent_build_generate_image_cmd "$cmd")
+        set route_source offline
+    else if _agent_is_compose_slides_request "$clean_cmd"
+        set interpreted (_agent_build_compose_slides_cmd "$cmd")
+        set route_source offline
+    else if _agent_is_convert_media_request "$clean_cmd"
+        set interpreted (_agent_build_convert_media_cmd "$cmd")
         set route_source offline
     else if _agent_is_compose_video_request "$clean_cmd"
         set interpreted (_agent_build_compose_video_cmd "$cmd")

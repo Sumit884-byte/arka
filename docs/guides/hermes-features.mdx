@@ -1,0 +1,141 @@
+---
+title: "Message sessions and sub-agent delegation"
+description: "Hermes Agent-inspired Arka features — per-channel session continuity, webhook handoff, silence tokens, and isolated sub-agent delegation."
+keywords: ["hermes", "message sessions", "subagent", "gateway", "cross-platform"]
+---
+
+Arka includes several **Hermes Agent-inspired** features (not a separate Hermes product integration). They add per-channel conversation continuity, webhook session handoff, and isolated background sub-agents — the same patterns Hermes uses in its messaging gateway and delegation layer.
+
+## Why Hermes Agent?
+
+[Hermes Agent](https://github.com/NousResearch/hermes-agent) (Nous Research) is a local-first terminal agent with a multi-platform messaging gateway, per-chat session store, and sub-agent delegation. Arka adopts the **ideas** that fit a fish-shell agent:
+
+| Hermes concept | Arka feature |
+| -------------- | ------------ |
+| Per-chat session store | `message_session` — keyed by `channel:chat_id` |
+| Cross-platform continuity | Webhook + CLI share the same session when `channel`/`chat_id` match |
+| Silence tokens | `[SILENT]`, `NO_REPLY` suppress webhook outbound delivery |
+| Sub-agent delegation | `subagent spawn` — isolated background agent tasks |
+| Skill manifest metadata | `metadata.hermes` gates merged like OpenClaw |
+
+Arka does **not** ship Hermes's full gateway adapters (Telegram, Discord, etc.). Use Arka's existing [webhook ingress](/guides/openclaw-features) and channel bridges, and attach Hermes-style sessions on top.
+
+## Message sessions
+
+Per-channel conversation turns stored under `~/.config/arka/message-sessions/`:
+
+```bash
+message_session push cli default user "Start the deploy checklist"
+message_session push cli default assistant "Step 1: run tests"
+message_session context cli default
+message_session resume cli default
+message_session list
+message_session reset telegram 123456789
+message_session status
+```
+
+Sessions are keyed as `channel:chat_id` (e.g. `webhook:slack`, `cli:default`, `telegram:987654321`).
+
+### Webhook continuity
+
+When `WEBHOOK_ENABLED=1`, inbound POST bodies can include:
+
+```json
+{
+  "text": "What's the deploy status?",
+  "channel": "telegram",
+  "chat_id": "123456789"
+}
+```
+
+Arka appends the user turn, injects prior session context into the agent prompt, stores the assistant reply, and returns `chat_id` in the response. Start on Telegram (via your bridge), continue in the terminal with the same `channel` + `chat_id`.
+
+### Silence tokens
+
+Hermes uses explicit silence tokens so group chats and automations can store a turn without sending outbound text. Arka recognizes:
+
+- `[SILENT]`
+- `SILENT`
+- `NO_REPLY`
+- `NO REPLY`
+
+When the agent's final response is exactly one of these (case-insensitive), the webhook returns `"silent": true` and an empty `output` field. The turn is still stored in the session transcript.
+
+### Environment variables
+
+| Variable | Default | Purpose |
+| -------- | ------- | ------- |
+| `HERMES_SESSIONS` | `1` | Enable (`0` to disable) |
+| `HERMES_SESSIONS_DIR` | `~/.config/arka/message-sessions` | Storage root |
+| `HERMES_SESSION_IDLE_MINUTES` | `0` | Auto-reset after idle minutes (`0` = never) |
+| `HERMES_SESSION_MAX_TURNS` | `40` | Max turns kept per session |
+
+Inbound turns are sanitized — injection patterns and unsafe content are blocked before storage.
+
+## Sub-agent delegation
+
+Spawn isolated background agents for parallel workstreams (Hermes `/background` pattern):
+
+```bash
+subagent spawn "Summarize today's git log"
+subagent list
+subagent resume abc123def4
+subagent status
+```
+
+Each sub-agent gets its own task record under `~/.cache/fish-agent/subagents/`. Results are truncated and stored when the agent finishes.
+
+### Security gates
+
+| Gate | Blocks when |
+| ---- | ----------- |
+| `HERMES_SUBAGENT_SECURITY=1` | Task fails `SECURITY_LLM` prompt verification |
+| `HERMES_SUBAGENT_MAX` | Concurrent running agents exceed limit |
+| `HERMES_SUBAGENT_MAX_CHARS` | Task text too long |
+
+Set `HERMES_SUBAGENT_SYNC=1` to run synchronously (used in tests).
+
+### Environment variables
+
+| Variable | Default | Purpose |
+| -------- | ------- | ------- |
+| `HERMES_SUBAGENT` | `1` | Enable (`0` to disable) |
+| `HERMES_SUBAGENT_DIR` | `~/.cache/fish-agent/subagents` | Storage root |
+| `HERMES_SUBAGENT_MAX` | `3` | Max concurrent background agents |
+| `HERMES_SUBAGENT_TIMEOUT` | `600` | Per-agent timeout (seconds) |
+| `HERMES_SUBAGENT_SECURITY` | `1` | Apply security gates to spawn tasks |
+
+Sub-agents can optionally attach to a message session via `--session-channel` and `--session-chat-id` (CLI flags on the Python module).
+
+## Skill manifest gates (`metadata.hermes`)
+
+Third-party plugins can declare Hermes-style gates in `skill.json`. Arka merges them at parse time (same as `metadata.openclaw`):
+
+```json
+{
+  "name": "my_skill",
+  "metadata": {
+    "hermes": {
+      "requires": { "env": ["MY_API_KEY"] },
+      "os": ["darwin"],
+      "permissions": ["network"]
+    }
+  }
+}
+```
+
+Gated skills are marked in `arka skills list`, skipped by routing, and blocked at execution. See [OpenClaw-inspired gates](/guides/openclaw-features) for full gate behavior.
+
+## Heartbeat integration
+
+`heartbeat status` reports Hermes session and sub-agent counts alongside memory and routine stats:
+
+```bash
+heartbeat status
+```
+
+## Related features
+
+- [Session memory](/guides/openclaw-features) — long-term markdown notes (`MEMORY.md`)
+- [Webhooks](/guides/openclaw-features) — verified external ingress
+- [Security](/concepts/security) — global `SECURITY`, `SECURITY_LLM`, and `SECURITY_ACTIONS` flags

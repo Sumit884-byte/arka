@@ -54,6 +54,29 @@ def _routine_count() -> int:
     return 0
 
 
+def _hermes_stats() -> dict[str, int]:
+    stats = {"message_sessions": 0, "subagents_running": 0, "subagents_total": 0}
+    try:
+        from arka.integrations.message_sessions import list_sessions, sessions_root
+
+        stats["message_sessions"] = len(list_sessions(limit=500))
+        if not stats["message_sessions"] and sessions_root().is_dir():
+            stats["message_sessions"] = len(list(sessions_root().glob("*.json")))
+    except ImportError:
+        pass
+    try:
+        from arka.integrations.subagent import list_agents, status_summary
+
+        summary = status_summary()
+        stats["subagents_running"] = int(summary.get("running") or 0)
+        stats["subagents_total"] = int(summary.get("total") or 0)
+        if not stats["subagents_total"]:
+            stats["subagents_total"] = len(list_agents(limit=500))
+    except ImportError:
+        pass
+    return stats
+
+
 def _memory_stats() -> dict[str, int]:
     stats = {"json_entries": 0, "session_daily": 0, "longterm_lines": 0}
     mem = cache_dir() / "memory.json"
@@ -94,6 +117,7 @@ def ping(activity: str, *, source: str = "arka") -> None:
             },
             "routines_enabled": _routine_count(),
             "memory": _memory_stats(),
+            "hermes": _hermes_stats(),
         }
     )
     _save(data)
@@ -121,6 +145,12 @@ def status(*, json_out: bool = False) -> int:
         f"Memory: json={mem.get('json_entries', 0)} "
         f"session_daily={mem.get('session_daily', 0)} "
         f"longterm_lines={mem.get('longterm_lines', 0)}"
+    )
+    hermes = data.get("hermes") or {}
+    print(
+        f"Hermes: sessions={hermes.get('message_sessions', 0)} "
+        f"subagents_running={hermes.get('subagents_running', 0)} "
+        f"subagents_total={hermes.get('subagents_total', 0)}"
     )
     return 0
 
