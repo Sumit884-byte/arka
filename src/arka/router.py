@@ -600,6 +600,24 @@ def _is_knowledge_question(clean: str) -> bool:
             return False
     except ImportError:
         pass
+    try:
+        from arka.llm.model_advisor import is_model_select_query
+
+        if is_model_select_query(clean):
+            return False
+    except ImportError:
+        pass
+    try:
+        from arka.integrations.gemini_cli import wants_gemini_cli
+
+        if wants_gemini_cli(clean):
+            return False
+    except ImportError:
+        pass
+    if re.search(r"(?i)\b(life[- ]sciences?)\s+(list|install|info|doctor)\b", clean):
+        return False
+    if re.search(r"(?i)\b(life[- ]sciences?|biomedical research tools|bioinformatics tools)\b", clean):
+        return False
     if _is_investment_question(clean):
         return False
     if re.search(r"[\w.+-]+@[\w.-]+\.\w+", clean) and re.search(

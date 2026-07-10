@@ -35,6 +35,10 @@ _SELECT_PATTERNS: tuple[re.Pattern[str], ...] = (
     ),
     re.compile(r"(?i)\b(?:auto[- ]?)?(?:configure|apply|set)\s+(?:llm\s+)?models?\s+(?:for|from|based on)\s+(?:my\s+)?(?:hardware|pc|mac|resources)\b"),
     re.compile(r"(?i)^(?:select_model|model_select|best_model|model_advisor)\b"),
+    re.compile(
+        r"(?i)\b(?:select|pick|choose)\s+(?:the\s+)?best\s+(?:llm\s+)?models?\b"
+    ),
+    re.compile(r"(?i)\b(?:select|pick|choose)\s+(?:the\s+)?(?:best\s+)?model\b"),
 )
 
 _APPLY_RE = re.compile(r"(?i)\b(?:apply|auto[- ]?apply|save|write|configure)\b")

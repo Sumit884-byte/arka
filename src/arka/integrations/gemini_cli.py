@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -61,6 +63,51 @@ def build_gemini_argv(argv: list[str]) -> list[str]:
         return []
     # Headless -p runs require workspace trust (see geminicli.com trusted-folders docs).
     return ["--skip-trust", "-p", prompt]
+
+
+_GEMINI_IMAGE_RE = re.compile(
+    r"(?i)\b(?:generate|create|make|draw|paint|sketch|render|produce|thumbnail|video|"
+    r"image|picture|photo|art|illustration|portrait|landscape|flash-image)\b"
+)
+
+
+def wants_gemini_cli(text: str) -> bool:
+    clean = (text or "").strip()
+    if not clean:
+        return False
+    if re.match(r"(?i)^(?:arka\s+)?gemini(?:_cli)?(?:\s+status|\s+help|\s+--help)?$", clean):
+        return True
+    if re.match(r"(?i)^gemini_cli\b", clean):
+        return True
+    if re.match(r"(?i)^gemini\s+\S", clean) and not _GEMINI_IMAGE_RE.search(clean):
+        return True
+    if re.search(r"(?i)\b(?:ask|use|run)\s+gemini\b", clean) and not _GEMINI_IMAGE_RE.search(clean):
+        return True
+    return False
+
+
+def route_command(text: str) -> str:
+    if not wants_gemini_cli(text):
+        return ""
+    clean = (text or "").strip()
+    if re.match(r"(?i)^(?:arka\s+)?gemini(?:_cli)?\s+status$", clean):
+        return "gemini_cli status"
+    m = re.match(r"(?i)^(?:arka\s+)?(?:gemini_cli|gemini)\s+(.+)$", clean)
+    if m:
+        rest = m.group(1).strip()
+        if rest:
+            return "gemini_cli " + shlex.quote(rest)
+    m = re.search(r"(?i)\b(?:ask|use|run)\s+gemini\s+(?:to\s+)?(.+)$", clean)
+    if m:
+        return "gemini_cli " + shlex.quote(m.group(1).strip())
+    return "gemini_cli " + shlex.quote(clean)
+
+
+def nl_to_argv(text: str) -> list[str] | None:
+    route = route_command(text)
+    if not route:
+        return None
+    return shlex.split(route)[1:]
 
 
 def run_gemini_cli(argv: list[str], *, inherit_stdio: bool = True) -> int:

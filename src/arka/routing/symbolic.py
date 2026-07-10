@@ -378,6 +378,57 @@ def route_model_select(cmd: str) -> str | None:
     return "select_model " + " ".join(shlex.quote(a) for a in argv)
 
 
+def route_life_sciences(cmd: str) -> str | None:
+    clean = cmd.lower()
+    m = re.search(r"(?i)\b(life[- ]sciences?)\s+(list|install|info|doctor)(?:\s+(\S+))?", cmd)
+    if m:
+        sub = m.group(2).lower()
+        extra = (m.group(3) or "").strip()
+        return f"life_sciences {sub} {extra}".strip()
+
+    m = re.search(
+        r"(?i)\b(?:install|setup)\s+(pubmed|single[- ]cell(?:[- ]rna[- ]qc)?|nextflow(?:[- ]development)?|scvi(?:[- ]tools)?|life[- ]sciences?)\b",
+        cmd,
+    )
+    if m:
+        token = m.group(1).lower().replace(" ", "-")
+        mapping = {
+            "pubmed": "life_sciences install pubmed",
+            "single-cell": "life_sciences install single-cell-rna-qc",
+            "single-cell-rna-qc": "life_sciences install single-cell-rna-qc",
+            "nextflow": "life_sciences install nextflow-development",
+            "nextflow-development": "life_sciences install nextflow-development",
+            "scvi": "life_sciences install scvi-tools",
+            "scvi-tools": "life_sciences install scvi-tools",
+            "life-sciences": "life_sciences list",
+            "life-science": "life_sciences list",
+        }
+        return mapping.get(token)
+
+    if re.search(r"(?i)\b(life[- ]sciences?|biomedical research tools|bioinformatics tools)\b", clean):
+        return "life_sciences list"
+    return None
+
+
+def route_platform_howto(cmd: str) -> str | None:
+    try:
+        from arka.routing.platform_howto import is_platform_howto_question
+    except ImportError:
+        return None
+    if is_platform_howto_question(cmd):
+        return f"platform_howto {cmd.strip()}"
+    return None
+
+
+def route_gemini_cli(cmd: str) -> str | None:
+    try:
+        from arka.integrations.gemini_cli import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
+
+
 def route_mcp(cmd: str) -> str | None:
     try:
         from arka.integrations.mcp_manager import nl_to_argv
@@ -401,9 +452,11 @@ def route_offline_extras(cmd: str) -> str | None:
         route_generate_data,
         route_data_ask,
         route_docker_status,
-        route_clipboard_history,
         route_daily_brief,
         route_model_select,
+        route_life_sciences,
+        route_platform_howto,
+        route_gemini_cli,
         route_gmail_draft,
         route_post_x,
         route_find_files_by_size,

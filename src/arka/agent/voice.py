@@ -211,6 +211,23 @@ def voice_progress(skill: str) -> str:
         "nearby_places": "Finding nearby places.",
         "find_videos": "Searching YouTube for videos.",
         "survive_lang": "Building survival phrases.",
+        "generate_data": "Generating sample data.",
+        "data_gen": "Generating sample data.",
+        "mcp": "Checking MCP servers.",
+        "bookmarks": "Saving your bookmark.",
+        "repo_health": "Checking repository health.",
+        "docker_status": "Checking Docker status.",
+        "clipboard_history": "Opening clipboard history.",
+        "select_model": "Finding the best model for your hardware.",
+        "model_select": "Finding the best model for your hardware.",
+        "best_model": "Finding the best model for your hardware.",
+        "ascii_art": "Making ASCII art.",
+        "life_sciences": "Looking up life sciences tools.",
+        "post_x": "Posting to X.",
+        "competitions": "Searching competitions.",
+        "route_learn": "Saving that route.",
+        "gemini_cli": "Asking Gemini.",
+        "gemini": "Asking Gemini.",
     }
     return table.get(key, voice_ack(key.replace("_", " ")))
 

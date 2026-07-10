@@ -1933,7 +1933,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         agent_resume agent_research agent_nudge agent_watch agent_routine agent_fanout \
         agent_code agent_handoff agent_browser transcript_ask media_ask \
         meeting_agent study_agent inbox_agent compare_agent product_reviewer price_check profession pr_check github_repo competitions route_learn \
-        bookmarks repo_health generate_data data_gen data_ask ask_data query_data analyze_data docker_status clipboard_history mcp \
+        bookmarks repo_health generate_data data_gen data_ask ask_data query_data analyze_data docker_status clipboard_history mcp gemini_cli \
         arka_ask semantic_memory supermemory speak_research voice_session handoff_notify remind routines predictions stock \
         rag_setup rag_status voice_agent wake_control \
         agent_ask web_answer deep_web_answer web_essay platform_howto calc chat_reset set_location files_preference_help google \
@@ -9513,6 +9513,66 @@ function _agent_route_clipboard_history --description "Build clipboard_history i
     echo "$route"
 end
 
+function _agent_is_life_sciences_request --description "True if user wants life sciences plugin catalog (internal)"
+    set -l clean (string lower (string trim -- "$argv[1]"))
+    test -z "$clean"; and return 1
+    if string match -qr '(?i)\b(life[- ]sciences?)\s+(list|install|info|doctor)\b' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)\b(install|setup)\s+(pubmed|single[- ]cell|nextflow|scvi)\b' "$clean"
+        return 0
+    end
+    string match -qr '(?i)\blife[- ]sciences?\b' "$clean"
+end
+
+function _agent_route_life_sciences --description "Build life_sciences invocation from NL (internal)"
+    set -l cmd "$argv[1]"
+    set -l ls_m (string match -r '(?i)\b(life[- ]sciences?)\s+(list|install|info|doctor)(?:\s+(\S+))?' -- "$cmd")
+    if test (count $ls_m) -ge 3
+        set -l ls_extra ""
+        if test (count $ls_m) -ge 4
+            set ls_extra $ls_m[4]
+        end
+        echo "life_sciences $ls_m[3] $ls_extra"
+        return
+    end
+    set -l plug_m (string match -r '(?i)\b(?:install|setup)\s+(pubmed|single[- ]cell(?:[- ]rna[- ]qc)?|nextflow(?:[- ]development)?|scvi(?:[- ]tools)?)\b' -- "$cmd")
+    if test (count $plug_m) -ge 2
+        set -l plug (string lower -- $plug_m[2])
+        switch $plug
+            case "single-cell" "single cell" "single-cell-rna-qc" "single cell rna qc"
+                set plug "single-cell-rna-qc"
+            case "nextflow" "nextflow-development"
+                set plug "nextflow-development"
+            case "scvi" "scvi-tools"
+                set plug "scvi-tools"
+        end
+        echo "life_sciences install $plug"
+        return
+    end
+    echo "life_sciences list"
+end
+
+function _agent_is_gemini_cli_request --description "True if user wants Google Gemini CLI (internal)"
+    set -l py (_arka_python)
+    $py -c "
+from arka.integrations.gemini_cli import route_command
+import sys
+sys.exit(0 if route_command(sys.argv[1]) else 1)
+" "$argv[1]" 2>/dev/null
+end
+
+function _agent_build_gemini_cli_cmd --description "Build gemini_cli args from NL (internal)"
+    set -l py (_arka_python)
+    $py -c "
+from arka.integrations.gemini_cli import route_command
+import sys
+route = route_command(sys.argv[1])
+if route:
+    print(route)
+" "$argv[1]" 2>/dev/null
+end
+
 function _agent_route_github_repo --description "Build github_repo invocation from NL (internal)"
     set -l py (_arka_python)
     set -l route ($py (_arka_py_script arka_github_repo.py) route "$argv[1]" 2>/dev/null | string trim)
@@ -9950,7 +10010,25 @@ function _agent_is_knowledge_question --description "True if user wants a factua
     if _agent_is_clipboard_history_request "$argv[1]"
         return 1
     end
+    if _agent_is_model_select_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_life_sciences_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_gemini_cli_request "$argv[1]"
+        return 1
+    end
     if _agent_is_route_learn_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_model_select_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_life_sciences_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_gemini_cli_request "$argv[1]"
         return 1
     end
     if _agent_is_survival_lang_request "$argv[1]"
@@ -10143,6 +10221,39 @@ function _agent_is_general_chat --description "True if plain conversational inpu
         return 1
     end
     if _agent_is_youtube_download_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_model_select_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_life_sciences_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_gemini_cli_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_bookmarks_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_competitions_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_generate_data_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_data_ask_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_repo_health_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_docker_status_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_mcp_request "$argv[1]"
+        return 1
+    end
+    if string match -qr '(?i)^(select|best_model|model_select|gemini|gemini_cli|life|bookmarks|mcp|docker|clipboard|competitions|route|teach|generate_data|data_ask|ask_data|query_data|analyze_data|repo_health|post_x|daily_brief)\b' "$clean"
         return 1
     end
     if string match -qr '(?i)^(install|play|open|run|create|download|search|list|show|fix|set|take|timer|remind|weather|pdf|ingest|screenshot|spotify|whatsapp|send|loop|agent_|generate_image|generate_video|generate_password|chart|ascii|ascii_art|figlet|graph|plot|predictions|stock|translate|survive_lang|pr_check|cheat|excuse|bored)\b' "$clean"
@@ -10478,6 +10589,50 @@ function _agent_offline_route_cmd --description "Full symbolic NL to skill comma
     end
     if _agent_is_clipboard_history_request "$cmd"
         echo (_agent_route_clipboard_history "$cmd")
+        return 0
+    end
+    if _agent_is_competitions_request "$cmd"
+        echo (_agent_route_competitions "$cmd")
+        return 0
+    end
+    if _agent_is_bookmarks_request "$cmd"
+        echo (_agent_route_bookmarks "$cmd")
+        return 0
+    end
+    if _agent_is_repo_health_request "$cmd"
+        echo (_agent_route_repo_health "$cmd")
+        return 0
+    end
+    if _agent_is_generate_data_request "$cmd"
+        echo (_agent_route_generate_data "$cmd")
+        return 0
+    end
+    if _agent_is_data_ask_request "$cmd"
+        echo (_agent_route_data_ask "$cmd")
+        return 0
+    end
+    if _agent_is_docker_status_request "$cmd"
+        echo (_agent_route_docker_status "$cmd")
+        return 0
+    end
+    if _agent_is_route_learn_request "$cmd"
+        echo (_agent_route_learn_management "$cmd")
+        return 0
+    end
+    if _agent_is_daily_brief_request "$cmd"
+        echo "daily_brief"
+        return 0
+    end
+    if _agent_is_life_sciences_request "$cmd"
+        echo (_agent_route_life_sciences "$cmd")
+        return 0
+    end
+    if _agent_is_platform_howto_question "$cmd"
+        echo "platform_howto $cmd"
+        return 0
+    end
+    if _agent_is_gemini_cli_request "$cmd"
+        echo (_agent_build_gemini_cli_cmd "$cmd")
         return 0
     end
     set -l prev $ROUTE_MODE
@@ -12588,6 +12743,35 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         end
     end
 
+    if _agent_is_bookmarks_request "$cmd"
+        set -l br (_agent_route_bookmarks "$cmd")
+        if test -n "$br"
+            echo "skill|$br|Bookmark manager"
+            return
+        end
+    end
+
+    if _agent_is_daily_brief_request "$cmd"
+        echo "skill|daily_brief|Weather + news headlines"
+        return
+    end
+
+    if _agent_is_life_sciences_request "$cmd"
+        set -l ls (_agent_route_life_sciences "$cmd")
+        if test -n "$ls"
+            echo "skill|$ls|Life sciences plugin catalog"
+            return
+        end
+    end
+
+    if _agent_is_gemini_cli_request "$cmd"
+        set -l gc (_agent_build_gemini_cli_cmd "$cmd")
+        if test -n "$gc"
+            echo "skill|$gc|Google Gemini CLI agent"
+            return
+        end
+    end
+
     set -l route_mode (_arka_route_mode)
     if test "$route_mode" = ai -o "$route_mode" = ai_only
         set -l skills (_agent_available_skills)
@@ -12891,8 +13075,16 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
             return
         end
     end
+    if _agent_is_data_ask_request "$cmd"
+        set -l da (_agent_route_data_ask "$cmd")
+        if test -n "$da"
+            echo "skill|$da|Ask questions about data files"
+            return
+        end
+    end
     if string match -qr '(?i)^(analyze|check)\s+(?:stock\s+)?([A-Z][A-Z0-9.-]{1,12})\b' "$clean"
         and not _agent_is_repo_health_request "$cmd"
+        and not _agent_is_data_ask_request "$cmd"
         set -l ticker (string upper (string match -r '(?i)([A-Z][A-Z0-9.-]{1,12})\s*$' "$cmd")[2])
         echo "skill|stock analyze $ticker|AI stock strategy backtest"
         return
@@ -12944,6 +13136,13 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         return
     end
     if string match -qr '(?i)^https?://' "$clean"
+        if _agent_is_bookmarks_request "$cmd"
+            set -l br (_agent_route_bookmarks "$cmd")
+            if test -n "$br"
+                echo "skill|$br|Bookmark manager"
+                return
+            end
+        end
         if set -l dl (_agent_build_download_cmd "$cmd")
             echo "skill|$dl|Download file via curl (resume)"
             return
@@ -13382,6 +13581,27 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
     if _agent_is_platform_howto_question "$cmd"
         echo "skill|platform_howto $cmd|Platform-specific app/UI how-to"
         return
+    end
+    if _agent_is_model_select_request "$cmd"
+        set -l parts (_agent_build_model_select_cmd "$cmd")
+        if test -n "$parts"
+            echo "skill|$parts|Recommend LLM models from PC resources"
+            return
+        end
+    end
+    if _agent_is_life_sciences_request "$cmd"
+        set -l ls (_agent_route_life_sciences "$cmd")
+        if test -n "$ls"
+            echo "skill|$ls|Life sciences plugin catalog"
+            return
+        end
+    end
+    if _agent_is_gemini_cli_request "$cmd"
+        set -l gc (_agent_build_gemini_cli_cmd "$cmd")
+        if test -n "$gc"
+            echo "skill|$gc|Google Gemini CLI agent"
+            return
+        end
     end
     if _agent_is_general_chat "$cmd"
         set -l route (_agent_route_general_chat "$cmd")
