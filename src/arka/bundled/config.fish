@@ -2932,9 +2932,10 @@ CRITICAL NOTE ON ALIASES:
 end
 fish_add_path ~/.npm-global/bin
 
-# OpenClaw Completion
-if test -f "/home/s/.openclaw/completions/openclaw.fish"
-    source "/home/s/.openclaw/completions/openclaw.fish"
+# OpenClaw completions (optional — only if installed)
+set -l _openclaw_completions "$HOME/.openclaw/completions/openclaw.fish"
+if test -f "$_openclaw_completions"
+    source "$_openclaw_completions"
 end
 
 # opencode

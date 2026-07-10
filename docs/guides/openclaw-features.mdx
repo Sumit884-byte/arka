@@ -1,0 +1,118 @@
+---
+title: "Session memory, heartbeat, and skill gates"
+description: "OpenClaw-inspired Arka features — markdown session memory, agent heartbeat, and skill manifest gates for requires, OS, and permissions."
+keywords: ["session memory", "heartbeat", "openclaw", "skill gates", "permissions"]
+---
+
+Arka includes several **OpenClaw-inspired** features (not a separate OpenClaw product integration). They add persistent session notes, agent health tracking, and declarative skill gates for third-party plugins.
+
+## Session memory
+
+Markdown-based session notes stored under `~/.config/arka/agent-memory/`:
+
+- `MEMORY.md` — long-term notes (pruned automatically)
+- `daily/YYYY-MM-DD.md` — per-day session notes
+
+```bash
+session_memory append "Prefers morning standups at 9am"
+session_memory append "Always use dark terminal theme" --long-term
+session_memory search standup
+session_memory context "plan my morning routine"
+session_memory status
+```
+
+Recalled context is injected into agent loops via `context_for()` when `SESSION_MEMORY=1`.
+
+### Environment variables
+
+| Variable | Default | Purpose |
+| -------- | ------- | ------- |
+| `SESSION_MEMORY` | `1` | Enable (`0` to disable) |
+| `SESSION_MEMORY_DIR` | `~/.config/arka/agent-memory` | Storage root |
+| `MEMORY_LONGTERM_MAX_LINES` | `100` | Max lines kept in `MEMORY.md` |
+| `MEMORY_AUTO_LONGTERM` | `0` | Auto-promote every append to long-term |
+
+Notes are sanitized before storage — injection patterns and unsafe content are blocked.
+
+## Heartbeat
+
+Tracks last agent activity, security flags, routine count, and memory stats.
+
+```bash
+heartbeat status
+heartbeat ping goal.completed
+```
+
+Heartbeat data is written to `~/.cache/fish-agent/heartbeat.json`. Subsystems like session memory and routines call `ping()` automatically on activity.
+
+## Skill manifest gates
+
+Third-party plugins can declare **OpenClaw-style gates** in `skill.json`. Arka applies them during discovery, routing, and execution.
+
+### Top-level fields
+
+```json
+{
+  "name": "my_skill",
+  "requires": {
+    "bins": ["ffmpeg"],
+    "anyBins": ["docker", "podman"],
+    "env": ["MY_API_KEY"]
+  },
+  "os": ["darwin", "linux"],
+  "permissions": ["read", "network"]
+}
+```
+
+### `metadata.openclaw` (or `metadata.arka`)
+
+The same fields can live under `metadata.openclaw` for compatibility with OpenClaw-style manifests:
+
+```json
+{
+  "name": "my_skill",
+  "metadata": {
+    "openclaw": {
+      "requires": { "env": ["MY_API_KEY"] },
+      "os": ["darwin"],
+      "permissions": ["network"]
+    }
+  }
+}
+```
+
+Arka merges `metadata.openclaw` into the top-level `requires`, `os`, and `permissions` fields at parse time.
+
+### Gate behavior
+
+| Gate | Blocks when |
+| ---- | ----------- |
+| `os` | Current platform not listed |
+| `requires.bins` | Binary not found on `PATH` |
+| `requires.anyBins` | None of the listed binaries found |
+| `requires.env` | Environment variable unset |
+| `permissions` | Permission not in `SKILL_PERMISSIONS` allowlist |
+
+Gated skills are:
+
+- **Marked** in `arka skills list` with `[gated: reason]`
+- **Skipped** by `match_command()` so routing does not match unavailable plugins
+- **Blocked** at `run_skill()` as a safety net
+
+### Environment variables
+
+| Variable | Default | Purpose |
+| -------- | ------- | ------- |
+| `SKILL_PERMISSIONS` | `read,write,network,shell` | Allowed permission tags |
+| `SKILLS_PATH` | — | Extra directories to search for plugins |
+
+See also: [Installing plugins](/guides/plugins) and the example at `src/arka/skills/examples/demo_echo/skill.json`.
+
+## Related security
+
+Routines and webhooks apply separate hardening layers:
+
+- `ROUTINES_SECURITY=1` — symbolic action checks on scheduled tasks
+- Webhook inbound verification blocks injection payloads
+
+These work alongside the global `SECURITY`, `SECURITY_LLM`, and `SECURITY_ACTIONS` flags documented in [Security](/concepts/security).

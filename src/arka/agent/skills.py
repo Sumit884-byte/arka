@@ -194,6 +194,8 @@ def discover_skills(*, refresh: bool = False) -> list[dict[str, Any]]:
                         by_name[sk["name"]] = sk
 
     skills = sorted(by_name.values(), key=lambda s: s["name"])
+    for sk in skills:
+        _annotate_gates(sk)
     REGISTRY_FILE.parent.mkdir(parents=True, exist_ok=True)
     REGISTRY_FILE.write_text(
         json.dumps({"updated": time.time(), "skills": skills}, indent=2),
@@ -202,10 +204,12 @@ def discover_skills(*, refresh: bool = False) -> list[dict[str, Any]]:
     return skills
 
 
-def list_names(*, enabled_only: bool = True) -> list[str]:
+def list_names(*, enabled_only: bool = True, gate_aware: bool = True) -> list[str]:
     skills = discover_skills()
     if enabled_only:
         skills = [s for s in skills if s.get("enabled")]
+    if gate_aware:
+        skills = [s for s in skills if s.get("gate_ok", True)]
     return [s["name"] for s in skills]
 
 
@@ -219,7 +223,7 @@ def get_skill(name: str) -> dict[str, Any] | None:
 def fish_sources() -> list[str]:
     paths: list[str] = []
     for sk in discover_skills():
-        if not sk.get("enabled") or sk.get("type") != "fish":
+        if not sk.get("enabled") or not sk.get("gate_ok", True) or sk.get("type") != "fish":
             continue
         root = Path(sk["root"])
         entry = sk.get("entry") or ""
@@ -240,7 +244,9 @@ def match_command(text: str) -> str:
         return ""
     low = _normalize(raw)
 
-    skills = [s for s in discover_skills() if s.get("enabled")]
+    skills = [
+        s for s in discover_skills() if s.get("enabled") and s.get("gate_ok", True)
+    ]
     skills.sort(key=lambda s: max((len(t) for t in s.get("triggers") or [""]), default=0), reverse=True)
 
     for sk in skills:
@@ -293,6 +299,12 @@ def _py() -> str:
 
 def _which(bin_name: str) -> bool:
     return shutil.which(bin_name) is not None
+
+
+def _annotate_gates(sk: dict[str, Any]) -> None:
+    ok, reason = _skill_gates(sk)
+    sk["gate_ok"] = ok
+    sk["gate_reason"] = reason if not ok else ""
 
 
 def _skill_gates(sk: dict[str, Any]) -> tuple[bool, str]:
@@ -468,6 +480,8 @@ def print_list(*, verbose: bool = False) -> None:
         line = f"  [{flag}] {sk['name']} v{sk.get('version', '?')}"
         if sk.get("description"):
             line += f" — {sk['description']}"
+        if not sk.get("gate_ok", True):
+            line += f" [gated: {sk.get('gate_reason', '?')}]"
         print(line)
         if verbose:
             print(f"       type={sk.get('type')} root={sk.get('root')}")
@@ -477,6 +491,8 @@ def print_list(*, verbose: bool = False) -> None:
                 print(f"       requires: {sk['requires']}")
             if sk.get("permissions"):
                 print(f"       permissions: {', '.join(sk['permissions'])}")
+            if not sk.get("gate_ok", True):
+                print(f"       gate: blocked ({sk.get('gate_reason', '?')})")
 
 
 def main() -> int:

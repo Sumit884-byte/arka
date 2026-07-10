@@ -10,5 +10,15 @@
     "echo back",
     "test plugin"
   ],
-  "voice_ack": "Running the demo plugin."
+  "voice_ack": "Running the demo plugin.",
+  "metadata": {
+    "openclaw": {
+      "requires": {
+        "bins": [],
+        "env": []
+      },
+      "os": ["darwin", "linux"],
+      "permissions": ["read"]
+    }
+  }
 }
