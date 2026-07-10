@@ -36,7 +36,8 @@
           "guides/skills",
           "guides/route-learn",
           "guides/competitions",
-          "guides/ascii-art"
+          "guides/ascii-art",
+          "guides/generate-data"
         ]
       },
       {

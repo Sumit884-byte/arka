@@ -53,6 +53,10 @@ charts = [
 ascii = [
     "pyfiglet>=1.0.0",
 ]
+data = [
+    "faker>=24.0",
+    "openpyxl>=3.1",
+]
 drawings = [
     "Pillow>=10.0",
     "pymupdf>=1.24",

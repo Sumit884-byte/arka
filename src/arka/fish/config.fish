@@ -1933,7 +1933,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         agent_resume agent_research agent_nudge agent_watch agent_routine agent_fanout \
         agent_code agent_handoff agent_browser transcript_ask media_ask \
         meeting_agent study_agent inbox_agent compare_agent product_reviewer price_check profession pr_check github_repo competitions route_learn \
-        bookmarks repo_health docker_status clipboard_history mcp \
+        bookmarks repo_health generate_data data_gen docker_status clipboard_history mcp \
         arka_ask semantic_memory supermemory speak_research voice_session handoff_notify remind routines predictions stock \
         rag_setup rag_status voice_agent wake_control \
         agent_ask web_answer deep_web_answer web_essay platform_howto calc chat_reset set_location files_preference_help google \
@@ -6638,6 +6638,16 @@ function repo_health --description "Detect and run quick lint/test checks for th
     $py $script $argv
 end
 
+function generate_data --description "Generate sample CSV, JSON, TSV, and other fake datasets"
+    set -l py (_arka_python)
+    set -l script (_arka_py_script arka_generate_data.py)
+    $py $script $argv
+end
+
+function data_gen --description "Alias for generate_data — fake sample datasets"
+    generate_data $argv
+end
+
 function docker_status --description "Docker containers, images, logs, and daemon health"
     set -l py (_arka_python)
     set -l script (_arka_py_script arka_docker_status.py)
@@ -9396,6 +9406,18 @@ function _agent_route_repo_health --description "Build repo_health invocation fr
     echo "$route"
 end
 
+function _agent_is_generate_data_request --description "True if user wants sample data generation (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_generate_data.py) route "$argv[1]" 2>/dev/null | string trim)
+    test -n "$route"
+end
+
+function _agent_route_generate_data --description "Build generate_data invocation from NL (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_generate_data.py) route "$argv[1]" 2>/dev/null | string trim)
+    echo "$route"
+end
+
 function _agent_is_docker_status_request --description "True if user wants docker status/logs (internal)"
     set -l py (_arka_python)
     set -l route ($py (_arka_py_script arka_docker_status.py) route "$argv[1]" 2>/dev/null | string trim)
@@ -9860,6 +9882,9 @@ function _agent_is_knowledge_question --description "True if user wants a factua
         return 1
     end
     if _agent_is_repo_health_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_generate_data_request "$argv[1]"
         return 1
     end
     if _agent_is_docker_status_request "$argv[1]"
@@ -12819,6 +12844,13 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         echo "skill|generate_thumbnail|YouTube thumbnail — Unsplash photo + title overlay"
         return
     end
+    if _agent_is_generate_data_request "$cmd"
+        set -l gd (_agent_route_generate_data "$cmd")
+        if test -n "$gd"
+            echo "skill|$gd|Generate sample datasets"
+            return
+        end
+    end
     if _agent_is_ascii_art_request "$cmd"
         set -l parts (_agent_build_ascii_art_cmd "$cmd")
         if test -n "$parts"
@@ -12923,6 +12955,13 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         set -l rh (_agent_route_repo_health "$cmd")
         if test -n "$rh"
             echo "skill|$rh|Repo health scan and checks"
+            return
+        end
+    end
+    if _agent_is_generate_data_request "$cmd"
+        set -l gd (_agent_route_generate_data "$cmd")
+        if test -n "$gd"
+            echo "skill|$gd|Generate sample datasets"
             return
         end
     end
@@ -14746,6 +14785,14 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                                 return $status
                             end
                         end
+                        if _agent_is_generate_data_request "$raw"
+                            set -l gd (_agent_route_generate_data "$raw")
+                            if test -n "$gd"
+                                echo (set_color yellow)"💡 [Generate data]"(set_color normal)
+                                _agent_dispatch_one "$gd"
+                                return $status
+                            end
+                        end
                         if _agent_is_docker_status_request "$raw"
                             set -l dr (_agent_route_docker_status "$raw")
                             if test -n "$dr"
@@ -15875,6 +15922,9 @@ function agent --description "Run commands safely: executes safe commands automa
     else if _agent_is_repo_health_request "$cmd"
         set interpreted (_agent_route_repo_health "$cmd")
         set route_source offline
+    else if _agent_is_generate_data_request "$cmd"
+        set interpreted (_agent_route_generate_data "$cmd")
+        set route_source offline
     else if string match -qr '(?i)^(analyze|check)\s+(?:stock\s+)?[A-Z][A-Z0-9.-]{1,12}\b' "$clean_cmd"
         and not _agent_is_repo_health_request "$cmd"
         set -l stock_ticker (string upper (string match -r '(?i)([A-Z][A-Z0-9.-]{1,12})\s*$' "$cmd")[2])
@@ -16055,6 +16105,9 @@ function agent --description "Run commands safely: executes safe commands automa
         set route_source offline
     else if _agent_is_repo_health_request "$cmd"
         set interpreted (_agent_route_repo_health "$cmd")
+        set route_source offline
+    else if _agent_is_generate_data_request "$cmd"
+        set interpreted (_agent_route_generate_data "$cmd")
         set route_source offline
     else if _agent_is_docker_status_request "$cmd"
         set interpreted (_agent_route_docker_status "$cmd")

@@ -1,0 +1,55 @@
+---
+title: "Generate data"
+description: "Create fake or sample datasets in CSV, JSON, TSV, YAML, XML, SQL, Markdown, and XLSX."
+keywords: ["generate", "data", "csv", "json", "fake", "sample", "mock"]
+---
+
+Generate realistic sample datasets from the terminal — useful for tests, demos, and prototypes.
+
+## Natural language
+
+```bash
+arka generate 100 users as csv
+arka generate sample sales data json --rows 50
+arka generate fake emails tsv
+arka create sample json data
+arka data_gen --schema "name,email,age" --format json --count 20
+```
+
+## CLI commands
+
+| Command | Description |
+| ------- | ----------- |
+| `generate_data users --count 100 --format csv` | User records preset |
+| `generate_data sales --rows 50 -f json` | Sales data preset |
+| `generate_data --fields "id,name,price,category" -n 20` | Custom columns |
+| `generate_data products.csv --fields "id,name,price,category"` | Write directly to file |
+| `data_gen emails -f tsv` | Alias for `generate_data` |
+
+## Supported formats
+
+`csv`, `json`, `jsonl`, `tsv`, `yaml`, `xml`, `sql`, `markdown`, `xlsx`
+
+XLSX output requires `openpyxl` (`pip install openpyxl`). For richer fake values, install the optional Faker extra:
+
+```bash
+pip install faker
+```
+
+## Presets
+
+Built-in presets infer columns automatically:
+
+| Preset | Columns |
+| ------ | ------- |
+| `users` | id, name, email, age, phone |
+| `products` | id, name, price, category |
+| `sales` | date, product, quantity, revenue, region |
+| `emails` | email |
+| `customers` | id, name, email, address, phone |
+
+Field names are matched to generators (names, emails, phones, addresses, dates, numbers, UUIDs, booleans). Use `--llm` for complex custom schemas when an LLM API key is configured.
+
+## Output
+
+Print to stdout by default, or save with `-o output.csv` or by passing a filename as the first argument.
