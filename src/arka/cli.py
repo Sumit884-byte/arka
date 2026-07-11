@@ -140,6 +140,9 @@ def main(argv: list[str] | None = None) -> int:
     if args[0] == "mcp":
         return run_script("arka_mcp.py", args[1:])
 
+    if args[0] in ("agent_hub", "agent-hub", "hub"):
+        return run_script("arka_agent_hub.py", args[1:])
+
     if args[0] == "remind":
         rest = args[1:]
         if not rest:

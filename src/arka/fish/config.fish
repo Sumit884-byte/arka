@@ -1933,7 +1933,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         agent_resume agent_research agent_nudge agent_watch agent_routine agent_fanout \
         agent_code agent_handoff agent_browser transcript_ask media_ask \
         meeting_agent study_agent inbox_agent compare_agent product_reviewer price_check profession pr_check github_repo competitions route_learn \
-        bookmarks repo_health generate_data data_gen data_ask ask_data query_data analyze_data docker_status clipboard_history mcp gemini_cli \
+        bookmarks repo_health generate_data data_gen data_ask ask_data query_data analyze_data docker_status clipboard_history mcp agent_hub gemini_cli \
         arka_ask semantic_memory supermemory speak_research voice_session handoff_notify remind routines predictions stock \
         rag_setup rag_status voice_agent wake_control \
         agent_ask web_answer deep_web_answer web_essay platform_howto calc chat_reset set_location files_preference_help google \
@@ -10739,6 +10739,13 @@ function _agent_offline_route_cmd --description "Full symbolic NL to skill comma
         echo $g
         return 0
     end
+    if _agent_is_agent_hub_request "$cmd"
+        set -l hub_cmd (_agent_route_agent_hub "$cmd")
+        if test -n "$hub_cmd"
+            echo $hub_cmd
+            return 0
+        end
+    end
     if _agent_is_mcp_request "$cmd"
         set -l mcp_cmd (_agent_route_mcp "$cmd")
         if test -n "$mcp_cmd"
@@ -11054,6 +11061,21 @@ end
 
 function _agent_is_google_calendar_request --description "True if user wants Google Calendar (internal)"
     string match -qr '(?i)(google\s+calendar|my\s+calendar|calendar\s+today|calendar\s+this\s+week|what(?:'\''s|\s+is)\s+on\s+my\s+calendar|meetings?\s+today|schedule\s+today|events?\s+today|upcoming\s+meetings?)' "$argv[1]"
+end
+
+function _agent_is_agent_hub_request --description "True if user wants Agent Hub sync/launch (internal)"
+    string match -qr '(?i)(\bagent\s+hub\b|\barka\s+hub\b|ollama\s+launch|shared\s+mcp\s+for\s+agents?|launch\s+claude\s+code|sync\s+agent\s+hub)' "$argv[1]"
+end
+
+function _agent_route_agent_hub --description "Map NL to agent_hub subcommand (internal)"
+    set -l cmd "$argv[1]"
+    set -l py (_arka_python)
+    set -l rest ($py (_arka_py_script arka_agent_hub.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
+    if test (count $rest) -gt 0
+        echo $rest
+        return 0
+    end
+    return 1
 end
 
 function _agent_is_mcp_request --description "True if user wants MCP server/tool management (internal)"
@@ -12004,6 +12026,15 @@ function google --description "Google Calendar and Gmail — login, status, mail
         return $status
     end
     $py (_arka_py_script arka_google.py) $argv
+end
+
+function agent_hub --description "Shared MCP, memory, and skills for ollama launch agents"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        $py (_arka_py_script arka_agent_hub.py) help
+        return $status
+    end
+    $py (_arka_py_script arka_agent_hub.py) $argv
 end
 
 function mcp --description "Model Context Protocol — list, add, tools, call, status"
@@ -13060,6 +13091,14 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         set -l ch (_agent_route_clipboard_history "$cmd")
         if test -n "$ch"
             echo "skill|$ch|Clipboard history"
+            return
+        end
+    end
+
+    if _agent_is_agent_hub_request "$cmd"
+        set -l hub_cmd (_agent_route_agent_hub "$cmd")
+        if test -n "$hub_cmd"
+            echo "skill|$hub_cmd|Agent Hub — shared MCP and memory"
             return
         end
     end
@@ -16182,6 +16221,8 @@ function agent --description "Run commands safely: executes safe commands automa
         echo "  google gmail|calendar  - Read mail or list events (after login)"
         echo "  mcp list|status|tools  - Model Context Protocol servers and tools"
         echo "  arka mcp add <name>    - Add stdio or HTTP MCP server"
+        echo "  agent_hub list|sync    - Shared hub for ollama launch agents"
+        echo "  arka agent_hub launch  - Launch agent with ARKA_HUB_* env vars"
         echo "  gemini_cli <prompt>    - Google Gemini CLI agent (npm @google/gemini-cli)"
         echo "  arka gemini status     - Check Gemini CLI install (same as gemini_cli status)"
         echo "  cleanup_downloads      - Remove .zip/.deb/.tar.gz clutter from Downloads"

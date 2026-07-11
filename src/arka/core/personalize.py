@@ -249,6 +249,12 @@ SKILL_CATALOG: dict[str, dict[str, Any]] = {
         "example": "gemini explain asyncio",
         "beginner": True,
     },
+    "agent_hub": {
+        "interests": ["dev", "productivity"],
+        "description": "Shared MCP, memory, and skills for ollama launch agents",
+        "example": "agent_hub sync && agent_hub launch claude",
+        "beginner": False,
+    },
 }
 
 _PERSONALIZE_TRIGGERS = re.compile(

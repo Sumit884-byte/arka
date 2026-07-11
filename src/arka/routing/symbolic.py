@@ -462,9 +462,21 @@ def route_mcp(cmd: str) -> str | None:
     return "mcp " + " ".join(shlex.quote(a) for a in argv)
 
 
+def route_agent_hub(cmd: str) -> str | None:
+    try:
+        from arka.integrations.agent_hub import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "agent_hub " + " ".join(shlex.quote(a) for a in argv)
+
+
 def route_offline_extras(cmd: str) -> str | None:
     """Try supplemental NL routes not always available via fish bridge."""
     for fn in (
+        route_agent_hub,
         route_mcp,
         route_clipboard_history,
         route_learned,

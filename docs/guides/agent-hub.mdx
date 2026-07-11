@@ -1,0 +1,99 @@
+---
+title: "Agent Hub"
+description: "Shared MCP, memory, and skills for ollama launch agents — one Arka-managed hub that Claude Code, Hermes, OpenClaw, and other agents can consume."
+keywords: ["agent hub", "ollama launch", "mcp", "shared memory", "openclaw", "hermes"]
+---
+
+The **Arka Agent Hub** is a shared interoperability layer for coding agents launched via `ollama launch`. Arka does not patch or fork external agents — it exports canonical config files and environment variables that any agent can read.
+
+## What gets shared
+
+| Hub path | Source | Purpose |
+| -------- | ------ | ------- |
+| `~/.config/arka/hub/mcp.json` | `~/.config/arka/mcp.json` | Single MCP config (Cursor-compatible) |
+| `~/.config/arka/hub/memory/summary.json` | unified memory + sessions | Lightweight facts and session index |
+| `~/.config/arka/hub/skills/manifest.json` | `discover_skills()` | Installed Arka skills other agents can read |
+| `~/.config/arka/hub/agents.json` | static registry | Agent catalog + last sync timestamps |
+
+## Quick start
+
+```bash
+# Refresh hub exports from Arka
+arka agent_hub sync
+
+# List supported ollama launch agents
+arka agent_hub list
+
+# Launch with shared env vars (syncs first by default)
+arka agent_hub launch claude
+arka agent_hub launch hermes
+arka agent_hub launch openclaw
+
+# Check sync state and adapter hints
+arka agent_hub status
+
+# Verify ollama + hub paths
+arka agent_hub doctor
+```
+
+From fish:
+
+```fish
+agent_hub sync
+agent_hub launch claude
+```
+
+Natural language:
+
+```fish
+agent "sync agent hub"
+agent "launch claude code"
+agent "shared mcp for agents"
+```
+
+## Supported agents
+
+| Key | Name | Launch command |
+| --- | ---- | -------------- |
+| `claude` | Claude Code | `ollama launch claude` |
+| `codex-app` | Codex App | `ollama launch codex-app` |
+| `hermes` | Hermes Agent | `ollama launch hermes` |
+| `openclaw` | OpenClaw | `ollama launch openclaw` |
+| `opencode` | OpenCode | `ollama launch opencode` |
+| `codex` | Codex CLI | `ollama launch codex` |
+| `copilot` | GitHub Copilot Agent | `ollama launch copilot` |
+| `droid` | Droid | `ollama launch droid` |
+| `pi` | Pi Agent | `ollama launch pi` |
+
+## Environment contract
+
+When you run `agent_hub launch`, Arka sets:
+
+| Variable | Points to |
+| -------- | --------- |
+| `ARKA_HUB_DIR` | Hub root (`~/.config/arka/hub/`) |
+| `ARKA_MCP_CONFIG` | Hub MCP config |
+| `ARKA_MEMORY_DIR` | Hub memory exports |
+| `MCP_CONFIG` | Same as `ARKA_MCP_CONFIG` (for agents that read it) |
+
+Agents that support these env vars pick up shared MCP and memory without Arka modifying their internals.
+
+## MCP adapters
+
+`agent_hub sync` writes **snippet files** under `~/.config/arka/hub/adapters/` showing how to merge hub MCP servers into Cursor or Claude Desktop configs. By default Arka does **not** overwrite your live configs.
+
+To merge hub MCP into external configs:
+
+```bash
+arka agent_hub sync --force
+```
+
+Use `--force` only when you want Arka to write merged `mcpServers` into documented adapter paths.
+
+## Related guides
+
+- [MCP integration](/guides/mcp) — configure servers in `~/.config/arka/mcp.json`
+- [Memory](/guides/memory) — unified memory layers exported to the hub
+- [Skills](/guides/skills) — plugins listed in the skills manifest
+- [OpenClaw-inspired features](/guides/openclaw-features) — session memory and skill gates
+- [Hermes-inspired features](/guides/hermes-features) — channel sessions and sub-agents
