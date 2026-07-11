@@ -38,6 +38,8 @@ arka kaggle download heptapod/titanic --unzip
 | `kaggle download <owner/dataset>` | Download a dataset to your Downloads folder |
 | `kaggle download <owner/dataset> -o DIR` | Download to a custom directory |
 | `kaggle download <owner/dataset> --unzip` | Download and extract archives |
+| `kaggle open <owner/dataset>` | Open dataset page in browser (no API key) |
+| `kaggle download <owner/dataset> --open` | Open in browser when credentials are missing |
 
 ## Credentials
 
@@ -61,6 +63,30 @@ chmod 600 ~/.kaggle/kaggle.json
 ```
 
 Run `kaggle status` to verify credentials before downloading.
+
+## Without API keys
+
+The official Kaggle API requires credentials. If you do not have an API token yet, you can still open a dataset page in your browser and download files manually from the Kaggle website.
+
+```bash
+kaggle open heptapod/titanic
+kaggle open https://www.kaggle.com/datasets/heptapod/titanic
+```
+
+Natural language:
+
+```bash
+arka "open kaggle dataset heptapod/titanic"
+arka "kaggle open heptapod/titanic"
+```
+
+You can also pass `--open` (or `--browser`) on download to open the page instead of failing when credentials are missing:
+
+```bash
+kaggle download heptapod/titanic --open
+```
+
+If you run `kaggle download` or `kaggle search` without credentials, Arka prints a short message suggesting `kaggle open owner/dataset` for manual download.
 
 ## API approach
 

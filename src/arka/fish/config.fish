@@ -2379,7 +2379,7 @@ function skills --description "Show what commands the agent can auto-run"
             case kalshi
                 echo (set_color green)"  kalshi         "(set_color normal)"search <topic> | market <TICKER> | trending | status — Kalshi prediction odds"
             case kaggle
-                echo (set_color green)"  kaggle         "(set_color normal)"download <owner/dataset> | search <query> | status — Kaggle datasets"
+                echo (set_color green)"  kaggle         "(set_color normal)"download <owner/dataset> | open <owner/dataset> | search <query> | status — Kaggle datasets"
             case wifi_info
                 echo (set_color green)"  wifi_info      "(set_color normal)"Current Wi-Fi network + signal"
             case generate_image
@@ -8443,10 +8443,12 @@ end
 function kaggle --description "Download and search Kaggle datasets"
     set -l py (_arka_python)
     if test (count $argv) -eq 0
-        echo "Usage: kaggle download <owner/dataset> [-o DIR] [--unzip]"
+        echo "Usage: kaggle download <owner/dataset> [-o DIR] [--unzip] [--open]"
+        echo "       kaggle open <owner/dataset>"
         echo "       kaggle search <keywords>"
         echo "       kaggle status"
         echo "       arka 'download kaggle dataset titanic'"
+        echo "       arka 'open kaggle dataset heptapod/titanic'"
         return 1
     end
     set -l out (_arka_capture_output $py (_arka_py_script arka_kaggle.py) $argv)
@@ -16314,6 +16316,7 @@ function agent --description "Run commands safely: executes safe commands automa
         echo "  kalshi trending          - Top Kalshi markets by 24h volume"
         echo "  kalshi status            - Kalshi exchange status"
         echo "  kaggle download <owner/dataset> - Download a Kaggle dataset"
+        echo "  kaggle open <owner/dataset> - Open dataset page in browser (no API key)"
         echo "  kaggle search <query>    - Search Kaggle datasets"
         echo "  kaggle status            - Check Kaggle API credentials"
         echo "  sports_score [league]  - Live scores: IPL, cricket, NFL, NBA, EPL, F1, …"

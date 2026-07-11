@@ -6,11 +6,13 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import platform
 import re
 import shlex
 import shutil
 import subprocess
 import sys
+import webbrowser
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -30,7 +32,8 @@ except ImportError:
 
 _DATASET_SLUG_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]*/[a-zA-Z0-9][a-zA-Z0-9_-]*$")
 _SEARCH_QUERY_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9\s._'-]{0,120}$")
-_KNOWN_CMDS = frozenset({"download", "search", "status", "parse"})
+_DATASET_URL_PREFIX = "https://www.kaggle.com/datasets/"
+_KNOWN_CMDS = frozenset({"download", "search", "status", "parse", "open"})
 
 _COMPETITIONS_RE = re.compile(r"(?i)\bcompetitions?\b")
 
@@ -40,7 +43,8 @@ def _is_competitions_request(text: str) -> bool:
 
 _TRIGGER_RE = re.compile(
     r"(?i)\b("
-    r"kaggle(?:\s+dataset|\s+datasets|\s+download|\s+search|\s+status)?|"
+    r"kaggle(?:\s+dataset|\s+datasets|\s+download|\s+search|\s+status|\s+open)?|"
+    r"open\s+kaggle\s+dataset|"
     r"download\s+(?:a\s+)?kaggle\s+dataset|"
     r"get\s+kaggle\s+dataset|"
     r"fetch\s+kaggle\s+dataset"
@@ -58,6 +62,52 @@ def sanitize_dataset_slug(slug: str) -> str:
     if not raw or not _DATASET_SLUG_RE.fullmatch(raw):
         raise ValueError(f"Invalid Kaggle dataset slug (expected owner/name): {slug!r}")
     return raw
+
+
+def build_dataset_url(slug_or_url: str) -> str:
+    return f"{_DATASET_URL_PREFIX}{sanitize_dataset_slug(slug_or_url)}"
+
+
+def _open_url(url: str) -> None:
+    if platform.system() == "Darwin":
+        subprocess.Popen(["open", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return
+    if shutil.which("xdg-open"):
+        subprocess.Popen(["xdg-open", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return
+    webbrowser.open(url)
+
+
+def open_dataset(slug_or_url: str) -> str:
+    url = build_dataset_url(slug_or_url)
+    _open_url(url)
+    return f"Opened {url}"
+
+
+def _no_credentials_message(slug: str | None = None) -> str:
+    lines = [
+        "Kaggle credentials not configured.",
+        "Set KAGGLE_USERNAME/KAGGLE_KEY or ~/.kaggle/kaggle.json — run: kaggle status",
+    ]
+    if slug:
+        lines.extend(
+            [
+                "",
+                "Without API keys, open the dataset page in your browser:",
+                f"  kaggle open {slug}",
+                f"  kaggle download {slug} --open",
+            ]
+        )
+    return "\n".join(lines)
+
+
+def _search_no_credentials_message() -> str:
+    return (
+        "Kaggle credentials not configured. "
+        "Set KAGGLE_USERNAME/KAGGLE_KEY or ~/.kaggle/kaggle.json — run: kaggle status\n\n"
+        "Without API keys, browse datasets at https://www.kaggle.com/datasets\n"
+        "or open a known dataset: kaggle open owner/dataset"
+    )
 
 
 def sanitize_search_query(query: str) -> str:
@@ -196,15 +246,19 @@ def _download_via_python(slug: str, *, output_dir: Path, unzip: bool) -> str:
     return f"Downloaded {slug} to {output_dir}"
 
 
-def download_dataset(slug: str, *, output_dir: Path | None = None, unzip: bool = False) -> str:
+def download_dataset(
+    slug: str,
+    *,
+    output_dir: Path | None = None,
+    unzip: bool = False,
+    open_browser: bool = False,
+) -> str:
+    safe = sanitize_dataset_slug(slug)
     cred = credential_status()
     if not cred["configured"]:
-        raise RuntimeError(
-            "Kaggle credentials not configured. "
-            "Set KAGGLE_USERNAME/KAGGLE_KEY or ~/.kaggle/kaggle.json — run: kaggle status"
-        )
-
-    safe = sanitize_dataset_slug(slug)
+        if open_browser:
+            return open_dataset(safe)
+        raise RuntimeError(_no_credentials_message(safe))
     out = _ensure_output_dir(output_dir or downloads_dir())
 
     if find_kaggle_cli():
@@ -298,10 +352,7 @@ def _parse_cli_dataset_table(text: str) -> list[dict[str, str]]:
 def search_datasets(query: str, *, limit: int = 10) -> list[dict[str, str]]:
     cred = credential_status()
     if not cred["configured"]:
-        raise RuntimeError(
-            "Kaggle credentials not configured. "
-            "Set KAGGLE_USERNAME/KAGGLE_KEY or ~/.kaggle/kaggle.json — run: kaggle status"
-        )
+        raise RuntimeError(_search_no_credentials_message())
 
     safe = sanitize_search_query(query)
     if find_kaggle_cli():
@@ -369,6 +420,23 @@ def nl_to_argv(text: str) -> list[str]:
     if re.search(r"(?i)\b(?:status|credentials?|configured|setup|auth)\b", raw):
         return ["status"]
 
+    if re.search(r"(?i)\bopen\b", raw):
+        slug = _extract_slug(raw)
+        if slug:
+            return ["open", slug]
+        rest = _strip_nl_prefix(raw)
+        rest = re.sub(r"(?i)^open\s+", "", rest).strip()
+        if rest and _DATASET_SLUG_RE.fullmatch(rest):
+            return ["open", rest]
+        rest = re.sub(
+            r"(?i)^(?:please\s+)?(?:arka\s+)?(?:open\s+)?(?:kaggle\s+)?(?:dataset|datasets)\s+",
+            "",
+            raw,
+        ).strip()
+        if rest and _DATASET_SLUG_RE.fullmatch(rest):
+            return ["open", rest]
+        return []
+
     if re.search(r"(?i)\bsearch\b", raw):
         rest = _strip_nl_prefix(raw)
         rest = re.sub(r"(?i)^search\s+", "", rest).strip()
@@ -410,11 +478,33 @@ def route_command(text: str) -> str:
 def cmd_download(args: argparse.Namespace) -> int:
     slug = (args.dataset or "").strip()
     if not slug:
-        print("Usage: kaggle download <owner/dataset> [-o DIR] [--unzip]", file=sys.stderr)
+        print(
+            "Usage: kaggle download <owner/dataset> [-o DIR] [--unzip] [--open]",
+            file=sys.stderr,
+        )
         return 1
     try:
-        out = download_dataset(slug, output_dir=args.output, unzip=args.unzip)
+        out = download_dataset(
+            slug,
+            output_dir=args.output,
+            unzip=args.unzip,
+            open_browser=args.open_browser,
+        )
     except (ValueError, RuntimeError) as exc:
+        print(f"✗ {exc}", file=sys.stderr)
+        return 1
+    print(out)
+    return 0
+
+
+def cmd_open(args: argparse.Namespace) -> int:
+    slug = (args.dataset or "").strip()
+    if not slug:
+        print("Usage: kaggle open <owner/dataset>", file=sys.stderr)
+        return 1
+    try:
+        out = open_dataset(slug)
+    except ValueError as exc:
         print(f"✗ {exc}", file=sys.stderr)
         return 1
     print(out)
@@ -451,7 +541,18 @@ def main(argv: list[str] | None = None) -> int:
     p_download.add_argument("dataset")
     p_download.add_argument("-o", "--output", type=Path, default=None)
     p_download.add_argument("--unzip", action="store_true")
+    p_download.add_argument(
+        "--open",
+        "--browser",
+        dest="open_browser",
+        action="store_true",
+        help="Open dataset page in browser (no API key required)",
+    )
     p_download.set_defaults(func=cmd_download)
+
+    p_open = sub.add_parser("open", help="Open dataset page in browser (no API key)")
+    p_open.add_argument("dataset")
+    p_open.set_defaults(func=cmd_open)
 
     p_search = sub.add_parser("search", help="Search datasets by keyword")
     p_search.add_argument("query", nargs="+")

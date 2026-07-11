@@ -8,16 +8,20 @@ from pathlib import Path
 from unittest import mock
 
 from arka.integrations.kaggle import (
+    build_dataset_url,
     credential_status,
     download_dataset,
     format_search_results,
     format_status,
     nl_to_argv,
+    open_dataset,
     route_command,
     sanitize_dataset_slug,
     sanitize_search_query,
     search_datasets,
     wants_kaggle,
+    _no_credentials_message,
+    _search_no_credentials_message,
 )
 from arka.routing.symbolic import route_kaggle, route_offline_extras
 
@@ -29,6 +33,18 @@ class KaggleSanitizeTests(unittest.TestCase):
     def test_sanitize_dataset_slug_from_url(self) -> None:
         slug = sanitize_dataset_slug("https://www.kaggle.com/datasets/heptapod/titanic")
         self.assertEqual(slug, "heptapod/titanic")
+
+    def test_build_dataset_url_from_slug(self) -> None:
+        self.assertEqual(
+            build_dataset_url("heptapod/titanic"),
+            "https://www.kaggle.com/datasets/heptapod/titanic",
+        )
+
+    def test_build_dataset_url_from_full_url(self) -> None:
+        self.assertEqual(
+            build_dataset_url("https://www.kaggle.com/datasets/heptapod/titanic"),
+            "https://www.kaggle.com/datasets/heptapod/titanic",
+        )
 
     def test_sanitize_dataset_slug_rejects_shell(self) -> None:
         with self.assertRaises(ValueError):
@@ -60,6 +76,27 @@ class KaggleParseTests(unittest.TestCase):
 
     def test_nl_status(self) -> None:
         self.assertEqual(nl_to_argv("kaggle status"), ["status"])
+
+    def test_nl_open_slug(self) -> None:
+        self.assertEqual(nl_to_argv("kaggle open heptapod/titanic"), ["open", "heptapod/titanic"])
+
+    def test_nl_open_dataset_phrase(self) -> None:
+        self.assertEqual(
+            nl_to_argv("open kaggle dataset heptapod/titanic"),
+            ["open", "heptapod/titanic"],
+        )
+
+    def test_nl_open_from_url(self) -> None:
+        self.assertEqual(
+            nl_to_argv("kaggle open https://www.kaggle.com/datasets/heptapod/titanic"),
+            ["open", "heptapod/titanic"],
+        )
+
+    def test_route_command_open(self) -> None:
+        self.assertEqual(
+            route_command("open kaggle dataset heptapod/titanic"),
+            "kaggle open heptapod/titanic",
+        )
 
     def test_route_command(self) -> None:
         self.assertEqual(
@@ -174,8 +211,32 @@ class KaggleDownloadTests(unittest.TestCase):
             "arka.integrations.kaggle.credential_status",
             return_value={"configured": False},
         ):
-            with self.assertRaises(RuntimeError):
+            with self.assertRaises(RuntimeError) as ctx:
                 download_dataset("heptapod/titanic")
+        self.assertIn("kaggle open heptapod/titanic", str(ctx.exception))
+
+    @mock.patch("arka.integrations.kaggle.credential_status")
+    @mock.patch("arka.integrations.kaggle._open_url")
+    def test_download_open_browser_without_credentials(
+        self,
+        open_url: mock.MagicMock,
+        cred: mock.MagicMock,
+    ) -> None:
+        cred.return_value = {"configured": False}
+        message = download_dataset("heptapod/titanic", open_browser=True)
+        self.assertIn("Opened https://www.kaggle.com/datasets/heptapod/titanic", message)
+        open_url.assert_called_once_with("https://www.kaggle.com/datasets/heptapod/titanic")
+
+    @mock.patch("arka.integrations.kaggle._open_url")
+    def test_open_dataset(self, open_url: mock.MagicMock) -> None:
+        message = open_dataset("heptapod/titanic")
+        self.assertIn("Opened https://www.kaggle.com/datasets/heptapod/titanic", message)
+        open_url.assert_called_once_with("https://www.kaggle.com/datasets/heptapod/titanic")
+
+    def test_no_credentials_message_includes_open_hint(self) -> None:
+        message = _no_credentials_message("heptapod/titanic")
+        self.assertIn("kaggle open heptapod/titanic", message)
+        self.assertIn("kaggle download heptapod/titanic --open", message)
 
 
 class KaggleSearchTests(unittest.TestCase):
@@ -200,6 +261,18 @@ class KaggleSearchTests(unittest.TestCase):
         text = format_search_results("missing", [])
         self.assertIn("No datasets matched", text)
 
+    def test_search_requires_credentials_with_browser_hint(self) -> None:
+        with mock.patch(
+            "arka.integrations.kaggle.credential_status",
+            return_value={"configured": False},
+        ):
+            with self.assertRaises(RuntimeError) as ctx:
+                search_datasets("titanic")
+        message = str(ctx.exception)
+        self.assertIn("kaggle open owner/dataset", message)
+        self.assertIn("kaggle.com/datasets", message)
+        self.assertEqual(message, _search_no_credentials_message())
+
 
 class KaggleRoutingTests(unittest.TestCase):
     def test_route_kaggle(self) -> None:
@@ -207,6 +280,10 @@ class KaggleRoutingTests(unittest.TestCase):
         self.assertIsNotNone(hit)
         assert hit is not None
         self.assertTrue(hit.startswith("kaggle download"))
+
+    def test_route_kaggle_open(self) -> None:
+        hit = route_kaggle("open kaggle dataset heptapod/titanic")
+        self.assertEqual(hit, "kaggle open heptapod/titanic")
 
     def test_route_offline_extras(self) -> None:
         hit = route_offline_extras("kaggle search titanic")
