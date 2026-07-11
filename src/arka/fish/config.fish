@@ -1937,7 +1937,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         agent_resume agent_research agent_nudge agent_watch agent_routine agent_fanout \
         agent_code agent_handoff agent_browser transcript_ask media_ask \
         meeting_agent study_agent inbox_agent compare_agent product_reviewer price_check profession pr_check github_repo competitions route_learn \
-        bookmarks repo_health repo_map generate_data data_gen data_ask ask_data query_data analyze_data docker_status clipboard_history mcp agent_hub gemini_cli elon talk_to_elon elon_chat \
+        bookmarks repo_health repo_map generate_data data_gen data_ask ask_data query_data analyze_data docker_status clipboard_history mcp agent_hub gemini_cli persona elon talk_to_elon elon_chat \
         arka_ask semantic_memory supermemory speak_research voice_session handoff_notify remind routines predictions stock \
         rag_setup rag_status voice_agent wake_control \
         agent_ask web_answer deep_web_answer web_essay platform_howto calc chat_reset set_location files_preference_help google \
@@ -9779,19 +9779,19 @@ sys.exit(0 if route_command(sys.argv[1]) else 1)
 " "$argv[1]" 2>/dev/null
 end
 
-function _agent_is_elon_request --description "True if user wants Elon persona chat (internal)"
+function _agent_is_elon_request --description "True if user wants persona chat (internal)"
     set -l py (_arka_python)
     $py -c "
-from arka.agent.personas.elon import route_command
+from arka.agent.personas.base import route_command
 import sys
 sys.exit(0 if route_command(sys.argv[1]) else 1)
 " "$argv[1]" 2>/dev/null
 end
 
-function _agent_build_elon_cmd --description "Build elon args from NL (internal)"
+function _agent_build_elon_cmd --description "Build persona args from NL (internal)"
     set -l py (_arka_python)
     $py -c "
-from arka.agent.personas.elon import route_command
+from arka.agent.personas.base import route_command
 import sys
 route = route_command(sys.argv[1])
 if route:
@@ -12227,6 +12227,15 @@ function gemini_cli --description "Google Gemini CLI agent (@google/gemini-cli)"
         return $status
     end
     $py (_arka_py_script arka_gemini.py) $argv
+end
+
+function persona --description "Create and chat with simulated personas (entertainment/education)"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        $py (_arka_py_script arka_persona.py) list
+        return $status
+    end
+    $py (_arka_py_script arka_persona.py) $argv
 end
 
 function elon --description "Simulated Elon-inspired persona chat (entertainment/education)"

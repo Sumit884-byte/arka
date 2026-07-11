@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
-"""Simulated Elon Musk-inspired persona chat — entertainment/education only."""
+"""Backward-compatible Elon persona shim — delegates to the persona system."""
 
 from __future__ import annotations
 
-import argparse
-import re
 import shlex
 import sys
+
+from arka.agent.personas.base import (
+    route_command as _route_persona,
+    sanitize_prompt as _sanitize_persona,
+    wants_persona as _wants_persona,
+)
+from arka.agent.personas.cli import main as persona_main
 
 DISCLAIMER = (
     "Note: Simulated Elon-inspired persona for fun and education — "
@@ -28,101 +33,36 @@ Rules:
 - If asked whether you are real Elon, clarify you are a simulation
 - Stay in character but keep responses helpful and good-natured"""
 
-_NL_PREFIX_RE = re.compile(
-    r"(?i)^(?:"
-    r"(?:arka\s+)?(?:elon|talk_to_elon|elon_chat|talk_elon)(?:\s+chat)?\s*"
-    r"|(?:talk|chat)\s+(?:to|with)\s+elon(?:\s+musk)?\s*"
-    r"|(?:what\s+would\s+)?elon(?:\s+musk)?\s+(?:say|think)\s+(?:about\s+)?"
-    r"|elon\s+persona\s*"
-    r")",
-)
+
+def wants_elon(text: str) -> bool:
+    return _wants_persona(text)
 
 
 def sanitize_prompt(text: str) -> str:
-    """Strip routing prefixes and return the user's question."""
-    clean = " ".join((text or "").split()).strip()
-    if not clean:
-        return ""
-    clean = _NL_PREFIX_RE.sub("", clean).strip()
-    clean = re.sub(r"(?i)^about\s+", "", clean).strip()
-    clean = re.sub(r'^["\']|["\']$', "", clean).strip()
-    return clean
-
-
-def wants_elon(text: str) -> bool:
-    clean = (text or "").strip()
-    if not clean:
-        return False
-    if re.match(
-        r"(?i)^(?:arka\s+)?(?:elon|talk_to_elon|elon_chat|talk_elon)(?:\s|$|\s+chat\b)",
-        clean,
-    ):
-        return True
-    if re.search(r"(?i)\b(?:talk|chat)\s+(?:to|with)\s+elon\b", clean):
-        return True
-    if re.search(r"(?i)\belon\s+(?:persona|mode|chat)\b", clean):
-        return True
-    if re.search(r"(?i)\bwhat\s+would\s+elon\s+(?:say|think)\b", clean):
-        return True
-    if re.search(r"(?i)\belon\s+musk\b", clean) and re.search(
-        r"(?i)\b(?:say|think|about|persona)\b", clean
-    ):
-        return True
-    return False
+    return _sanitize_persona(text, persona_name="elon")
 
 
 def route_command(text: str) -> str:
-    if not wants_elon(text):
+    route = _route_persona(text)
+    if not route:
         return ""
-    clean = (text or "").strip()
-    if re.match(r"(?i)^(?:arka\s+)?(?:elon|talk_to_elon|elon_chat|talk_elon)\s*$", clean):
-        return "elon chat"
-    if re.match(
-        r"(?i)^(?:arka\s+)?(?:elon|talk_to_elon|elon_chat|talk_elon)\s+chat\s*$",
-        clean,
-    ):
-        return "elon chat"
-    prompt = sanitize_prompt(clean)
-    if not prompt or prompt.lower() == "chat":
-        return "elon chat"
-    return "elon " + shlex.quote(prompt)
+    if route.startswith("persona chat elon"):
+        rest = route.removeprefix("persona chat elon").strip()
+        if not rest:
+            return "elon chat"
+        return "elon " + rest
+    if route.startswith("persona "):
+        return route
+    return route
 
 
 def nl_to_argv(text: str) -> list[str] | None:
     route = route_command(text)
     if not route:
         return None
+    if route.startswith("persona "):
+        return shlex.split(route)[1:]
     return shlex.split(route)[1:]
-
-
-def _format_user(question: str, history: list[tuple[str, str]] | None = None) -> str:
-    if not history:
-        return question
-    lines = ["Conversation so far:"]
-    for user, assistant in history[-6:]:
-        lines.append(f"User: {user}")
-        lines.append(f"Persona: {assistant}")
-    lines.append(f"User: {question}")
-    return "\n".join(lines)
-
-
-def _llm_reply(system: str, user: str) -> str:
-    try:
-        from arka.llm.cli import llm_complete
-
-        return llm_complete(
-            system,
-            user,
-            temperature=0.7,
-            task="chat",
-            skill="elon",
-        ).strip()
-    except ImportError:
-        pass
-
-    from arka.agent.core import _llm
-
-    return _llm(system, user, temperature=0.7, task="chat").strip()
 
 
 def chat_once(
@@ -131,36 +71,15 @@ def chat_once(
     history: list[tuple[str, str]] | None = None,
     show_disclaimer: bool = False,
 ) -> str:
-    question = sanitize_prompt(question) or question.strip()
-    if not question:
-        return ""
-    user = _format_user(question, history)
-    reply = _llm_reply(ELON_SYSTEM_PROMPT, user)
-    if show_disclaimer and reply:
-        return DISCLAIMER + reply
-    return reply
+    from arka.agent.personas.base import chat_once as _chat_once
+
+    return _chat_once("elon", question, history=history, show_disclaimer=show_disclaimer)
 
 
 def chat_repl(*, show_disclaimer: bool = True) -> int:
-    if show_disclaimer:
-        print(DISCLAIMER, end="")
-    print("Elon persona chat (type 'quit' or Ctrl-D to exit)\n")
-    history: list[tuple[str, str]] = []
-    while True:
-        try:
-            line = input("you> ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print()
-            break
-        if not line or line.lower() in {"quit", "exit", "q"}:
-            break
-        answer = chat_once(line, history=history)
-        if not answer:
-            print("Could not get a reply (check LLM API keys)", file=sys.stderr)
-            continue
-        print(f"\nelon> {answer}\n")
-        history.append((line, answer))
-    return 0
+    from arka.agent.personas.base import chat_repl as _chat_repl
+
+    return _chat_repl("elon", show_disclaimer=show_disclaimer)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -170,20 +89,10 @@ def main(argv: list[str] | None = None) -> int:
         _print_help()
         return 0
 
-    if not raw or raw[0] == "chat":
-        return chat_repl()
-
-    prompt = " ".join(raw).strip()
-    if not prompt:
-        return chat_repl()
-
-    print(DISCLAIMER, end="")
-    answer = chat_once(prompt)
-    if not answer:
-        print("Could not get a reply (check LLM API keys)", file=sys.stderr)
-        return 1
-    print(answer)
-    return 0
+    chat_argv = ["chat", "elon", *raw]
+    if raw and raw[0] == "chat":
+        chat_argv = ["chat", "elon", *raw[1:]]
+    return persona_main(chat_argv)
 
 
 def _print_help() -> None:
@@ -195,6 +104,10 @@ Usage:
   elon chat                    Same as above
   elon "should I learn Rust?"  One-shot question
   talk to elon about rockets   Natural-language routing via arka
+
+Also available:
+  arka persona list
+  arka persona chat elon
 
 Examples:
   arka talk to elon about first-principles thinking

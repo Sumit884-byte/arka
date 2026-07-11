@@ -471,11 +471,15 @@ def route_gemini_cli(cmd: str) -> str | None:
 
 def route_elon(cmd: str) -> str | None:
     try:
-        from arka.agent.personas.elon import route_command
+        from arka.agent.personas.base import route_command
     except ImportError:
         return None
     route = route_command(cmd)
     return route or None
+
+
+def route_persona(cmd: str) -> str | None:
+    return route_elon(cmd)
 
 
 def route_mcp(cmd: str) -> str | None:

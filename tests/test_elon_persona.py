@@ -2,9 +2,19 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest import mock
 
-from arka.agent.personas import elon
+import pytest
+
+from arka.agent.personas import base, elon, io
+
+
+@pytest.fixture
+def personas_tmp(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("ARKA_CONFIG_DIR", str(tmp_path))
+    io.ensure_layout()
+    return tmp_path / "personas"
 
 
 def test_wants_elon_direct_commands():
@@ -48,10 +58,10 @@ def test_nl_to_argv():
     assert elon.nl_to_argv("talk to elon about Mars") == ["Mars"]
 
 
-def test_chat_once_mock_llm():
-    with mock.patch.object(elon, "_llm_reply", return_value="Do hard things."):
+def test_chat_once_mock_llm(personas_tmp):
+    with mock.patch.object(base, "_llm_reply", return_value="Do hard things."):
         out = elon.chat_once("should I learn Rust?", show_disclaimer=True)
-    assert out.startswith(elon.DISCLAIMER)
+    assert out.startswith("Note:")
     assert "Do hard things." in out
 
 

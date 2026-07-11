@@ -123,6 +123,7 @@ arka = [
     "pdf/privategpt/*",
     "env.example",
     "teams/templates/*",
+    "agent/personas/templates/*",
     "skills/**/*",
     "professions/**/*",
 ]

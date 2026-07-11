@@ -99,6 +99,7 @@ LEGACY_MODULES: dict[str, str] = {
     "arka_chart": "arka.charts.plot",
     "arka_ascii_art": "arka.agent.ascii_art",
     "arka_elon": "arka.agent.personas.elon",
+    "arka_persona": "arka.agent.personas.cli",
     "arka_drawing": "arka.documents.drawing",
     "arka_describe_image": "arka.vision.describe",
     "arka_aie": "arka.aie.cli",

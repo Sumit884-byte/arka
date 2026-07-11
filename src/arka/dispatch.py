@@ -87,6 +87,14 @@ def run_skill(skill_line: str) -> int:
             from arka.core.personalize import main as personalize_main
 
             code = personalize_main(rest)
+        elif head == "persona":
+            from arka.agent.personas.cli import main as persona_main
+
+            code = persona_main(rest)
+        elif head in ("elon", "talk_to_elon", "elon_chat", "talk_elon"):
+            from arka.agent.personas.elon import main as elon_main
+
+            code = elon_main(rest)
         elif head == "google":
             code = run_script("arka_google.py", rest)
         elif head.endswith(".py") and script_path(head).is_file():

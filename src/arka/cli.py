@@ -64,6 +64,11 @@ def main(argv: list[str] | None = None) -> int:
 
         return personalize_main(args[1:])
 
+    if args[0] == "persona":
+        from arka.agent.personas.cli import main as persona_main
+
+        return persona_main(args[1:])
+
     if args[0] == "config":
         from arka.core.config_backup import main as config_main
 

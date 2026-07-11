@@ -1,23 +1,41 @@
 ---
 title: "Persona chat"
-description: "Talk to simulated character personas in Arka — stylized LLM voices for fun and education, not real people."
+description: "Create and talk to simulated character personas in Arka — stylized LLM voices for fun and education, not real people."
 keywords: ["persona", "chat", "elon", "simulation"]
 ---
 
-Arka includes **simulated persona chat** skills — LLM-powered characters inspired by public figures, clearly labeled as fiction for entertainment and education.
+Arka includes **simulated persona chat** — LLM-powered characters inspired by public figures or your own prompts, clearly labeled as fiction for entertainment and education.
 
 <Warning>
   Personas are **not** the real people they resemble. Do not use them for deception, impersonation, or authoritative advice.
 </Warning>
 
-## Elon-inspired persona
+## Quick start
 
-Chat with a stylized voice inspired by public interviews and talks — first-principles thinking, engineering focus, rockets, manufacturing, AI, and ambitious goals.
+List bundled and saved personas:
+
+```bash
+arka persona list
+```
+
+Chat with a persona (interactive REPL):
+
+```bash
+arka persona chat elon
+arka persona chat socrates
+```
+
+One-shot question:
+
+```bash
+arka persona chat elon "should I learn Rust?"
+```
+
+The bundled **Elon** persona remains available as a shortcut:
 
 ```bash
 elon                                 # interactive REPL
-elon chat                            # same
-elon "should I learn Rust?"          # one-shot question
+elon "should I learn Rust?"          # one-shot
 talk_to_elon about first principles  # alias
 ```
 
@@ -25,26 +43,61 @@ Natural language via `arka`:
 
 ```bash
 arka talk to elon about rockets
-arka what would elon say about learning physics
-arka elon persona
+arka talk to socrates about virtue
+arka create persona for steve jobs
+arka persona elon about manufacturing
 ```
 
-### Requirements
+## Persona store
+
+Personas are YAML (or JSON) files in `~/.config/arka/personas/` (or `{ARKA_CONFIG_DIR}/personas/`).
+
+Example `~/.config/arka/personas/coach.yaml`:
+
+```yaml
+name: coach
+display_name: Supportive Coach
+description: Encouraging mentor tone for career and learning questions
+disclaimer: Simulated persona for fun — not a real person.
+voice: Warm, concise, asks one clarifying question when helpful
+system_prompt: |
+  You are a simulated supportive coach for entertainment and education only.
+  You are NOT a real person.
+
+  Voice and style:
+  - Encouraging but honest; practical next steps
+  - Short paragraphs; no buzzword soup
+
+  Rules:
+  - Never claim to be a real individual
+  - Do not give authoritative financial, legal, or medical advice
+  - If asked whether you are real, clarify you are a simulation
+```
+
+Bundled templates (`elon`, `socrates`, `blank`) seed into your personas directory on first use.
+
+## CLI commands
+
+```bash
+arka persona list
+arka persona show <name>
+arka persona create <name>              # interactive wizard
+arka persona create <name> -t blank     # from template
+arka persona create steve-jobs -y       # LLM draft, non-interactive
+arka persona chat <name> ["question"]
+arka persona edit <name>                # opens YAML in $EDITOR
+```
+
+## Requirements
 
 Uses Arka's built-in LLM stack (same API keys as `web_answer` / `agent_ask`). Configure `GEMINI_API_KEY`, `GROQ_API_KEY`, or another provider in `~/.config/arka/.env`.
 
-### Disclaimer
+## Disclaimer
 
-Every session prints:
+Every chat session prints the persona's disclaimer, for example:
+
+> Note: Simulated persona for fun — not the real person.
+
+Bundled Elon uses:
 
 > Note: Simulated Elon-inspired persona for fun and education — not the real Elon Musk.
-
-## Adding more personas
-
-Personas live under `arka.agent.personas` with:
-
-- A fixed system prompt and disclaimer
-- `route_command()` for NL routing
-- A fish function and `arka_<name>.py` bundled shim
-
-See `elon.py` as the reference pattern for future personas.
