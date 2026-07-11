@@ -33,6 +33,7 @@ arka team run research --task "Summarize Rust async patterns"
 
 arka workflow run review-and-ship --task "Plan a v2 auth redesign"
 arka workflow run code-review --task "Review PR #42: add JWT refresh"
+arka workflow run brainstorm --task "Cache invalidation strategies for edge CDN"
 ```
 
 From fish:
@@ -41,6 +42,7 @@ From fish:
 team list
 team run research --task "Compare Postgres vs SQLite for edge caches"
 workflow run code-review --task "Review auth middleware changes"
+workflow run brainstorm --task "Ideas for offline-first mobile sync"
 ```
 
 ## Example team
@@ -86,6 +88,79 @@ steps:
     prompt: "Merge results: {results}"
 ```
 
+## Round-robin mode (v2)
+
+Instead of explicit steps, members take turns until `max_turns` is reached. Outputs accumulate in `{results}`, `{transcript}`, and `{last_result}`.
+
+```yaml
+name: brainstorm
+team: research
+mode: round_robin
+max_turns: 6
+prompt: |
+  Continue brainstorming on: {task}
+  Previous: {last_result}
+members:
+  - lead
+  - analyst
+  - local-fallback
+defaults:
+  retries: 2
+  mcp: true
+```
+
+Run:
+
+```bash
+arka workflow run brainstorm --task "Edge cache invalidation patterns"
+```
+
+If `members` is omitted, all team roles rotate in definition order.
+
+## Retries (v2)
+
+Retry failed agent/LLM steps before marking a run failed.
+
+**Per step:**
+
+```yaml
+- member: analyst
+  action: analyze
+  prompt: "Analyze: {task}"
+  retries: 3
+  retry_delay: 2
+```
+
+**Workflow or team defaults:**
+
+```yaml
+defaults:
+  retries: 2
+  retry_delay: 1
+```
+
+Priority: step → workflow `defaults` → team `defaults`. Retry count appears in CLI output (`retries=N`, `attempts=N`). Set `TEAM_RETRY_BACKOFF=1` for exponential delay.
+
+## Per-step MCP (v2)
+
+Enable MCP context per step (or inherit from workflow/team defaults):
+
+```yaml
+- member: analyst
+  action: fetch
+  prompt: "Summarize open PRs for: {task}"
+  mcp: true
+  mcp_servers: [github]
+```
+
+| Setting | Effect |
+| ------- | ------ |
+| `mcp: true` | Inject all configured MCP servers from `~/.config/arka/mcp.json` |
+| `mcp_servers: [github]` | Limit to named servers |
+| `defaults.mcp: true` | Enable for all steps unless overridden |
+
+For **agent** steps, MCP tool summaries are prepended to the prompt. For **model/provider** steps, they are added to the system prompt. Optional tool loop for model steps: set `TEAM_MCP_TOOL_ROUNDS=1` and have the model emit JSON like `{"mcp_tool": "github", "tool": "search", "arguments": {}}`.
+
 ## CLI reference
 
 ```bash
@@ -108,10 +183,13 @@ arka workflow run <name> --task "..."
 2. **Resolve** members — agents via Agent Hub catalog; models/providers via LLM registry.
 3. **Recall** unified memory when `defaults.memory: unified`.
 4. **Execute** steps:
-   - Agent roles → `answer_question` with role context (lightweight v1; not full `ollama launch`).
+   - Agent roles → `answer_question` with role context (lightweight; not full `ollama launch`).
    - Model/provider roles → `LlmOrchestrator` with a fixed provider/model chain.
    - Parallel blocks → thread pool (`TEAM_MAX_PARALLEL`, default 4).
-5. **Pass** outputs forward via template variables.
+   - Round-robin → rotate members for `max_turns` with shared transcript variables.
+5. **Retry** failed steps per `retries` / `retry_delay` (workflow or team defaults).
+6. **Inject MCP** tool summaries when `mcp` is enabled for a step.
+7. **Pass** outputs forward via template variables.
 
 ## Bundled templates
 
@@ -121,6 +199,7 @@ arka workflow run <name> --task "..."
 | `code-review` | team | lead (codex), analyst (groq), local-fallback (ollama) |
 | `review-and-ship` | workflow | plan → parallel analyze/verify → synthesize |
 | `code-review` | workflow | review checklist → parallel review → summary |
+| `brainstorm` | workflow | round-robin ideation across team roles |
 
 Create from templates:
 
@@ -135,16 +214,18 @@ arka workflow create my-ship --template review-and-ship --team my-research
 ARKA_TEAMS_DIR=~/.config/arka/teams
 ARKA_WORKFLOWS_DIR=~/.config/arka/workflows
 TEAM_MAX_PARALLEL=4
+TEAM_RETRY_BACKOFF=0
+TEAM_MCP_TOOL_ROUNDS=0
 ```
 
 Teams and workflows are included in `arka config backup`.
 
-## v1 limitations (v2 roadmap)
+## Limitations
 
 - Agent steps use Arka chat routing, not full interactive `ollama launch` sessions.
-- No round-robin mode yet — use explicit workflow steps.
-- No live MCP tool calls per step (hub MCP is shared via memory/context only).
-- Workflow conditions, retries, and human-in-the-loop gates are not implemented.
+- Model-step MCP tool loops are opt-in (`TEAM_MCP_TOOL_ROUNDS`) and single-round by default.
+- Round-robin has no early-stop condition — runs until `max_turns`.
+- Workflow conditions and human-in-the-loop gates are not implemented.
 - Provider health checks run at LLM call time, not at team resolve time.
 
 ## Related

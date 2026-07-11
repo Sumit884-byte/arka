@@ -165,7 +165,7 @@ def test_parallel_merge(team_paths):
 
     wf = parse_workflow(REVIEW_WORKFLOW)
     parallel_step = wf.steps[1]
-    results = _execute_step(ctx, parallel_step, runner=fake_runner)
+    results = _execute_step(ctx, parallel_step, workflow=wf, runner=fake_runner)
     outputs = {r.role: r.output for r in results}
     assert outputs["analyst"] == "analyst-done"
     assert outputs["local-fallback"] == "local-fallback-done"

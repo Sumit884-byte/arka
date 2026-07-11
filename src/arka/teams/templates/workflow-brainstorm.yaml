@@ -1,0 +1,22 @@
+name: brainstorm
+team: research
+mode: round_robin
+max_turns: 6
+prompt: |
+  Continue brainstorming on: {task}
+
+  Previous turn:
+  {last_result}
+
+  Full transcript:
+  {results}
+
+  Add one concise new idea or refinement. Do not repeat prior points.
+members:
+  - lead
+  - analyst
+  - local-fallback
+defaults:
+  retries: 2
+  retry_delay: 1
+  mcp: true

@@ -99,7 +99,7 @@ def cmd_workflow_create(args: argparse.Namespace) -> int:
         src = templates_dir() / f"workflow-{template}.json"
     if not src.is_file():
         print(f"Unknown workflow template: {template}", file=sys.stderr)
-        print("Available: review-and-ship, code-review", file=sys.stderr)
+        print("Available: review-and-ship, code-review, brainstorm", file=sys.stderr)
         return 1
     from arka.teams.io import _load_text
 
@@ -232,12 +232,14 @@ Usage:
 
 Config paths (under ~/.config/arka/):
   teams/       Team definitions (agents, models, providers by role)
-  workflows/   Step graphs (sequential, parallel, handoff)
+  workflows/   Step graphs (sequential, parallel, round-robin)
 
 Environment:
   ARKA_TEAMS_DIR       Override teams directory
   ARKA_WORKFLOWS_DIR   Override workflows directory
   TEAM_MAX_PARALLEL    Max parallel workflow steps (default 4)
+  TEAM_RETRY_BACKOFF   Exponential retry delay (default off)
+  TEAM_MCP_TOOL_ROUNDS MCP tool loop rounds for model steps (default 0)
 
 Examples:
   arka team list

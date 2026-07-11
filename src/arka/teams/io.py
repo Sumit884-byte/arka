@@ -184,7 +184,12 @@ def format_workflow_list() -> str:
     for name in names:
         try:
             wf = load_workflow(name)
-            lines.append(f"{name}\tteam={wf.team}\tsteps={len(wf.steps)}")
+            if wf.mode == "round_robin":
+                lines.append(
+                    f"{name}\tteam={wf.team}\tmode=round_robin\tturns={wf.max_turns}"
+                )
+            else:
+                lines.append(f"{name}\tteam={wf.team}\tsteps={len(wf.steps)}")
         except (ValueError, FileNotFoundError) as exc:
             lines.append(f"{name}\tinvalid\t{exc}")
     return "\n".join(lines)
@@ -212,16 +217,36 @@ def format_workflow_show(name: str) -> str:
     lines = [
         f"name\t{wf.name}",
         f"team\t{wf.team}",
+        f"mode\t{wf.mode}",
         f"source\t{wf.source}",
-        f"steps\t{len(wf.steps)}",
     ]
-    for idx, step in enumerate(wf.steps, start=1):
-        if step.parallel:
-            lines.append(f"step_{idx}\tparallel\tcount={len(step.parallel)}")
-            for sub_idx, sub in enumerate(step.parallel, start=1):
+    if wf.defaults:
+        lines.append(f"defaults\t{json.dumps(wf.defaults)}")
+    if wf.mode == "round_robin":
+        lines.append(f"max_turns\t{wf.max_turns}")
+        if wf.members:
+            lines.append(f"members\t{', '.join(wf.members)}")
+        if wf.prompt:
+            lines.append(f"prompt\t{wf.prompt[:120]}")
+    else:
+        lines.append(f"steps\t{len(wf.steps)}")
+        for idx, step in enumerate(wf.steps, start=1):
+            if step.parallel:
+                lines.append(f"step_{idx}\tparallel\tcount={len(step.parallel)}")
+                for sub_idx, sub in enumerate(step.parallel, start=1):
+                    lines.append(
+                        f"  step_{idx}.{sub_idx}\t{sub.member}\t{sub.action}\t{sub.prompt[:80]}"
+                    )
+            else:
+                meta: list[str] = []
+                if step.retries is not None:
+                    meta.append(f"retries={step.retries}")
+                if step.mcp is not None:
+                    meta.append(f"mcp={step.mcp}")
+                if step.mcp_servers:
+                    meta.append(f"mcp_servers={','.join(step.mcp_servers)}")
+                suffix = f"\t{' '.join(meta)}" if meta else ""
                 lines.append(
-                    f"  step_{idx}.{sub_idx}\t{sub.member}\t{sub.action}\t{sub.prompt[:80]}"
+                    f"step_{idx}\t{step.member}\t{step.action}\t{step.prompt[:80]}{suffix}"
                 )
-        else:
-            lines.append(f"step_{idx}\t{step.member}\t{step.action}\t{step.prompt[:80]}")
     return "\n".join(lines)
