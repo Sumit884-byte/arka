@@ -32,6 +32,7 @@ NL_CASES: tuple[tuple[str, str], ...] = (
     ("download kaggle dataset heptapod/titanic", "kaggle"),
     ("how to close window on brave", "platform_howto"),
     ("gemini explain asyncio", "gemini_cli"),
+    ("fugu explain TLS", "fugu"),
 )
 
 

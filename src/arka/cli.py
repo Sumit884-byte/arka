@@ -147,6 +147,9 @@ def main(argv: list[str] | None = None) -> int:
     if args[0] == "gemini":
         return run_script("arka_gemini.py", args[1:])
 
+    if args[0] == "fugu":
+        return run_script("arka_fugu.py", args[1:])
+
     if args[0] == "kaggle":
         return run_script("arka_kaggle.py", args[1:])
 
@@ -770,6 +773,9 @@ Usage:
   arka google calendar --today    # today's events
   arka gemini <prompt>            # Google Gemini CLI (npm @google/gemini-cli)
   arka gemini status              # check Gemini CLI install
+  arka fugu <prompt>              # Sakana Fugu multi-agent orchestrator
+  arka fugu ultra <prompt>        # Fugu Ultra (deeper orchestration)
+  arka fugu status                # check Sakana API key + provider
   arka chat calc integrate sin(x) # SymPy
   arka ascii "HELLO"              # ASCII banner (figlet / pyfiglet)
   arka ascii --from-image cat.jpg # image → ASCII art

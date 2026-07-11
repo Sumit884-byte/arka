@@ -89,6 +89,7 @@ LEGACY_MODULES: dict[str, str] = {
     "arka_password_vault": "arka.integrations.password_vault",
     "arka_google": "arka.integrations.google_workspace",
     "arka_gemini": "arka.integrations.gemini_cli",
+    "arka_fugu": "arka.integrations.fugu",
     "arka_qr": "arka.integrations.qr_code",
     "arka_mac_mic": "arka.integrations.mac_mic",
     "arka_pdf_rag": "arka.pdf.rag",

@@ -70,6 +70,16 @@ AGENTS: dict[str, dict[str, Any]] = {
         "memory_hint": "Set MCP_CONFIG or ARKA_MCP_CONFIG to hub/mcp.json",
         "skills_path_var": "ARKA_SKILLS_DIR",
     },
+    "fugu": {
+        "name": "Sakana Fugu",
+        "ollama_launch": "codex",
+        "aliases": ["sakana", "sakana fugu"],
+        "mcp_paths": ["~/.codex/mcp.json"],
+        "mcp_merge_key": "mcpServers",
+        "memory_hint": "Orchestrator via Codex -p fugu; read ARKA_CONTEXT_MD or hub/memory/context.md",
+        "skills_path_var": "ARKA_SKILLS_DIR",
+        "env_vars": {"SAKANA_API_KEY": "SAKANA_API_KEY"},
+    },
     "copilot": {
         "name": "GitHub Copilot Agent",
         "ollama_launch": "copilot",

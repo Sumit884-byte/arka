@@ -1,0 +1,148 @@
+---
+title: "Sakana Fugu orchestrator"
+description: "Use Sakana Fugu's multi-agent orchestration from Arka — as an LLM provider, Codex bridge, and Agent Hub peer."
+keywords: ["fugu", "sakana", "orchestrator", "multi-agent", "codex"]
+---
+
+[**Sakana Fugu**](https://sakana.ai/fugu/) is a learned multi-agent orchestrator from Sakana AI. It exposes a single **OpenAI-compatible API** (`https://api.sakana.ai/v1`) that routes, delegates, verifies, and synthesizes work across a pool of frontier models. From your code's perspective it behaves like one model — `fugu` (fast) or `fugu-ultra` (deeper).
+
+Arka integrates Fugu in three ways:
+
+1. **LLM provider** — use `sakana` / `fugu` in failover chains, teams, and skills
+2. **`arka fugu` CLI** — one-shot prompts through Fugu
+3. **Agent Hub + MCP** — share Arka memory, skills, and tools with Fugu (via Codex)
+
+## Quick start
+
+```bash
+# 1. Create an API key at https://console.sakana.ai
+# 2. Add to ~/.config/arka/.env
+SAKANA_API_KEY=your_key_here
+
+# 3. Verify
+arka fugu status
+
+# 4. Ask Fugu
+arka fugu explain how TLS handshake works
+arka fugu ultra design a multi-region failover plan
+```
+
+## LLM provider
+
+Fugu is registered as provider `sakana` (alias `fugu`):
+
+```env
+SAKANA_API_KEY=your_key_here
+AI_PREFERRED_PROVIDER=sakana
+AI_PREFERRED_MODEL=fugu
+# SAKANA_MODELS=fugu,fugu-ultra
+```
+
+Use in failover chains:
+
+```env
+LLM_FALLBACK=sakana:fugu,gemini:gemini-2.5-flash,groq:llama-3.3-70b-versatile
+```
+
+Per-skill override:
+
+```bash
+arka ai-skill-model research sakana/fugu-ultra
+```
+
+## Agent teams
+
+```yaml
+# ~/.config/arka/teams/research.yaml
+name: research
+members:
+  - role: lead
+    kind: model
+    id: fugu-ultra
+    provider: sakana
+  - role: reviewer
+    kind: model
+    id: gemini-2.0-flash
+    provider: gemini
+```
+
+Or use the provider default:
+
+```yaml
+  - role: orchestrator
+    kind: provider
+    id: sakana
+```
+
+## Codex bridge
+
+Fugu's primary harness is **OpenAI Codex**. Install the Sakana provider bundle:
+
+```bash
+curl -fsSL https://sakana.ai/fugu/install | bash
+SAKANA_API_KEY=your_key codex -p fugu
+```
+
+Share Arka tools with Codex/Fugu:
+
+```bash
+# Export hub memory, skills, and MCP registry
+arka fugu sync
+
+# Merge Arka MCP servers into ~/.codex/mcp.json (includes arka mcp serve)
+arka fugu sync --unify
+```
+
+This registers Fugu in [Agent Hub](/guides/agent-hub) and merges the shared `hub/mcp.json` into Codex's MCP config so Fugu can call `arka_ask`, `arka_skill`, `arka_team_run`, and other Arka MCP tools.
+
+## MCP: external orchestrators → Arka
+
+Any orchestrator with MCP client support (including Fugu via Codex) can consume Arka as a tool server:
+
+```json
+{
+  "mcpServers": {
+    "arka": {
+      "command": "arka",
+      "args": ["mcp", "serve"]
+    }
+  }
+}
+```
+
+Install snippet:
+
+```bash
+arka mcp install --agent cursor --write-config
+arka agent_hub sync --unify
+```
+
+## HTTP webhook (alternative ingress)
+
+For orchestrators that POST JSON instead of MCP:
+
+```bash
+WEBHOOK_ENABLED=1
+WEBHOOK_TOKEN=your-secret
+arka webhook serve
+```
+
+POST to `http://127.0.0.1:8767/v1/inbox` with `channel` + `chat_id` for session continuity. See [Hermes features](/guides/hermes-features) for the session pattern.
+
+## What Fugu is (and isn't)
+
+| | Fugu | Arka |
+| --- | --- | --- |
+| **Role** | Multi-model orchestrator (routes to frontier LLMs) | Local agent hub (skills, memory, MCP, teams) |
+| **Interface** | OpenAI-compatible REST API | CLI, fish, MCP server, webhooks |
+| **MCP** | Via Codex harness | Native client + server |
+| **Self-host** | API-only (closed weights) | Fully local |
+
+Fugu handles **which models to call and how to coordinate them**. Arka handles **what tools, memory, and workflows are available** in your environment. Together: Fugu orchestrates reasoning; Arka supplies the toolbox.
+
+## Related
+
+- [LLM failover](/concepts/llm) — provider registry and `sakana` slug
+- [Agent Hub](/guides/agent-hub) — cross-agent MCP/memory sync
+- [MCP](/guides/mcp) — `arka mcp serve` tool surface
+- [Agent teams](/guides/agent-teams) — `kind: model` with `provider: sakana`

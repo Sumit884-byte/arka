@@ -73,6 +73,23 @@ def route(text: str) -> Route | None:
         if span is not None:
             current.set_attribute("arka.route.mode", mode)
 
+        try:
+            from arka.integrations.fugu import route_command as fugu_route_cmd
+
+            fugu_hit = fugu_route_cmd(cmd)
+            if fugu_hit:
+                fugu_route = Route(fugu_hit, source="offline")
+                if span is not None:
+                    _finish_route_span(
+                        current,
+                        fugu_route,
+                        decision="symbolic",
+                        start=route_start,
+                    )
+                return fugu_route
+        except ImportError:
+            pass
+
         fish_route = _route_via_fish(cmd)
         if fish_route:
             if span is not None:
@@ -610,6 +627,13 @@ def _is_knowledge_question(clean: str) -> bool:
         from arka.llm.model_advisor import is_model_select_query
 
         if is_model_select_query(clean):
+            return False
+    except ImportError:
+        pass
+    try:
+        from arka.integrations.fugu import wants_fugu
+
+        if wants_fugu(clean):
             return False
     except ImportError:
         pass

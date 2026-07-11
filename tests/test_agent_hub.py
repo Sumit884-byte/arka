@@ -26,7 +26,7 @@ def test_agent_catalog():
     from arka.integrations.agent_hub import AGENTS, list_agents
 
     agents = list_agents()
-    assert len(agents) == 9
+    assert len(agents) == 10
     keys = {k for k, _ in agents}
     assert keys == {
         "claude",
@@ -35,6 +35,7 @@ def test_agent_catalog():
         "openclaw",
         "opencode",
         "codex",
+        "fugu",
         "copilot",
         "droid",
         "pi",

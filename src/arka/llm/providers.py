@@ -37,6 +37,7 @@ PROVIDER_SLUG_ALIASES = {
     "kimi": "moonshot",
     "google": "gemini",
     "glm": "zai",
+    "fugu": "sakana",
 }
 
 
@@ -242,6 +243,18 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
         default_base_url="",
         models_env="AZURE_OPENAI_MODELS",
         default_models=("gpt-4o-mini", "gpt-4o"),
+    ),
+    ProviderSpec(
+        slug="sakana",
+        display_name="Sakana Fugu",
+        env_keys=("SAKANA_API_KEY", "SAKANA_API_KEYS"),
+        api_key_env="SAKANA_API_KEY",
+        default_model="fugu",
+        kind="openai_compatible",
+        base_url_env="SAKANA_API_BASE",
+        default_base_url="https://api.sakana.ai/v1",
+        models_env="SAKANA_MODELS",
+        default_models=("fugu", "fugu-ultra"),
     ),
     ProviderSpec(
         slug="openrouter",

@@ -460,6 +460,15 @@ def route_platform_howto(cmd: str) -> str | None:
     return None
 
 
+def route_fugu(cmd: str) -> str | None:
+    try:
+        from arka.integrations.fugu import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
+
+
 def route_gemini_cli(cmd: str) -> str | None:
     try:
         from arka.integrations.gemini_cli import route_command
@@ -523,6 +532,7 @@ def route_offline_extras(cmd: str) -> str | None:
         route_personalize,
         route_life_sciences,
         route_platform_howto,
+        route_fugu,
         route_gemini_cli,
         route_elon,
         route_gmail_draft,
