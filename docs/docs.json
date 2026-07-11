@@ -44,7 +44,7 @@
       },
       {
         "group": "Chat & search",
-        "icon": "message-circle",
+        "icon": "comments",
         "pages": [
           "guides/chat",
           "guides/personas",
@@ -88,7 +88,7 @@
       },
       {
         "group": "Agent & voice",
-        "icon": "bot",
+        "icon": "robot",
         "pages": [
           "guides/voice",
           "guides/goal-agent",
