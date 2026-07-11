@@ -364,6 +364,19 @@ def route_clipboard_history(cmd: str) -> str | None:
     return route or None
 
 
+def route_personalize(cmd: str) -> str | None:
+    try:
+        from arka.core.personalize import is_personalize_query, nl_to_argv
+    except ImportError:
+        return None
+    if not is_personalize_query(cmd):
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return "personalize recommend"
+    return "personalize " + " ".join(shlex.quote(a) for a in argv)
+
+
 def route_model_select(cmd: str) -> str | None:
     try:
         from arka.llm.model_advisor import is_model_select_query, nl_to_argv
@@ -454,6 +467,7 @@ def route_offline_extras(cmd: str) -> str | None:
         route_docker_status,
         route_daily_brief,
         route_model_select,
+        route_personalize,
         route_life_sciences,
         route_platform_howto,
         route_gemini_cli,

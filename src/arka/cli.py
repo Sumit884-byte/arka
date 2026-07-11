@@ -59,6 +59,11 @@ def main(argv: list[str] | None = None) -> int:
     if args[0] == "doctor":
         return _cmd_doctor()
 
+    if args[0] == "personalize":
+        from arka.core.personalize import main as personalize_main
+
+        return personalize_main(args[1:] or None)
+
     if args[0] in ("refetch", "update", "sync"):
         return _cmd_refetch(args[1:])
 
@@ -624,6 +629,7 @@ def _cmd_setup(extra: list[str] | None = None) -> int:
     if skill_mode() == "portable":
         print(f"\n  For all 70+ skills, install fish: {fish_install_hint()}")
     print("\n✓ Setup complete — try: arka brief   or   arka ask \"what is Python?\"")
+    print("  Next: arka personalize wizard — get skill recommendations for your interests")
     return 0
 
 

@@ -15,7 +15,8 @@
         "icon": "rocket",
         "pages": [
           "index",
-          "quickstart"
+          "quickstart",
+          "guides/personalize"
         ]
       },
       {

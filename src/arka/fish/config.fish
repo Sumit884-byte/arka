@@ -1938,6 +1938,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         rag_setup rag_status voice_agent wake_control \
         agent_ask web_answer deep_web_answer web_essay platform_howto calc chat_reset set_location files_preference_help google \
         select_model model_select best_model model_advisor \
+        personalize \
         nearby_places map_download error_helper deep_queue app_usage internet_enhance aie \
         youtube_bulk yt_bulk
 end
@@ -3178,6 +3179,16 @@ end
 
 function best_model --description "Alias for select_model"
     select_model $argv
+end
+
+function personalize --description "Onboarding wizard and skill recommendations from your interests"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        $py (_arka_py_script arka_personalize.py) wizard
+        return $status
+    end
+    $py (_arka_py_script arka_personalize.py) $argv
+    return $status
 end
 
 # --- Virtual Environment Skills ---
@@ -10111,6 +10122,9 @@ function _agent_is_knowledge_question --description "True if user wants a factua
     if _agent_is_model_select_request "$argv[1]"
         return 1
     end
+    if _agent_is_personalize_request "$argv[1]"
+        return 1
+    end
     if _agent_is_life_sciences_request "$argv[1]"
         return 1
     end
@@ -10121,6 +10135,9 @@ function _agent_is_knowledge_question --description "True if user wants a factua
         return 1
     end
     if _agent_is_model_select_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_personalize_request "$argv[1]"
         return 1
     end
     if _agent_is_life_sciences_request "$argv[1]"
@@ -10322,6 +10339,9 @@ function _agent_is_general_chat --description "True if plain conversational inpu
         return 1
     end
     if _agent_is_model_select_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_personalize_request "$argv[1]"
         return 1
     end
     if _agent_is_life_sciences_request "$argv[1]"
@@ -10629,6 +10649,10 @@ function _agent_offline_route_cmd --description "Full symbolic NL to skill comma
         echo (_agent_build_model_select_cmd "$cmd")
         return 0
     end
+    if _agent_is_personalize_request "$cmd"
+        echo (_agent_build_personalize_cmd "$cmd")
+        return 0
+    end
     if _agent_is_ascii_art_request "$cmd"
         echo (_agent_build_ascii_art_cmd "$cmd")
         return 0
@@ -10763,6 +10787,19 @@ function _agent_build_model_select_cmd --description "Build select_model args fr
     if test (count $rest) -gt 0
         echo "select_model $rest"
     end
+end
+
+function _agent_build_personalize_cmd --description "Build personalize args from NL (internal)"
+    set -l cmd "$argv[1]"
+    set -l py (_arka_python)
+    set -l rest ($py (_arka_py_script arka_personalize.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
+    if test (count $rest) -gt 0
+        echo "personalize $rest"
+    end
+end
+
+function _agent_is_personalize_request --description "True if user wants onboarding or skill recommendations (internal)"
+    test -n "$(_agent_build_personalize_cmd "$argv[1]")"
 end
 
 function _agent_is_model_select_request --description "True if user wants hardware-based model advice (internal)"
@@ -12912,6 +12949,8 @@ function _agent_skill_matches_request --description "True if skill fits the user
             _agent_is_chart_request "$cmd"
         case select_model model_select best_model model_advisor
             _agent_is_model_select_request "$cmd"
+        case personalize onboard onboarding
+            _agent_is_personalize_request "$cmd"
         case ascii_art
             _agent_is_ascii_art_request "$cmd"
         case drawing_ask
@@ -13166,6 +13205,13 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         set -l parts (_agent_build_model_select_cmd "$cmd")
         if test -n "$parts"
             echo "skill|$parts|Recommend LLM models from PC resources"
+            return
+        end
+    end
+    if _agent_is_personalize_request "$cmd"
+        set -l parts (_agent_build_personalize_cmd "$cmd")
+        if test -n "$parts"
+            echo "skill|$parts|Onboarding and skill recommendations"
             return
         end
     end
@@ -15206,6 +15252,9 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                     set -l py (_arka_python)
                     $py -m arka doctor
                     return $status
+                case personalize onboard onboarding
+                    personalize $argv[2..-1]
+                    return $status
                 case wifi wireless
                     wifi_info $argv[2..-1]
                     return $status
@@ -16458,6 +16507,11 @@ function agent --description "Run commands safely: executes safe commands automa
         if test -n "$interpreted"
             set route_source offline
         end
+    else if _agent_is_personalize_request "$cmd"
+        set interpreted (_agent_build_personalize_cmd "$cmd")
+        if test -n "$interpreted"
+            set route_source offline
+        end
     else if _agent_is_ascii_art_request "$cmd"
         set interpreted (_agent_build_ascii_art_cmd "$cmd")
         if test -n "$interpreted"
@@ -17171,6 +17225,10 @@ function agent --description "Run commands safely: executes safe commands automa
         set -l model_cmd (_agent_build_model_select_cmd "$cmd")
         echo (set_color yellow)"💡 [Model advisor → $model_cmd]"(set_color normal)
         _agent_dispatch_one "$model_cmd"
+    else if _agent_is_personalize_request "$cmd"
+        set -l personalize_cmd (_agent_build_personalize_cmd "$cmd")
+        echo (set_color yellow)"💡 [Personalize → $personalize_cmd]"(set_color normal)
+        _agent_dispatch_one "$personalize_cmd"
     else if _agent_is_ascii_art_request "$cmd"
         set -l ascii_cmd (_agent_build_ascii_art_cmd "$cmd")
         echo (set_color yellow)"💡 [ASCII → $ascii_cmd]"(set_color normal)

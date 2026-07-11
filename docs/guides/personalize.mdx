@@ -1,0 +1,92 @@
+---
+title: "Personalize your Arka experience"
+description: "Onboarding wizard that saves your interests and recommends built-in skills with example commands — no LLM required."
+keywords: ["onboarding", "personalize", "skills", "getting started"]
+---
+
+`arka personalize` helps new users get started quickly. Answer a short questionnaire (or pass flags), save a profile to `~/.config/arka/personalize.json`, and see ranked skill recommendations with example commands.
+
+## Quick start
+
+```bash
+arka personalize wizard
+arka personalize recommend
+arka personalize quickstart
+```
+
+Non-interactive (CI, scripts, or no TTY):
+
+```bash
+arka personalize wizard --interests finance,pdf --experience beginner --platform mac -y
+```
+
+## Natural language
+
+```bash
+arka personalize me
+arka recommend skills
+arka what skills should I use
+arka get started with arka
+```
+
+## Commands
+
+| Command | What it does |
+| ------- | ------------ |
+| `personalize` / `personalize wizard` | Interactive questionnaire; saves profile |
+| `personalize recommend` | Ranked skills from saved interests |
+| `personalize status` | Show saved profile |
+| `personalize reset` | Clear profile |
+| `personalize quickstart` | 5-step checklist (setup → doctor → personalize → try top skills) |
+
+## Interest tags
+
+Pick any combination when running the wizard:
+
+| Tag | Covers |
+| --- | ------ |
+| `finance` | Stocks, currency, daily brief, price checks |
+| `pdf` | Merge/compress PDFs, PDF Q&A |
+| `voice` | Wake word, STT, TTS |
+| `dev` | GitHub, Docker, repo health, PR checks |
+| `productivity` | Reminders, routines, bookmarks |
+| `research` | Web search, YouTube research, data Q&A |
+| `google` | Gmail, Calendar OAuth |
+| `memory` | Unified memory, session notes |
+| `media` | YouTube, slides, video, thumbnails |
+
+## Example output
+
+```
+Your profile: finance, pdf (beginner)
+
+Recommended skills:
+  1. pdf_tools — Merge, split, compress, and edit PDFs
+     Try: pdf_tools merge a.pdf b.pdf -o combined.pdf
+  2. stocks [needs GROQ_API_KEY] — Stock quotes, fundamentals, and market context
+     Try: stocks AAPL
+```
+
+Gated skills still appear in recommendations but are marked with what is missing (API key, binary, or OS).
+
+## Profile file
+
+Stored at `~/.config/arka/personalize.json`:
+
+```json
+{
+  "interests": ["finance", "pdf"],
+  "experience": "beginner",
+  "platforms": ["mac"],
+  "has_api_keys": true,
+  "uses_fish": true,
+  "completed_at": "2026-07-11T12:00:00Z",
+  "onboarding_done": true
+}
+```
+
+## Related
+
+- [Quickstart](/quickstart) — install and first command
+- [Skills catalog](/guides/skills) — full list of built-in skills
+- [Select model](/guides/select-model) — hardware-aware LLM picks after onboarding

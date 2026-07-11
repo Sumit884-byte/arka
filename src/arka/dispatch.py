@@ -83,6 +83,10 @@ def run_skill(skill_line: str) -> int:
             from arka.llm.model_advisor import main as model_advisor_main
 
             code = model_advisor_main(rest or None)
+        elif head == "personalize":
+            from arka.core.personalize import main as personalize_main
+
+            code = personalize_main(rest or None)
         elif head == "google":
             code = run_script("arka_google.py", rest)
         elif head.endswith(".py") and script_path(head).is_file():
