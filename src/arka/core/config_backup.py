@@ -62,6 +62,8 @@ def _known_paths() -> list[tuple[str, Path]]:
         ("learned_routes", cfg / "learned_routes.json"),
         ("charts", cfg / "charts.yaml"),
         ("llm_skill_models", cfg / "llm-skill-models.json"),
+        ("benchmarks", cfg / "benchmarks"),
+        ("benchmark_results", cfg / "benchmark-results.json"),
         ("cache_root", cache_dir()),
         ("cache_memory", cache_dir() / "memory.json"),
     ]

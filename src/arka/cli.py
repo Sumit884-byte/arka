@@ -150,6 +150,12 @@ def main(argv: list[str] | None = None) -> int:
     if args[0] == "fugu":
         return run_script("arka_fugu.py", args[1:])
 
+    if args[0] == "benchmark":
+        return run_script("arka_benchmark.py", args[1:])
+
+    if args[0] == "orchestrate":
+        return _cmd_orchestrate(args[1:])
+
     if args[0] == "kaggle":
         return run_script("arka_kaggle.py", args[1:])
 
@@ -608,6 +614,39 @@ def _cmd_youtube(rest: list[str]) -> int:
     return 1
 
 
+def _cmd_orchestrate(rest: list[str]) -> int:
+    import os
+
+    benchmark = "--benchmark" in rest
+    filtered = [a for a in rest if a != "--benchmark"]
+    if benchmark:
+        os.environ["ARKA_BENCHMARK_ORCHESTRATE"] = "1"
+    text = " ".join(filtered).strip()
+    if not text:
+        print("Usage: arka orchestrate [--benchmark] <request>", file=sys.stderr)
+        print("  --benchmark  Prefer providers/models from benchmark-results.json", file=sys.stderr)
+        return 1
+    if benchmark:
+        from arka.llm.benchmarks import benchmark_chain_entries, load_results
+
+        if not (load_results().get("suites") or {}):
+            print(
+                "No benchmark results yet — run: arka benchmark run --dry-run (or live run)",
+                file=sys.stderr,
+            )
+            return 1
+        task = "default"
+        winners = benchmark_chain_entries(task)
+        if winners:
+            label = ", ".join(f"{p}/{m}" for p, m in winners[:3])
+            print(f"benchmark route ({task}): {label}")
+    if has_full_fish_agent():
+        code = delegate_to_fish(filtered)
+        if code is not None:
+            return code
+    return _run_portable(text)
+
+
 def _cmd_route_preview(text: str) -> int:
     r = route(text)
     if r:
@@ -776,6 +815,10 @@ Usage:
   arka fugu <prompt>              # Sakana Fugu multi-agent orchestrator
   arka fugu ultra <prompt>        # Fugu Ultra (deeper orchestration)
   arka fugu status                # check Sakana API key + provider
+  arka benchmark run [--dry-run]  # compare models/providers on sample tasks
+  arka benchmark show             # view benchmark rankings by task profile
+  arka benchmark apply            # write winners to llm-skill-models.json
+  arka orchestrate --benchmark <request>  # route using benchmark winners
   arka chat calc integrate sin(x) # SymPy
   arka ascii "HELLO"              # ASCII banner (figlet / pyfiglet)
   arka ascii --from-image cat.jpg # image → ASCII art

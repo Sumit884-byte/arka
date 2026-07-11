@@ -1,0 +1,25 @@
+name: default
+description: Core Arka task profiles — compare providers/models for orchestration routing
+candidates:
+  - provider: gemini
+    model: gemini-2.5-flash
+  - provider: groq
+    model: llama-3.3-70b-versatile
+  - provider: groq
+    model: llama-3.1-8b-instant
+tasks:
+  - id: chat_qa
+    profile: chat
+    prompt: "What is 17 + 25? Reply with just the number."
+    eval:
+      contains: "42"
+  - id: route_hint
+    profile: route
+    prompt: "Given the request 'summarize my latest email', reply with one skill name like google or summarize."
+    eval:
+      min_length: 3
+  - id: agent_code
+    profile: agent
+    prompt: "Write a one-line Python function named add that returns the sum of two numbers."
+    eval:
+      contains_any: ["def add", "def add("]

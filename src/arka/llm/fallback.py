@@ -559,6 +559,24 @@ def _guidance_entries() -> list[tuple[str, str]]:
     return parse_chain(env("LLM_FALLBACK_GUIDANCE"))
 
 
+def _benchmark_orchestrate_enabled() -> bool:
+    try:
+        from arka.llm.benchmarks import is_benchmark_orchestrate_enabled
+
+        return is_benchmark_orchestrate_enabled()
+    except ImportError:
+        return False
+
+
+def _benchmark_chain_entries(task: str) -> list[tuple[str, str]]:
+    try:
+        from arka.llm.benchmarks import benchmark_chain_entries
+
+        return benchmark_chain_entries(task)
+    except ImportError:
+        return []
+
+
 def normalize_gemini_model(model_id: str) -> str:
     mid = (model_id or "").strip()
     if not mid:
@@ -1000,8 +1018,12 @@ def build_default_chain(*, task: str = "default", skill: str | None = None) -> l
 
     guidance = _guidance_entries()
     skill_models = _skill_model_entries(task, skill=skill)
-    if skill_models or guidance:
-        ordered = _prepend_chain(skill_models + guidance, ordered)
+    benchmark: list[tuple[str, str]] = []
+    if _benchmark_orchestrate_enabled():
+        benchmark = _benchmark_chain_entries(task)
+    head = benchmark + skill_models + guidance
+    if head:
+        ordered = _prepend_chain(head, ordered)
 
     return ordered
 

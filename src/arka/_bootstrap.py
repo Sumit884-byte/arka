@@ -90,6 +90,7 @@ LEGACY_MODULES: dict[str, str] = {
     "arka_google": "arka.integrations.google_workspace",
     "arka_gemini": "arka.integrations.gemini_cli",
     "arka_fugu": "arka.integrations.fugu",
+    "arka_benchmark": "arka.integrations.benchmark_cli",
     "arka_qr": "arka.integrations.qr_code",
     "arka_mac_mic": "arka.integrations.mac_mic",
     "arka_pdf_rag": "arka.pdf.rag",
