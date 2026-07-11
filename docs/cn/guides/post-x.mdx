@@ -1,0 +1,57 @@
+---
+title: "发布到 X (Twitter)"
+description: "获取 URL，通过 LLM 将内容缩短到指定字数限制，然后发布到 X/Twitter — 具备 GitHub 链接安全性和可选的监控。"
+keywords: ["x", "twitter", "post", "social"]
+---
+
+`post_x` 技能会获取一个 URL，将其摘要缩短到可配置的字数限制，并通过 [Bird CLI](https://www.npmjs.com/package/@steipete/bird) 发布到 X/Twitter。
+
+## 自然语言
+
+```bash
+arka post this on my X https://example.com/article
+arka shorten this linkedin post to 40 words and post on twitter
+arka share https://github.com/Sumit884-byte/arka on my x
+```
+
+## 字数限制
+
+用自然语言指定字数上限：
+
+```bash
+arka post this article in 30 words on x
+arka shorten to 50 words and tweet on twitter
+```
+
+默认：**40 字**。最大：**200 字**。
+
+## 安装设置
+
+1. 安装 Node.js 18+。
+2. 认证 Bird（首次运行时按提示操作）：
+
+```bash
+npx @steipete/bird login
+```
+
+3. 确保在 `.env` 中配置了 LLM 提供商（Gemini、Groq 等）用于摘要。
+
+如果全局没有 Bird，会在首次使用时通过 `npx` 自动安装。
+
+## CLI
+
+```bash
+post_x https://example.com/article
+post_x https://example.com/article --words 30
+post_x --dry-run https://example.com/article   # preview without posting
+```
+
+## 安全性
+
+- 推文中的 GitHub URL 必须出现在源文本中 — 幻觉的仓库路径会被屏蔽。
+- LinkedIn 和文章 URL 在发布前会被获取并摘要。
+- 使用 `--dry-run` 预览撰写的推文。
+
+<Warning>
+  发布需要通过 Bird 提供的有效 X/Twitter 凭据。在生产账户中发布前请审查推文内容。
+</Warning>

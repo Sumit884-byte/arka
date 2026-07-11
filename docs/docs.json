@@ -9,110 +9,225 @@
   },
   "favicon": "/favicon.svg",
   "navigation": {
-    "groups": [
+    "languages": [
       {
-        "group": "Getting started",
-        "icon": "rocket",
-        "pages": [
-          "index",
-          "quickstart",
-          "guides/personalize"
+        "language": "en",
+        "groups": [
+          {
+            "group": "Getting started",
+            "icon": "rocket",
+            "pages": [
+              "index",
+              "quickstart",
+              "guides/personalize"
+            ]
+          },
+          {
+            "group": "Core concepts",
+            "icon": "brain",
+            "pages": [
+              "concepts/routing",
+              "concepts/llm",
+              "concepts/security",
+              "guides/select-model"
+            ]
+          },
+          {
+            "group": "Using Arka",
+            "icon": "terminal",
+            "pages": [
+              "guides/cli",
+              "guides/skills",
+              "guides/route-learn",
+              "guides/competitions",
+              "guides/ascii-art",
+              "guides/generate-data",
+              "guides/data-ask"
+            ]
+          },
+          {
+            "group": "Chat & search",
+            "icon": "comments",
+            "pages": [
+              "guides/chat",
+              "guides/personas",
+              "guides/memory",
+              "guides/daily-brief"
+            ]
+          },
+          {
+            "group": "Documents & media",
+            "icon": "file-text",
+            "pages": [
+              "guides/pdf-rag",
+              "guides/charts",
+              "guides/vision",
+              "guides/youtube"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "icon": "plug",
+            "pages": [
+              "guides/google-workspace",
+              "guides/plugins",
+              "guides/life-sciences",
+              "guides/gemini-cli",
+              "guides/fugu",
+              "guides/mcp",
+              "guides/agent-hub",
+              "guides/agent-teams",
+              "guides/post-x"
+            ]
+          },
+          {
+            "group": "Finance",
+            "icon": "chart-line",
+            "pages": [
+              "guides/stocks",
+              "guides/kalshi",
+              "guides/kaggle"
+            ]
+          },
+          {
+            "group": "Agent & voice",
+            "icon": "robot",
+            "pages": [
+              "guides/voice",
+              "guides/goal-agent",
+              "guides/repo-map",
+              "guides/openclaw-features",
+              "guides/hermes-features",
+              "guides/professions"
+            ]
+          },
+          {
+            "group": "Operations",
+            "icon": "wrench",
+            "pages": [
+              "guides/observability",
+              "guides/testing"
+            ]
+          },
+          {
+            "group": "Reference",
+            "icon": "list",
+            "pages": [
+              "reference/configuration",
+              "reference/aliases",
+              "reference/troubleshooting"
+            ]
+          }
         ]
       },
       {
-        "group": "Core concepts",
-        "icon": "brain",
-        "pages": [
-          "concepts/routing",
-          "concepts/llm",
-          "concepts/security",
-          "guides/select-model"
-        ]
-      },
-      {
-        "group": "Using Arka",
-        "icon": "terminal",
-        "pages": [
-          "guides/cli",
-          "guides/skills",
-          "guides/route-learn",
-          "guides/competitions",
-          "guides/ascii-art",
-          "guides/generate-data",
-          "guides/data-ask"
-        ]
-      },
-      {
-        "group": "Chat & search",
-        "icon": "comments",
-        "pages": [
-          "guides/chat",
-          "guides/personas",
-          "guides/memory",
-          "guides/daily-brief"
-        ]
-      },
-      {
-        "group": "Documents & media",
-        "icon": "file-text",
-        "pages": [
-          "guides/pdf-rag",
-          "guides/charts",
-          "guides/vision",
-          "guides/youtube"
-        ]
-      },
-      {
-        "group": "Integrations",
-        "icon": "plug",
-        "pages": [
-          "guides/google-workspace",
-          "guides/plugins",
-          "guides/life-sciences",
-          "guides/gemini-cli",
-          "guides/fugu",
-          "guides/mcp",
-          "guides/agent-hub",
-          "guides/agent-teams",
-          "guides/post-x"
-        ]
-      },
-      {
-        "group": "Finance",
-        "icon": "chart-line",
-        "pages": [
-          "guides/stocks",
-          "guides/kalshi",
-          "guides/kaggle"
-        ]
-      },
-      {
-        "group": "Agent & voice",
-        "icon": "robot",
-        "pages": [
-          "guides/voice",
-          "guides/goal-agent",
-          "guides/repo-map",
-          "guides/openclaw-features",
-          "guides/hermes-features",
-          "guides/professions"
-        ]
-      },
-      {
-        "group": "Operations",
-        "icon": "wrench",
-        "pages": [
-          "guides/observability",
-          "guides/testing"
-        ]
-      },
-      {
-        "group": "Reference",
-        "icon": "list",
-        "pages": [
-          "reference/configuration",
-          "reference/aliases",
-          "reference/troubleshooting"
+        "language": "cn",
+        "groups": [
+          {
+            "group": "入门",
+            "icon": "rocket",
+            "pages": [
+              "cn/index",
+              "cn/quickstart",
+              "cn/guides/personalize"
+            ]
+          },
+          {
+            "group": "核心概念",
+            "icon": "brain",
+            "pages": [
+              "cn/concepts/routing",
+              "cn/concepts/llm",
+              "cn/concepts/security",
+              "cn/guides/select-model"
+            ]
+          },
+          {
+            "group": "使用 Arka",
+            "icon": "terminal",
+            "pages": [
+              "cn/guides/cli",
+              "cn/guides/skills",
+              "cn/guides/route-learn",
+              "cn/guides/competitions",
+              "cn/guides/ascii-art",
+              "cn/guides/generate-data",
+              "cn/guides/data-ask"
+            ]
+          },
+          {
+            "group": "聊天与搜索",
+            "icon": "comments",
+            "pages": [
+              "cn/guides/chat",
+              "cn/guides/personas",
+              "cn/guides/memory",
+              "cn/guides/daily-brief"
+            ]
+          },
+          {
+            "group": "文档与媒体",
+            "icon": "file-text",
+            "pages": [
+              "cn/guides/pdf-rag",
+              "cn/guides/charts",
+              "cn/guides/vision",
+              "cn/guides/youtube"
+            ]
+          },
+          {
+            "group": "集成",
+            "icon": "plug",
+            "pages": [
+              "cn/guides/google-workspace",
+              "cn/guides/plugins",
+              "cn/guides/life-sciences",
+              "cn/guides/gemini-cli",
+              "cn/guides/fugu",
+              "cn/guides/mcp",
+              "cn/guides/agent-hub",
+              "cn/guides/agent-teams",
+              "cn/guides/post-x"
+            ]
+          },
+          {
+            "group": "金融",
+            "icon": "chart-line",
+            "pages": [
+              "cn/guides/stocks",
+              "cn/guides/kalshi",
+              "cn/guides/kaggle"
+            ]
+          },
+          {
+            "group": "代理与语音",
+            "icon": "robot",
+            "pages": [
+              "cn/guides/voice",
+              "cn/guides/goal-agent",
+              "cn/guides/repo-map",
+              "cn/guides/openclaw-features",
+              "cn/guides/hermes-features",
+              "cn/guides/professions"
+            ]
+          },
+          {
+            "group": "运维",
+            "icon": "wrench",
+            "pages": [
+              "cn/guides/observability",
+              "cn/guides/testing"
+            ]
+          },
+          {
+            "group": "参考",
+            "icon": "list",
+            "pages": [
+              "cn/reference/configuration",
+              "cn/reference/aliases",
+              "cn/reference/troubleshooting"
+            ]
+          }
         ]
       }
     ]

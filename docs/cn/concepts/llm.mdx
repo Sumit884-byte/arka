@@ -1,0 +1,109 @@
+---
+title: "多提供商故障切换的 LLM 编排"
+description: "Arka 如何编排 24 家 LLM 提供商，实现自动故障切换、API 密钥轮换、按任务的配置文件以及按技能的模型覆盖。"
+keywords: ["llm", "providers", "failover", "models"]
+---
+
+Arka 的 `LlmFallbackEngine` 管理跨 **25 家提供商**的所有 LLM 调用，支持自动故障切换、API 密钥轮换以及按任务或按技能的模型覆盖。
+
+## 支持的提供商
+
+Anthropic、OpenAI、Gemini、Groq、xAI、DeepSeek、Moonshot、Z.AI、MiniMax、Venice、Mistral、Cohere、Together、Fireworks、Perplexity、Hugging Face、OpenRouter、Sakana Fugu、Bedrock、Azure、LiteLLM、Ollama、LM Studio、vLLM 以及 vLLM Cloud。
+
+## 故障切换的工作方式
+
+编排器按以下顺序构建候选列表：
+
+1. `AI_PREFERRED_PROVIDER` + `AI_PREFERRED_MODEL`（若已设置）
+2. 从各提供商 API 获取的实时模型列表（当密钥允许时）
+3. 内置链：Gemini 2.5/2.0 Flash → Groq Llama 3.3/3.1 → Ollama cloud/local
+
+遇到 429、401 或超时时，Arka 会尝试下一个模型。API 密钥轮换（`API_KEY_ROTATION=1`）会在切换提供商前先循环使用备份密钥。
+
+```env
+AI_PREFERRED_PROVIDER=gemini
+AI_PREFERRED_MODEL=gemini-2.0-flash
+LLM_AUTO_FALLBACK=1
+API_KEY_ROTATION=1
+```
+
+## 按任务的配置文件
+
+| 任务 | 用途 |
+| ---- | -------- |
+| `route` | 技能路由决策 |
+| `summarize` | 邮件和文档摘要 |
+| `chat` | 对话式回复 |
+| `research` | 深度网络研究 |
+| `agent` | 目标代理的步骤 |
+| `pdf` | PDF 问答 |
+| `predictions` | 股票和预测分析 |
+| `compose_video` | 视频脚本生成 |
+| `compose_slides` | 演示幻灯片脚本生成 |
+
+按任务覆盖：
+
+```env
+LLM_FALLBACK_ROUTE=gemini/gemini-2.0-flash,groq/llama-3.3-70b-versatile
+LLM_FALLBACK_SUMMARIZE=groq/llama-3.3-70b-versatile
+```
+
+## 按技能模型
+
+```bash
+arka ai-skill-model web_answer groq/llama-3.3-70b-versatile
+arka ai-skill-model profiles
+arka ai-models
+```
+
+或编辑 `~/.config/arka/llm-skill-models.json`。
+
+## 共享的耗尽缓存
+
+单会话缓存 —— 已耗尽的模型在重置前会跨技能被跳过：
+
+```bash
+python3 arka_llm.py reset-exhaustion
+```
+
+在故障切换时启用 stderr 通知：`LLM_FALLBACK_NOTIFY=1`。调试尝试过程：`LLM_VERBOSE=1`。
+
+## 本地 LLM 服务器
+
+```env
+OLLAMA_HOST=127.0.0.1:11434
+LLM_AUTO_START_SERVERS=1
+LLM_AUTO_STOP_SERVERS=1
+```
+
+## 为什么技能保持简洁
+
+Arka **不会**让 LLM 去记忆 70 个技能手册。技能是本地程序 —— 模型只需选出正确的名称。在 LLM 路由时，Arka 会传递：
+
+- 一份**紧凑的技能目录**（仅包含已注册的名称）
+- **精选路由规则**（高信噪比的模式）
+- 通过 `ROUTE_ALIASES` 传入的**你机器上的 shell 别名**
+
+路由任务使用低 temperature 和专用链，让快速/低成本模型处理分类；重型工作在本地技能内部执行。
+
+## 运行时检查
+
+```bash
+arka ai-models
+python3 arka_llm.py models --task summarize
+python3 arka_llm.py models --skill web_answer
+python3 arka_llm.py active-model
+python3 arka_llm.py reset-exhaustion
+```
+
+<Note>
+  设置 `SHOW_MODEL=1`（默认值）可在答案下方显示 `Model: provider/name`。
+</Note>
+
+## 相关内容
+
+<CardGroup cols={2}>
+  <Card title="配置" icon="settings" href="/cn/reference/configuration">环境变量与 API 密钥</Card>
+  <Card title="对话与网络" icon="message-circle" href="/cn/guides/chat">使用编排器的技能</Card>
+  <Card title="故障排查" icon="wrench" href="/cn/reference/troubleshooting">401、429 与故障切换修复</Card>
+</CardGroup>

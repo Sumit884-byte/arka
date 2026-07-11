@@ -1,0 +1,85 @@
+---
+title: "生成数据"
+description: "创建伪造或示例数据集，或从 World Bank、PubMed、URL 与网页搜索中获取真实数据行。"
+keywords: ["generate", "data", "csv", "json", "fake", "sample", "mock", "world bank", "pubmed", "real"]
+---
+
+在终端中生成示例数据集 —— 或从 API 和公开来源获取 **真实世界** 的数据行。适用于测试、演示、原型和快速数据抓取。
+
+## 自然语言
+
+### 合成数据（默认）
+
+```bash
+arka generate 100 users as csv
+arka generate sample sales data json --rows 50
+arka generate fake emails tsv
+arka create sample json data
+arka data_gen --schema "name,email,age" --format json --count 20
+```
+
+### 真实世界来源
+
+```bash
+arka generate real world bank gdp india 2010-2024 as csv
+arka generate 20 pubmed papers on "mRNA vaccines" as csv
+arka generate data from https://pokeapi.co/api/v2/pokemon?limit=10 as jsonl
+```
+
+包含 **real**、**actual**、**live**、**world bank**、**pubmed papers** 或 **URL** 的短语会路由到真实数据抓取器。**Fake** / **sample** / **mock** 会保持合成生成。
+
+## CLI 命令
+
+| 命令 | 说明 |
+| ---- | ---- |
+| `generate_data users --count 100 --format csv` | 用户记录预设（合成） |
+| `generate_data --source worldbank --indicator gdp --country IN -f json` | 印度的 World Bank GDP |
+| `generate_data --source pubmed --query "mRNA vaccines" -n 20 -f csv` | PubMed 论文元数据 |
+| `generate_data --source url --url "https://pokeapi.co/api/v2/pokemon?limit=10" -f jsonl` | 从 URL 获取 JSON 或 CSV |
+| `generate_data --real --indicator population --country US` | 简写：自动推断为 World Bank |
+| `generate_data --fields "id,name,price,category" -n 20` | 自定义合成列 |
+
+## 真实世界来源
+
+| `--source` | 说明 | 关键参数 |
+| ---------- | ---- | -------- |
+| `worldbank` | GDP、人口、预期寿命、CO₂、失业率、互联网普及率 | `--indicator`、`--country`、`--year-from`、`--year-to` |
+| `pubmed` | 生物医学论文元数据（标题、期刊、年份、URL） | `--query`、`--count` |
+| `url` | 从任意 URL 获取 JSON 数组/对象或 CSV | `--url`、`--count` |
+| `web` | DuckDuckGo 搜索结果作为数据行 | `--query`、`--count` |
+
+真实来源的行数上限为 **500 行**。当设置了 `--source` 时，Arka 不会回退到合成或 LLM 数据 —— 抓取错误会被清晰地报告。
+
+### World Bank 指标
+
+`gdp`、`gdp_per_capita`、`population`、`life_expectancy`、`co2`、`unemployment`、`internet`
+
+国家代码使用 ISO-3166 alpha-2（如 `IN`、`US`）。自然语言国家名称（India、United States）会被自动解析。
+
+## 支持的格式
+
+`csv`、`json`、`jsonl`、`tsv`、`yaml`、`xml`、`sql`、`markdown`、`xlsx`
+
+XLSX 输出需要 `openpyxl`（`pip install openpyxl`）。要获得更丰富的伪造值，请安装可选的 Faker 扩展：
+
+```bash
+pip install faker
+```
+
+## 预设
+
+内置预设会自动推断列（仅限合成模式）：
+
+| 预设 | 列 |
+| ---- | -- |
+| `users` | id, name, email, age, phone |
+| `products` | id, name, price, category |
+| `sales` | date, product, quantity, revenue, region |
+| `emails` | email |
+| `customers` | id, name, email, address, phone |
+
+字段名会与生成器（姓名、邮箱、电话、地址、日期、数字、UUID、布尔值）匹配。当配置了 LLM API key 时，可对复杂自定义模式使用 `--llm`。
+
+## 输出
+
+默认打印到标准输出，或使用 `-o output.csv` 保存，也可以将文件名作为第一个参数传入。

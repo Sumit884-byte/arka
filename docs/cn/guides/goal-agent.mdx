@@ -1,0 +1,49 @@
+---
+title: "运行自主目标 Agent"
+description: "使用 Arka 的目标 Agent 自主运行多步终端任务 —— 通过步骤预算和安全门禁完成环境搭建、调试、重构以及运行测试。"
+keywords: ["goal", "agent", "autonomous", "loop"]
+---
+
+目标 Agent 自主运行多步任务 —— 通过步骤预算和安全门禁完成环境搭建、调试、重构以及运行测试。
+
+## 用法
+
+```bash
+arka goal set up a venv, install requests, and run pytest
+arka goal -y -n 30 debug why nginx fails
+arka goal --butterfish refactor this module and run tests
+```
+
+在 zsh/bash 中（无需 fish）：
+
+```bash
+arka goal debug my nginx setup
+arka goal -b -y set up venv and run pytest
+```
+
+## 引擎
+
+| 引擎 | 行为 |
+| ------ | -------- |
+| `auto` / `arka` | 内置目标 Agent（默认） |
+| `butterfish` | 启动 Butterfish shell（`!goal`） |
+| `legacy` | 仅原始 JSON 循环 |
+| `off` | 禁用目标委托 |
+
+```env
+GOAL_ENGINE=auto
+GOAL_MAX_STEPS=25
+GOAL_AUTO_CONTINUE=1
+GOAL_OUTPUT_LIMIT=8000
+```
+
+## 工作原理
+
+目标 Agent 使用 Butterfish 风格的运行/修复循环，结合 shell 历史、文件读取和安全门禁。每一步都可以调用任何已注册的技能或安全的 shell 命令。
+
+仅在您信任环境时使用 `-y` 自动确认高风险步骤。
+
+## 相关
+
+- `agent_plan` —— 前置 JSON 规划（独立于响应式目标循环）
+- `arka loop` —— 当 `GOAL_ENGINE=auto` 时是 `arka goal` 的别名

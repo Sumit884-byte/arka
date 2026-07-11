@@ -1,0 +1,89 @@
+---
+title: "使用唤醒词、STT 和 TTS 的语音控制"
+description: "通过唤醒词监听器、可配置的语音转文本引擎以及语音命令的文本转语音回复，实现免手操作 Arka。"
+keywords: ["voice", "stt", "tts", "wake word"]
+---
+
+Arka 支持通过唤醒词监听器、多种 STT 引擎和 TTS 回复的免手操作使用。
+
+## 快速开始
+
+```bash
+arka listen
+# 说：“hey arka, what's the weather”
+```
+
+TTS 回复默认开启（`AGENT_SPEAK=1`）。设置 `AGENT_SPEAK=0` 可禁用。
+
+## 唤醒词监听器
+
+在运行 `arka listen` 之前，监听器**默认关闭**。若要在登录时自动启动 shell：
+
+```env
+AGENT_WAKE_AUTO=1
+```
+
+配置更改后重新启动：
+
+```bash
+arka reload --listen
+```
+
+## STT 引擎
+
+Arka 会自动选择最佳可用引擎（`STT=auto`，`LISTEN_ENGINE=auto`）：
+
+| 优先级 | 引擎 | 需要 |
+| --- | --- | --- |
+| 1 | AssemblyAI | API 密钥 |
+| 2 | Sarvam | API 密钥（印度语言） |
+| 3 | Groq | API 密钥 |
+| 4 | Vosk | 本地模型（离线） |
+
+显式覆盖：
+
+```env
+STT=groq
+LISTEN_ENGINE=vosk
+```
+
+安装语音附加组件：
+
+```bash
+pip install "arka-agent[voice]"
+```
+
+## TTS 后端
+
+Arka 使用 Edge TTS 或 Sarvam 朗读回复：
+
+```bash
+arka speak-lang hi-IN    # 印地语
+arka speak-lang en-US    # 英语
+```
+
+Sarvam 支持印度语言。Edge TTS 对大多数区域设置可离线工作。
+
+## 远程服务器
+
+使用 `arka serve` 运行远程 STT/TTS 服务器，通过手机与 PC 上的 Agent 进行交互：
+
+```bash
+arka serve
+```
+
+## 多轮对话
+
+语音会话在多轮之间保持上下文。说出 "hey arka" 加上您的请求，然后继续对话而无需重复唤醒词，直到会话超时。
+
+## 从语音记忆
+
+设置 `MEMORY_AUTODETECT=1`（默认），Arka 会自动检测语音和聊天中的 "remember that …" 短语：
+
+```text
+hey arka, remember that I prefer Hindi TTS
+```
+
+<Note>
+  安装 fish shell 和语音附加组件以获得完整的语音体验。请参阅[快速开始](/cn/quickstart)了解设置步骤。
+</Note>

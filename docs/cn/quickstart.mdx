@@ -1,0 +1,162 @@
+---
+title: "快速开始：安装 Arka 并运行第一条命令"
+description: "在 macOS、Linux 或 Windows 上安装 Arka，配置 API 密钥，并在五分钟内运行你的第一条自然语言终端命令。"
+---
+
+让 Arka 在 macOS、Linux 或 Windows 上运行起来。完成本指南后，你将安装好代理、配置好 API 密钥并运行你的第一条自然语言命令。
+
+## 开始之前
+
+Arka 采用 docs-as-code 方式 —— 本站基于 [Mintlify](https://mintlify.com) 构建，并部署在 [arka-agent.mintlify.site](https://arka-agent.mintlify.site)。使用 Arka 本身，你需要：
+
+- **Python 3.11\+**
+- 至少一个 LLM API 密钥（推荐使用免费额度的 Gemini 或 Groq）
+- [**fish shell**](https://fishshell.com) 以启用完整的 70\+ 技能路由（可选但推荐）
+
+## 安装
+
+<Tabs>
+  <Tab title="Git clone">
+    最适合开发或跟随最新 `main` 分支。
+
+    ```bash
+    git clone https://github.com/Sumit884-byte/arka.git
+    cd arka
+    ./scripts/refetch.sh --install
+    ```
+  </Tab>
+  <Tab title="PyPI / pipx">
+    最适合无需克隆仓库的独立安装。
+
+    ```bash
+    pipx install "arka-agent[chat]"
+    arka setup
+    ```
+  </Tab>
+  <Tab title="可编辑开发模式">
+    适用于在仓库内进行开发的贡献者。
+
+    ```bash
+    git clone https://github.com/Sumit884-byte/arka.git && cd arka
+    python3 scripts/sync_bundled.py
+    pip install -e ".[chat]"
+    arka setup
+    ```
+  </Tab>
+</Tabs>
+
+## 开始使用
+
+<Steps>
+  <Step title="配置 API 密钥">
+    复制示例环境文件并至少添加一个提供商的密钥。
+
+    ```bash
+    cp .env.example ~/.config/arka/.env
+    ```
+
+    快速上手的最小 `.env`：
+
+    ```env
+    GEMINI_API_KEY=your_key_here
+    GROQ_API_KEY=your_key_here
+    AI_PREFERRED_PROVIDER=gemini
+    AI_PREFERRED_MODEL=gemini-2.0-flash
+    AGENT_SPEAK=1
+    ```
+
+    <Note>
+      配置路径因操作系统而异。Linux 使用 `~/.config/arka/`，macOS 使用 `~/Library/Application Support/arka/`，Windows 使用 `%APPDATA%\arka\`。
+    </Note>
+  </Step>
+  <Step title="验证安装">
+    运行诊断以确认依赖和 API 密钥。
+
+    ```bash
+    arka doctor
+    ```
+  </Step>
+  <Step title="运行你的第一条命令">
+    提出一个问题，看 Arka 将其路由到网络答案技能。
+
+    ```bash
+    arka ask "what is Rust?"
+    ```
+
+    再试几个：
+
+    ```bash
+    arka "convert 100 USD to INR"
+    arka route "play bohemian rhapsody on spotify"
+    arka help
+    ```
+  </Step>
+  <Step title="个性化（可选）">
+    选择兴趣，获取为你量身定制的技能推荐。
+
+    ```bash
+    arka personalize wizard
+    arka personalize recommend
+    ```
+
+    详见[个性化你的 Arka 体验](/cn/guides/personalize)，了解兴趣标签和非交互式选项。
+  </Step>
+  <Step title="安装 fish shell（可选）">
+    Fish 可解锁完整的 70\+ 技能路由。pip 包中自带 `config.fish`。
+
+    ```bash
+    # macOS
+    brew install fish
+    
+    # Linux
+    apt install fish
+    
+    # Windows
+    scoop install fish
+    ```
+  </Step>
+</Steps>
+
+## 可选附加组件
+
+| 附加组件 | 增加内容 |
+| --- | --- |
+| `[chat]` | Agno、web 搜索、trafilatura、sympy、geopy |
+| `[voice]` | vosk、sounddevice |
+| `[pdf]` | PrivateGPT 客户端 |
+| `[charts]` | matplotlib |
+| `[all]` | 以上全部 |
+
+```bash
+pip install "arka-agent[all]"
+```
+
+## 下一步
+
+按侧边栏顺序阅读，或直接跳到你需要的部分：
+
+<CardGroup cols={2}>
+  <Card title="CLI 参考" icon="terminal" href="/cn/guides/cli">
+    所有命令、别名和子命令。
+  </Card>
+
+  <Card title="技能目录" icon="puzzle-piece" href="/cn/guides/skills">
+    你可以让 Arka 做的事。
+  </Card>
+
+  <Card title="路由工作原理" icon="route" href="/cn/concepts/routing">
+    离线规则、LLM 回退与纠错层。
+  </Card>
+
+  <Card title="LLM 配置" icon="brain" href="/cn/concepts/llm">
+    提供商、故障切换和按技能模型。
+  </Card>
+
+  <Card title="配置" icon="settings" href="/cn/reference/configuration">
+    环境变量、优先级和内置默认值。
+  </Card>
+
+  <Card title="语音" icon="microphone" href="/cn/guides/voice">
+    唤醒词、STT 与 TTS 设置。
+  </Card>
+</CardGroup>

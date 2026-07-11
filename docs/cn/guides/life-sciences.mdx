@@ -1,0 +1,72 @@
+---
+title: "生命科学（Anthropic 市场）"
+description: "从 Arka 使用 Anthropic 的生命科学市场 — 安装 PubMed、单细胞 QC、Nextflow 流水线以及有证据支持的生物医学研究。"
+keywords: ["life sciences", "pubmed", "bioinformatics", "genomics", "plugins"]
+---
+
+Arka 集成了 [Anthropic 的生命科学市场](https://github.com/anthropics/life-sciences) — 用于生物医学研究、基因组学和药物发现的 MCP 服务器与工作流技能。
+
+## 它提供什么
+
+| 类型 | 示例 | Arka 支持 |
+| --- | --- | --- |
+| **MCP 服务器** | PubMed、BioRender、Synapse、ClinicalTrials.gov | PubMed 通过 NCBI 在本地工作；其他以桩形式安装并附带指导 |
+| **工作流技能** | single-cell-rna-qc、nextflow-development | 在可用时随可运行脚本一起安装 |
+| **指导技能** | scientific-problem-selection、scvi-tools | 以 LLM 引导的 SKILL.md 工作流形式安装 |
+
+## 快速开始
+
+```bash
+arka life_sciences list
+arka life_sciences install pubmed
+arka pubmed crispr base editing
+arka life_sciences install single-cell-rna-qc
+```
+
+## 市场命令
+
+```bash
+arka life_sciences list                 # catalog all plugins
+arka life_sciences info pubmed          # plugin details
+arka life_sciences install pubmed       # install one plugin as an Arka skill
+arka life_sciences doctor               # check cache and install status
+```
+
+自然语言同样有效：
+
+```bash
+arka "life sciences list"
+arka "install pubmed"
+```
+
+## 带引用的研究
+
+使用捆绑的 **life_sciences** 专业领域进行以证据为先的回答：
+
+```bash
+arka profession ask life_sciences what are latest CAR-T trial endpoints
+arka "as a biomedical researcher summarize crispr off-target risks"
+```
+
+## MCP 与 Arka 技能
+
+上游仓库面向 **Claude Code**（`/plugin marketplace add anthropics/life-sciences`）。Arka 将其适配到终端：
+
+1. **`life_sciences` 元技能** — 列出市场插件并将其安装到 `~/.config/arka/skills/`
+2. **单插件技能** — 每次安装都会得到带有 Arka 触发器的 `skill.json` + `run.py`
+3. **专业领域** — `life_sciences` 添加了偏向 PubMed/NIH 的源注册表，用于带引用的研究
+
+需要认证的远程 MCP 服务器（BioRender、Synapse、Cortellis）以桩形式安装。使用 Claude Code 获取完整的 MCP 访问权限，或通过 `profession ask life_sciences` 提问。
+
+## 常用插件
+
+| 插件 | 安装后的命令 |
+| --- | --- |
+| PubMed | `arka pubmed <query>` |
+| 单细胞 QC | `arka single-cell-rna-qc data.h5ad` |
+| Nextflow | `arka nextflow-development`（需要 Docker + Nextflow） |
+| 科学问题选择 | `arka scientific-problem-selection <research question>` |
+
+<Tip>
+  安装插件后运行 `arka life_sciences doctor`。如果触发器未立即路由，请使用 `arka skills refresh`。
+</Tip>

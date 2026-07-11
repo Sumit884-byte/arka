@@ -1,0 +1,135 @@
+---
+title: "YouTube 研究和下载"
+description: "从 Arka 搜索 YouTube，从视频字幕中合成研究，使用 yt-dlp 下载单个视频，并批量抓取整个播放列表。"
+keywords: ["youtube", "yt-dlp", "research", "download", "transcript"]
+---
+
+Arka 提供了几个由 **yt-dlp** 驱动的 YouTube 技能，用于搜索、字幕、下载以及批量抓取播放列表/频道。
+
+## 前置条件
+
+```bash
+brew install yt-dlp    # macOS
+apt install yt-dlp     # Linux
+```
+
+视频默认保存到 `~/Videos/YoutubeDownloads/`。可在 `.env` 中通过 `YOUTUBE_DOWNLOAD_DIR` 或 `YOUTUBE_BULK_DOWNLOAD_DIR` 覆盖。
+
+## YouTube 研究
+
+搜索 YouTube，从多个视频抓取字幕，并合成统一的研究简报。
+
+```bash
+arka youtube research "how to fix hair loss"
+arka youtube research "python asyncio tutorial" --limit 5
+youtube_research "analyze 3 videos on react hooks"
+youtube_research "IPL 2025 highlights" --index --ask "who scored most runs"
+```
+
+| 标志 | 用途 |
+| ---- | ------- |
+| `--limit N` | 要分析的视频数量（默认：`2`，在 `.env` 中设置 `YT_RESEARCH_MAX`） |
+| `--focus "question"` | 将合成聚焦到具体问题 |
+| `--index` | 保存会话以便后续提问 |
+| `--show-items` | 打印每个视频的摘要 |
+
+**对已索引会话进行后续提问：**
+
+```bash
+youtube_research list
+youtube_research ask <session-id> "what was the main recommendation"
+```
+
+别名：`yt_research`、`arka research youtube <query>`。
+
+自然语言数量解析可内联使用：
+
+```
+"analyze 5 videos on rust async"
+"research two youtube videos about kubernetes"
+```
+
+## 播放和查找视频
+
+| 技能 | 示例 |
+| ----- | ------- |
+| `play_youtube` | `arka play lofi beats on youtube` |
+| `find_videos` | `find_videos swimming tutorial` |
+| `youtube_transcript` | `youtube_transcript <url> --summarize` |
+
+## 单视频下载
+
+下载单个视频或 Shorts 链接：
+
+```bash
+arka download dQw4w9WgXcQ
+arka download "https://youtube.com/watch?v=dQw4w9WgXcQ"
+youtube_download youtu.be/abc123 --audio
+yt_download <url> --quality 720
+```
+
+| 标志 | 用途 |
+| ---- | ------- |
+| `--audio` | 保存为 MP3 而非视频 |
+| `--quality 1080\|720\|480\|best` | 视频质量 |
+| `-o dir` | 输出目录 |
+
+默认保存到 `~/Videos/YoutubeDownloads/Singles/`。
+
+## 视频和播放列表摘要
+
+```bash
+arka summarize youtube dQw4w9WgXcQ
+arka summarize youtube PLxxx          # 播放列表 ID
+playlist_summarize <playlist-url>
+```
+
+有字幕时使用字幕；否则回退到 STT。
+
+## 批量下载
+
+使用 `http://localhost:5000` 的 Web UI 下载整个播放列表或频道：
+
+```bash
+youtube_bulk status
+youtube_bulk start
+youtube_bulk open
+youtube_bulk download "https://youtube.com/playlist?list=PLxxx" --wait
+yt_bulk download @mkbhd --channel --limit 5 --audio
+youtube_bulk download PLxxx --range 6-9 --wait
+youtube_bulk library
+```
+
+| 子命令 | 描述 |
+| ---------- | ----------- |
+| `status` | 服务器 + 下载进度（默认） |
+| `start` / `stop` / `open` | 管理批量下载 Web UI |
+| `download <url>` | 批量下载播放列表或频道 |
+| `library` | 列出已下载的文件夹和文件 |
+| `logs` | 查看下载日志 |
+
+**下载选项：**
+
+| 标志 | 用途 |
+| ---- | ------- |
+| `--channel` | 频道 URL 或 `@handle` |
+| `--audio` | MP3 而非视频 |
+| `--quality 1080\|720\|480` | 视频质量 |
+| `--limit N` | 前 N 项 |
+| `--range A-B` | 播放列表切片，例如 `6-9` |
+| `--wait` | 阻塞直到完成 |
+
+别名：`yt_bulk`。
+
+## 环境变量
+
+| 变量 | 默认 | 用途 |
+| -------- | ------- | ------- |
+| `YT_RESEARCH_MAX` | `2` | 研究默认视频数 |
+| `YT_RESEARCH_POOL` | auto | 填充 N 个有字幕视频时的搜索池大小 |
+| `YOUTUBE_DOWNLOAD_DIR` | `~/Videos/YoutubeDownloads/Singles` | 单个下载 |
+| `YOUTUBE_BULK_DOWNLOAD_DIR` | `~/Videos/YoutubeDownloads` | 批量下载 |
+
+<Tip>
+  研究会在 `~/.cache/fish-agent/youtube-research/` 中缓存字幕。重复运行相同查询会更快。
+</Tip>

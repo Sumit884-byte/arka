@@ -1,0 +1,52 @@
+---
+title: "终端中的 ASCII 艺术"
+description: "使用 figlet、pyfiglet 或内置块字体后备，在终端中生成文字横幅并将图片转换为 ASCII 艺术。"
+keywords: ["ascii", "art", "figlet", "terminal"]
+---
+
+Arka 可以直接在终端中从文本或图片生成 **ASCII 艺术**。
+
+## 文字横幅
+
+```bash
+arka make ascii art HELLO WORLD
+arka ascii banner Arka Agent
+arka figlet "Good morning"
+ascii_art Hello from Arka
+```
+
+可选字体（在安装了 `figlet` 或 `pyfiglet` 后）：
+
+```bash
+ascii_art --font slant "Ship it"
+```
+
+默认字体：`standard`。使用 `figlet -f?` 或 `pyfiglet -l` 列出字体。
+
+## 图片转 ASCII
+
+```bash
+arka ascii art from photo.jpg
+arka convert logo.png to ascii
+ascii_art --image screenshot.png
+```
+
+图片会被缩小并映射为 ASCII 字符（`@%#*+=-:. `）。
+
+## 后备字体
+
+如果 `figlet` 和 `pyfiglet` 都不可用，Arka 会使用内置的 5 行块字体渲染 A–Z、0–9 和空格。
+
+## 安装 figlet（可选）
+
+```bash
+# macOS
+brew install figlet
+
+# Python
+pip install pyfiglet
+```
+
+<Tip>
+  图片 ASCII 无需 figlet 即可运行 —— 只有文字横幅才会用到外部字体库。
+</Tip>

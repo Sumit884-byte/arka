@@ -1,0 +1,64 @@
+---
+title: "Kalshi 预测市场"
+description: "在终端获取 Kalshi 预测市场赔率、搜索开放市场并查看热门合约 —— 公共数据无需 API 密钥。"
+keywords: ["kalshi", "prediction markets", "odds", "finance"]
+---
+
+Arka 包含一个 **kalshi** 技能，用于只读访问 Kalshi 预测市场数据：搜索开放市场、检查某个 ticker、按 24 小时成交量查看热门合约以及查询交易所状态。
+
+不涉及交易 —— 仅报价和发现。
+
+## 快速示例
+
+```bash
+kalshi search bitcoin
+kalshi market KXBTC-25JUL-T100K
+kalshi trending
+kalshi status
+```
+
+也支持自然语言：
+
+```bash
+arka "kalshi predictions on bitcoin"
+arka "what are kalshi odds for inflation"
+arka "kalshi trending"
+```
+
+## 命令
+
+| 命令 | 描述 |
+| ------- | ----------- |
+| `kalshi search <keywords>` | 按标题/ticker 关键字搜索开放市场 |
+| `kalshi market <TICKER>` | 单个市场的完整报价（YES/NO、成交量、收盘时间） |
+| `kalshi trending` | 按 24 小时成交量排序的热门开放市场 |
+| `kalshi status` | Kalshi 交易所/交易状态 |
+
+## API 方式
+
+此技能使用 Kalshi 的公开 **Trade API v2**（只读市场数据无需 API 密钥）：
+
+- 基础 URL：`https://external-api.kalshi.com/trade-api/v2`
+- 端点：`GET /markets`、`GET /markets/{ticker}`、`GET /exchange/status`
+
+Kalshi 没有专门的关键字搜索端点，因此 `kalshi search` 会获取开放市场并在客户端按关键字过滤。
+
+## 可选配置
+
+仅当您需要自定义基础 URL 或未来的认证端点时，将以下内容添加到 `~/.config/arka/.env`：
+
+```bash
+# 可选 —— 公共只读端点无需密钥即可使用
+KALSHI_API_KEY=
+KALSHI_API_BASE=https://external-api.kalshi.com/trade-api/v2
+```
+
+## 相关技能
+
+| 技能 | 示例 |
+| ----- | ------- |
+| `stock` | `arka stock news` |
+| `currency_convert` | `arka convert 100 USD to INR` |
+| `predictions` | `predictions --domain stocks --deep "banking sector"` |
+
+另请参阅：[股票智能](/cn/guides/stocks)

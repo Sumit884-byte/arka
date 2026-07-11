@@ -1,0 +1,70 @@
+---
+title: "教授自定义路由"
+description: "教给 Arka 可跨会话保存的短语到技能映射 —— 纠正路由错误、添加快捷方式、管理已学习路由。"
+keywords: ["routing", "learn", "custom", "teach"]
+---
+
+Arka 可以学习 **持久化的自然语言路由** —— 短语到技能的映射保存在 `~/.config/arka/learned_routes.json` 中。学习到的路由会在路由器的早期阶段（先于符号规则）进行匹配。
+
+## 教授路由
+
+```bash
+route_learn learn "deploy staging" "agent_code run deploy.sh"
+route_learn learn "my dashboard" system_monitor
+```
+
+自然语言：
+
+```bash
+arka teach route "deploy staging" to "agent_code run deploy.sh"
+arka learn that when I say "morning standup" means stock news
+arka remember route "check disk" as disk_breakdown
+```
+
+## 纠正路由错误
+
+当请求被错误路由后，可以基于最近一次 trace 进行修正：
+
+```bash
+route_learn learn --from-trace --correct "stock news"
+```
+
+这会把 trace 中的输入与你原本想要的技能配对。
+
+## 管理路由
+
+| 命令 | 说明 |
+| ---- | ---- |
+| `route_learn list` | 列出所有已学习的路由 |
+| `route_learn delete <id-or-phrase>` | 移除一条路由 |
+| `route_learn test <phrase>` | 预览某个短语将执行什么 |
+
+自然语言：
+
+```bash
+arka list learned routes
+```
+
+## 占位符
+
+在技能命令中使用 `{args}` 可捕获尾部文本：
+
+```bash
+route_learn learn "summarize repo" "github_repo activity {args}"
+# "summarize repo Sumit884-byte/arka" → github_repo activity Sumit884-byte/arka
+```
+
+## 匹配机制
+
+- 完全匹配触发词时按原样执行技能命令。
+- 前缀匹配会把剩余部分追加上去（`"check servers in prod"` → `system_monitor in prod`）。
+- 较长的触发词优先于较短的。
+
+<Tip>
+  已学习的路由不消耗 LLM token。它们非常适合团队专属的快捷方式，以及修正反复出现的错误路由。
+</Tip>
+
+## 相关内容
+
+- [路由概念](/cn/concepts/routing) —— 符号规则与 LLM 回退
+- [CLI 参考](/cn/guides/cli) —— `route_learn` 子命令

@@ -1,0 +1,61 @@
+---
+title: "Google Gemini CLI 集成"
+description: "从 Arka 运行 Google 的 Gemini CLI — 交互式会话、一次性提示以及原生子命令透传。"
+keywords: ["gemini", "google", "cli", "integration"]
+---
+
+Arka 封装了 Google 官方的 [**Gemini CLI**](https://github.com/google-gemini/gemini-cli)（`@google/gemini-cli`），可与内置 Arka 技能一起在终端中使用。
+
+## 使用
+
+```bash
+arka gemini                          # interactive session
+arka gemini explain asyncio in Python
+arka gemini -m gemini-2.5-flash "summarize this diff"
+arka gemini status                   # check install + auth
+arka gemini mcp                      # native subcommands (passthrough)
+arka gemini -- -p "hello" -m gemini-2.5-pro
+```
+
+来自 fish：
+
+```fish
+gemini_cli explain Rust ownership
+```
+
+## 安装
+
+需要 Node.js 18+：
+
+```bash
+npm install -g @google/gemini-cli
+# or one-shot:
+npx @google/gemini-cli
+```
+
+## 认证
+
+以下二选一：
+
+1. 运行一次 `gemini` 并使用 Google 登录（浏览器 OAuth），或
+2. 在 `~/.config/arka/.env` 中设置 `GEMINI_API_KEY`（Arka 已将其用于内置的 LLM 调用）。
+
+```bash
+arka gemini status
+```
+
+## 覆盖二进制文件
+
+```bash
+GEMINI_CLI=/path/to/gemini arka gemini status
+```
+
+## 工作原理
+
+- 对于无头使用，裸提示被包装为 `gemini --skip-trust -p "<prompt>"`。
+- 标志和子命令（`mcp`、`extensions`、`hooks` 等）会原样透传。
+- 如果 `gemini` 不在 PATH 上，Arka 会回退到 `npx @google/gemini-cli`。
+
+<Note>
+  Gemini CLI 与 Arka 内置的 Gemini 提供商是分开的。使用它来访问原生 CLI 暴露的 Gemini 特定功能（MCP、扩展、钩子）。
+</Note>

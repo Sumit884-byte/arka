@@ -1,0 +1,82 @@
+---
+title: "安装和构建 Arka 插件"
+description: "通过将第三方插件技能安装到 ~/.config/arka/skills/ 并使用接入路由器的 skill.json 触发文件来扩展 Arka。"
+keywords: ["plugins", "skills", "extensions"]
+---
+
+使用安装到 `~/.config/arka/skills/` 的第三方技能扩展 Arka。
+
+## 安装插件
+
+```bash
+arka skills install https://github.com/user/my-skill.git
+arka skills refresh
+arka skills list
+```
+
+## skill.json 格式
+
+每个插件都需要一个 `skill.json` 清单文件：
+
+```json
+{
+  "name": "my_skill",
+  "description": "What it does",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": ["my skill", "do the thing"],
+  "voice_ack": "Running my skill."
+}
+```
+
+### 支持的类型
+
+| 类型 | 入口 | 运行方式 |
+| --- | --- | --- |
+| `python` | `run.py` | Python 脚本 |
+| `fish` | `skill.fish` | Fish 函数 |
+| `shell` | `run.sh` | Shell 脚本 |
+| `command` | `echo hello` | 直接命令 |
+
+## 触发器的工作原理
+
+Arka 在 AI 路由**之前**匹配插件触发器。当您说出与触发器匹配的内容时，Arka 会立即运行该插件，无需消耗任何 LLM 令牌。
+
+```json
+"triggers": ["weather in", "forecast for"]
+```
+
+触发器是针对完整用户请求进行的不区分大小写的子串匹配。
+
+## 目录结构
+
+```text
+~/.config/arka/skills/
+└── my_skill/
+    ├── skill.json
+    ├── run.py
+    └── README.md
+```
+
+## 语音确认
+
+设置 `voice_ack` 以便插件从语音运行时朗读确认信息：
+
+```json
+"voice_ack": "Checking the weather for you."
+```
+
+## 专业领域插件
+
+Arka 支持带有精选源注册表的专业领域插件。请参阅仓库中的 `src/arka/professions/examples/` 了解建筑师示例。
+
+## 更改后刷新
+
+```bash
+arka skills refresh
+arka reload
+```
+
+<Tip>
+  让触发器足够具体，以避免误匹配。部署前请使用 `arka route "your trigger phrase"` 进行测试。
+</Tip>

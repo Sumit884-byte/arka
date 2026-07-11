@@ -1,0 +1,111 @@
+---
+title: "角色扮演聊天"
+description: "在 Arka 中创建和与模拟的角色对话 —— 用于娱乐和教育的风格化 LLM 声音，非真实人物。"
+keywords: ["persona", "chat", "elon", "simulation"]
+---
+
+Arka 包含 **模拟角色聊天** —— 由 LLM 驱动的角色，灵感来自公众人物或你自己的提示，明确标注为用于娱乐和教育的虚构内容。
+
+<Warning>
+  角色 **并非** 他们所模仿的真实人物。请勿将其用于欺骗、冒充或权威性建议。
+</Warning>
+
+## 快速开始
+
+列出内置和已保存的角色：
+
+```bash
+arka persona list
+```
+
+与角色聊天（交互式 REPL）：
+
+```bash
+arka persona chat elon
+arka persona chat socrates
+```
+
+一次性提问：
+
+```bash
+arka persona chat elon "should I learn Rust?"
+```
+
+内置的 **Elon** 角色仍可作为快捷方式使用：
+
+```bash
+elon                                 # 交互式 REPL
+elon "should I learn Rust?"          # 一次性
+talk_to_elon about first principles  # 别名
+```
+
+通过 `arka` 使用自然语言：
+
+```bash
+arka talk to elon about rockets
+arka talk to socrates about virtue
+arka create persona for steve jobs
+arka persona elon about manufacturing
+```
+
+## 角色存储
+
+角色是位于 `~/.config/arka/personas/`（或 `{ARKA_CONFIG_DIR}/personas/`）中的 YAML（或 JSON）文件。
+
+示例 `~/.config/arka/personas/coach.yaml`：
+
+```yaml
+name: coach
+display_name: Supportive Coach
+description: Encouraging mentor tone for career and learning questions
+disclaimer: Simulated persona for fun — not a real person.
+voice: Warm, concise, asks one clarifying question when helpful
+system_prompt: |
+  You are a simulated supportive coach for entertainment and education only.
+  You are NOT a real person.
+
+  Voice and style:
+  - Encouraging but honest; practical next steps
+  - Short paragraphs; no buzzword soup
+
+  Rules:
+  - Never claim to be a real individual
+  - Do not give authoritative financial, legal, or medical advice
+  - If asked whether you are real, clarify you are a simulation
+```
+
+内置模板（`elon`、`socrates`、`blank`）在首次使用时会种入你的角色目录。
+
+## CLI 命令
+
+```bash
+arka persona list
+arka persona show <name>
+arka persona create <name>              # 交互式向导
+arka persona create <name> -t blank     # 从模板创建
+arka persona create steve-jobs -y       # LLM 起草，非交互
+arka persona chat <name> ["question"]
+arka persona edit <name>                # 在 $EDITOR 中打开 YAML
+```
+
+## 依赖
+
+使用 Arka 内置的 LLM 栈（与 `web_answer` / `agent_ask` 相同的 API 密钥）。在 `~/.config/arka/.env` 中配置 `GEMINI_API_KEY`、`GROQ_API_KEY` 或其他提供商。
+
+## 免责声明和输出格式
+
+每个聊天会话会打印一次角色的免责声明，然后每次回复都使用一致的终端布局：
+
+```text
+  Note: Simulated Elon-inspired persona for fun and education — not the real Elon Musk.
+
+── Elon (simulated) ──
+
+  First-principles answer text wraps near 88 columns and keeps paragraph breaks.
+```
+
+在交互式 REPL 模式下，你的提示为 `you> `，每条角色回复在标题块之前会标记为 `{name}> `。一次性命令（`arka talk to elon about …`）使用相同的格式。
+
+内置的 Elon 使用以下免责声明文本：
+
+> Note: Simulated Elon-inspired persona for fun and education — not the real Elon Musk.

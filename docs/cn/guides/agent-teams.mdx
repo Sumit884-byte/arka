@@ -1,0 +1,267 @@
+---
+title: "智能体团队"
+description: "跨智能体、模型和提供商组建团队 — 然后运行带有共享内存的顺序或并行工作流。"
+keywords: ["agent teams", "workflows", "multi-agent", "orchestration", "providers", "agent hub"]
+---
+
+**智能体团队**让您可以将编码智能体（来自 [Agent Hub](/cn/guides/agent-hub)）、云模型和本地提供商编组为命名角色，然后运行在它们之间传递工作的**工作流**。
+
+## 概念
+
+| 部件 | 是什么 | 存储位置 |
+| ----- | ---------- | --------- |
+| **团队** | 映射到智能体、模型或提供商的命名角色（`lead`、`analyst` 等） | `~/.config/arka/teams/` |
+| **工作流** | 团队的步骤 — 顺序、并行或轮询式的交接 | `~/.config/arka/workflows/` |
+| **运行** | 用任务字符串执行工作流；结果通过 `{task}`、`{results}`、`{step_N}` 在步骤之间传递 | CLI |
+
+成员类型：
+
+- `agent` — 来自 Agent Hub 的 ollama launch 智能体（`claude`、`codex`、`hermes` 等）
+- `model` — 具体的模型 + 提供商（`gpt-4o` + `openai`、`gemini-2.0-flash` + `gemini`）
+- `provider` — 提供商默认模型（`ollama`、`groq` 等）
+
+## 快速开始
+
+首次使用时会预置入门团队和工作流：
+
+```bash
+arka team list
+arka workflow list
+
+arka team show research --resolve
+arka team run research --task "Summarize Rust async patterns"
+
+arka workflow run review-and-ship --task "Plan a v2 auth redesign"
+arka workflow run code-review --task "Review PR #42: add JWT refresh"
+arka workflow run brainstorm --task "Cache invalidation strategies for edge CDN"
+```
+
+来自 fish：
+
+```fish
+team list
+team run research --task "Compare Postgres vs SQLite for edge caches"
+workflow run code-review --task "Review auth middleware changes"
+workflow run brainstorm --task "Ideas for offline-first mobile sync"
+```
+
+## 团队示例
+
+```yaml
+name: research
+description: Deep research team
+members:
+  - kind: agent
+    id: claude
+    role: lead
+  - kind: model
+    id: gemini-2.0-flash
+    provider: gemini
+    role: analyst
+  - kind: provider
+    id: ollama
+    role: local-fallback
+defaults:
+  memory: unified
+  mcp: true
+  workflow: review-and-ship
+```
+
+## 工作流示例
+
+```yaml
+name: review-and-ship
+team: research
+steps:
+  - member: lead
+    action: plan
+    prompt: "Break down: {task}"
+  - parallel:
+      - member: analyst
+        action: analyze
+        prompt: "Analyze: {task}\n\nPlan:\n{step_1}"
+      - member: local-fallback
+        action: verify
+        prompt: "Sanity-check: {step_1}"
+  - member: lead
+    action: synthesize
+    prompt: "Merge results: {results}"
+```
+
+## 轮询模式 (v2)
+
+不使用显式步骤，成员轮流参与，直到达到 `max_turns`。输出在 `{results}`、`{transcript}` 和 `{last_result}` 中累积。
+
+```yaml
+name: brainstorm
+team: research
+mode: round_robin
+max_turns: 6
+prompt: |
+  Continue brainstorming on: {task}
+  Previous: {last_result}
+members:
+  - lead
+  - analyst
+  - local-fallback
+defaults:
+  retries: 2
+  mcp: true
+```
+
+运行：
+
+```bash
+arka workflow run brainstorm --task "Edge cache invalidation patterns"
+```
+
+如果省略 `members`，则所有团队角色按定义顺序轮换。
+
+## 重试 (v2)
+
+在将运行标记为失败之前，重试失败的智能体/LLM 步骤。
+
+**单步：**
+
+```yaml
+- member: analyst
+  action: analyze
+  prompt: "Analyze: {task}"
+  retries: 3
+  retry_delay: 2
+```
+
+**工作流或团队默认值：**
+
+```yaml
+defaults:
+  retries: 2
+  retry_delay: 1
+```
+
+优先级：步骤 → 工作流 `defaults` → 团队 `defaults`。重试次数会出现在 CLI 输出中（`retries=N`、`attempts=N`）。设置 `TEAM_RETRY_BACKOFF=1` 使用指数延迟。
+
+## 单步 MCP (v2)
+
+按步骤启用 MCP 上下文（或继承工作流/团队默认值）：
+
+```yaml
+- member: analyst
+  action: fetch
+  prompt: "Summarize open PRs for: {task}"
+  mcp: true
+  mcp_servers: [github]
+```
+
+| 设置 | 效果 |
+| ------- | ------ |
+| `mcp: true` | 注入 `~/.config/arka/mcp.json` 中所有已配置的 MCP 服务器 |
+| `mcp_servers: [github]` | 限制为命名的服务器 |
+| `defaults.mcp: true` | 除非被覆盖，否则对所有步骤启用 |
+
+对于**智能体**步骤，MCP 工具摘要会被添加到提示前。对于**模型/提供商**步骤，它们会被添加到系统提示中。模型步骤的可选工具循环：设置 `TEAM_MCP_TOOL_ROUNDS=1`，让模型发出类似 `{"mcp_tool": "github", "tool": "search", "arguments": {}}` 的 JSON。
+
+## CLI 参考
+
+```bash
+arka team list
+arka team show <name> [--resolve]
+arka team create <name> [--template research]
+arka team run <name> --task "..." [--workflow <name>]
+
+arka workflow list
+arka workflow show <name>
+arka workflow create <name> [--template review-and-ship] [--team research]
+arka workflow run <name> --task "..."
+```
+
+`--resolve` 打印每个角色如何映射到具体的智能体或 LLM 目标。
+
+## 运行时行为
+
+1. **加载**来自配置目录（或捆绑模板）的团队 + 工作流 YAML/JSON。
+2. **解析**成员 — 智能体通过 Agent Hub 目录；模型/提供商通过 LLM 注册表。
+3. 当 `defaults.memory: unified` 时**召回**统一内存。
+4. **执行**步骤：
+   - 智能体角色 → 带角色上下文的 `answer_question`（轻量级；不是完整的 `ollama launch`）。
+   - 模型/提供商角色 → 带有固定提供商/模型链的 `LlmOrchestrator`。
+   - 并行块 → 线程池（`TEAM_MAX_PARALLEL`，默认 4）。
+   - 轮询 → 使用共享的转录变量为 `max_turns` 轮换成员。
+5. **重试**根据 `retries` / `retry_delay`（工作流或团队默认值）失败的步骤。
+6. 当步骤启用 `mcp` 时**注入 MCP** 工具摘要。
+7. 通过模板变量**向前传递**输出。
+
+## 捆绑模板
+
+| 模板 | 类型 | 角色 |
+| -------- | ---- | ----- |
+| `research` | 团队 | lead (claude)、analyst (gemini)、local-fallback (ollama) |
+| `code-review` | 团队 | lead (codex)、analyst (groq)、local-fallback (ollama) |
+| `clawbox-edge` | 团队 | openclaw lead + ollama fallback；为 Jetson 提供范围化内存 |
+| `review-and-ship` | 工作流 | plan → parallel analyze/verify → synthesize |
+| `code-review` | 工作流 | 审查清单 → 并行审查 → 摘要 |
+| `brainstorm` | 工作流 | 跨团队角色的轮询构思 |
+
+从模板创建：
+
+```bash
+arka team create my-research --template research
+arka workflow create my-ship --template review-and-ship --team my-research
+```
+
+## 环境
+
+```bash
+ARKA_TEAMS_DIR=~/.config/arka/teams
+ARKA_WORKFLOWS_DIR=~/.config/arka/workflows
+TEAM_MAX_PARALLEL=4
+TEAM_RETRY_BACKOFF=0
+TEAM_MCP_TOOL_ROUNDS=0
+```
+
+## 范围化内存 (v3)
+
+团队可以选择加入带溯源信息的**策略过滤召回**和**便签写入**：
+
+```yaml
+defaults:
+  memory: scoped          # unified | scoped | off
+  memory_scope:
+    read: [global, team, workflow]
+    write: workflow
+    ttl_hours: 72
+    promote: manual
+  trust_tier: team
+```
+
+| 模式 | 召回 | 步骤输出 |
+| ---- | ------ | ----------- |
+| `unified`（默认） | 全局统一内存 | 不持久化 |
+| `scoped` | 按信任层级 + 团队/工作流过滤 | 带溯源的便签 |
+| `off` | 无 | 不持久化 |
+
+单步覆盖：在工作流步骤上使用 `memory_scope: { write: run }`。
+
+```bash
+arka workflow run review-and-ship --task "..." --promote-final
+memory_scope scratchpad list --team research
+memory_promote abc123def456
+```
+
+工作流运行在 CLI 输出中打印 `run_id` 和 `scratchpad_writes`。
+
+团队和工作流包含在 `arka config backup` 中。
+
+## 限制
+
+- 智能体步骤使用 Arka 聊天路由，而不是完整的交互式 `ollama launch` 会话。
+- 模型步骤的 MCP 工具循环需要选择加入（`TEAM_MCP_TOOL_ROUNDS`），且默认为单轮。
+- 轮询没有提前停止条件 — 会运行到 `max_turns`。
+- 尚未实现工作流条件和人机回环网关。
+- 提供商健康检查在 LLM 调用时运行，而不是在团队解析时。
+
+## 相关
+
+- [Agent Hub](/cn/guides/agent-hub) — 共享 MCP、内存和智能体目录
+- [LLM 回退](/cn/concepts/llm) — 模型/提供商角色使用的提供商/模型路由
+- [内存](/cn/guides/memory) — 注入团队运行的统一内存

@@ -1,0 +1,36 @@
+---
+title: "仓库健康度"
+description: "为当前 git 项目检测并运行快速 lint 和测试检查。"
+keywords: ["repo", "health", "tests", "lint", "ci"]
+---
+
+扫描当前仓库以查找常见的测试和 lint 工具，然后运行快速健康检查。
+
+## 自然语言
+
+```bash
+arka check repo health
+arka run project tests
+arka scan what checks are available
+```
+
+## CLI 命令
+
+| 命令 | 描述 |
+| ------- | ----------- |
+| `repo_health scan [path]` | 检测可用检查（不执行） |
+| `repo_health run [path]` | 运行所有检测到的检查 |
+| `repo_health run --test` | 仅运行测试检查 |
+| `repo_health run --lint` | 仅运行 lint 检查 |
+
+## 检测到的工具
+
+Arka 会查找：
+
+- **Python：** `pytest`、`unittest`、`ruff`、`flake8`
+- **Node：** `package.json` 脚本中的 `npm test`、`npm run lint`
+- **Rust：** `cargo test`、`cargo clippy`
+- **Go：** `go test ./...`
+- **Make：** 当 `Makefile` 定义了 `test` 目标时的 `make test`
+
+在仓库内时从当前 git 根目录运行，否则从当前目录运行。

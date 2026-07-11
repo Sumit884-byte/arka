@@ -1,0 +1,187 @@
+---
+title: "MCP 集成"
+description: "将 Arka 连接到任何 Model Context Protocol (MCP) 服务器 — stdio 或 HTTP — 列出工具、调用工具以及检查健康状况。"
+keywords: ["mcp", "model context protocol", "integration", "tools"]
+---
+
+Arka 可以从终端连接到**任何 MCP 服务器** — 与 Cursor、Claude Desktop 和其他 AI 客户端所使用的 [Model Context Protocol](https://modelcontextprotocol.io) 相同。
+
+配置位于 `~/.config/arka/mcp.json`，采用与 Cursor 兼容的 `mcpServers` 格式。
+
+## 快速开始
+
+```bash
+# List configured servers
+arka mcp list
+
+# Add a stdio MCP server (command + args)
+arka mcp add filesystem npx -y @modelcontextprotocol/server-filesystem /tmp
+
+# Add an HTTP/SSE MCP server
+arka mcp add signoz --url http://localhost:8000/mcp \
+  --header SIGNOZ-API-KEY=$SIGNOZ_API_KEY
+
+# List tools from a server
+arka mcp tools signoz
+
+# Call a tool
+arka mcp call signoz signoz_ask --args '{"question":"error rate last hour"}'
+
+# Check connection health
+arka mcp status
+```
+
+来自 fish：
+
+```fish
+mcp list
+mcp status
+mcp tools signoz
+```
+
+自然语言（智能体路由）：
+
+```fish
+agent "list mcp servers"
+agent "mcp status"
+agent "list mcp tools from signoz"
+```
+
+## 配置格式
+
+`~/.config/arka/mcp.json`：
+
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
+    },
+    "signoz": {
+      "url": "http://localhost:8000/mcp",
+      "headers": {
+        "SIGNOZ-API-KEY": "<your-api-key>"
+      }
+    }
+  }
+}
+```
+
+Stdio 服务器使用 `command` + `args`。远程服务器使用 `url` + 可选的 `headers`。可选的 `env` 值支持 `${env:VAR_NAME}` 替换。
+
+## 传输方式
+
+| 传输方式 | 配置 | 示例 |
+|-----------|--------|---------|
+| **stdio** | `command` + `args` | `npx -y @modelcontextprotocol/server-filesystem /tmp` |
+| **HTTP/SSE** | `url` + `headers` | 位于 `http://localhost:8000/mcp` 的 SigNoz MCP |
+
+Arka 为远程服务器复用现有的 HTTP MCP 客户端，并为 stdio 使用内置的按行分隔 JSON-RPC 客户端 — 无需额外依赖。
+
+## 可选的 Python SDK
+
+```bash
+pip install mcp
+```
+
+Arka 不安装 SDK 也能工作。如果安装了，Arka 会检测到（`arka mcp status` 会显示 `sdk on`）。
+
+## SigNoz MCP
+
+针对 SigNoz，Arka 还附带了带追踪的辅助功能（`arka signoz status`、目标自愈）。通用的 `arka mcp` 可与任何 MCP 服务器一起使用 — 不仅限于 SigNoz。
+
+```bash
+arka mcp add signoz --url http://localhost:8000/mcp --header SIGNOZ-API-KEY=$SIGNOZ_API_KEY
+arka mcp tools signoz
+```
+
+## 命令参考
+
+| 命令 | 描述 |
+|---------|-------------|
+| `arka mcp list` | 列出已配置的 MCP 服务器 |
+| `arka mcp add <name> <command> [args...]` | 添加 stdio 服务器 |
+| `arka mcp add <name> --url <url>` | 添加 HTTP/SSE 服务器 |
+| `arka mcp add <name> --url <url> --header KEY=VAL` | 添加带认证头的 HTTP 服务器 |
+| `arka mcp remove <name>` | 移除服务器 |
+| `arka mcp tools <server>` | 列出服务器的工具 |
+| `arka mcp call <server> <tool> [--args '{}']` | 调用工具 |
+| `arka mcp status` | 所有服务器的连接健康状况 |
+| `arka mcp serve` | 将 Arka 作为本地 stdio MCP 服务器启动 |
+| `arka mcp install` | 打印与 Cursor/Claude 兼容的 `mcp.json` 片段 |
+| `arka mcp doctor` | 验证本地 Arka MCP 服务器能否启动 |
+
+<Note>
+  MCP 工具调用会为每次调用打开一个新连接。对于高频使用，建议将服务器保持在本地（stdio）或低延迟 HTTP 端点上。
+</Note>
+
+## 将 Arka 作为 MCP 服务器
+
+其他智能体（Cursor、Claude Desktop、OpenClaw、Codex 等）可以通过 MCP 调用 Arka 技能和内存 — 使用与 Arka 作为 MCP **客户端**时相同的 stdio 传输。
+
+### 快速开始
+
+```bash
+# Start the server (stdio — used by MCP clients automatically)
+arka mcp serve
+
+# Print config for Cursor or Claude Desktop
+arka mcp install
+
+# Add arka to ~/.config/arka/mcp.json and print snippet
+arka mcp install --write-config
+
+# Verify initialize + tools/list
+arka mcp doctor
+```
+
+**Cursor** 的 `~/.cursor/mcp.json` 示例：
+
+```json
+{
+  "mcpServers": {
+    "arka": {
+      "command": "arka",
+      "args": ["mcp", "serve"]
+    }
+  }
+}
+```
+
+在 PATH 中没有 `arka` 的可编辑安装：
+
+```json
+{
+  "mcpServers": {
+    "arka": {
+      "command": "python",
+      "args": ["-m", "arka", "mcp", "serve"]
+    }
+  }
+}
+```
+
+运行 `arka mcp install` 以打印适合您机器的正确命令。
+
+### 暴露的工具
+
+| 工具 | 描述 |
+|------|-------------|
+| `arka_ask` | 向 Arka 提问（网页、内存、计算、天气、聊天） |
+| `arka_remember` | 存储事实、笔记或频道回合 |
+| `arka_recall` | 按目标召回统一内存 |
+| `arka_skill` | 调用命名的 Arka 技能 |
+| `arka_repo_map` | 仓库布局和 Python 符号 |
+| `arka_team_run` | 运行智能体团队工作流 |
+
+### Agent Hub
+
+`agent_hub sync` 将 MCP 配置复制到中枢，并确保 **arka** 自服务器条目存在，以便其他启动智能体可以合并它：
+
+```bash
+arka agent_hub sync
+arka agent_hub adapters    # see which agent configs would gain hub servers
+```
+
+中枢环境变量（`ARKA_MCP_CONFIG`、`ARKA_HUB_DIR`）已在 [Agent Hub](/cn/guides/agent-hub) 中记录。

@@ -1,0 +1,37 @@
+---
+title: "使用 PrivateGPT 和 Qdrant RAG 查询 PDF"
+description: "将 PDF 导入本地向量存储，并使用 Arka 的 PrivateGPT 和 Qdrant 驱动的检索增强生成流水线用自然语言提问。"
+keywords: ["pdf", "rag", "privategpt", "qdrant"]
+---
+
+使用 PrivateGPT + Qdrant 向量搜索询问关于你的 PDF 的问题。
+
+## 命令
+
+| 命令 | 示例 |
+| ------- | ------- |
+| `pdf_ingest` | `pdf_ingest ~/Documents/resume.pdf` |
+| `pdf_list` | 列出已导入的文档 |
+| `pdf_ask` | `pdf_ask --doc resume.pdf "summarize skills"` |
+
+## 自然语言
+
+```bash
+arka "ask Profile.pdf about main skills"
+arka "summarize ENGLSH-2 weeks 1 to 3"
+```
+
+## 设置
+
+需要 [PrivateGPT](https://github.com/zylon-ai/private-gpt) 和用于 Qdrant 的 Docker。当 `PDF_RAG_AUTO_START=1` 时，Arka 会自动启动服务。
+
+```env
+PDF_RAG_URL=http://127.0.0.1:8080
+PRIVATEGPT_HOME=~/Projects/private-gpt
+PDF_RAG_AUTO_START=1
+```
+
+```bash
+pip install "arka-agent[pdf]"
+arka pdf status    # 检查 PrivateGPT + Qdrant
+```
