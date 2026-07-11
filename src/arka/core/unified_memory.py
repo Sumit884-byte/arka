@@ -9,7 +9,10 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from arka.core.memory_scope import RecallScope
 
 try:
     from arka.paths import cache_dir, load_env_file
@@ -159,12 +162,17 @@ def remember(
         return 1, "fact memory unavailable"
 
 
-def _recall_facts(goal: str, *, limit_chars: int) -> str:
+def _recall_facts(
+    goal: str,
+    *,
+    limit_chars: int,
+    scope: RecallScope | None = None,
+) -> str:
     try:
         from arka.integrations.supermemory import context_for
 
         ctx = context_for(goal, limit_chars=limit_chars)
-        if ctx and ctx.strip():
+        if ctx and ctx.strip() and scope is None:
             return ctx.strip()
     except ImportError:
         pass
@@ -179,9 +187,15 @@ def _recall_facts(goal: str, *, limit_chars: int) -> str:
     if not isinstance(raw, list) or not raw:
         return ""
 
+    rows = raw
+    if scope is not None:
+        from arka.core.memory_scope import filter_fact_rows
+
+        rows = filter_fact_rows(raw, scope=scope)
+
     q = goal.lower()
     scored: list[tuple[float, str]] = []
-    for row in raw:
+    for row in rows:
         if not isinstance(row, dict):
             continue
         text = str(row.get("text") or "")
@@ -229,16 +243,20 @@ def recall(
     channel: str = "",
     chat_id: str = "",
     include_channel: bool = True,
+    scope: RecallScope | None = None,
 ) -> str:
     """Aggregate context from all enabled memory layers."""
     goal = (goal or "").strip()
     if not goal:
         return ""
 
-    per_layer = max(800, limit_chars // 3)
+    if scope is not None:
+        include_channel = scope.policy.include_channel
+
+    per_layer = max(800, limit_chars // 4 if scope else limit_chars // 3)
     sections: list[str] = []
 
-    facts = _recall_facts(goal, limit_chars=per_layer)
+    facts = _recall_facts(goal, limit_chars=per_layer, scope=scope)
     if facts:
         sections.append(facts)
 
@@ -250,6 +268,13 @@ def recall(
         channel_ctx = _recall_channel(channel, chat_id, limit_chars=per_layer)
         if channel_ctx:
             sections.append(channel_ctx)
+
+    if scope is not None:
+        from arka.core.memory_scope import recall_scratchpad
+
+        scratch = recall_scratchpad(goal, scope=scope, limit_chars=per_layer)
+        if scratch:
+            sections.append(scratch)
 
     out = "\n\n".join(sections).strip()
     if len(out) > limit_chars:
@@ -276,6 +301,12 @@ def status(*, channel: str = "", chat_id: str = "") -> dict[str, object]:
         "unified_memory": _enabled(),
         "facts": _facts_status(),
     }
+    try:
+        from arka.core.memory_scope import scope_status
+
+        info["scope"] = scope_status()
+    except ImportError:
+        pass
     try:
         from arka.core.session_memory import status as notes_status
 
@@ -318,6 +349,57 @@ def print_status(*, channel: str = "", chat_id: str = "") -> None:
         sess = channel_info.get("session")
         if isinstance(sess, dict) and sess.get("key"):
             print(f"    Active: {sess.get('key')} ({sess.get('turns', 0)} turns)")
+    scope_info = info.get("scope")
+    if isinstance(scope_info, dict):
+        print(
+            f"  Scoped memory: trust_max={scope_info.get('trust_max')}"
+            f", scratchpad={scope_info.get('scratchpad_count', 0)} entries"
+        )
+
+
+def _cmd_scratchpad_list(args: argparse.Namespace) -> int:
+    from arka.core.memory_scope import list_scratchpad
+
+    rows = list_scratchpad(team=args.team or "", workflow=args.workflow or "", limit=args.limit)
+    if not rows:
+        print("(no scratchpad entries)")
+        return 0
+    for row in rows:
+        prov = row.get("provenance") if isinstance(row.get("provenance"), dict) else {}
+        print(
+            f"{row.get('id')}\t{prov.get('team', '')}\t{prov.get('workflow', '')}\t"
+            f"{prov.get('role', '')}\t{str(row.get('text', ''))[:80]}"
+        )
+    return 0
+
+
+def _cmd_scratchpad_show(args: argparse.Namespace) -> int:
+    from arka.core.memory_scope import get_scratchpad
+
+    row = get_scratchpad(args.id)
+    if not row:
+        print(f"Not found: {args.id}", file=sys.stderr)
+        return 1
+    print(json.dumps(row, indent=2))
+    return 0
+
+
+def _cmd_promote(args: argparse.Namespace) -> int:
+    from arka.core.memory_scope import promote_to_facts
+
+    ok, err = promote_to_facts(args.id)
+    if not ok:
+        print(f"Promote failed: {err}", file=sys.stderr)
+        return 1
+    print(f"Promoted {args.id} to global facts")
+    return 0
+
+
+def _cmd_scope_status(_args: argparse.Namespace) -> int:
+    from arka.core.memory_scope import print_scope_status
+
+    print_scope_status()
+    return 0
 
 
 def main() -> int:
@@ -341,6 +423,22 @@ def main() -> int:
     p = sub.add_parser("status")
     p.add_argument("--channel", default="")
     p.add_argument("--chat-id", default="")
+
+    scope = sub.add_parser("scope", help="Scoped memory commands")
+    scope_sub = scope.add_subparsers(dest="scope_cmd")
+    scope_sub.add_parser("status", help="Show trust cap and scratchpad stats")
+
+    sp = scope_sub.add_parser("scratchpad", help="Scratchpad commands")
+    sp_sub = sp.add_subparsers(dest="scratchpad_cmd")
+    sp_list = sp_sub.add_parser("list", help="List scratchpad entries")
+    sp_list.add_argument("--team", default="")
+    sp_list.add_argument("--workflow", default="")
+    sp_list.add_argument("--limit", type=int, default=50)
+    sp_show = sp_sub.add_parser("show", help="Show scratchpad entry")
+    sp_show.add_argument("id")
+
+    promote_p = scope_sub.add_parser("promote", help="Promote scratchpad entry to global facts")
+    promote_p.add_argument("id")
 
     args = parser.parse_args()
     if args.cmd == "remember":
@@ -366,6 +464,18 @@ def main() -> int:
     if args.cmd == "status":
         print_status(channel=args.channel, chat_id=args.chat_id)
         return 0
+    if args.cmd == "scope":
+        if args.scope_cmd == "status":
+            return _cmd_scope_status(args)
+        if args.scope_cmd == "promote":
+            return _cmd_promote(args)
+        if args.scope_cmd == "scratchpad":
+            if args.scratchpad_cmd == "list":
+                return _cmd_scratchpad_list(args)
+            if args.scratchpad_cmd == "show":
+                return _cmd_scratchpad_show(args)
+        print("Usage: scope status|promote <id>|scratchpad list|show <id>", file=sys.stderr)
+        return 1
     return 1
 
 

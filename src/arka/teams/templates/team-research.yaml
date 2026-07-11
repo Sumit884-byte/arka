@@ -13,5 +13,10 @@ members:
     role: local-fallback
 defaults:
   memory: unified
+  # memory: scoped
+  # memory_scope:
+  #   read: [global, team, workflow]
+  #   write: workflow
+  #   ttl_hours: 72
   mcp: true
   workflow: review-and-ship

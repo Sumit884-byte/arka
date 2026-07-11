@@ -49,7 +49,7 @@ def cmd_team_create(args: argparse.Namespace) -> int:
         src = templates_dir() / f"team-{template}.json"
     if not src.is_file():
         print(f"Unknown team template: {template}", file=sys.stderr)
-        print(f"Available: research, code-review", file=sys.stderr)
+        print(f"Available: research, code-review, clawbox-edge", file=sys.stderr)
         return 1
     from arka.teams.io import _load_text
 
@@ -67,7 +67,7 @@ def cmd_team_run(args: argparse.Namespace) -> int:
         print("Usage: arka team run <name> --task \"...\"", file=sys.stderr)
         return 1
     try:
-        result = run_team(args.name, task, workflow_name=args.workflow)
+        result = run_team(args.name, task, workflow_name=args.workflow, promote_final=args.promote_final)
     except (FileNotFoundError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
         return 1
@@ -119,7 +119,7 @@ def cmd_workflow_run(args: argparse.Namespace) -> int:
         print('Usage: arka workflow run <name> --task "..."', file=sys.stderr)
         return 1
     try:
-        result = run_workflow(args.name, task)
+        result = run_workflow(args.name, task, promote_final=args.promote_final)
     except (FileNotFoundError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
         return 1
@@ -151,6 +151,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("name")
     run_p.add_argument("--task", required=True)
     run_p.add_argument("--workflow", help="Override workflow name")
+    run_p.add_argument("--promote-final", action="store_true", help="Promote final output to global facts")
     run_p.add_argument("--json", action="store_true")
 
     wf = sub.add_parser("workflow", help="Manage workflows")
@@ -166,6 +167,7 @@ def build_parser() -> argparse.ArgumentParser:
     wf_run = wf_sub.add_parser("run", help="Run workflow")
     wf_run.add_argument("name")
     wf_run.add_argument("--task", required=True)
+    wf_run.add_argument("--promote-final", action="store_true", help="Promote final output to global facts")
     wf_run.add_argument("--json", action="store_true")
 
     return parser

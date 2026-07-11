@@ -72,11 +72,17 @@ def _llm(system: str, user: str, temperature: float = 0.2, *, task: str = "agent
 
 # ── Memory ────────────────────────────────────────────────────────────────────
 
-def memory_remember(text: str, *, tags: list[str] | None = None) -> None:
+def memory_remember(
+    text: str,
+    *,
+    tags: list[str] | None = None,
+    provenance: dict | None = None,
+    trust_tier: str = "global",
+) -> None:
     try:
         from arka.integrations.supermemory import remember_print
 
-        remember_print(text, tags=tags)
+        remember_print(text, tags=tags, provenance=provenance, trust_tier=trust_tier)
         return
     except ImportError:
         pass
@@ -85,7 +91,13 @@ def memory_remember(text: str, *, tags: list[str] | None = None) -> None:
             print(f"Supermemory error: {exc}", file=sys.stderr)
             raise
 
-    if memory_remember_silent(text, tags=tags, source="cli"):
+    if memory_remember_silent(
+        text,
+        tags=tags,
+        source="cli",
+        provenance=provenance,
+        trust_tier=trust_tier,
+    ):
         items = load_json(MEMORY_FILE, [])
         if isinstance(items, list) and items:
             print(f"Remembered ({items[-1].get('id', '?')}): {text[:120]}")
@@ -93,15 +105,25 @@ def memory_remember(text: str, *, tags: list[str] | None = None) -> None:
             print(f"Remembered: {text[:120]}")
 
 
-def memory_remember_silent(text: str, *, tags: list[str] | None = None, source: str = "auto") -> bool:
+def memory_remember_silent(
+    text: str,
+    *,
+    tags: list[str] | None = None,
+    source: str = "auto",
+    provenance: dict | None = None,
+    trust_tier: str = "global",
+) -> bool:
     """Store a memory without printing. Returns True if stored."""
     text = text.strip()
     if not text:
         return False
+    tier = (trust_tier or "global").strip().lower()
+    if tier not in ("global", "team", "workflow", "run"):
+        tier = "global"
     try:
         from arka.integrations.supermemory import remember
 
-        remember(text, tags=tags)
+        remember(text, tags=tags, provenance=provenance, trust_tier=tier)
         return True
     except ImportError:
         pass
@@ -120,7 +142,10 @@ def memory_remember_silent(text: str, *, tags: list[str] | None = None, source: 
         "ts": time.time(),
         "when": datetime.now().isoformat(timespec="seconds"),
         "source": source,
+        "trust_tier": tier,
     }
+    if provenance:
+        entry["provenance"] = provenance
     items.append(entry)
     save_json(MEMORY_FILE, items[-200:])
     try:

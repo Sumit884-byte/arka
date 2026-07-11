@@ -96,3 +96,54 @@ Layer routing with `--layer auto` (default):
 - **Channel** — conversation turns → `message_session` JSON
 
 Existing commands (`agent_remember`, `session_memory`, `message_session`) still work independently.
+
+## Scoped memory and provenance (v3)
+
+Shared memory is useful only when trust boundaries are explicit. Scoped memory adds **trust tiers**, **write-time provenance**, and a **workflow scratchpad** separate from global facts.
+
+| Trust tier | Scope | Typical use |
+| ---------- | ----- | ----------- |
+| `global` | User-curated facts | Preferences, promoted workflow outputs |
+| `team` | Same team name | Cross-workflow team context (ClawBox edge) |
+| `workflow` | Team + workflow | Step handoff within one workflow |
+| `run` | Single run ID | Ephemeral turn context |
+
+### Commands
+
+| Command | Example |
+| ------- | ------- |
+| `memory_scope status` | Trust cap, scratchpad count |
+| `memory_scope scratchpad list` | List scoped entries |
+| `memory_scope scratchpad list --team research` | Filter by team |
+| `memory_promote <id>` | Elevate scratchpad entry to global facts |
+| `unified_memory scope status` | Same via Python CLI |
+
+### Configuration
+
+```env
+ARKA_MEMORY_TRUST_MAX=run    # cap recall/export: global | team | workflow | run (default run = all tiers)
+ARKA_HUB_MEMORY_SCOPE=team:clawbox   # limit Agent Hub export to one team
+MEMORY_SCRATCHPAD_TTL_HOURS=72  # expire workflow scratchpad entries
+```
+
+### Agent teams integration
+
+Teams with `defaults.memory: scoped` use policy-filtered recall and write step outputs to the scratchpad (not global facts) unless you promote:
+
+```yaml
+defaults:
+  memory: scoped
+  memory_scope:
+    read: [global, team, workflow]
+    write: workflow
+    ttl_hours: 72
+    promote: manual
+```
+
+Promote after a workflow run:
+
+```bash
+arka workflow run review-and-ship --task "..." --promote-final
+```
+
+See [Agent Teams](/guides/agent-teams) and [Agent Hub](/guides/agent-hub) for edge deployment (Jetson / ClawBox).

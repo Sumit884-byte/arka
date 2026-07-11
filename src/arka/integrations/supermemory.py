@@ -164,10 +164,17 @@ def _api_request(
             raise RuntimeError(f"Supermemory network error: {exc.reason}") from exc
 
 
-def _local_remember(text: str, *, tags: list[str] | None = None) -> str:
+def _local_remember(
+    text: str,
+    *,
+    tags: list[str] | None = None,
+    provenance: dict | None = None,
+    trust_tier: str = "global",
+) -> str:
     items = load_json(MEMORY_FILE, [])
     if not isinstance(items, list):
         items = []
+    tier = (trust_tier or "global").strip().lower()
     entry = {
         "id": hashlib.sha256(f"{text}{time.time()}".encode()).hexdigest()[:12],
         "text": text.strip(),
@@ -175,7 +182,10 @@ def _local_remember(text: str, *, tags: list[str] | None = None) -> str:
         "ts": time.time(),
         "when": datetime.now().isoformat(timespec="seconds"),
         "source": "local",
+        "trust_tier": tier,
     }
+    if provenance:
+        entry["provenance"] = provenance
     items.append(entry)
     save_json(MEMORY_FILE, items[-200:])
     return entry["id"]
@@ -284,11 +294,19 @@ def _parse_profile(data: dict[str, Any], *, limit_chars: int) -> str:
     return text[:limit_chars]
 
 
-def _api_remember(text: str, *, tags: list[str] | None = None) -> str:
+def _api_remember(
+    text: str,
+    *,
+    tags: list[str] | None = None,
+    provenance: dict | None = None,
+    trust_tier: str = "global",
+) -> str:
     tag = _container_tag()
-    metadata: dict[str, Any] = {"source": "arka", "agent": tag}
+    metadata: dict[str, Any] = {"source": "arka", "agent": tag, "trust_tier": trust_tier}
     if tags:
         metadata["tags"] = ",".join(tags)
+    if provenance:
+        metadata["provenance"] = json.dumps(provenance, ensure_ascii=False)[:2000]
     body = {
         "content": text.strip(),
         "metadata": metadata,
@@ -315,7 +333,13 @@ def _api_profile_context(query: str, *, limit_chars: int = 3500) -> str:
     return _parse_profile(data, limit_chars=limit_chars)
 
 
-def remember(text: str, *, tags: list[str] | None = None) -> dict[str, Any]:
+def remember(
+    text: str,
+    *,
+    tags: list[str] | None = None,
+    provenance: dict | None = None,
+    trust_tier: str = "global",
+) -> dict[str, Any]:
     """Store memory — Supermemory API when available, always cache locally."""
     text = text.strip()
     if not text:
@@ -325,14 +349,16 @@ def remember(text: str, *, tags: list[str] | None = None) -> dict[str, Any]:
         from arka.telemetry import mark_error, mark_ok, set_span_attributes, span
         from arka.telemetry.supermemory_obs import emit_supermemory_log, record_supermemory_op
     except ImportError:
-        return _remember_impl(text, tags=tags)
+        return _remember_impl(text, tags=tags, provenance=provenance, trust_tier=trust_tier)
 
     with span(
         "arka.supermemory.remember",
         attributes={"arka.supermemory.mode": _mode(), "arka.supermemory.container": _container_tag()},
     ) as sp:
         try:
-            result = _remember_impl(text, tags=tags)
+            result = _remember_impl(
+                text, tags=tags, provenance=provenance, trust_tier=trust_tier
+            )
             backend = str(result.get("backend") or "local")
             success = backend == "supermemory+local" or "api_error" not in result
             set_span_attributes(
@@ -357,15 +383,25 @@ def remember(text: str, *, tags: list[str] | None = None) -> dict[str, Any]:
             raise
 
 
-def _remember_impl(text: str, *, tags: list[str] | None = None) -> dict[str, Any]:
-    local_id = _local_remember(text, tags=tags)
+def _remember_impl(
+    text: str,
+    *,
+    tags: list[str] | None = None,
+    provenance: dict | None = None,
+    trust_tier: str = "global",
+) -> dict[str, Any]:
+    local_id = _local_remember(
+        text, tags=tags, provenance=provenance, trust_tier=trust_tier
+    )
     result: dict[str, Any] = {"backend": "local", "local_id": local_id}
 
     if not _should_try_api():
         return result
 
     try:
-        api_id = _api_remember(text, tags=tags)
+        api_id = _api_remember(
+            text, tags=tags, provenance=provenance, trust_tier=trust_tier
+        )
         result.update({"backend": "supermemory+local", "api_id": api_id})
         try:
             import importlib
@@ -632,8 +668,14 @@ def status() -> None:
         print("Behavior:        Local cache only")
 
 
-def remember_print(text: str, *, tags: list[str] | None = None) -> None:
-    result = remember(text, tags=tags)
+def remember_print(
+    text: str,
+    *,
+    tags: list[str] | None = None,
+    provenance: dict | None = None,
+    trust_tier: str = "global",
+) -> None:
+    result = remember(text, tags=tags, provenance=provenance, trust_tier=trust_tier)
     backend = result.get("backend", "local")
     local_id = result.get("local_id", "?")
     msg = f"Remembered ({local_id}): {text[:120]}"

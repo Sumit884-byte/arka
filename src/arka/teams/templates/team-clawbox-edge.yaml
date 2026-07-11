@@ -1,0 +1,19 @@
+name: clawbox-edge
+description: Always-on edge team for ClawBox / Jetson — scoped memory, team trust only
+members:
+  - kind: agent
+    id: openclaw
+    role: lead
+  - kind: provider
+    id: ollama
+    role: local-fallback
+defaults:
+  memory: scoped
+  memory_scope:
+    read: [global, team]
+    write: team
+    ttl_hours: 48
+    promote: manual
+  trust_tier: team
+  mcp: true
+  workflow: brainstorm

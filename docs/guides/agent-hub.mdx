@@ -160,6 +160,38 @@ arka agent_hub sync --unify --replace
 
 Legacy `--force` still merges into Cursor/Claude Desktop adapter targets.
 
+## Scoped export (edge / ClawBox)
+
+On always-on edge devices (Jetson Orin, ClawBox), limit what the hub exports so shared context does not become shared trust:
+
+```env
+ARKA_MEMORY_TRUST_MAX=team
+ARKA_HUB_MEMORY_SCOPE=team:clawbox
+```
+
+| Setting | Effect |
+| ------- | ------ |
+| `ARKA_MEMORY_TRUST_MAX` | Caps recall and hub export to `global`, `team`, `workflow`, or `run` tier |
+| `ARKA_HUB_MEMORY_SCOPE` | Filters hub `summary.json` / `context.md` to one team (e.g. `team:clawbox`) |
+
+**Recommended edge pattern:**
+
+```bash
+# Export-only — no writes to agent configs
+arka agent_hub sync
+
+# Do NOT run sync --unify on edge unless you intend to merge MCP into agent configs
+source ~/.config/arka/hub/launch.env
+```
+
+Hub exports include `trust_tier` and `provenance` on facts plus a `scratchpad_preview` for scoped workflow memory.
+
+Create a scoped team from template:
+
+```bash
+arka team create clawbox --template clawbox-edge
+```
+
 ## Related guides
 
 - [MCP integration](/guides/mcp) — configure servers in `~/.config/arka/mcp.json`

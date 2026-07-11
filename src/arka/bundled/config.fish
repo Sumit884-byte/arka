@@ -12448,6 +12448,34 @@ function unified_memory --description "Unified memory facade (facts + notes + ch
     end
 end
 
+function memory_scope --description "Scoped memory — trust tiers, scratchpad, provenance"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        $py (_arka_py_script arka_unified_memory.py) scope status
+        echo ""
+        echo "Usage: memory_scope status | scratchpad list [--team T] [--workflow W] | promote <id>"
+        return 0
+    end
+    switch $argv[1]
+        case status
+            $py (_arka_py_script arka_unified_memory.py) scope status
+        case scratchpad
+            $py (_arka_py_script arka_unified_memory.py) scope scratchpad $argv[2..-1]
+        case promote
+            if test (count $argv) -lt 2
+                echo "Usage: memory_promote <scratchpad-id>"
+                return 1
+            end
+            $py (_arka_py_script arka_unified_memory.py) scope promote $argv[2]
+        case '*'
+            $py (_arka_py_script arka_unified_memory.py) scope $argv
+    end
+end
+
+function memory_promote --description "Promote scratchpad entry to global facts"
+    memory_scope promote $argv
+end
+
 function subagent --description "Isolated sub-agent delegation (background tasks)"
     set -l py (_arka_python)
     if test (count $argv) -eq 0

@@ -197,6 +197,7 @@ arka workflow run <name> --task "..."
 | -------- | ---- | ----- |
 | `research` | team | lead (claude), analyst (gemini), local-fallback (ollama) |
 | `code-review` | team | lead (codex), analyst (groq), local-fallback (ollama) |
+| `clawbox-edge` | team | openclaw lead + ollama fallback; scoped memory for Jetson |
 | `review-and-ship` | workflow | plan → parallel analyze/verify → synthesize |
 | `code-review` | workflow | review checklist → parallel review → summary |
 | `brainstorm` | workflow | round-robin ideation across team roles |
@@ -217,6 +218,37 @@ TEAM_MAX_PARALLEL=4
 TEAM_RETRY_BACKOFF=0
 TEAM_MCP_TOOL_ROUNDS=0
 ```
+
+## Scoped memory (v3)
+
+Teams can opt into **policy-filtered recall** and **scratchpad writes** with provenance:
+
+```yaml
+defaults:
+  memory: scoped          # unified | scoped | off
+  memory_scope:
+    read: [global, team, workflow]
+    write: workflow
+    ttl_hours: 72
+    promote: manual
+  trust_tier: team
+```
+
+| Mode | Recall | Step output |
+| ---- | ------ | ----------- |
+| `unified` (default) | Global unified memory | Not persisted |
+| `scoped` | Filtered by trust tier + team/workflow | Scratchpad with provenance |
+| `off` | None | Not persisted |
+
+Per-step override: `memory_scope: { write: run }` on a workflow step.
+
+```bash
+arka workflow run review-and-ship --task "..." --promote-final
+memory_scope scratchpad list --team research
+memory_promote abc123def456
+```
+
+Workflow runs print `run_id` and `scratchpad_writes` in CLI output.
 
 Teams and workflows are included in `arka config backup`.
 

@@ -336,7 +336,12 @@ def _import_fact(text: str) -> tuple[bool, str | None]:
     try:
         from arka.agent.core import memory_remember_silent
 
-        if memory_remember_silent(cleaned, source="agent_hub_import"):
+        if memory_remember_silent(
+            cleaned,
+            source="agent_hub_import",
+            trust_tier="global",
+            provenance={"source": "agent_hub_import", "trust_tier": "global"},
+        ):
             return True, None
     except ImportError:
         pass
@@ -436,8 +441,21 @@ def _write_context_md(summary: dict[str, Any]) -> Path:
         for row in facts:
             text = row.get("text") if isinstance(row, dict) else str(row)
             when = row.get("when") if isinstance(row, dict) else None
-            suffix = f" _({when})_" if when else ""
+            tier = row.get("trust_tier") if isinstance(row, dict) else "global"
+            suffix = f" _({when}, {tier})_" if when else f" _({tier})_"
             lines.append(f"- {text}{suffix}")
+        lines.append("")
+
+    scratch = summary.get("scratchpad_preview") or []
+    if scratch:
+        lines.append("## Workflow scratchpad (scoped)")
+        lines.append("")
+        for row in scratch:
+            if not isinstance(row, dict):
+                continue
+            prov = row.get("provenance") if isinstance(row.get("provenance"), dict) else {}
+            label = prov.get("team") or prov.get("workflow") or "scratchpad"
+            lines.append(f"- [{label}] {str(row.get('text') or '')[:200]}")
         lines.append("")
 
     notes = summary.get("long_term_notes") or []
@@ -503,6 +521,17 @@ arka agent_hub import-memory path/to/notes.md
 ```
 
 Imported text passes through Arka security gates before writing to unified memory.
+
+## Scoped export (edge / ClawBox)
+
+Set on Jetson or always-on devices to limit what the hub exports:
+
+```env
+ARKA_MEMORY_TRUST_MAX=team
+ARKA_HUB_MEMORY_SCOPE=team:clawbox
+```
+
+Use `agent_hub sync` (export-only) on edge — avoid `sync --unify` unless you intend to merge MCP into agent configs.
 """
     path = mem_dir / "README.md"
     path.write_text(text, encoding="utf-8")
@@ -689,6 +718,30 @@ def sync_mcp(*, use_symlink: bool = False) -> dict[str, Any]:
     return result
 
 
+def _hub_fact_allowed(row: dict[str, Any]) -> bool:
+    try:
+        from arka.core.memory_scope import (
+            TIER_ORDER,
+            fact_provenance,
+            fact_trust_tier,
+            hub_memory_scope,
+            trust_max_tier,
+        )
+
+        tier = fact_trust_tier(row)
+        cap = trust_max_tier()
+        if TIER_ORDER.get(tier, 99) > TIER_ORDER.get(cap, 0):
+            return False
+        hub = hub_memory_scope()
+        if hub and hub[0] == "team":
+            prov = fact_provenance(row)
+            if tier != "global" and prov.team and prov.team != hub[1]:
+                return False
+        return True
+    except ImportError:
+        return True
+
+
 def _export_memory_summary() -> dict[str, Any]:
     summary: dict[str, Any] = {
         "exported_at": _iso_now(),
@@ -696,7 +749,31 @@ def _export_memory_summary() -> dict[str, Any]:
         "facts_status": {},
         "notes_status": {},
         "sessions": [],
+        "scratchpad_preview": [],
     }
+
+    try:
+        from arka.core.memory_scope import list_scratchpad, scope_status
+
+        summary["scope"] = scope_status()
+        hub = scope_status().get("hub_scope")
+        team_filter = ""
+        if hub and isinstance(hub, str) and hub.startswith("team:"):
+            team_filter = hub.split(":", 1)[-1]
+        scratch_rows = list_scratchpad(team=team_filter, limit=10) if team_filter else list_scratchpad(limit=10)
+        for row in scratch_rows:
+            prov = row.get("provenance") if isinstance(row.get("provenance"), dict) else {}
+            summary["scratchpad_preview"].append(
+                {
+                    "id": row.get("id"),
+                    "text": str(row.get("text") or "")[:500],
+                    "trust_tier": row.get("trust_tier"),
+                    "provenance": prov,
+                    "expires_at": row.get("expires_at"),
+                }
+            )
+    except ImportError:
+        pass
 
     try:
         from arka.core.unified_memory import status as memory_status
@@ -715,16 +792,23 @@ def _export_memory_summary() -> dict[str, Any]:
         if memory_file.is_file():
             raw = json.loads(memory_file.read_text(encoding="utf-8"))
             if isinstance(raw, list):
-                for row in raw[-20:]:
+                for row in raw[-40:]:
                     if isinstance(row, dict):
+                        if not _hub_fact_allowed(row):
+                            continue
                         text = str(row.get("text") or "").strip()
                         if text:
-                            summary["facts"].append(
-                                {
-                                    "text": text[:500],
-                                    "when": row.get("when"),
-                                }
-                            )
+                            fact_row: dict[str, Any] = {
+                                "text": text[:500],
+                                "when": row.get("when"),
+                                "trust_tier": row.get("trust_tier", "global"),
+                            }
+                            if row.get("provenance"):
+                                fact_row["provenance"] = row.get("provenance")
+                            if row.get("source"):
+                                fact_row["source"] = row.get("source")
+                            summary["facts"].append(fact_row)
+                summary["facts"] = summary["facts"][-20:]
     except (OSError, json.JSONDecodeError):
         pass
 

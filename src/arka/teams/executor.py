@@ -55,6 +55,8 @@ class RunContext:
     members: dict[str, ResolvedMember] = field(default_factory=dict)
     results: list[StepResult] = field(default_factory=list)
     memory_context: str = ""
+    run_id: str = ""
+    scratchpad_writes: int = 0
 
     def vars(self) -> dict[str, str]:
         merged = "\n\n".join(
@@ -80,15 +82,75 @@ class RunContext:
         return text.strip()
 
 
-def _memory_context(team: Team, task: str) -> str:
-    if team.defaults.get("memory", "unified") in (False, "off", "none", "0"):
+def _team_memory_mode(team: Team) -> str:
+    raw = team.defaults.get("memory", "unified")
+    if raw in (False, "off", "none", "0"):
+        return "off"
+    return str(raw).strip().lower() or "unified"
+
+
+def _memory_context(team: Team, task: str, workflow: Workflow | None, run_id: str) -> str:
+    mode = _team_memory_mode(team)
+    if mode == "off":
         return ""
     try:
         from arka.core.unified_memory import recall
 
+        if mode == "scoped" and workflow is not None:
+            from arka.core.memory_scope import RecallScope, resolve_memory_policy
+
+            policy = resolve_memory_policy(team.defaults, workflow.defaults)
+            scope = RecallScope(
+                team=team.name,
+                workflow=workflow.name,
+                run_id=run_id,
+                policy=policy,
+            )
+            return recall(task, limit_chars=2500, scope=scope)
         return recall(task, limit_chars=2500)
     except Exception:
         return ""
+
+
+def _write_step_scratchpad(
+    ctx: RunContext,
+    result: StepResult,
+    *,
+    step: WorkflowStep | None,
+    step_index: int,
+) -> None:
+    if _team_memory_mode(ctx.team) != "scoped" or not ctx.workflow or not result.ok:
+        return
+    if not result.output or result.output == "(no output)":
+        return
+    try:
+        from arka.core.memory_scope import Provenance, resolve_memory_policy, write_scratchpad
+
+        policy = resolve_memory_policy(ctx.team.defaults, ctx.workflow.defaults)
+        if step is not None and step.memory_scope:
+            policy = resolve_memory_policy(
+                ctx.team.defaults, ctx.workflow.defaults, step.memory_scope
+            )
+        mcp_servers: list[str] = []
+        if step is not None:
+            enabled, mcp_servers = resolve_step_mcp(step, ctx.team, ctx.workflow)
+            if not enabled:
+                mcp_servers = []
+        provenance = Provenance(
+            team=ctx.team.name,
+            workflow=ctx.workflow.name,
+            step=str(step_index),
+            role=result.role,
+            member_id=result.member_id,
+            run_id=ctx.run_id,
+            mcp_servers=mcp_servers,
+            source="workflow_step",
+            trust_tier=policy.write_tier,
+        )
+        write_scratchpad(result.output, provenance=provenance, ttl_hours=policy.ttl_hours)
+        ctx.scratchpad_writes += 1
+    except Exception:
+        pass
 
 
 def _resolve_retry_settings(
@@ -410,6 +472,7 @@ def _execute_step(
     *,
     workflow: Workflow,
     runner: Callable[[ResolvedMember, str, str], StepResult] | None = None,
+    step_index: int = 0,
 ) -> list[StepResult]:
     if step.parallel:
         max_workers = min(
@@ -428,11 +491,14 @@ def _execute_step(
                     step=sub,
                     workflow=workflow,
                     runner=runner,
-                ): sub
-                for sub in step.parallel
+                ): (sub, idx)
+                for idx, sub in enumerate(step.parallel)
             }
             for future in as_completed(futures):
-                results.append(future.result())
+                sub, idx = futures[future]
+                result = future.result()
+                _write_step_scratchpad(ctx, result, step=sub, step_index=step_index * 10 + idx)
+                results.append(result)
         results.sort(key=lambda r: r.role)
         return results
 
@@ -445,6 +511,7 @@ def _execute_step(
         workflow=workflow,
         runner=runner,
     )
+    _write_step_scratchpad(ctx, result, step=step, step_index=step_index)
     return [result]
 
 
@@ -485,6 +552,7 @@ def _execute_round_robin(
             workflow=workflow,
             runner=runner,
         )
+        _write_step_scratchpad(ctx, result, step=pseudo_step, step_index=turn + 1)
         ctx.results.append(result)
         all_results.append(result)
     return all_results
@@ -496,15 +564,23 @@ def execute_workflow(
     *,
     team: Team | None = None,
     runner: Callable[[ResolvedMember, str, str], StepResult] | None = None,
+    promote_final: bool = False,
 ) -> dict[str, Any]:
     team = team or load_team(workflow.team)
     members = resolve_team(team)
+    try:
+        from arka.core.memory_scope import new_run_id
+
+        run_id = new_run_id()
+    except ImportError:
+        run_id = ""
     ctx = RunContext(
         task=task.strip(),
         team=team,
         workflow=workflow,
         members=members,
-        memory_context=_memory_context(team, task),
+        memory_context=_memory_context(team, task, workflow, run_id),
+        run_id=run_id,
     )
     if not ctx.task:
         raise ValueError("task is required")
@@ -513,13 +589,37 @@ def execute_workflow(
         all_results = _execute_round_robin(ctx, workflow, runner=runner)
     else:
         all_results = []
-        for step in workflow.steps:
-            step_results = _execute_step(ctx, step, workflow=workflow, runner=runner)
+        for step_idx, step in enumerate(workflow.steps, start=1):
+            step_results = _execute_step(
+                ctx, step, workflow=workflow, runner=runner, step_index=step_idx
+            )
             ctx.results.extend(step_results)
             all_results.extend(step_results)
 
     final = ctx.results[-1].output if ctx.results else ""
     ok = all(r.ok for r in all_results) if all_results else False
+    promoted_id = ""
+    if promote_final and final and ok:
+        try:
+            from arka.core.memory_scope import Provenance, write_scratchpad, promote_to_facts
+
+            prov = Provenance(
+                team=team.name,
+                workflow=workflow.name,
+                step="final",
+                role="workflow",
+                run_id=run_id,
+                source="workflow_final",
+                trust_tier="workflow",
+            )
+            entry_id = write_scratchpad(final, provenance=prov)
+            if entry_id:
+                promoted, _ = promote_to_facts(entry_id)
+                if promoted:
+                    promoted_id = entry_id
+        except Exception:
+            pass
+
     return {
         "team": team.name,
         "workflow": workflow.name,
@@ -527,6 +627,9 @@ def execute_workflow(
         "task": ctx.task,
         "ok": ok,
         "final": final,
+        "run_id": run_id,
+        "scratchpad_writes": ctx.scratchpad_writes,
+        "promoted_id": promoted_id,
         "steps": [r.to_dict() for r in all_results],
     }
 
@@ -541,6 +644,7 @@ def run_team(
     task: str,
     *,
     workflow_name: str | None = None,
+    promote_final: bool = False,
     **kwargs: Any,
 ) -> dict[str, Any]:
     team = load_team(name)
@@ -558,7 +662,7 @@ def run_team(
         raise ValueError(
             f"Workflow {workflow.name!r} is for team {workflow.team!r}, not {team.name!r}"
         )
-    return execute_workflow(workflow, task, team=team, **kwargs)
+    return execute_workflow(workflow, task, team=team, promote_final=promote_final, **kwargs)
 
 
 def _workflows_for_team(team_name: str) -> list[str]:
@@ -583,6 +687,12 @@ def format_run_result(result: dict[str, Any]) -> str:
         f"ok\t{result.get('ok')}",
         f"task\t{result.get('task')}",
     ]
+    if result.get("run_id"):
+        lines.append(f"run_id\t{result.get('run_id')}")
+    if result.get("scratchpad_writes"):
+        lines.append(f"scratchpad_writes\t{result.get('scratchpad_writes')}")
+    if result.get("promoted_id"):
+        lines.append(f"promoted_id\t{result.get('promoted_id')}")
     for idx, step in enumerate(result.get("steps") or [], start=1):
         status = "ok" if step.get("ok") else "fail"
         retry_note = ""

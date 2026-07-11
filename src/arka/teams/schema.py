@@ -52,6 +52,7 @@ class WorkflowStep:
     retry_delay: float | None = None
     mcp: bool | None = None
     mcp_servers: list[str] | None = None
+    memory_scope: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         if self.parallel:
@@ -67,6 +68,8 @@ class WorkflowStep:
             row["mcp"] = self.mcp
         if self.mcp_servers:
             row["mcp_servers"] = list(self.mcp_servers)
+        if self.memory_scope:
+            row["memory_scope"] = dict(self.memory_scope)
         return row
 
 
@@ -206,6 +209,12 @@ def _parse_step(raw: Any) -> WorkflowStep:
         if not isinstance(mcp_servers_raw, list):
             raise ValueError("mcp_servers must be a list")
         mcp_servers = [str(s).strip() for s in mcp_servers_raw if str(s).strip()]
+    memory_scope_raw = raw.get("memory_scope")
+    memory_scope: dict[str, Any] | None = None
+    if memory_scope_raw is not None:
+        if not isinstance(memory_scope_raw, dict):
+            raise ValueError("memory_scope must be an object")
+        memory_scope = dict(memory_scope_raw)
     return WorkflowStep(
         member=member,
         action=action,
@@ -214,6 +223,7 @@ def _parse_step(raw: Any) -> WorkflowStep:
         retry_delay=retry_delay,
         mcp=mcp,
         mcp_servers=mcp_servers,
+        memory_scope=memory_scope,
     )
 
 
