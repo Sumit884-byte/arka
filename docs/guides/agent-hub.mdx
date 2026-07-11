@@ -90,6 +90,8 @@ arka agent_hub sync --unify
 arka agent_hub sync --unify --replace
 ```
 
+Before `--unify` runs, Arka auto-backs up your config directory to `config/backups/arka-config-YYYY-MM-DD.tar.gz` (default on). Disable with `ARKA_CONFIG_BACKUP_ON_UNIFY=0`, or run `arka config backup` manually anytime.
+
 Use `agent_hub detect` to see which config files exist locally, and `agent_hub adapters` to see what would merge or is already merged.
 
 ## Supported agents

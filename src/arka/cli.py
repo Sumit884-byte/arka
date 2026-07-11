@@ -64,6 +64,11 @@ def main(argv: list[str] | None = None) -> int:
 
         return personalize_main(args[1:])
 
+    if args[0] == "config":
+        from arka.core.config_backup import main as config_main
+
+        return config_main(args[1:])
+
     if args[0] in ("refetch", "update", "sync"):
         return _cmd_refetch(args[1:])
 

@@ -48,10 +48,18 @@ def arka_home() -> Path:
     return bundled
 
 
+def _config_dir_override() -> Path | None:
+    """Explicit config root from CONFIG_DIR or ARKA_CONFIG_DIR."""
+    for key in ("CONFIG_DIR", "ARKA_CONFIG_DIR"):
+        if env := os.environ.get(key, "").strip():
+            return Path(env).expanduser().resolve()
+    return None
+
+
 def config_dir() -> Path:
     """User-writable config (.env, overrides) — not the package install dir."""
-    if env := os.environ.get("CONFIG_DIR", "").strip():
-        return Path(env).expanduser().resolve()
+    if override := _config_dir_override():
+        return override
 
     legacy = Path.home() / ".config" / "fish"
     if (legacy / ".env").is_file():

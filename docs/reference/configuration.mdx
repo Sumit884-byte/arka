@@ -14,7 +14,24 @@ Arka is on by default for safety, failover, and local-first routing. You only ne
 | macOS | `~/Library/Application Support/arka/` | `~/Library/Caches/arka/` |
 | Windows | `%APPDATA%\arka\` | `%LOCALAPPDATA%\arka\` |
 
-Override with `ARKA_HOME`, `ARKA_CONFIG_DIR`, or `ARKA_CACHE_DIR`.
+Override with `ARKA_CONFIG_DIR` (or `CONFIG_DIR`), `INSTALL_HOME` (legacy `ARKA_HOME`), or `ARKA_CACHE_DIR` (or `CACHE_DIR`).
+
+Setting `ARKA_CONFIG_DIR=/path/to/my-arka-config` moves **all** user config there — `.env`, `mcp.json`, `hub/`, `agent-memory/`, `skills/`, and related paths.
+
+```bash
+# Show current root + shell export snippet
+arka config path
+
+# Initialize a new config directory (no automatic move)
+arka config init --dir ~/my-arka-config
+
+# Backup / restore entire config tree
+arka config backup -o ~/backups/arka-2026-07-11.tar.gz
+arka config restore ~/backups/arka-2026-07-11.tar.gz
+
+# List paths and sizes
+arka config list
+```
 
 User config includes `.env`, `charts.yaml`, `llm-skill-models.json`, and `skills/` (plugins).
 

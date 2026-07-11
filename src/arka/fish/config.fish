@@ -91,6 +91,10 @@ function _arka_root --description "Arka scripts directory (bundled in pip packag
 end
 
 function _arka_config_dir --description "User config dir (.env, secrets)"
+    if set -q ARKA_CONFIG_DIR; and test -n "$ARKA_CONFIG_DIR"
+        echo $ARKA_CONFIG_DIR
+        return
+    end
     if set -q CONFIG_DIR; and test -n "$CONFIG_DIR"
         echo $CONFIG_DIR
         return
@@ -3190,6 +3194,36 @@ function personalize --description "Onboarding wizard and skill recommendations 
         return $status
     end
     $py (_arka_py_script arka_personalize.py) $argv
+    return $status
+end
+
+function config --description "Unified config root — path, list, backup, restore, init"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        $py (_arka_py_script arka_config.py) help
+        return $status
+    end
+    $py (_arka_py_script arka_config.py) $argv
+    return $status
+end
+
+function config_backup --description "Backup Arka config dir to tarball"
+    set -l py (_arka_python)
+    if test (count $argv) -gt 0
+        $py (_arka_py_script arka_config.py) backup -o $argv[1]
+    else
+        $py (_arka_py_script arka_config.py) backup
+    end
+    return $status
+end
+
+function config_restore --description "Restore Arka config from tarball"
+    if test (count $argv) -eq 0
+        echo "Usage: config_restore <archive.tar.gz> [--force]"
+        return 1
+    end
+    set -l py (_arka_python)
+    $py (_arka_py_script arka_config.py) restore $argv
     return $status
 end
 

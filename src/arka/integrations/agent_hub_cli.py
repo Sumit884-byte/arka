@@ -26,6 +26,13 @@ def cmd_list(_args: argparse.Namespace) -> int:
 
 
 def cmd_sync(args: argparse.Namespace) -> int:
+    pre_backup = None
+    if args.unify:
+        from arka.core.config_backup import maybe_backup_before_unify
+
+        pre_backup = maybe_backup_before_unify()
+        if pre_backup:
+            print(f"pre_backup\t{pre_backup.get('archive')}\tbytes={pre_backup.get('bytes')}")
     result = sync_all(
         force_adapters=args.force,
         use_symlink=args.symlink,
@@ -232,6 +239,7 @@ Environment:
   ARKA_CONTEXT_MD           Human-readable context markdown
   ARKA_SKILLS_MANIFEST      Skills manifest path
   AGENT_HUB_SYNC_ON_LAUNCH  Sync before launch (default 1)
+  ARKA_CONFIG_BACKUP_ON_UNIFY  Auto-backup before sync --unify (default 1)
 
 Examples:
   arka agent_hub sync
