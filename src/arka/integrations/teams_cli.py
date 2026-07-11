@@ -22,6 +22,7 @@ from arka.teams.io import (
     save_workflow,
     templates_dir,
 )
+from arka.teams.doctor import format_doctor as format_team_doctor
 from arka.teams.resolve import format_resolved
 from arka.teams.schema import parse_team, parse_workflow
 
@@ -59,6 +60,12 @@ def cmd_team_create(args: argparse.Namespace) -> int:
     path = save_team(team, fmt=args.format)
     print(f"created\t{path}")
     return 0
+
+
+def cmd_team_doctor(args: argparse.Namespace) -> int:
+    text, code = format_team_doctor(getattr(args, "name", None))
+    print(text)
+    return code
 
 
 def cmd_team_run(args: argparse.Namespace) -> int:
@@ -147,6 +154,8 @@ def build_parser() -> argparse.ArgumentParser:
     create_p.add_argument("name")
     create_p.add_argument("--template", help="Template name (default: same as name)")
     create_p.add_argument("--format", choices=("yaml", "json"), default="yaml")
+    doctor_p = team_sub.add_parser("doctor", help="Health check for teams and scoped memory")
+    doctor_p.add_argument("name", nargs="?", help="Check one team (default: all)")
     run_p = team_sub.add_parser("run", help="Run team default workflow")
     run_p.add_argument("name")
     run_p.add_argument("--task", required=True)
@@ -204,6 +213,7 @@ def main(argv: list[str] | None = None) -> int:
         ("team", "list"): cmd_team_list,
         ("team", "show"): cmd_team_show,
         ("team", "create"): cmd_team_create,
+        ("team", "doctor"): cmd_team_doctor,
         ("team", "run"): cmd_team_run,
         ("workflow", "list"): cmd_workflow_list,
         ("workflow", "show"): cmd_workflow_show,
@@ -225,6 +235,7 @@ Usage:
   arka team list
   arka team show <name> [--resolve]
   arka team create <name> [--template research]
+  arka team doctor [<name>]
   arka team run <name> --task "..." [--workflow <name>]
 
   arka workflow list
@@ -246,6 +257,8 @@ Environment:
 Examples:
   arka team list
   arka team show research --resolve
+  arka team doctor
+  arka team doctor research
   arka team run research --task "Summarize Rust async patterns"
   arka workflow run review-and-ship --task "Plan a v2 auth redesign"
 """

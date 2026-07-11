@@ -244,3 +244,55 @@ def test_cli_create_team(team_paths):
     team = load_team("my-team")
     assert team.name == "my-team"
     assert team.members[0].role == "lead"
+
+
+def test_team_doctor_layout(team_paths):
+    from arka.teams.doctor import doctor
+    from arka.teams.io import ensure_layout
+
+    ensure_layout()
+    checks = {c["name"]: c for c in doctor()}
+    assert checks["teams_dir"]["ok"] is True
+    assert checks["workflows_dir"]["ok"] is True
+    assert checks["scratchpad_writable"]["ok"] is True
+    assert checks["trust_max"]["ok"] is True
+    assert checks["teams_present"]["ok"] is True
+    assert checks["team_research_config"]["ok"] is True
+    assert checks["team_research_members"]["ok"] is True
+    assert checks["team_research_workflow"]["ok"] is True
+
+
+def test_team_doctor_invalid_hub_scope(team_paths, monkeypatch):
+    from arka.teams.doctor import doctor
+    from arka.teams.io import ensure_layout
+
+    monkeypatch.setenv("ARKA_HUB_MEMORY_SCOPE", "bad-scope")
+    ensure_layout()
+    checks = {c["name"]: c for c in doctor()}
+    assert checks["hub_memory_scope"]["ok"] is False
+
+
+def test_team_doctor_unknown_team(team_paths):
+    from arka.teams.doctor import doctor
+    from arka.teams.io import ensure_layout
+
+    ensure_layout()
+    checks = {c["name"]: c for c in doctor("missing-team")}
+    assert checks["team_missing-team_config"]["ok"] is False
+
+
+def test_cli_doctor(team_paths, capsys):
+    from arka.integrations.teams_cli import main
+    from arka.teams.io import ensure_layout
+
+    ensure_layout()
+    assert main(["team", "doctor", "research"]) == 0
+    out = capsys.readouterr().out
+    assert "team_research_config\tok" in out
+    assert "summary\t" in out
+
+    capsys.readouterr()
+    code = main(["team", "doctor"])
+    out = capsys.readouterr().out
+    assert "summary\t" in out
+    assert "team_research_config\tok" in out
