@@ -47,6 +47,7 @@
         "icon": "message-circle",
         "pages": [
           "guides/chat",
+          "guides/personas",
           "guides/memory",
           "guides/daily-brief"
         ]

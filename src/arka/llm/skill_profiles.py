@@ -49,6 +49,9 @@ SKILL_TASK_MAP: dict[str, str] = {
     "route": "route",
     # Chat / Q&A
     "platform_howto": "chat",
+    "elon": "chat",
+    "talk_to_elon": "chat",
+    "elon_chat": "chat",
     "web_answer": "chat",
     "deep_web_answer": "research",
     "web_essay": "chat",

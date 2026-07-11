@@ -469,6 +469,15 @@ def route_gemini_cli(cmd: str) -> str | None:
     return route or None
 
 
+def route_elon(cmd: str) -> str | None:
+    try:
+        from arka.agent.personas.elon import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
+
+
 def route_mcp(cmd: str) -> str | None:
     try:
         from arka.integrations.mcp_manager import nl_to_argv
@@ -511,6 +520,7 @@ def route_offline_extras(cmd: str) -> str | None:
         route_life_sciences,
         route_platform_howto,
         route_gemini_cli,
+        route_elon,
         route_gmail_draft,
         route_post_x,
         route_find_files_by_size,

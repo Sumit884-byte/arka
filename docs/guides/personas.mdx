@@ -1,0 +1,50 @@
+---
+title: "Persona chat"
+description: "Talk to simulated character personas in Arka — stylized LLM voices for fun and education, not real people."
+keywords: ["persona", "chat", "elon", "simulation"]
+---
+
+Arka includes **simulated persona chat** skills — LLM-powered characters inspired by public figures, clearly labeled as fiction for entertainment and education.
+
+<Warning>
+  Personas are **not** the real people they resemble. Do not use them for deception, impersonation, or authoritative advice.
+</Warning>
+
+## Elon-inspired persona
+
+Chat with a stylized voice inspired by public interviews and talks — first-principles thinking, engineering focus, rockets, manufacturing, AI, and ambitious goals.
+
+```bash
+elon                                 # interactive REPL
+elon chat                            # same
+elon "should I learn Rust?"          # one-shot question
+talk_to_elon about first principles  # alias
+```
+
+Natural language via `arka`:
+
+```bash
+arka talk to elon about rockets
+arka what would elon say about learning physics
+arka elon persona
+```
+
+### Requirements
+
+Uses Arka's built-in LLM stack (same API keys as `web_answer` / `agent_ask`). Configure `GEMINI_API_KEY`, `GROQ_API_KEY`, or another provider in `~/.config/arka/.env`.
+
+### Disclaimer
+
+Every session prints:
+
+> Note: Simulated Elon-inspired persona for fun and education — not the real Elon Musk.
+
+## Adding more personas
+
+Personas live under `arka.agent.personas` with:
+
+- A fixed system prompt and disclaimer
+- `route_command()` for NL routing
+- A fish function and `arka_<name>.py` bundled shim
+
+See `elon.py` as the reference pattern for future personas.

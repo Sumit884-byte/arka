@@ -1937,7 +1937,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         agent_resume agent_research agent_nudge agent_watch agent_routine agent_fanout \
         agent_code agent_handoff agent_browser transcript_ask media_ask \
         meeting_agent study_agent inbox_agent compare_agent product_reviewer price_check profession pr_check github_repo competitions route_learn \
-        bookmarks repo_health repo_map generate_data data_gen data_ask ask_data query_data analyze_data docker_status clipboard_history mcp agent_hub gemini_cli \
+        bookmarks repo_health repo_map generate_data data_gen data_ask ask_data query_data analyze_data docker_status clipboard_history mcp agent_hub gemini_cli elon talk_to_elon elon_chat \
         arka_ask semantic_memory supermemory speak_research voice_session handoff_notify remind routines predictions stock \
         rag_setup rag_status voice_agent wake_control \
         agent_ask web_answer deep_web_answer web_essay platform_howto calc chat_reset set_location files_preference_help google \
@@ -9779,6 +9779,26 @@ sys.exit(0 if route_command(sys.argv[1]) else 1)
 " "$argv[1]" 2>/dev/null
 end
 
+function _agent_is_elon_request --description "True if user wants Elon persona chat (internal)"
+    set -l py (_arka_python)
+    $py -c "
+from arka.agent.personas.elon import route_command
+import sys
+sys.exit(0 if route_command(sys.argv[1]) else 1)
+" "$argv[1]" 2>/dev/null
+end
+
+function _agent_build_elon_cmd --description "Build elon args from NL (internal)"
+    set -l py (_arka_python)
+    $py -c "
+from arka.agent.personas.elon import route_command
+import sys
+route = route_command(sys.argv[1])
+if route:
+    print(route)
+" "$argv[1]" 2>/dev/null
+end
+
 function _agent_build_gemini_cli_cmd --description "Build gemini_cli args from NL (internal)"
     set -l py (_arka_python)
     $py -c "
@@ -10242,6 +10262,9 @@ function _agent_is_knowledge_question --description "True if user wants a factua
     if _agent_is_gemini_cli_request "$argv[1]"
         return 1
     end
+    if _agent_is_elon_request "$argv[1]"
+        return 1
+    end
     if _agent_is_route_learn_request "$argv[1]"
         return 1
     end
@@ -10255,6 +10278,9 @@ function _agent_is_knowledge_question --description "True if user wants a factua
         return 1
     end
     if _agent_is_gemini_cli_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_elon_request "$argv[1]"
         return 1
     end
     if _agent_is_survival_lang_request "$argv[1]"
@@ -10467,6 +10493,9 @@ function _agent_is_general_chat --description "True if plain conversational inpu
     if _agent_is_gemini_cli_request "$argv[1]"
         return 1
     end
+    if _agent_is_elon_request "$argv[1]"
+        return 1
+    end
     if _agent_is_bookmarks_request "$argv[1]"
         return 1
     end
@@ -10497,7 +10526,7 @@ function _agent_is_general_chat --description "True if plain conversational inpu
     if _agent_is_mcp_request "$argv[1]"
         return 1
     end
-    if string match -qr '(?i)^(select|best_model|model_select|gemini|gemini_cli|life|bookmarks|mcp|docker|clipboard|competitions|route|teach|generate_data|data_ask|ask_data|query_data|analyze_data|repo_health|repo_map|post_x|daily_brief)\b' "$clean"
+    if string match -qr '(?i)^(select|best_model|model_select|gemini|gemini_cli|elon|talk_to_elon|elon_chat|life|bookmarks|mcp|docker|clipboard|competitions|route|teach|generate_data|data_ask|ask_data|query_data|analyze_data|repo_health|repo_map|post_x|daily_brief)\b' "$clean"
         return 1
     end
     if string match -qr '(?i)^(install|play|open|run|create|download|search|list|show|fix|set|take|timer|remind|weather|pdf|ingest|screenshot|spotify|whatsapp|send|loop|agent_|generate_image|generate_video|generate_password|chart|ascii|ascii_art|figlet|graph|plot|predictions|stock|translate|survive_lang|pr_check|cheat|excuse|bored)\b' "$clean"
@@ -10931,6 +10960,10 @@ function _agent_offline_route_cmd --description "Full symbolic NL to skill comma
     end
     if _agent_is_gemini_cli_request "$cmd"
         echo (_agent_build_gemini_cli_cmd "$cmd")
+        return 0
+    end
+    if _agent_is_elon_request "$cmd"
+        echo (_agent_build_elon_cmd "$cmd")
         return 0
     end
     set -l prev $ROUTE_MODE
@@ -12196,6 +12229,23 @@ function gemini_cli --description "Google Gemini CLI agent (@google/gemini-cli)"
     $py (_arka_py_script arka_gemini.py) $argv
 end
 
+function elon --description "Simulated Elon-inspired persona chat (entertainment/education)"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        $py (_arka_py_script arka_elon.py) chat
+        return $status
+    end
+    $py (_arka_py_script arka_elon.py) $argv
+end
+
+function talk_to_elon --description "Alias for elon persona chat"
+    elon $argv
+end
+
+function elon_chat --description "Alias for elon persona chat"
+    elon $argv
+end
+
 function voice_agent --description "Multi-turn voice chat via wake listener"
     if test (count $argv) -eq 0
         echo "Usage: voice_agent start|stop|status"
@@ -13318,6 +13368,14 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         end
     end
 
+    if _agent_is_elon_request "$cmd"
+        set -l ec (_agent_build_elon_cmd "$cmd")
+        if test -n "$ec"
+            echo "skill|$ec|Simulated Elon-inspired persona chat"
+            return
+        end
+    end
+
     set -l route_mode (_arka_route_mode)
     if test "$route_mode" = ai -o "$route_mode" = ai_only
         set -l skills (_agent_available_skills)
@@ -14189,6 +14247,13 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         set -l gc (_agent_build_gemini_cli_cmd "$cmd")
         if test -n "$gc"
             echo "skill|$gc|Google Gemini CLI agent"
+            return
+        end
+    end
+    if _agent_is_elon_request "$cmd"
+        set -l ec (_agent_build_elon_cmd "$cmd")
+        if test -n "$ec"
+            echo "skill|$ec|Simulated Elon-inspired persona chat"
             return
         end
     end
@@ -16438,6 +16503,8 @@ function agent --description "Run commands safely: executes safe commands automa
         echo "  workflow list|run      - Sequential/parallel team workflows"
         echo "  gemini_cli <prompt>    - Google Gemini CLI agent (npm @google/gemini-cli)"
         echo "  arka gemini status     - Check Gemini CLI install (same as gemini_cli status)"
+        echo "  elon [question]        - Simulated Elon-inspired persona chat (entertainment)"
+        echo "  elon chat              - Interactive persona REPL"
         echo "  cleanup_downloads      - Remove .zip/.deb/.tar.gz clutter from Downloads"
         echo "  watch_zip              - Watch a folder and auto-extract new .zip files"
         echo "  monitor_x <handle>     - Monitor a Twitter/X profile for new tweets"
@@ -17557,6 +17624,10 @@ function agent --description "Run commands safely: executes safe commands automa
         set -l personalize_cmd (_agent_build_personalize_cmd "$cmd")
         echo (set_color yellow)"💡 [Personalize → $personalize_cmd]"(set_color normal)
         _agent_dispatch_one "$personalize_cmd"
+    else if _agent_is_elon_request "$cmd"
+        set -l elon_cmd (_agent_build_elon_cmd "$cmd")
+        echo (set_color yellow)"💡 [Elon persona → $elon_cmd]"(set_color normal)
+        _agent_dispatch_one "$elon_cmd"
     else if _agent_is_ascii_art_request "$cmd"
         set -l ascii_cmd (_agent_build_ascii_art_cmd "$cmd")
         echo (set_color yellow)"💡 [ASCII → $ascii_cmd]"(set_color normal)
