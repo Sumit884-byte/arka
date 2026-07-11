@@ -14,11 +14,12 @@ def test_list_tool_definitions_schema():
 
     tools = list_tool_definitions()
     names = list_tool_names()
-    assert len(tools) == len(names) == 8
+    assert len(tools) == len(names) == 9
     assert "arka_ask" in names
     assert "arka_recall" in names
     assert "arka_heartbeat" in names
     assert "arka_sessions" in names
+    assert "arka_routines" in names
     for tool in tools:
         assert tool["name"]
         assert tool["description"]
@@ -101,7 +102,7 @@ def test_mcp_server_stdio_roundtrip():
     server = ArkaMcpServer(stdin=inp, stdout=out)
     response = server.process_line(inp.getvalue().strip())
     assert response is not None
-    assert len(response["result"]["tools"]) == 8
+    assert len(response["result"]["tools"]) == 9
 
 
 def test_install_config_snippet():
@@ -193,6 +194,42 @@ def test_handle_arka_sessions_list_and_context(tmp_path, monkeypatch):
     assert "hello from mcp test" in ctx
 
 
+def test_handle_arka_routines_list(tmp_path, monkeypatch):
+    from arka.integrations.mcp_server import _handle_arka_routines
+
+    routine_file = tmp_path / "routines.json"
+    routine_file.write_text(
+        json.dumps(
+            [
+                {
+                    "id": "morning",
+                    "schedule": "daily 9am",
+                    "action": "check unread emails",
+                    "enabled": True,
+                    "created": 1.0,
+                },
+                {
+                    "id": "paused",
+                    "schedule": "hourly",
+                    "action": "ping status",
+                    "enabled": False,
+                    "created": 2.0,
+                },
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("arka.integrations.routines.ROUTINE_FILE", routine_file)
+
+    rows = json.loads(_handle_arka_routines({"action": "list"}))
+    assert len(rows) == 2
+    assert rows[0]["id"] == "morning"
+
+    enabled = json.loads(_handle_arka_routines({"action": "list", "enabled_only": True}))
+    assert len(enabled) == 1
+    assert enabled[0]["id"] == "morning"
+
+
 def test_doctor_spawns_client(monkeypatch):
     from arka.integrations.mcp_client import McpTool
     from arka.integrations.mcp_server import doctor
@@ -215,6 +252,7 @@ def test_doctor_spawns_client(monkeypatch):
                 "arka_repo_map",
                 "arka_heartbeat",
                 "arka_sessions",
+                "arka_routines",
                 "arka_team_run",
             ]]
 

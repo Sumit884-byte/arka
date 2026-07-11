@@ -188,6 +188,20 @@ def _handle_arka_sessions(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"message_sessions unavailable: {exc}") from exc
 
 
+def _handle_arka_routines(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "list").strip().lower()
+    try:
+        from arka.integrations.routines import list_routines
+
+        if action == "list":
+            enabled_only = bool(arguments.get("enabled_only", False))
+            rows = list_routines(enabled_only=enabled_only)
+            return json.dumps(rows, indent=2)
+        raise ValueError("action must be list")
+    except ImportError as exc:
+        raise RuntimeError(f"routines unavailable: {exc}") from exc
+
+
 def _handle_arka_team_run(arguments: dict[str, Any]) -> str:
     team = str(arguments.get("team") or arguments.get("name") or "").strip()
     task = str(arguments.get("task") or "").strip()
@@ -358,6 +372,27 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_sessions,
+        ),
+        ArkaMcpTool(
+            name="arka_routines",
+            description="List OpenClaw-style scheduled routines (schedule → action pairs).",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["list"],
+                        "default": "list",
+                        "description": "list: return scheduled routines as JSON",
+                    },
+                    "enabled_only": {
+                        "type": "boolean",
+                        "description": "Only include enabled routines",
+                        "default": False,
+                    },
+                },
+            },
+            handler=_handle_arka_routines,
         ),
         ArkaMcpTool(
             name="arka_team_run",

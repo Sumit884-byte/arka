@@ -230,9 +230,33 @@ def routine_add(schedule: str, action: str, *, name: str = "", auto_install: boo
     return rid
 
 
-def routine_list() -> None:
+def list_routines(*, enabled_only: bool = False) -> list[dict]:
+    """Return scheduled routines as structured rows (OpenClaw always-on layer)."""
     routines = _load_json(ROUTINE_FILE, [])
-    if not isinstance(routines, list) or not routines:
+    if not isinstance(routines, list):
+        return []
+    out: list[dict] = []
+    for r in routines:
+        if not isinstance(r, dict):
+            continue
+        enabled = bool(r.get("enabled", True))
+        if enabled_only and not enabled:
+            continue
+        out.append(
+            {
+                "id": str(r.get("id") or ""),
+                "schedule": str(r.get("schedule") or ""),
+                "action": str(r.get("action") or ""),
+                "enabled": enabled,
+                "created": r.get("created"),
+            }
+        )
+    return out
+
+
+def routine_list() -> None:
+    routines = list_routines()
+    if not routines:
         print("No routines. Add one with:")
         print('  routines add daily 9am "check unread emails"')
         print('  arka every day at 9am summarize my gmail')
