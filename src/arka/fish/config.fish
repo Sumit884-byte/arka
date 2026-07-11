@@ -1926,7 +1926,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         store_password pass \
         open_file list_files search_files find_files_by_size browse_web activate_venv create_venv fix_venv \
         write_script run_script ollama_run lint_python cheat qr_code shorten_url \
-        crypto_price currency_convert convert currency kalshi pomodoro sports_score live_scores system_monitor excuse bored open_app create_skill \
+        crypto_price currency_convert convert currency kalshi kaggle pomodoro sports_score live_scores system_monitor excuse bored open_app create_skill \
         calculate_bmi send_whatsapp whatsapp_listen search_stores download_file extract_and_run \
         create_desktop_app fix_graphics_driver install_app install_apt install_brew install_flatpak \
         install_snap install_package install_uv stock_analysis stock macro emotion \
@@ -2378,6 +2378,8 @@ function skills --description "Show what commands the agent can auto-run"
                 echo (set_color green)"  currency_convert "(set_color normal)"<amount> <from> <to> — live FX rates (USD, EUR, INR, …)"
             case kalshi
                 echo (set_color green)"  kalshi         "(set_color normal)"search <topic> | market <TICKER> | trending | status — Kalshi prediction odds"
+            case kaggle
+                echo (set_color green)"  kaggle         "(set_color normal)"download <owner/dataset> | search <query> | status — Kaggle datasets"
             case wifi_info
                 echo (set_color green)"  wifi_info      "(set_color normal)"Current Wi-Fi network + signal"
             case generate_image
@@ -8438,6 +8440,25 @@ function kalshi --description "Kalshi prediction market odds (read-only public A
     return 0
 end
 
+function kaggle --description "Download and search Kaggle datasets"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        echo "Usage: kaggle download <owner/dataset> [-o DIR] [--unzip]"
+        echo "       kaggle search <keywords>"
+        echo "       kaggle status"
+        echo "       arka 'download kaggle dataset titanic'"
+        return 1
+    end
+    set -l out (_arka_capture_output $py (_arka_py_script arka_kaggle.py) $argv)
+    set -l st $status
+    if test $st -ne 0
+        echo $out >&2
+        return $st
+    end
+    _arka_pretty_python_output "$out"
+    return 0
+end
+
 function sports_score --description "Live sports scores — IPL, cricket, NFL, NBA, soccer, F1, …"
     set -l py (_arka_python)
     if test (count $argv) -eq 0
@@ -10211,6 +10232,9 @@ function _agent_is_knowledge_question --description "True if user wants a factua
     if _agent_is_kalshi_request "$argv[1]"
         return 1
     end
+    if _agent_is_kaggle_request "$argv[1]"
+        return 1
+    end
     if _agent_is_post_x_request "$argv[1]"
         return 1
     end
@@ -10430,6 +10454,9 @@ function _agent_is_general_chat --description "True if plain conversational inpu
     if _agent_is_kalshi_request "$argv[1]"
         return 1
     end
+    if _agent_is_kaggle_request "$argv[1]"
+        return 1
+    end
     if _agent_is_mcp_request "$argv[1]"
         return 1
     end
@@ -10607,12 +10634,29 @@ function _agent_is_kalshi_request --description "True if user wants Kalshi predi
     string match -qr '(?i)\b(kalshi|prediction\s+market|kalshi\s+odds|kalshi\s+predictions?)\b' "$clean"
 end
 
+function _agent_is_kaggle_request --description "True if user wants Kaggle dataset download/search (internal)"
+    set -l clean (string lower (string trim -- "$argv[1]"))
+    if string match -qr '(?i)\bcompetitions?\b' "$clean"
+        return 1
+    end
+    string match -qr '(?i)\b(kaggle|download\s+(?:a\s+)?kaggle\s+dataset|get\s+kaggle\s+dataset|fetch\s+kaggle\s+dataset)\b' "$clean"
+end
+
 function _agent_build_kalshi_cmd --description "Build kalshi invocation from NL (internal)"
     set -l py (_arka_python)
     set -l cmd $argv[1]
     set -l rest ($py (_arka_py_script arka_kalshi.py) parse -- $cmd 2>/dev/null)
     if test (count $rest) -gt 0
         echo "kalshi $rest"
+    end
+end
+
+function _agent_build_kaggle_cmd --description "Build kaggle invocation from NL (internal)"
+    set -l py (_arka_python)
+    set -l cmd $argv[1]
+    set -l rest ($py (_arka_py_script arka_kaggle.py) parse -- $cmd 2>/dev/null)
+    if test (count $rest) -gt 0
+        echo "kaggle $rest"
     end
 end
 
@@ -13887,6 +13931,13 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
             return
         end
     end
+    if _agent_is_kaggle_request "$cmd"
+        set -l kgc (_agent_build_kaggle_cmd "$cmd")
+        if test -n "$kgc"
+            echo "skill|$kgc|Kaggle dataset download/search"
+            return
+        end
+    end
     if set -l cc_cmd (_agent_build_currency_cmd "$cmd")
         if test -n "$cc_cmd"
             echo "skill|$cc_cmd|Currency conversion"
@@ -16262,6 +16313,9 @@ function agent --description "Run commands safely: executes safe commands automa
         echo "  kalshi market <TICKER>   - One Kalshi market quote"
         echo "  kalshi trending          - Top Kalshi markets by 24h volume"
         echo "  kalshi status            - Kalshi exchange status"
+        echo "  kaggle download <owner/dataset> - Download a Kaggle dataset"
+        echo "  kaggle search <query>    - Search Kaggle datasets"
+        echo "  kaggle status            - Check Kaggle API credentials"
         echo "  sports_score [league]  - Live scores: IPL, cricket, NFL, NBA, EPL, F1, …"
         echo "  live_scores            - Alias for sports_score"
         echo "  lint_python <file>     - Lint Python code automatically using ruff or flake8"
@@ -16736,6 +16790,7 @@ function agent --description "Run commands safely: executes safe commands automa
         set interpreted "stock analyze $stock_ticker"
     else if string match -qr '(?i)(predict|prediction|forecast|opportunit).*(antique|stock|market|strategy|invest|collectible|portfolio)|^(predict|forecast)\s+' "$clean_cmd"
         and not _agent_is_kalshi_request "$cmd"
+        and not _agent_is_kaggle_request "$cmd"
         set -l pred_topic (string replace -r -i '^(?:predict|prediction|forecast|find|analyze|show)\s+(?:opportunities?\s+(?:in|for|about)\s+)?' '' "$cmd" | string trim)
         set -l pred_flags ""
         if string match -qr '(?i)\bantique|collectible|auction|vintage\b' "$clean_cmd"
@@ -16846,6 +16901,13 @@ function agent --description "Run commands safely: executes safe commands automa
         set -l kc (_agent_build_kalshi_cmd "$cmd")
         if test -n "$kc"
             set interpreted $kc
+            set route_source offline
+        end
+    else if string match -qr '(?i)\b(kaggle|download\s+(?:a\s+)?kaggle\s+dataset|get\s+kaggle\s+dataset|fetch\s+kaggle\s+dataset)\b' "$clean_cmd"
+        and not string match -qr '(?i)\bcompetitions?\b' "$clean_cmd"
+        set -l kgc (_agent_build_kaggle_cmd "$cmd")
+        if test -n "$kgc"
+            set interpreted $kgc
             set route_source offline
         end
     else if set -l tp_match (_arka_match_third_party_skill "$cmd")

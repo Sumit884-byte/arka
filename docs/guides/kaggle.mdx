@@ -1,0 +1,88 @@
+---
+title: "Kaggle datasets"
+description: "Download and search Kaggle datasets from the terminal using the Kaggle API."
+keywords: ["kaggle", "datasets", "machine learning", "data"]
+---
+
+Arka includes a **kaggle** skill for downloading and searching Kaggle datasets. It uses the official Kaggle API via the `kaggle` CLI (preferred) or the Python `kaggle` package.
+
+## Quick examples
+
+```bash
+kaggle status
+kaggle search titanic
+kaggle download heptapod/titanic
+kaggle download heptapod/titanic --unzip -o ~/Downloads
+```
+
+Natural language also works:
+
+```bash
+arka "download kaggle dataset heptapod/titanic"
+arka "kaggle search housing prices"
+arka "kaggle status"
+```
+
+Or via the CLI subcommand:
+
+```bash
+arka kaggle download heptapod/titanic --unzip
+```
+
+## Commands
+
+| Command | Description |
+| ------- | ----------- |
+| `kaggle status` | Check whether Kaggle credentials are configured |
+| `kaggle search <keywords>` | Search datasets by keyword |
+| `kaggle download <owner/dataset>` | Download a dataset to your Downloads folder |
+| `kaggle download <owner/dataset> -o DIR` | Download to a custom directory |
+| `kaggle download <owner/dataset> --unzip` | Download and extract archives |
+
+## Credentials
+
+Kaggle requires an API token. Create one at [kaggle.com/settings](https://www.kaggle.com/settings) (Account → API → Create New Token).
+
+**Option A — environment variables** (recommended for Arka):
+
+```bash
+KAGGLE_USERNAME=your_username
+KAGGLE_KEY=your_api_key
+```
+
+Add these to `~/.config/arka/.env`.
+
+**Option B — `kaggle.json`** (standard Kaggle layout):
+
+```bash
+mkdir -p ~/.kaggle
+# unzip the token download into ~/.kaggle/kaggle.json
+chmod 600 ~/.kaggle/kaggle.json
+```
+
+Run `kaggle status` to verify credentials before downloading.
+
+## API approach
+
+The skill prefers the `kaggle` CLI if it is on `PATH`:
+
+```bash
+kaggle datasets download -d owner/dataset -p /output/dir
+kaggle datasets list -s "query"
+```
+
+If the CLI is not installed, it falls back to the Python `kaggle` package:
+
+```bash
+pip install kaggle
+```
+
+## Related skills
+
+| Skill | Example |
+| ----- | ------- |
+| `generate_data` | `generate 100 users as csv` |
+| `data_ask` | `ask data in reports folder` |
+| `competitions` | `search kaggle competitions` |
+
+See also: [Generate data](/guides/generate-data)

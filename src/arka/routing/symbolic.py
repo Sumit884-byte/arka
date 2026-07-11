@@ -212,6 +212,15 @@ def route_kalshi(cmd: str) -> str | None:
     return route or None
 
 
+def route_kaggle(cmd: str) -> str | None:
+    try:
+        from arka.integrations.kaggle import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd.strip())
+    return route or None
+
+
 def route_compose_video(cmd: str) -> str | None:
     try:
         from arka.media.compose_video import nl_to_argv
@@ -497,6 +506,7 @@ def route_offline_extras(cmd: str) -> str | None:
         route_find_files_by_size,
         route_currency_convert,
         route_kalshi,
+        route_kaggle,
         route_remind,
         route_routines,
         route_chart,

@@ -83,6 +83,7 @@ LEGACY_MODULES: dict[str, str] = {
     "arka_sports": "arka.integrations.sports",
     "arka_currency": "arka.integrations.currency",
     "arka_kalshi": "arka.integrations.kalshi",
+    "arka_kaggle": "arka.integrations.kaggle",
     "arka_password_vault": "arka.integrations.password_vault",
     "arka_google": "arka.integrations.google_workspace",
     "arka_gemini": "arka.integrations.gemini_cli",

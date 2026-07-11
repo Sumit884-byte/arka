@@ -88,6 +88,13 @@ SKILL_CATALOG: dict[str, dict[str, Any]] = {
         "example": "kalshi search bitcoin",
         "beginner": True,
     },
+    "kaggle": {
+        "interests": ["research", "productivity"],
+        "description": "Download and search Kaggle datasets",
+        "example": "kaggle download titanic",
+        "beginner": True,
+        "requires_env": ["KAGGLE_USERNAME", "KAGGLE_KEY"],
+    },
     "daily_brief": {
         "interests": ["finance", "productivity", "research"],
         "description": "Morning weather + tech headlines",

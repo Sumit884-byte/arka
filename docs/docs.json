@@ -80,7 +80,8 @@
         "icon": "chart-line",
         "pages": [
           "guides/stocks",
-          "guides/kalshi"
+          "guides/kalshi",
+          "guides/kaggle"
         ]
       },
       {

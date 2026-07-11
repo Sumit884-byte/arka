@@ -146,7 +146,7 @@ _SEND_SKILLS = frozenset({"send_whatsapp"})
 
 _DELETE_SKILLS = frozenset({"cleanup_downloads", "fix_venv"})
 
-_DOWNLOAD_SKILLS = frozenset({"download_file", "extract_and_run"})
+_DOWNLOAD_SKILLS = frozenset({"download_file", "extract_and_run", "kaggle"})
 
 _EXEC_SKILLS = frozenset({"browse_web", "write_script", "run_script", "create_skill"})
 
