@@ -14,9 +14,10 @@ def test_list_tool_definitions_schema():
 
     tools = list_tool_definitions()
     names = list_tool_names()
-    assert len(tools) == len(names) == 6
+    assert len(tools) == len(names) == 7
     assert "arka_ask" in names
     assert "arka_recall" in names
+    assert "arka_heartbeat" in names
     for tool in tools:
         assert tool["name"]
         assert tool["description"]
@@ -99,7 +100,7 @@ def test_mcp_server_stdio_roundtrip():
     server = ArkaMcpServer(stdin=inp, stdout=out)
     response = server.process_line(inp.getvalue().strip())
     assert response is not None
-    assert len(response["result"]["tools"]) == 6
+    assert len(response["result"]["tools"]) == 7
 
 
 def test_install_config_snippet():
@@ -150,6 +151,25 @@ def test_handle_arka_remember_mock():
     assert "Remembered" in text
 
 
+def test_handle_arka_heartbeat_ping_and_status(tmp_path, monkeypatch):
+    from arka.integrations.mcp_server import _handle_arka_heartbeat
+
+    hb_file = tmp_path / "heartbeat.json"
+    monkeypatch.setattr("arka.integrations.heartbeat.HEARTBEAT_FILE", hb_file)
+    monkeypatch.setattr("arka.integrations.heartbeat.cache_dir", lambda: tmp_path)
+
+    ping_text = _handle_arka_heartbeat({"action": "ping", "activity": "test.mcp"})
+    assert "Heartbeat ping" in ping_text
+    assert hb_file.is_file()
+
+    status_text = _handle_arka_heartbeat({"action": "status"})
+    assert "Last activity" in status_text
+
+    json_text = _handle_arka_heartbeat({"action": "status", "json": True})
+    data = json.loads(json_text)
+    assert data.get("last_activity") == "test.mcp"
+
+
 def test_doctor_spawns_client(monkeypatch):
     from arka.integrations.mcp_client import McpTool
     from arka.integrations.mcp_server import doctor
@@ -170,6 +190,7 @@ def test_doctor_spawns_client(monkeypatch):
                 "arka_recall",
                 "arka_skill",
                 "arka_repo_map",
+                "arka_heartbeat",
                 "arka_team_run",
             ]]
 

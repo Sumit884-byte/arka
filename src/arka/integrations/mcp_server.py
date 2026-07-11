@@ -142,6 +142,25 @@ def _handle_arka_repo_map(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"repo_map unavailable: {exc}") from exc
 
 
+def _handle_arka_heartbeat(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "status").strip().lower()
+    activity = str(arguments.get("activity") or "mcp.ping").strip()
+    try:
+        from arka.integrations.heartbeat import ping, status
+
+        if action == "ping":
+            ping(activity, source="mcp")
+            return f"Heartbeat ping: {activity}"
+        if action == "status":
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                status(json_out=bool(arguments.get("json")))
+            return buf.getvalue().strip() or "Heartbeat status unavailable"
+        raise ValueError("action must be ping or status")
+    except ImportError as exc:
+        raise RuntimeError(f"heartbeat unavailable: {exc}") from exc
+
+
 def _handle_arka_team_run(arguments: dict[str, Any]) -> str:
     team = str(arguments.get("team") or arguments.get("name") or "").strip()
     task = str(arguments.get("task") or "").strip()
@@ -252,6 +271,32 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_repo_map,
+        ),
+        ArkaMcpTool(
+            name="arka_heartbeat",
+            description="Ping or read Arka agent heartbeat — routines, memory, and channel health (OpenClaw layer).",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["status", "ping"],
+                        "default": "status",
+                        "description": "status: read health snapshot; ping: record activity",
+                    },
+                    "activity": {
+                        "type": "string",
+                        "description": "Activity label when action=ping",
+                        "default": "mcp.ping",
+                    },
+                    "json": {
+                        "type": "boolean",
+                        "description": "Return JSON when action=status",
+                        "default": False,
+                    },
+                },
+            },
+            handler=_handle_arka_heartbeat,
         ),
         ArkaMcpTool(
             name="arka_team_run",
