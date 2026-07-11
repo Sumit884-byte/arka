@@ -1,0 +1,495 @@
+"""Arka as a local stdio MCP server — expose skills and memory to other agents."""
+
+from __future__ import annotations
+
+import contextlib
+import io
+import json
+import shutil
+import sys
+import threading
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Callable, TextIO
+
+from arka import __version__
+from arka.integrations.mcp_client import MCP_PROTOCOL_VERSION
+
+SERVER_NAME = "arka"
+ARKA_MCP_SERVER_KEY = "arka"
+
+ToolHandler = Callable[[dict[str, Any]], str]
+
+
+@dataclass(frozen=True)
+class ArkaMcpTool:
+    name: str
+    description: str
+    input_schema: dict[str, Any]
+    handler: ToolHandler
+
+
+def _text_result(text: str, *, is_error: bool = False) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "content": [{"type": "text", "text": text}],
+    }
+    if is_error:
+        payload["isError"] = True
+    return payload
+
+
+def _handle_arka_ask(arguments: dict[str, Any]) -> str:
+    prompt = str(arguments.get("prompt") or "").strip()
+    if not prompt:
+        raise ValueError("prompt is required")
+    deep = bool(arguments.get("deep", False))
+    try:
+        from arka.agent.chat import answer_question
+
+        provenance, answer = answer_question(
+            prompt,
+            deep=deep,
+            use_session=True,
+            cleanup=True,
+        )
+        return f"[{provenance}]\n{answer}".strip()
+    except ImportError as exc:
+        raise RuntimeError(f"chat module unavailable: {exc}") from exc
+
+
+def _handle_arka_remember(arguments: dict[str, Any]) -> str:
+    text = str(arguments.get("text") or "").strip()
+    if not text:
+        raise ValueError("text is required")
+    layer = str(arguments.get("layer") or "auto").strip().lower()
+    if layer not in {"auto", "fact", "note", "channel"}:
+        raise ValueError("layer must be auto, fact, note, or channel")
+    try:
+        from arka.core.unified_memory import remember
+
+        with contextlib.redirect_stdout(io.StringIO()):
+            code, err = remember(
+                text,
+                layer=layer,  # type: ignore[arg-type]
+                long_term=bool(arguments.get("long_term", False)),
+            )
+        if code != 0:
+            raise RuntimeError(err or "remember failed")
+        return f"Remembered ({layer}): {text[:200]}"
+    except ImportError as exc:
+        raise RuntimeError(f"unified_memory unavailable: {exc}") from exc
+
+
+def _handle_arka_recall(arguments: dict[str, Any]) -> str:
+    goal = str(arguments.get("goal") or arguments.get("query") or "").strip()
+    if not goal:
+        raise ValueError("goal is required")
+    limit_chars = int(arguments.get("limit_chars") or 3500)
+    try:
+        from arka.core.unified_memory import recall
+
+        text = recall(goal, limit_chars=max(200, limit_chars))
+        return text or "(no matching memory)"
+    except ImportError as exc:
+        raise RuntimeError(f"unified_memory unavailable: {exc}") from exc
+
+
+def _handle_arka_skill(arguments: dict[str, Any]) -> str:
+    skill = str(arguments.get("skill") or arguments.get("name") or "").strip()
+    if not skill:
+        raise ValueError("skill is required")
+    args = arguments.get("args") or []
+    if isinstance(args, str):
+        extra = args.split()
+    elif isinstance(args, list):
+        extra = [str(a) for a in args]
+    else:
+        raise ValueError("args must be a string or list")
+    skill_line = " ".join([skill, *extra]).strip()
+    try:
+        from arka.dispatch import run_skill
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+            code = run_skill(skill_line)
+        output = buf.getvalue().strip()
+        if code != 0 and not output:
+            raise RuntimeError(f"skill exited {code}")
+        if output:
+            return output
+        return f"Skill {skill!r} completed (exit {code})"
+    except ImportError as exc:
+        raise RuntimeError(f"dispatch unavailable: {exc}") from exc
+
+
+def _handle_arka_repo_map(arguments: dict[str, Any]) -> str:
+    depth = int(arguments.get("depth") or 2)
+    include_symbols = bool(arguments.get("symbols", True))
+    path_arg = str(arguments.get("path") or "").strip()
+    try:
+        from arka.agent.pr_check import git_root
+        from arka.agent.repo_map import map_text
+
+        root = Path(path_arg).expanduser().resolve() if path_arg else git_root()
+        if root is None or not root.is_dir():
+            root = Path.cwd()
+        return map_text(
+            root,
+            depth=max(1, min(depth, 5)),
+            include_symbols=include_symbols,
+        )
+    except ImportError as exc:
+        raise RuntimeError(f"repo_map unavailable: {exc}") from exc
+
+
+def _handle_arka_team_run(arguments: dict[str, Any]) -> str:
+    team = str(arguments.get("team") or arguments.get("name") or "").strip()
+    task = str(arguments.get("task") or "").strip()
+    if not team:
+        raise ValueError("team is required")
+    if not task:
+        raise ValueError("task is required")
+    workflow = str(arguments.get("workflow") or "").strip() or None
+    try:
+        from arka.teams.executor import format_run_result, run_team
+
+        result = run_team(
+            team,
+            task,
+            workflow_name=workflow,
+            promote_final=bool(arguments.get("promote_final", False)),
+        )
+        if arguments.get("json"):
+            return json.dumps(result, indent=2)
+        return format_run_result(result)
+    except ImportError as exc:
+        raise RuntimeError(f"teams unavailable: {exc}") from exc
+
+
+def _build_tools() -> list[ArkaMcpTool]:
+    return [
+        ArkaMcpTool(
+            name="arka_ask",
+            description="Ask Arka a question — web search, memory, calc, weather, or chat.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "prompt": {"type": "string", "description": "Question or request"},
+                    "deep": {
+                        "type": "boolean",
+                        "description": "Use deep web search when applicable",
+                        "default": False,
+                    },
+                },
+                "required": ["prompt"],
+            },
+            handler=_handle_arka_ask,
+        ),
+        ArkaMcpTool(
+            name="arka_remember",
+            description="Store a fact, note, or channel turn in Arka unified memory.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string", "description": "Content to remember"},
+                    "layer": {
+                        "type": "string",
+                        "enum": ["auto", "fact", "note", "channel"],
+                        "default": "auto",
+                    },
+                    "long_term": {
+                        "type": "boolean",
+                        "description": "Persist note to long-term session memory",
+                        "default": False,
+                    },
+                },
+                "required": ["text"],
+            },
+            handler=_handle_arka_remember,
+        ),
+        ArkaMcpTool(
+            name="arka_recall",
+            description="Recall facts, notes, and channel context from Arka unified memory.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "goal": {"type": "string", "description": "What to recall or search for"},
+                    "limit_chars": {
+                        "type": "integer",
+                        "description": "Max characters in response",
+                        "default": 3500,
+                    },
+                },
+                "required": ["goal"],
+            },
+            handler=_handle_arka_recall,
+        ),
+        ArkaMcpTool(
+            name="arka_skill",
+            description="Invoke an Arka skill or routed command by name.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "skill": {"type": "string", "description": "Skill name or command head"},
+                    "args": {
+                        "description": "Skill arguments (string or list)",
+                        "oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
+                    },
+                },
+                "required": ["skill"],
+            },
+            handler=_handle_arka_skill,
+        ),
+        ArkaMcpTool(
+            name="arka_repo_map",
+            description="Summarize repository layout and optional Python symbols.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Repo path (default: git root or cwd)"},
+                    "depth": {"type": "integer", "default": 2, "minimum": 1, "maximum": 5},
+                    "symbols": {"type": "boolean", "default": True},
+                },
+            },
+            handler=_handle_arka_repo_map,
+        ),
+        ArkaMcpTool(
+            name="arka_team_run",
+            description="Run an Arka agent team workflow on a task.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "team": {"type": "string", "description": "Team name"},
+                    "task": {"type": "string", "description": "Task description"},
+                    "workflow": {"type": "string", "description": "Optional workflow override"},
+                    "promote_final": {"type": "boolean", "default": False},
+                    "json": {"type": "boolean", "default": False},
+                },
+                "required": ["team", "task"],
+            },
+            handler=_handle_arka_team_run,
+        ),
+    ]
+
+
+def list_tool_definitions() -> list[dict[str, Any]]:
+    return [
+        {
+            "name": tool.name,
+            "description": tool.description,
+            "inputSchema": tool.input_schema,
+        }
+        for tool in _build_tools()
+    ]
+
+
+def list_tool_names() -> list[str]:
+    return [tool.name for tool in _build_tools()]
+
+
+def mcp_server_launch_spec() -> dict[str, Any]:
+    """Cursor-compatible stdio launch spec for this MCP server."""
+    arka_cmd = shutil.which("arka")
+    if arka_cmd:
+        return {"command": arka_cmd, "args": ["mcp", "serve"]}
+    from arka.paths import python_executable
+
+    return {"command": python_executable(), "args": ["-m", "arka", "mcp", "serve"]}
+
+
+def install_config_snippet(*, agent: str = "cursor") -> str:
+    """Return JSON config snippet for Cursor, Claude Desktop, or generic clients."""
+    entry = mcp_server_launch_spec()
+    payload: dict[str, Any] = {"mcpServers": {ARKA_MCP_SERVER_KEY: entry}}
+    if agent.strip().lower() in {"claude", "claude_desktop", "claude-desktop"}:
+        payload = {
+            "mcpServers": {
+                ARKA_MCP_SERVER_KEY: {
+                    **entry,
+                    "env": {},
+                }
+            }
+        }
+    return json.dumps(payload, indent=2) + "\n"
+
+
+def ensure_arka_self_in_config() -> bool:
+    """Add arka self-MCP entry to ~/.config/arka/mcp.json if missing."""
+    from arka.integrations.mcp_manager import load_mcp_config, save_mcp_config
+
+    data = load_mcp_config()
+    servers = data.setdefault("mcpServers", {})
+    if ARKA_MCP_SERVER_KEY in servers:
+        return False
+    servers[ARKA_MCP_SERVER_KEY] = mcp_server_launch_spec()
+    save_mcp_config(data)
+    return True
+
+
+class ArkaMcpServer:
+    """Minimal newline-delimited JSON-RPC MCP server over stdio."""
+
+    def __init__(
+        self,
+        *,
+        stdin: TextIO | None = None,
+        stdout: TextIO | None = None,
+        stderr: TextIO | None = None,
+    ) -> None:
+        self.stdin = stdin or sys.stdin
+        self.stdout = stdout or sys.stdout
+        self.stderr = stderr or sys.stderr
+        self._tools = {tool.name: tool for tool in _build_tools()}
+        self._lock = threading.Lock()
+        self._initialized = False
+
+    def _send(self, payload: dict[str, Any]) -> None:
+        self.stdout.write(json.dumps(payload, separators=(",", ":")) + "\n")
+        self.stdout.flush()
+
+    def _error_response(self, request_id: Any, code: int, message: str) -> dict[str, Any]:
+        return {
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "error": {"code": code, "message": message},
+        }
+
+    def handle_message(self, body: dict[str, Any]) -> dict[str, Any] | None:
+        method = str(body.get("method", "")).strip()
+        request_id = body.get("id")
+        params = body.get("params") or {}
+        if not isinstance(params, dict):
+            params = {}
+
+        if method == "notifications/initialized":
+            return None
+
+        if method == "initialize":
+            self._initialized = True
+            return {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "result": {
+                    "protocolVersion": MCP_PROTOCOL_VERSION,
+                    "capabilities": {"tools": {"listChanged": False}},
+                    "serverInfo": {"name": SERVER_NAME, "version": __version__},
+                },
+            }
+
+        if method == "tools/list":
+            return {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "result": {"tools": list_tool_definitions()},
+            }
+
+        if method == "tools/call":
+            name = str(params.get("name") or "").strip()
+            arguments = params.get("arguments") or {}
+            if not isinstance(arguments, dict):
+                arguments = {}
+            tool = self._tools.get(name)
+            if not tool:
+                return self._error_response(request_id, -32602, f"Unknown tool: {name}")
+            try:
+                text = tool.handler(arguments)
+                return {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "result": _text_result(text),
+                }
+            except Exception as exc:
+                return {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "result": _text_result(str(exc)[:2000], is_error=True),
+                }
+
+        if request_id is None:
+            return None
+        return self._error_response(request_id, -32601, f"Method not found: {method}")
+
+    def process_line(self, line: str) -> dict[str, Any] | None:
+        line = line.strip()
+        if not line:
+            return None
+        try:
+            body = json.loads(line)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(body, dict):
+            return None
+        with self._lock:
+            return self.handle_message(body)
+
+    def run(self) -> None:
+        for line in self.stdin:
+            response = self.process_line(line)
+            if response is not None:
+                self._send(response)
+
+
+def serve_stdio() -> int:
+    """Run the MCP server on stdio until stdin closes."""
+    ArkaMcpServer().run()
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI entry for bundled arka_mcp_server.py — defaults to serve."""
+    args = list(argv if argv is not None else sys.argv[1:])
+    if args and args[0] in ("-h", "--help", "help"):
+        print("Usage: arka mcp serve  |  python -m arka.integrations.mcp_server")
+        return 0
+    return serve_stdio()
+
+
+def doctor(*, timeout: float = 8.0) -> tuple[str, int]:
+    """Verify the stdio MCP server initializes and lists tools."""
+    from arka.integrations.mcp_manager import McpStdioClient
+
+    spec = mcp_server_launch_spec()
+    client = McpStdioClient(
+        server=ARKA_MCP_SERVER_KEY,
+        command=spec["command"],
+        args=list(spec.get("args") or []),
+        timeout=timeout,
+    )
+    lines: list[str] = [
+        f"command\t{spec['command']}",
+        f"args\t{' '.join(spec.get('args') or [])}",
+        f"tools_expected\t{len(list_tool_names())}",
+    ]
+    try:
+        info = client.connect()
+        tools = client.list_tools()
+        server_info = info.get("serverInfo") if isinstance(info, dict) else {}
+        lines.append(f"initialize\tok\t{server_info}")
+        lines.append(f"tools_list\tok\tcount={len(tools)}")
+        for tool in tools:
+            lines.append(f"tool\t{tool.name}")
+        missing = [name for name in list_tool_names() if name not in {t.name for t in tools}]
+        if missing:
+            lines.append(f"missing\t{','.join(missing)}")
+            return "\n".join(lines), 1
+        lines.append("summary\tok")
+        return "\n".join(lines), 0
+    except Exception as exc:
+        lines.append(f"error\t{exc}")
+        return "\n".join(lines), 1
+    finally:
+        client.close()
+
+
+__all__ = [
+    "ARKA_MCP_SERVER_KEY",
+    "ArkaMcpServer",
+    "doctor",
+    "ensure_arka_self_in_config",
+    "install_config_snippet",
+    "list_tool_definitions",
+    "list_tool_names",
+    "main",
+    "mcp_server_launch_spec",
+    "serve_stdio",
+]

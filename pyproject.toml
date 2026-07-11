@@ -85,6 +85,9 @@ dev = [
     "pytest",
     "twine>=5.0",
 ]
+mcp-server = [
+    "mcp>=1.0",
+]
 all = [
     "arka-agent[chat,voice,pdf,pdf-tools,whatsapp,charts,drawings,video]",
 ]

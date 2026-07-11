@@ -108,7 +108,80 @@ arka mcp tools signoz
 | `arka mcp tools <server>` | List tools from a server |
 | `arka mcp call <server> <tool> [--args '{}']` | Call a tool |
 | `arka mcp status` | Connection health for all servers |
+| `arka mcp serve` | Start Arka as a local stdio MCP server |
+| `arka mcp install` | Print Cursor/Claude-compatible `mcp.json` snippet |
+| `arka mcp doctor` | Verify the local Arka MCP server starts |
 
 <Note>
   MCP tool calls open a fresh connection per invocation. For high-frequency use, prefer keeping servers local (stdio) or on a low-latency HTTP endpoint.
 </Note>
+
+## Arka as MCP server
+
+Other agents (Cursor, Claude Desktop, OpenClaw, Codex, etc.) can call Arka skills and memory over MCP — the same stdio transport Arka uses as an MCP **client**.
+
+### Quick start
+
+```bash
+# Start the server (stdio — used by MCP clients automatically)
+arka mcp serve
+
+# Print config for Cursor or Claude Desktop
+arka mcp install
+
+# Add arka to ~/.config/arka/mcp.json and print snippet
+arka mcp install --write-config
+
+# Verify initialize + tools/list
+arka mcp doctor
+```
+
+Example **Cursor** `~/.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "arka": {
+      "command": "arka",
+      "args": ["mcp", "serve"]
+    }
+  }
+}
+```
+
+Editable installs without `arka` on PATH:
+
+```json
+{
+  "mcpServers": {
+    "arka": {
+      "command": "python",
+      "args": ["-m", "arka", "mcp", "serve"]
+    }
+  }
+}
+```
+
+Run `arka mcp install` to print the correct command for your machine.
+
+### Exposed tools
+
+| Tool | Description |
+|------|-------------|
+| `arka_ask` | Ask Arka (web, memory, calc, weather, chat) |
+| `arka_remember` | Store a fact, note, or channel turn |
+| `arka_recall` | Recall unified memory by goal |
+| `arka_skill` | Invoke a named Arka skill |
+| `arka_repo_map` | Repository layout and Python symbols |
+| `arka_team_run` | Run an agent team workflow |
+
+### Agent Hub
+
+`agent_hub sync` copies MCP config to the hub and ensures the **arka** self-server entry is present so other launch agents can merge it:
+
+```bash
+arka agent_hub sync
+arka agent_hub adapters    # see which agent configs would gain hub servers
+```
+
+Hub env vars (`ARKA_MCP_CONFIG`, `ARKA_HUB_DIR`) are documented in [Agent Hub](/guides/agent-hub).

@@ -162,6 +162,32 @@ def cmd_parse(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_serve(_args: argparse.Namespace) -> int:
+    from arka.integrations.mcp_server import serve_stdio
+
+    return serve_stdio()
+
+
+def cmd_install(args: argparse.Namespace) -> int:
+    from arka.integrations.mcp_server import ensure_arka_self_in_config, install_config_snippet
+
+    agent = getattr(args, "agent", "cursor") or "cursor"
+    if getattr(args, "write_config", False):
+        added = ensure_arka_self_in_config()
+        print(f"config\t{mcp_config_path()}")
+        print(f"self_mcp\t{'added' if added else 'present'}")
+    print(install_config_snippet(agent=agent), end="")
+    return 0
+
+
+def cmd_doctor(args: argparse.Namespace) -> int:
+    from arka.integrations.mcp_server import doctor
+
+    text, code = doctor(timeout=float(getattr(args, "timeout", 8.0)))
+    print(text)
+    return code
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="arka mcp",
@@ -196,6 +222,23 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("status", help="Connection health for all servers")
 
+    sub.add_parser("serve", help="Start Arka as a stdio MCP server")
+
+    install_p = sub.add_parser("install", help="Print MCP config snippet for Cursor/Claude")
+    install_p.add_argument(
+        "--agent",
+        default="cursor",
+        help="Target client: cursor, claude, or generic (default: cursor)",
+    )
+    install_p.add_argument(
+        "--write-config",
+        action="store_true",
+        help="Also add arka self-MCP to ~/.config/arka/mcp.json",
+    )
+
+    doctor_p = sub.add_parser("doctor", help="Verify Arka MCP server starts and lists tools")
+    doctor_p.add_argument("--timeout", type=float, default=8.0, help="RPC timeout seconds")
+
     parse_p = sub.add_parser("parse", help=argparse.SUPPRESS)
     parse_p.add_argument("text", help="Natural language request")
     return parser
@@ -223,6 +266,9 @@ def main(argv: list[str] | None = None) -> int:
         "tools": cmd_tools,
         "call": cmd_call,
         "status": cmd_status,
+        "serve": cmd_serve,
+        "install": cmd_install,
+        "doctor": cmd_doctor,
         "parse": cmd_parse,
     }
     return handlers[args.command](args)
@@ -241,6 +287,9 @@ Usage:
   arka mcp tools <server>                    List tools from a server
   arka mcp call <server> <tool> [--args '{}']
   arka mcp status                            Connection health
+  arka mcp serve                             Start Arka as stdio MCP server
+  arka mcp install [--agent cursor|claude]   Print client mcp.json snippet
+  arka mcp doctor                            Verify local MCP server
 
 Config:
   ~/.config/arka/mcp.json  (Cursor-compatible mcpServers format)

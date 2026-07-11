@@ -691,11 +691,15 @@ def _save_agents_registry(data: dict[str, Any]) -> Path:
 
 def sync_mcp(*, use_symlink: bool = False) -> dict[str, Any]:
     from arka.integrations.mcp_manager import load_mcp_config, mcp_config_path
+    from arka.integrations.mcp_server import ARKA_MCP_SERVER_KEY, ensure_arka_self_in_config, mcp_server_launch_spec
 
     src = mcp_config_path()
     dst = hub_mcp_path()
     dst.parent.mkdir(parents=True, exist_ok=True)
     result: dict[str, Any] = {"source": str(src), "destination": str(dst), "ok": False}
+
+    if ensure_arka_self_in_config():
+        result["arka_self_mcp"] = "added_to_source"
 
     if not src.is_file():
         payload = load_mcp_config()
@@ -713,6 +717,12 @@ def sync_mcp(*, use_symlink: bool = False) -> dict[str, Any]:
         return result
 
     shutil.copy2(src, dst)
+    hub_data = _load_json_file(dst)
+    hub_servers = hub_data.setdefault("mcpServers", {})
+    if ARKA_MCP_SERVER_KEY not in hub_servers:
+        hub_servers[ARKA_MCP_SERVER_KEY] = mcp_server_launch_spec()
+        dst.write_text(json.dumps(hub_data, indent=2) + "\n", encoding="utf-8")
+        result["arka_self_mcp"] = result.get("arka_self_mcp", "merged_into_hub")
     result["ok"] = True
     result["mode"] = "copy"
     return result
