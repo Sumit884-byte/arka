@@ -90,6 +90,7 @@
         "pages": [
           "guides/voice",
           "guides/goal-agent",
+          "guides/repo-map",
           "guides/openclaw-features",
           "guides/hermes-features",
           "guides/professions"

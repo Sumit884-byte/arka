@@ -99,6 +99,7 @@ SKILL_TASK_MAP: dict[str, str] = {
     "codebase_ingest": "agent",
     "semantic_memory": "agent",
     "github_repo": "agent",
+    "repo_map": "agent",
     # PDF / RAG
     "pdf_ask": "pdf",
     "doc_ask": "pdf",

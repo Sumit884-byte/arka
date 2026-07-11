@@ -1937,7 +1937,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         agent_resume agent_research agent_nudge agent_watch agent_routine agent_fanout \
         agent_code agent_handoff agent_browser transcript_ask media_ask \
         meeting_agent study_agent inbox_agent compare_agent product_reviewer price_check profession pr_check github_repo competitions route_learn \
-        bookmarks repo_health generate_data data_gen data_ask ask_data query_data analyze_data docker_status clipboard_history mcp agent_hub gemini_cli \
+        bookmarks repo_health repo_map generate_data data_gen data_ask ask_data query_data analyze_data docker_status clipboard_history mcp agent_hub gemini_cli \
         arka_ask semantic_memory supermemory speak_research voice_session handoff_notify remind routines predictions stock \
         rag_setup rag_status voice_agent wake_control \
         agent_ask web_answer deep_web_answer web_essay platform_howto calc chat_reset set_location files_preference_help google \
@@ -6787,6 +6787,16 @@ function repo_health --description "Detect and run quick lint/test checks for th
     $py $script $argv
 end
 
+function repo_map --description "Lightweight repo structure map for agent context"
+    set -l py (_arka_python)
+    set -l script (_arka_py_script arka_repo_map.py)
+    if test (count $argv) -eq 0
+        $py $script map
+        return $status
+    end
+    $py $script $argv
+end
+
 function generate_data --description "Generate sample or real-world datasets (CSV, JSON, World Bank, PubMed, URL)"
     set -l py (_arka_python)
     set -l script (_arka_py_script arka_generate_data.py)
@@ -9636,6 +9646,18 @@ function _agent_route_repo_health --description "Build repo_health invocation fr
     echo "$route"
 end
 
+function _agent_is_repo_map_request --description "True if user wants repo layout map (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_repo_map.py) route "$argv[1]" 2>/dev/null | string trim)
+    test -n "$route"
+end
+
+function _agent_route_repo_map --description "Build repo_map invocation from NL (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_repo_map.py) route "$argv[1]" 2>/dev/null | string trim)
+    echo "$route"
+end
+
 function _agent_is_generate_data_request --description "True if user wants sample data generation (internal)"
     set -l py (_arka_python)
     set -l route ($py (_arka_py_script arka_generate_data.py) route "$argv[1]" 2>/dev/null | string trim)
@@ -10186,6 +10208,9 @@ function _agent_is_knowledge_question --description "True if user wants a factua
     if _agent_is_repo_health_request "$argv[1]"
         return 1
     end
+    if _agent_is_repo_map_request "$argv[1]"
+        return 1
+    end
     if _agent_is_generate_data_request "$argv[1]"
         return 1
     end
@@ -10450,6 +10475,9 @@ function _agent_is_general_chat --description "True if plain conversational inpu
     if _agent_is_repo_health_request "$argv[1]"
         return 1
     end
+    if _agent_is_repo_map_request "$argv[1]"
+        return 1
+    end
     if _agent_is_docker_status_request "$argv[1]"
         return 1
     end
@@ -10462,7 +10490,7 @@ function _agent_is_general_chat --description "True if plain conversational inpu
     if _agent_is_mcp_request "$argv[1]"
         return 1
     end
-    if string match -qr '(?i)^(select|best_model|model_select|gemini|gemini_cli|life|bookmarks|mcp|docker|clipboard|competitions|route|teach|generate_data|data_ask|ask_data|query_data|analyze_data|repo_health|post_x|daily_brief)\b' "$clean"
+    if string match -qr '(?i)^(select|best_model|model_select|gemini|gemini_cli|life|bookmarks|mcp|docker|clipboard|competitions|route|teach|generate_data|data_ask|ask_data|query_data|analyze_data|repo_health|repo_map|post_x|daily_brief)\b' "$clean"
         return 1
     end
     if string match -qr '(?i)^(install|play|open|run|create|download|search|list|show|fix|set|take|timer|remind|weather|pdf|ingest|screenshot|spotify|whatsapp|send|loop|agent_|generate_image|generate_video|generate_password|chart|ascii|ascii_art|figlet|graph|plot|predictions|stock|translate|survive_lang|pr_check|cheat|excuse|bored)\b' "$clean"
@@ -10860,6 +10888,10 @@ function _agent_offline_route_cmd --description "Full symbolic NL to skill comma
     end
     if _agent_is_repo_health_request "$cmd"
         echo (_agent_route_repo_health "$cmd")
+        return 0
+    end
+    if _agent_is_repo_map_request "$cmd"
+        echo (_agent_route_repo_map "$cmd")
         return 0
     end
     if _agent_is_generate_data_request "$cmd"
@@ -13597,6 +13629,13 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
             return
         end
     end
+    if _agent_is_repo_map_request "$cmd"
+        set -l rm (_agent_route_repo_map "$cmd")
+        if test -n "$rm"
+            echo "skill|$rm|Repo structure map"
+            return
+        end
+    end
     if _agent_is_data_ask_request "$cmd"
         set -l da (_agent_route_data_ask "$cmd")
         if test -n "$da"
@@ -13740,6 +13779,13 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         set -l rh (_agent_route_repo_health "$cmd")
         if test -n "$rh"
             echo "skill|$rh|Repo health scan and checks"
+            return
+        end
+    end
+    if _agent_is_repo_map_request "$cmd"
+        set -l rm (_agent_route_repo_map "$cmd")
+        if test -n "$rm"
+            echo "skill|$rm|Repo structure map"
             return
         end
     end
@@ -15615,6 +15661,14 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                                 return $status
                             end
                         end
+                        if _agent_is_repo_map_request "$raw"
+                            set -l rm (_agent_route_repo_map "$raw")
+                            if test -n "$rm"
+                                echo (set_color yellow)"💡 [Repo map]"(set_color normal)
+                                _agent_dispatch_one "$rm"
+                                return $status
+                            end
+                        end
                         if _agent_is_data_ask_request "$raw"
                             set -l da (_agent_route_data_ask "$raw")
                             if test -n "$da"
@@ -16781,6 +16835,9 @@ function agent --description "Run commands safely: executes safe commands automa
     else if _agent_is_repo_health_request "$cmd"
         set interpreted (_agent_route_repo_health "$cmd")
         set route_source offline
+    else if _agent_is_repo_map_request "$cmd"
+        set interpreted (_agent_route_repo_map "$cmd")
+        set route_source offline
     else if _agent_is_data_ask_request "$cmd"
         set interpreted (_agent_route_data_ask "$cmd")
         set route_source offline
@@ -16988,6 +17045,9 @@ function agent --description "Run commands safely: executes safe commands automa
         set route_source offline
     else if _agent_is_repo_health_request "$cmd"
         set interpreted (_agent_route_repo_health "$cmd")
+        set route_source offline
+    else if _agent_is_repo_map_request "$cmd"
+        set interpreted (_agent_route_repo_map "$cmd")
         set route_source offline
     else if _agent_is_data_ask_request "$cmd"
         set interpreted (_agent_route_data_ask "$cmd")
