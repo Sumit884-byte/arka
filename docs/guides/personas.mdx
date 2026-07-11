@@ -92,12 +92,20 @@ arka persona edit <name>                # opens YAML in $EDITOR
 
 Uses Arka's built-in LLM stack (same API keys as `web_answer` / `agent_ask`). Configure `GEMINI_API_KEY`, `GROQ_API_KEY`, or another provider in `~/.config/arka/.env`.
 
-## Disclaimer
+## Disclaimer and output format
 
-Every chat session prints the persona's disclaimer, for example:
+Every chat session prints the persona's disclaimer once, then each reply uses a consistent terminal layout:
 
-> Note: Simulated persona for fun — not the real person.
+```text
+  Note: Simulated Elon-inspired persona for fun and education — not the real Elon Musk.
 
-Bundled Elon uses:
+── Elon (simulated) ──
+
+  First-principles answer text wraps near 88 columns and keeps paragraph breaks.
+```
+
+In interactive REPL mode, your prompt is `you> ` and each persona reply is labeled with `{name}> ` before the header block. One-shot commands (`arka talk to elon about …`) use the same formatting.
+
+Bundled Elon uses this disclaimer text:
 
 > Note: Simulated Elon-inspired persona for fun and education — not the real Elon Musk.

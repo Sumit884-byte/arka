@@ -61,7 +61,8 @@ def test_nl_to_argv():
 def test_chat_once_mock_llm(personas_tmp):
     with mock.patch.object(base, "_llm_reply", return_value="Do hard things."):
         out = elon.chat_once("should I learn Rust?", show_disclaimer=True)
-    assert out.startswith("Note:")
+    assert "Note:" in out
+    assert "──" in out
     assert "Do hard things." in out
 
 

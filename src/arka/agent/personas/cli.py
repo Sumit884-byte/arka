@@ -173,12 +173,13 @@ def cmd_chat(name: str, question: str | None = None) -> int:
     if not question or question.strip().lower() == "chat":
         return chat_repl(persona)
 
-    print(persona.formatted_disclaimer, end="")
     answer = chat_once(persona, question)
     if not answer:
         print("Could not get a reply (check LLM API keys)", file=sys.stderr)
         return 1
-    print(answer)
+    from arka.agent.personas.format import print_chat
+
+    print_chat(persona, answer, show_disclaimer=True)
     return 0
 
 

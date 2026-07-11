@@ -91,8 +91,47 @@ def test_chat_once_mock(personas_tmp):
     persona = io.resolve_persona("elon")
     with mock.patch.object(base, "_llm_reply", return_value="First principles."):
         out = base.chat_once(persona, "rockets?", show_disclaimer=True)
-    assert out.startswith("Note:")
+    assert "Note:" in out
+    assert "── Elon (simulated) ──" in out
     assert "First principles." in out
+
+
+def test_format_helpers(personas_tmp):
+    from arka.agent.personas import format as fmt
+
+    io.seed_persona("elon")
+    persona = io.resolve_persona("elon")
+
+    assert fmt.persona_header(persona) == "── Elon (simulated) ──"
+    assert fmt.repl_prompt(persona) == "elon> "
+
+    disclaimer = fmt.format_disclaimer(persona)
+    assert "Note:" in disclaimer
+    assert "not the real Elon Musk" in disclaimer
+
+    body = fmt.format_body("**Manufacturing** at scale needs first-principles thinking.")
+    assert "Manufacturing" in body
+    assert "**" not in body
+
+    reply = fmt.format_reply(persona, "Build the machine that builds the machine.")
+    assert reply.startswith("── Elon (simulated) ──")
+    assert "Build the machine" in reply
+
+    full = fmt.format_chat(persona, "Iterate fast.", show_disclaimer=True)
+    assert "Note:" in full
+    assert "── Elon (simulated) ──" in full
+    assert "Iterate fast." in full
+
+
+def test_cmd_chat_one_shot_format(personas_tmp, capsys):
+    io.seed_persona("elon")
+    with mock.patch.object(base, "_llm_reply", return_value="First principles win."):
+        code = cli.cmd_chat("elon", "manufacturing at scale")
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "Note:" in out
+    assert "── Elon (simulated) ──" in out
+    assert "First principles win." in out
 
 
 def test_cmd_create_from_template(personas_tmp, monkeypatch):

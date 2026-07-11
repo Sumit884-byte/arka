@@ -6,6 +6,7 @@ import re
 import shlex
 import sys
 
+from arka.agent.personas.format import format_chat, print_repl_banner, print_repl_reply
 from arka.agent.personas.io import list_personas, resolve_persona
 from arka.agent.personas.schema import Persona, slugify
 
@@ -283,7 +284,7 @@ def chat_once(
     user = _format_user(question, history)
     reply = _llm_reply(p.system_prompt, user, skill=f"persona:{p.name}")
     if show_disclaimer and reply:
-        return p.formatted_disclaimer + reply
+        return format_chat(p, reply, show_disclaimer=True)
     return reply
 
 
@@ -294,11 +295,11 @@ def chat_repl(persona: Persona | str, *, show_disclaimer: bool = True) -> int:
         p = persona
 
     if show_disclaimer:
-        print(p.formatted_disclaimer, end="")
-    label = p.display_name or p.name
-    print(f"{label} persona chat (type 'quit' or Ctrl-D to exit)\n")
+        print_repl_banner(p)
+    else:
+        label = p.display_name or p.name
+        print(f"{label} persona chat (type 'quit' or Ctrl-D to exit)\n")
     history: list[tuple[str, str]] = []
-    prompt_label = p.name
 
     while True:
         try:
@@ -312,6 +313,8 @@ def chat_repl(persona: Persona | str, *, show_disclaimer: bool = True) -> int:
         if not answer:
             print("Could not get a reply (check LLM API keys)", file=sys.stderr)
             continue
-        print(f"\n{prompt_label}> {answer}\n")
+        print()
+        print_repl_reply(p, answer)
+        print()
         history.append((line, answer))
     return 0
