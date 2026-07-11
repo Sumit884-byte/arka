@@ -184,10 +184,17 @@ def cmd_chat(name: str, question: str | None = None) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     raw = list(argv if argv is not None else sys.argv[1:])
+    while raw and raw[0] == "--":
+        raw.pop(0)
 
     if raw and raw[0] in ("-h", "--help", "help"):
         _print_help()
         return 0
+
+    if raw and raw[0] == "chat" and len(raw) >= 2:
+        name = raw[1]
+        question = " ".join(raw[2:]).strip()
+        return cmd_chat(name, question or None)
 
     parser = argparse.ArgumentParser(prog="arka persona", description="Simulated persona chat")
     sub = parser.add_subparsers(dest="cmd")

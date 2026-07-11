@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import inspect
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -144,6 +145,12 @@ def run_legacy_module(qualname: str) -> int:
     mod = importlib.import_module(qualname)
     main = getattr(mod, "main", None)
     if callable(main):
+        try:
+            params = list(inspect.signature(main).parameters)
+        except (TypeError, ValueError):
+            params = []
+        if params and params[0] in ("argv", "args"):
+            return int(main(sys.argv[1:]) or 0)
         return int(main() or 0)
     import runpy
 

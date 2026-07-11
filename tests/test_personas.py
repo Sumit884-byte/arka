@@ -116,3 +116,45 @@ def test_routing_symbolic():
 
     assert route_elon("talk to elon about AI") == "persona chat elon AI"
     assert route_elon("create persona for marie curie") == "persona create marie-curie"
+
+def test_run_legacy_module_forwards_argv_to_personalize_parse(capsys):
+    import sys
+
+    from arka._bootstrap import run_legacy_module
+
+    old = sys.argv
+    sys.argv = ["arka_personalize.py", "parse", "talk to elon about manufacturing at scale"]
+    try:
+        assert run_legacy_module("arka.core.personalize") == 0
+        assert capsys.readouterr().out.strip() == ""
+    finally:
+        sys.argv = old
+
+
+def test_run_legacy_module_personalize_parse_recommend(capsys):
+    import sys
+
+    from arka._bootstrap import run_legacy_module
+
+    old = sys.argv
+    sys.argv = ["arka_personalize.py", "parse", "recommend skills for me"]
+    try:
+        assert run_legacy_module("arka.core.personalize") == 0
+        assert capsys.readouterr().out.strip() == "recommend"
+    finally:
+        sys.argv = old
+
+def test_persona_cli_chat_multi_word_question():
+    from arka.agent.personas import cli
+
+    with __import__("unittest").mock.patch.object(cli, "cmd_chat", return_value=0) as chat:
+        assert cli.main(["chat", "elon", "manufacturing", "at", "scale"]) == 0
+    chat.assert_called_once_with("elon", "manufacturing at scale")
+
+def test_persona_cli_strips_fish_double_dash():
+    from arka.agent.personas import cli
+
+    with __import__("unittest").mock.patch.object(cli, "cmd_chat", return_value=0) as chat:
+        assert cli.main(["--", "chat", "elon", "manufacturing", "at", "scale"]) == 0
+    chat.assert_called_once_with("elon", "manufacturing at scale")
+

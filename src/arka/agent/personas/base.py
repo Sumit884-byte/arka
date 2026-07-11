@@ -167,7 +167,7 @@ def route_command(text: str) -> str:
                     prompt = " ".join(parts[1:])
                     prompt = re.sub(r"(?i)^about\s+", "", prompt).strip()
                     if prompt:
-                        return f"persona chat {name} {shlex.quote(prompt)}"
+                        return f"persona chat {name} {prompt}"
                     return f"persona chat {name}"
                 return f"persona {sub} {parts[0]}"
         if sub == "chat" and rest:
@@ -190,7 +190,7 @@ def route_command(text: str) -> str:
         prompt = sanitize_prompt(clean, persona_name="elon")
         if not prompt or prompt.lower() == "chat":
             return "persona chat elon"
-        return f"persona chat elon {shlex.quote(prompt)}"
+        return f"persona chat elon {prompt}"
 
     talk_m = re.match(
         r"(?i)^(?:talk|chat)\s+(?:to|with)\s+(.+?)(?:\s+about\s+(.+))?$",
@@ -206,7 +206,7 @@ def route_command(text: str) -> str:
         prompt = about or extra
         if not prompt:
             return f"persona chat {name}"
-        return f"persona chat {name} {shlex.quote(prompt)}"
+        return f"persona chat {name} {prompt}"
 
     persona_m = re.match(
         r"(?i)^(?:arka\s+)?persona\s+(?:chat\s+)?([a-z0-9_-]+)(?:\s+about\s+|\s+)(.*)$",
@@ -218,7 +218,7 @@ def route_command(text: str) -> str:
         prompt = sanitize_prompt(prompt, persona_name=name) if prompt else ""
         if not prompt or prompt.lower() == "chat":
             return f"persona chat {name}"
-        return f"persona chat {name} {shlex.quote(prompt)}"
+        return f"persona chat {name} {prompt}"
 
     return ""
 
