@@ -1,0 +1,77 @@
+---
+title: "Arka 故障排查：LLM、路由、语音与 RAG 修复"
+description: "诊断并修复常见的 Arka 问题，涵盖 API 密钥错误、LLM 故障切换、技能路由、PDF RAG、语音唤醒词以及第三方服务集成。"
+keywords: ["troubleshooting", "errors", "fixes", "debug"]
+---
+
+## LLM 与 API 密钥
+
+| 问题 | 修复方式 |
+| ----- | --- |
+| `Could not generate an answer` / `401` | 检查 API 密钥；`arka ai-models`；设置 `AI_PREFERRED_PROVIDER=groq`；`python3 arka_llm.py reset-exhaustion` |
+| Gemini 429 / 响应缓慢 | 编排器会通过 `LLM_AUTO_FALLBACK=1` 自动切换；通过 `AI_PREFERRED_PROVIDER=groq` 优先使用 Groq |
+| 选到了错误模型 | `arka ai-skill-model web_answer groq/llama-3.3-70b-versatile` |
+
+## 路由
+
+| 问题 | 修复方式 |
+| ----- | --- |
+| 对随机文本执行 `uv pip install am` | 对于自然语言请使用 `arka`，不要用原始 shell |
+| 插件未被路由 | `arka skills refresh`；检查 `skill.json` 的 triggers；`arka route "your trigger phrase"` |
+| 配置更改未生效 | `arka reload` 或打开新 shell；对唤醒监听使用 `arka reload --listen` |
+
+## PDF RAG
+
+| 问题 | 修复方式 |
+| ----- | --- |
+| PDF 提问失败 | `arka pdf status`；确保 Qdrant Docker 已启动 |
+
+## 网络搜索
+
+| 问题 | 修复方式 |
+| ----- | --- |
+| 深度搜索为空 | `pip install ddgs trafilatura beautifulsoup4` |
+| 地图下载超时 | 稍后重试 `map_download <city>`（Overpass API） |
+
+## 语音
+
+| 问题 | 修复方式 |
+| ----- | --- |
+| 唤醒词漏检 / STT 错误 | 设置 `ASSEMBLYAI_API_KEY`；或 `SARVAM_API_KEY` + `SARVAM_STT_MODE=translit` |
+| 天城文导致路由异常 | 通过 `arka_stt_map.py` 修复；试试 `LISTEN_STT_LANG=en-IN` |
+| 监听器崩溃 | `python3 arka_wake.py --check` 然后 `arka doctor` |
+| 麦克风错误 | Linux：`pactl list sources short` → 在 `.env` 中设置 `MIC_DEVICE` |
+
+## 图表
+
+| 问题 | 修复方式 |
+| ----- | --- |
+| 图表默认值未生效 | 编辑 `~/.config/arka/charts.yaml`；为自定义路径设置 `CHARTS_CONFIG` |
+| 抓取型图表 NL 未被路由 | 使用内联 label:value 键值对；外部抓取接线正在开发中 |
+
+## 可观测性
+
+| 问题 | 修复方式 |
+| ----- | --- |
+| SigNoz 追踪未显示 | 设置 `OTEL_TRACES_ENABLED=1`（不仅仅是 `SIGNOZ_ENDPOINT`）；`python3 bin/arka_signoz.py status` |
+
+## 记忆
+
+| 问题 | 修复方式 |
+| ----- | --- |
+| Supermemory 未被使用 | `supermemory status`；设置 `SUPERMEMORY_API_KEY`；`MEMORY=auto` |
+
+## 日志
+
+```
+~/.cache/arka/*.log
+~/.cache/fish-agent/*.log    # 旧版 fish 安装
+```
+
+## 相关内容
+
+<CardGroup cols={2}>
+  <Card title="配置" icon="settings" href="/cn/reference/configuration">环境变量与默认值</Card>
+  <Card title="快速开始" icon="rocket" href="/cn/quickstart">全新安装检查清单</Card>
+  <Card title="CLI 参考" icon="terminal" href="/cn/guides/cli">`arka doctor` 与诊断</Card>
+</CardGroup>

@@ -1,0 +1,114 @@
+---
+title: "Kaggle 数据集"
+description: "使用 Kaggle API 从终端下载和搜索 Kaggle 数据集。"
+keywords: ["kaggle", "datasets", "machine learning", "data"]
+---
+
+Arka 包含一个 **kaggle** 技能，用于下载和搜索 Kaggle 数据集。它通过 `kaggle` CLI（优先）或 Python `kaggle` 包使用官方 Kaggle API。
+
+## 快速示例
+
+```bash
+kaggle status
+kaggle search titanic
+kaggle download heptapod/titanic
+kaggle download heptapod/titanic --unzip -o ~/Downloads
+```
+
+也支持自然语言：
+
+```bash
+arka "download kaggle dataset heptapod/titanic"
+arka "kaggle search housing prices"
+arka "kaggle status"
+```
+
+或通过 CLI 子命令：
+
+```bash
+arka kaggle download heptapod/titanic --unzip
+```
+
+## 命令
+
+| 命令 | 描述 |
+| ------- | ----------- |
+| `kaggle status` | 检查是否已配置 Kaggle 凭据 |
+| `kaggle search <keywords>` | 按关键字搜索数据集 |
+| `kaggle download <owner/dataset>` | 下载数据集到 Downloads 文件夹 |
+| `kaggle download <owner/dataset> -o DIR` | 下载到自定义目录 |
+| `kaggle download <owner/dataset> --unzip` | 下载并解压归档文件 |
+| `kaggle open <owner/dataset>` | 在浏览器中打开数据集页面（无需 API 密钥） |
+| `kaggle download <owner/dataset> --open` | 缺少凭据时在浏览器中打开 |
+
+## 凭据
+
+Kaggle 需要 API 令牌。在 [kaggle.com/settings](https://www.kaggle.com/settings) 创建（Account → API → Create New Token）。
+
+**选项 A —— 环境变量**（推荐用于 Arka）：
+
+```bash
+KAGGLE_USERNAME=your_username
+KAGGLE_KEY=your_api_key
+```
+
+将其添加到 `~/.config/arka/.env`。
+
+**选项 B —— `kaggle.json`**（标准 Kaggle 布局）：
+
+```bash
+mkdir -p ~/.kaggle
+# 将下载的令牌解压到 ~/.kaggle/kaggle.json
+chmod 600 ~/.kaggle/kaggle.json
+```
+
+下载前运行 `kaggle status` 以验证凭据。
+
+## 无 API 密钥
+
+官方 Kaggle API 需要凭据。如果您尚未拥有 API 令牌，仍可以在浏览器中打开数据集页面，并从 Kaggle 网站手动下载文件。
+
+```bash
+kaggle open heptapod/titanic
+kaggle open https://www.kaggle.com/datasets/heptapod/titanic
+```
+
+自然语言：
+
+```bash
+arka "open kaggle dataset heptapod/titanic"
+arka "kaggle open heptapod/titanic"
+```
+
+您也可以在下载时传入 `--open`（或 `--browser`），以便在缺少凭据时打开页面而不是失败：
+
+```bash
+kaggle download heptapod/titanic --open
+```
+
+如果没有凭据就运行 `kaggle download` 或 `kaggle search`，Arka 会打印一条简短消息，建议使用 `kaggle open owner/dataset` 进行手动下载。
+
+## API 方式
+
+如果 `kaggle` CLI 位于 `PATH` 上，此技能会优先使用它：
+
+```bash
+kaggle datasets download -d owner/dataset -p /output/dir
+kaggle datasets list -s "query"
+```
+
+如果未安装 CLI，则回退到 Python `kaggle` 包：
+
+```bash
+pip install kaggle
+```
+
+## 相关技能
+
+| 技能 | 示例 |
+| ----- | ------- |
+| `generate_data` | `generate 100 users as csv` |
+| `data_ask` | `ask data in reports folder` |
+| `competitions` | `search kaggle competitions` |
+
+另请参阅：[生成数据](/cn/guides/generate-data)

@@ -1,0 +1,122 @@
+---
+title: "使用 pytest 套件测试 Arka"
+description: "在本地和 CI 中运行 Arka 的 pytest 套件，了解各测试覆盖领域，并在贡献技能或插件时添加新测试。"
+keywords: ["testing", "pytest", "ci", "development"]
+---
+
+Arka 使用 **pytest** 进行自动化测试。套件涵盖路由、LLM 故障转移、视觉、集成、遥测以及特定于技能的行为。
+
+## 运行测试
+
+从开发检出：
+
+```bash
+cd arka
+pip install -e ".[dev]"
+pytest tests/
+```
+
+运行单个文件或测试：
+
+```bash
+pytest tests/test_llm_fallback.py
+pytest tests/test_router_show_me.py -v
+pytest tests/test_currency_convert.py::test_specific_case
+```
+
+安装 dev 附加组件（包括 `pytest` 和 `ruff`）：
+
+```bash
+pip install -e ".[dev]"
+```
+
+## 测试套件概览
+
+`tests/` 目录包含 **24 个测试模块**（约 270 个测试）。它们按领域组织：
+
+### 路由和自然语言解析
+
+| 模块 | 测试内容 |
+| ------ | ------------- |
+| `test_router_show_me.py` | “Show me” 查询不应路由到 `describe_image` |
+| `test_router_github_repo.py` | GitHub 仓库技能路由 |
+| `test_router_find_files_by_size.py` | 文件大小搜索路由 |
+
+### LLM 和提供商
+
+| 模块 | 测试内容 |
+| ------ | ------------- |
+| `test_llm_fallback.py` | 提供商链解析、故障转移、每个技能的模型 |
+| `test_vllm_cloud.py` | vLLM 云提供商集成 |
+| `test_vllm_cross_platform.py` | vLLM 在 macOS/Linux/Windows 上 |
+| `test_word_limit.py` | 输出字数限制强制执行 |
+
+### 视觉和媒体
+
+| 模块 | 测试内容 |
+| ------ | ------------- |
+| `test_describe_image_resize.py` | 视觉 API 调用前的图像缩放 |
+| `test_describe_image_ocr_output.py` | OCR 输出格式 |
+| `test_describe_screen.py` | 屏幕描述技能 |
+| `test_compose_video_captions.py` | 视频合成字幕 |
+| `test_compose_slides.py` | 演示幻灯片生成和格式转换 |
+| `test_chart_fetch.py` | 图表外部数据获取 |
+
+### 集成
+
+| 模块 | 测试内容 |
+| ------ | ------------- |
+| `test_currency_convert.py` | 货币转换技能 |
+| `test_price_check.py` | 价格检查技能 |
+| `test_github_repo.py` | GitHub 仓库统计 |
+| `test_gmail_draft.py` | Gmail 草稿创建 |
+| `test_install_app_platform.py` | 跨平台应用安装 |
+| `test_product_reviewer.py` | 产品评论技能 |
+| `test_memory_search_fallback.py` | 记忆搜索回退链 |
+| `test_openclaw_features.py` | OpenClaw 兼容性特性 |
+| `test_hermes_features.py` | Hermes 启发的会话和子 Agent |
+
+### 可观测性
+
+| 模块 | 测试内容 |
+| ------ | ------------- |
+| `test_telemetry.py` | OpenTelemetry 追踪设置 |
+| `test_signoz_setup.py` | SigNoz 配置 |
+| `test_supermemory_obs.py` | Supermemory 可观测性钩子 |
+| `test_mcp_obs.py` | MCP 客户端可观测性 |
+
+## 编写新测试
+
+将测试放在 `tests/` 中，使用 `test_` 前缀。遵循现有模式：
+
+```python
+import pytest
+
+def test_my_skill_routes_correctly():
+    from arka.router import route
+    result = route("convert 100 USD to INR")
+    assert "currency" in result.lower()
+```
+
+对于路由测试，直接使用 `arka.routing.symbolic` 辅助函数或 `arka.router.route()`。当测试不应访问网络时，模拟外部 API（LLM、网络搜索）。
+
+## 代码检查
+
+```bash
+ruff check src/ tests/
+```
+
+`ruff` 包含在 `[dev]` 附加组件中。
+
+## 本地验证脚本
+
+除了 pytest 之外，仓库还包含辅助脚本：
+
+```bash
+python3 scripts/verify_features.py   # 实时特性冒烟测试
+python3 scripts/sync_bundled.py      # 在 wheel 构建前同步 bundled/
+```
+
+<Note>
+  某些测试需要可选附加组件（`[chat]`、`[charts]`、`[drawings]`）或 API 密钥。需要网络访问的测试通常会被模拟 —— 如果测试在导入时失败，请先安装匹配的附加组件。
+</Note>

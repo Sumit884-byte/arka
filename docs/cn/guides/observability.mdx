@@ -1,0 +1,46 @@
+---
+title: "OpenTelemetry 追踪和 SigNoz 可观测性"
+description: "启用 Arka 的 OpenTelemetry 追踪、指标和日志，并将其发送到 SigNoz，以监控 LLM 提供商调用、故障转移事件、延迟和令牌用量。"
+keywords: ["observability", "signoz", "opentelemetry", "tracing"]
+---
+
+启用后可将追踪、指标和日志导出到 [SigNoz](https://signoz.io)。**默认关闭。**
+
+## 快速开始
+
+```bash
+python3 bin/arka_signoz.py status
+python3 bin/arka_signoz.py setup -y
+python3 bin/arka_signoz.py demo
+python3 arka_llm.py trace-status
+```
+
+## 配置
+
+```env
+OTEL_TRACES_ENABLED=1
+SIGNOZ_ENDPOINT=http://localhost:4318
+SIGNOZ_UI_URL=http://localhost:8080
+OTEL_SERVICE_NAME=arka
+# SIGNOZ_API_KEY=               # 用于告警 / MCP
+```
+
+## 追踪内容
+
+- LLM 提供商调用（模型、延迟、令牌、故障转移事件）
+- 技能调度和路由决策
+- MCP 客户端调用
+- Supermemory 操作
+
+## SigNoz MCP + Cursor
+
+```bash
+python3 bin/arka_signoz.py mcp tools
+python3 bin/arka_signoz.py cursor-setup
+```
+
+黑客松资产（仪表板、告警、演示）位于仓库的 `hackathon/signoz/` 中。
+
+<Note>
+  必须同时设置 `OTEL_TRACES_ENABLED=1` 和 `SIGNOZ_ENDPOINT`，追踪才会导出。
+</Note>

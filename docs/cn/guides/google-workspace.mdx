@@ -1,0 +1,52 @@
+---
+title: "通过 OAuth 连接 Gmail 和 Google 日历"
+description: "完成一次性 OAuth 登录后，即可从 Arka 中读取 Gmail 和 Google 日历，包含未读摘要、每日摘要和周视图排程等命令。"
+keywords: ["google", "gmail", "calendar", "oauth"]
+---
+
+完成一次性的浏览器 OAuth 登录后，即可读取 Gmail 和 Google 日历。
+
+## 安装设置
+
+```bash
+arka google setup          # print Cloud Console steps
+# Add GOOGLE_OAUTH_CLIENT_ID + GOOGLE_OAUTH_CLIENT_SECRET to .env
+arka reload
+arka google login          # opens browser; stores token locally
+arka google status
+```
+
+在 Google Cloud Console 中启用 **Gmail API** 和 **Google Calendar API**。默认重定向 URI：`http://127.0.0.1:8766/oauth2callback`。
+
+## 命令
+
+| 命令 | 示例 |
+| ------- | ------- |
+| `google gmail --unread` | 列出未读邮件 |
+| `google gmail --summarize --unread` | 未读邮件的 AI 摘要 |
+| `google gmail --today` | 今日邮件 |
+| `google gmail --days 3` | 最近 3 天 |
+| `google calendar --today` | 今日事件 |
+| `google calendar --week` | 本周事件 |
+
+## 自然语言
+
+```bash
+arka give unread emails
+arka summarize unread emails
+arka summarize emails within 3 days
+arka what's on my calendar today
+```
+
+未读数量在表头中使用 Gmail 的 `resultSizeEstimate`（例如 `10 unread emails`）。
+
+## 配置
+
+```env
+GOOGLE_OAUTH_CLIENT_ID=....apps.googleusercontent.com
+GOOGLE_OAUTH_CLIENT_SECRET=...
+# GMAIL_MAX=500
+# GMAIL_SUMMARIZE_MAX=40
+```
+
+在 macOS 上，当 Google 不可用时，日历自然语言可以合并 **macOS Calendar.app** 的事件。

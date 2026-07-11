@@ -1,0 +1,58 @@
+---
+title: "图像描述、OCR 和屏幕截图"
+description: "使用 Arka 的视觉技能，通过 Gemini、Ollama llava 或 vLLM 后端描述照片、通过 OCR 提取文本、分析蓝图并捕获屏幕。"
+keywords: ["vision", "describe_image", "drawing_ask", "ocr", "screen"]
+---
+
+Arka 支持视觉任务：照片描述、蓝图分析和屏幕捕获。
+
+## 描述图像
+
+双层分析：OCR 提取精确文本；视觉描述布局和颜色。
+
+```bash
+arka describe photo.jpg
+describe_image ~/Downloads/chart.png
+```
+
+后端（自动选择）：Gemini、Ollama (llava)、vLLM。
+
+```env
+DESCRIBE_IMAGE_BACKEND=auto   # auto | gemini | ollama | vllm
+GEMINI_API_KEY=...
+# DESCRIBE_IMAGE_TWO_LAYER=1
+# DESCRIBE_IMAGE_OCR=1
+```
+
+```bash
+pip install "arka-agent[vision]"
+brew install tesseract    # OCR 层
+```
+
+## 图纸和蓝图
+
+使用 Gemini 视觉分析平面图、立面图、MEP 图纸和扫描的合同：
+
+```bash
+drawing_ask plan.pdf "extract door schedule and room dimensions"
+drawing_ask --pages 1-3 specs.pdf "summarize payment terms"
+```
+
+```bash
+pip install "arka-agent[drawings]"
+```
+
+```env
+# DRAWING_MODEL=gemini-2.5-flash
+# DRAWING_MAX_PAGES=8
+```
+
+## 屏幕捕获
+
+10 秒倒计时、全屏捕获、视觉描述：
+
+```bash
+describe_screen
+arka describe my screen
+describe_screen what app is in focus
+```

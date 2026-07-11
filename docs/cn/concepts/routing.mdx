@@ -1,0 +1,103 @@
+---
+title: "符号与 LLM 路由管道"
+description: "Arka 的分层管道如何在回退到 LLM 之前，使用符号化离线匹配将自然语言路由到 120+ 个技能模式。"
+keywords: ["routing", "symbolic", "offline", "skills"]
+---
+
+Arka 将每个请求都通过一个分层管道进行路由。大多数请求根本不会触及 LLM —— `config.fish` 中的符号规则可离线匹配 120+ 个技能模式。
+
+## 路由管道
+
+<Steps>
+  <Step title="直接技能名">
+    如果第一个 token 匹配一个已注册的技能，Arka 会立即运行它。零 token。
+
+    ```bash
+    arka weather
+    arka calc 2+2
+    demo_echo hello    # 通过名称调用的第三方插件
+    ```
+  </Step>
+  <Step title="插件触发器">
+    Arka 接下来检查 `~/.config/arka/skills/` 中的第三方技能。每个插件在 `skill.json` 中声明 `triggers`。
+  </Step>
+  <Step title="离线符号规则">
+    默认路径。`config.fish` 中的 `_agent_guess_route` 和 `_agent_offline_route_cmd` 使用正则匹配 120+ 个技能的模式。不调用 LLM。触发时你会看到 `💡 [Offline routing]` 和 `→ Interpreted: …`。
+  </Step>
+  <Step title="LLM 路由">
+    当离线规则未匹配时，Arka 会将紧凑的技能目录以 `task=route` 发送给 LLM。模型挑选最佳技能。
+  </Step>
+  <Step title="纠错层">
+    一个确定性的纠错层可修正较弱的 LLM 选择，无需第二次 LLM 调用（例如：将事实性问题的 `search_web` → 修正为 `web_answer`）。
+  </Step>
+  <Step title="分发">
+    `dispatch.py` 执行所选的技能脚本。
+  </Step>
+</Steps>
+
+## 各层的 token 消耗
+
+| 层级 | LLM tokens |
+| ----- | ---------- |
+| 直接技能名 | **0** |
+| 符号路由 | **0** |
+| 插件触发器 | **0** |
+| LLM 路由（回退） | **少量**（仅紧凑目录） |
+
+默认模式为 `ROUTE_MODE=symbolic` —— 先离线规则，仅在需要时调用 AI。
+
+## 模糊路由
+
+当两条或更多离线模式都可能适用时（在 play/media 中较常见），Arka 会检测到冲突并让 LLM 决定：
+
+```
+💡 [AI routing — ambiguous play/media request]
+→ Interpreted: play_movie bohemian rhapsody
+```
+
+明确的单向请求仍然使用离线路由，零 token 消耗。
+
+## 路由模式
+
+| 模式 | 行为 |
+| ---- | -------- |
+| `symbolic` | 先离线规则，必要时调用 LLM（默认） |
+| `ai` | 优先使用 LLM 路由 |
+| `symbolic_only` | 永远不调用 LLM 进行路由 |
+| `ai_only` | 始终使用 LLM 进行路由 |
+
+```env
+ROUTE_MODE=symbolic
+```
+
+## 检查路由
+
+在不执行的情况下预览 Arka 会选择哪个技能：
+
+```bash
+arka route "summarize my unread emails"
+agent_route "play bohemian rhapsody on spotify"
+agent_trace          # 最近一次路由决策
+agent_why            # 解释技能选择原因
+arka help            # 完整技能列表
+arka tell your skills   # 适合语音的摘要 + 当前使用的模型
+```
+
+## Python 回退（无 fish）
+
+未安装 fish 时，Arka 使用 `src/arka/routing/symbolic.py` 提供相同的离线优先行为。便携式 CLI 仍支持对话、网络答案、密码、计算、天气、体育和插件。
+
+安装 [fish shell](https://fishshell.com) 以解锁完整的 70+ 技能路由。
+
+## 技能路由器 vs 编排器
+
+**技能路由器**决定*哪个技能运行*。**LLM 编排器**（参见 [LLM 编排](/cn/concepts/llm)）为技能*内部*的补全 —— 摘要、对话、研究、PDF、预测 —— 提供带故障切换的支持。它们是两个独立的系统。
+
+## 相关内容
+
+<CardGroup cols={2}>
+  <Card title="技能目录" icon="puzzle-piece" href="/cn/guides/skills">所有可路由的技能</Card>
+  <Card title="CLI 参考" icon="terminal" href="/cn/guides/cli">`arka route` 与 `agent_route`</Card>
+  <Card title="插件" icon="plug" href="/cn/guides/plugins">第三方触发器</Card>
+  <Card title="别名" icon="list" href="/cn/reference/aliases">命令与技能同义词</Card>
+</CardGroup>

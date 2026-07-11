@@ -1,0 +1,71 @@
+---
+title: "聊天、网络搜索和事实问答技能"
+description: "通过 Arka 的聊天引擎回答问题，支持网络搜索、深度爬取 RAG、数学、天气、附近地点查询以及位置感知的会话记忆。"
+keywords: ["chat", "web_answer", "search", "calc", "weather"]
+---
+
+Arka 的聊天引擎可处理事实性问题、深度网络研究、数学、天气以及位置感知搜索。
+
+## 核心技能
+
+| 技能 | 示例 |
+| ----- | ------- |
+| `web_answer` | `arka ask who won IPL 2025` |
+| `deep_web_answer` | `deep_web_answer latest AI regulation news` |
+| `calc` | `arka calc integrate sin(x) dx` |
+| `hyperlocal_weather` | `arka weather near me` |
+| `set_location` | `set_location Mumbai` |
+| `nearby_places` | `nearby_places Kolkata` |
+| `error_helper` | `error_helper <traceback>` |
+| `chat_reset` | 清除会话 + 位置上下文 |
+
+## 强制深度搜索
+
+使用 `/` 前缀强制执行深度网络搜索：
+
+```bash
+arka "/who won IPL 2025"
+```
+
+## 深度搜索队列
+
+在后台运行深度搜索：
+
+```bash
+deep_queue add "who won the last IPL final"
+deep_queue list
+deep_queue run
+deep_queue results
+```
+
+## 会话记忆
+
+回答会被标记为 `[FROM SEARCH]` 或 `[FROM MEMORY]`（在 TTS 中会被剥离）。聊天会话会在同一会话内跨后续问题保留上下文。
+
+```bash
+arka facing hair loss          # 路由到带会话的 web_answer
+chat_reset                     # 清除上下文
+```
+
+## 位置定位
+
+设置位置以获取超本地化结果：
+
+```bash
+set_location Mumbai
+hyperlocal_weather
+nearby_places
+map_download Kolkata           # 将城市地图缓存到 ~/.cache/arka/maps/
+```
+
+## 安装聊天附加组件
+
+```bash
+pip install "arka-agent[chat]"
+```
+
+依赖：Agno、ddgs、trafilatura、sympy、geopy。
+
+<Note>
+  网络查询在搜索前会经过安全检查。参见 [安全](/cn/concepts/security)。
+</Note>

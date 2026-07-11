@@ -1,0 +1,32 @@
+---
+title: "剪贴板历史"
+description: "从终端保存、列出和恢复最近的剪贴板条目。"
+keywords: ["clipboard", "history", "paste", "copy"]
+---
+
+保留剪贴板片段的滚动历史 —— 当你在终端和应用之间复制粘贴时非常有用。
+
+## 自然语言
+
+```bash
+arka save clipboard to history
+arka show clipboard history
+arka paste clipboard entry 2
+arka clear clipboard history
+```
+
+## CLI 命令
+
+| 命令 | 描述 |
+| ------- | ----------- |
+| `clipboard_history save` | 将当前剪贴板保存到历史 |
+| `clipboard_history list` | 列出最近条目（最新在前） |
+| `clipboard_history paste <index>` | 将条目恢复到系统剪贴板 |
+| `clipboard_history paste <index> --stdout` | 将条目打印到 stdout |
+| `clipboard_history clear` | 清空历史 |
+
+使用平台剪贴板工具（macOS 上的 `pbcopy`/`pbpaste`，Linux 上的 `xclip` 或 `wl-copy`）。在你的 Arka 配置目录中最多存储 50 个条目。
+
+<Note>
+  基础的 `clipboard` fish 技能仍会复制或显示当前剪贴板。当你需要持久化调用时使用 `clipboard_history`。
+</Note>

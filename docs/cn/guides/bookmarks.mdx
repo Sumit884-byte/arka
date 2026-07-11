@@ -1,0 +1,29 @@
+---
+title: "书签管理器"
+description: "从终端保存、搜索和调用带标签和备注的 URL。"
+keywords: ["bookmarks", "urls", "links", "saved"]
+---
+
+保存你关心的链接并稍后调用 —— 无需浏览器同步。
+
+## 自然语言
+
+```bash
+arka save bookmark https://docs.python.org --tags docs
+arka list my bookmarks
+arka search bookmarks for python
+arka open bookmark 1
+```
+
+## CLI 命令
+
+| 命令 | 描述 |
+| ------- | ----------- |
+| `bookmarks save <url> [--title T] [--tags a,b] [--note N]` | 保存 URL |
+| `bookmarks list [--tag TAG]` | 列出已保存的书签 |
+| `bookmarks search <keywords>` | 搜索标题、URL、标签、备注 |
+| `bookmarks get <index>` | 按列表索引打印 URL |
+| `bookmarks open <index>` | 在默认浏览器中打开 |
+| `bookmarks delete <index>` | 删除书签 |
+
+书签存储在你的 Arka 配置目录（`bookmarks.json`）中。

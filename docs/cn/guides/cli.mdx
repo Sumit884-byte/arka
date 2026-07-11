@@ -1,0 +1,162 @@
+---
+title: "Arka CLI 命令与参数参考"
+description: "arka 命令行界面参考，包括主要命令、agent 别名、子命令，以及用于终端操作的参数。"
+keywords: ["cli", "commands", "terminal"]
+---
+
+`arka` 命令是主入口。`agent` 是同一路由器的别名。
+
+## 主要命令
+
+| 命令 | 说明 |
+| ---- | ---- |
+| `arka <request>` | 将自然语言路由到最佳技能 |
+| `agent <request>` | 相同路由器（别名） |
+| `arka ask <question>` | Web + AI 回答 |
+| `arka route <request>` | 预览路由但不执行 |
+| `arka goal <goal>` | 自主多步骤 agent 循环 |
+| `arka setup` | 初始化配置目录和依赖 |
+| `arka doctor` | 安装诊断 |
+| `arka reload` | 重新读取 `.env` 和 `config.fish` |
+| `arka refetch --install` | Git pull + sync + 重新安装 |
+| `arka help` | 技能概览 |
+
+## YouTube 命令
+
+请参阅完整的 [YouTube 指南](/cn/guides/youtube)。
+
+| 命令 | 说明 |
+| ---- | ---- |
+| `arka youtube research <query>` | 搜索 + 字幕研究摘要 |
+| `arka download <id-or-url>` | 下载视频、Shorts 或播放列表 |
+| `arka summarize youtube <id>` | 总结视频或播放列表 |
+| `youtube_download <url>` | 单个视频下载（fish） |
+| `youtube_bulk download <url>` | 批量下载播放列表/频道 |
+
+## 股票命令
+
+请参阅完整的 [股票情报指南](/cn/guides/stocks)。
+
+| 命令 | 说明 |
+| ---- | ---- |
+| `stock news` | 市场新闻源 |
+| `stock prices [TICKER…]` | 实时价格 |
+| `stock analyze TICKER` | AI 回测 + ML 信号 |
+| `stock fundamentals TICKER…` | 与同行的比率对比 |
+| `stock invest <question>` | 深度投资研究 |
+| `predictions --domain stocks <topic>` | 机会分析 |
+
+## 语音与服务
+
+| 命令 | 说明 |
+| ---- | ---- |
+| `arka listen` | 唤醒词监听器（"hey arka, …"） |
+| `arka start` / `arka stop` | 后台服务 |
+| `arka serve` | 用于手机 STT/TTS 的远程服务器 |
+| `arka speak-lang hi-IN` | 设置语音语言 |
+| `arka reload --listen` | 重新加载配置并重启监听器 |
+
+## LLM 管理
+
+| 命令 | 说明 |
+| ---- | ---- |
+| `arka ai-models` | 列出提供商与默认模型 |
+| `arka ai-skill-model` | 按技能配置模型 |
+| `arka ai-skill-model profiles` | 任务配置文件（route、chat、summarize） |
+| `select_model` | 基于硬件的模型推荐 |
+| `select_model --apply` | 将推荐应用到技能配置 |
+
+参见 [硬件感知的模型选择](/cn/guides/select-model)。
+
+## 路由学习
+
+| 命令 | 说明 |
+| ---- | ---- |
+| `route_learn learn <phrase> <skill>` | 教授短语 → 技能映射 |
+| `route_learn learn --from-trace --correct <skill>` | 修正上一次路由错误 |
+| `route_learn list` | 列出已学习的路由 |
+| `route_learn delete <id>` | 移除已学习的路由 |
+| `route_learn test <phrase>` | 预览短语的路由 |
+
+参见 [教授自定义路由](/cn/guides/route-learn)。
+
+## 竞赛
+
+| 命令 | 说明 |
+| ---- | ---- |
+| `competitions sources` | 列出黑客松/ML 竞赛来源 |
+| `competitions search <topic>` | 搜索全部来源 |
+| `competitions search <topic> --source kaggle` | 搜索某个平台 |
+
+参见 [黑客松与 ML 竞赛](/cn/guides/competitions)。
+
+## 每日简报
+
+| 命令 | 说明 |
+| ---- | ---- |
+| `daily_brief` | 个性化早间科技头条 |
+
+自然语言：`arka daily brief`、`arka morning tech brief`。参见 [每日与科技简报](/cn/guides/daily-brief)。
+
+## Gemini CLI
+
+| 命令 | 说明 |
+| ---- | ---- |
+| `arka gemini` | 交互式 Google Gemini CLI |
+| `arka gemini <prompt>` | 一次性提示 |
+| `arka gemini status` | 安装与认证检查 |
+
+参见 [Google Gemini CLI 集成](/cn/guides/gemini-cli)。
+
+## 社交与媒体
+
+| 命令 | 说明 |
+| ---- | ---- |
+| `post_x <url>` | 抓取、缩短并发布到 X/Twitter |
+| `ascii_art <text>` | 生成 ASCII 艺术横幅 |
+| `ascii_art --image <path>` | 将图片转换为 ASCII |
+
+## Google Workspace
+
+| 命令 | 说明 |
+| ---- | ---- |
+| `arka google setup` | 配置 Google OAuth |
+| `arka google login` | 认证 Gmail + Calendar |
+| `arka google gmail --unread` | 获取未读邮件 |
+| `arka google calendar --today` | 今日日历事件 |
+
+## 插件
+
+| 命令 | 说明 |
+| ---- | ---- |
+| `arka skills list` | 列出已安装的插件 |
+| `arka skills install <url>` | 从 git URL 安装 |
+| `arka skills refresh` | 重新加载插件注册表 |
+
+## Goal agent
+
+以步骤预算运行自主多步骤任务：
+
+```bash
+arka goal set up a venv, install requests, and run pytest
+arka goal -y -n 30 debug why nginx fails
+```
+
+默认步骤预算：`GOAL_MAX_STEPS=25`。
+
+## Fish shell 辅助函数
+
+使用 fish 时，可用以下函数：
+
+```fish
+agent_route "play bohemian rhapsody"   # 预览路由
+agent_trace                            # 上一次路由决策
+agent_why                              # 解释技能选择
+```
+
+## 应用配置更改
+
+```bash
+arka reload              # 重新读取 .env + config.fish
+arka reload --listen     # 同时重启唤醒监听器
+```

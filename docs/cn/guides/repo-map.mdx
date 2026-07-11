@@ -1,0 +1,25 @@
+---
+title: "仓库地图"
+description: "为 Agent 上下文提供的轻量级项目布局和 Python 符号概览。"
+keywords: ["repo", "map", "structure", "codebase", "aider"]
+---
+
+获取当前 git 仓库的紧凑视图 —— 目录布局、检测到的项目类型以及顶层 Python 符号。灵感来自 Aider/OpenCode 的仓库感知，但无需完整的 RAG 摄取。
+
+## 自然语言
+
+```bash
+arka map this repo
+arka show project structure
+arka codebase overview with symbols
+```
+
+## CLI 命令
+
+| 命令 | 描述 |
+| ------- | ----------- |
+| `repo_map map [path]` | 显示布局（深度 2） |
+| `repo_map map --depth 3` | 更深的目录树 |
+| `repo_map map --symbols` | 包含 Python 类/函数名称 |
+
+在仓库内时使用当前 git 根目录，否则使用当前目录。忽略 `node_modules`、`.git`、虚拟环境和构建产物。

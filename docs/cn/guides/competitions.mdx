@@ -1,0 +1,53 @@
+---
+title: "黑客松与 ML 竞赛搜索"
+description: "在 Kaggle、Devpost、MLH、HackerEarth 及其他精选来源中搜索正在进行的黑客松和机器学习竞赛。"
+keywords: ["competitions", "hackathons", "kaggle", "ml"]
+---
+
+Arka 通过 DuckDuckGo 站点定向查询在精选平台上搜索 **黑客松与 ML 竞赛**。
+
+## 自然语言
+
+```bash
+arka find hackathons for computer vision
+arka show me kaggle competitions for NLP
+arka search competitions for time series forecasting
+arka list competition data sources
+```
+
+## CLI 命令
+
+| 命令 | 说明 |
+| ---- | ---- |
+| `competitions sources` | 列出所有支持的数据源 |
+| `competitions search <topic>` | 搜索所有来源 |
+| `competitions search <topic> --source kaggle` | 搜索某一个来源 |
+| `competitions search <topic> --source kaggle,devpost` | 搜索多个来源 |
+| `competitions search <topic> --limit 8` | 每个来源的最大结果数（默认 5） |
+
+## 支持的来源
+
+| 来源 ID | 平台 |
+| ------- | ---- |
+| `kaggle` | Kaggle 竞赛 |
+| `devpost` | Devpost 黑客松 |
+| `wemakedevs` | WeMakeDevs 黑客松 |
+| `mlh` | Major League Hacking |
+| `hackerearth` | HackerEarth 挑战赛 |
+| `drivendata` | DrivenData 竞赛 |
+| `zindi` | Zindi Africa |
+| `aicrowd` | AIcrowd 挑战赛 |
+| `topcoder` | Topcoder 挑战赛 |
+| `codalab` | Codabench / Codalab |
+
+## 要求
+
+竞赛搜索需要 chat 扩展（DuckDuckGo 搜索）：
+
+```bash
+pip install 'arka-agent[chat]'
+```
+
+<Note>
+  股票"竞争"查询（同行分析、竞争对手）会路由到股票技能 —— 而非此搜索。
+</Note>

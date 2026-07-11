@@ -1,0 +1,99 @@
+---
+title: "Arka 简介"
+description: "Arka 是一款跨平台 AI 终端代理，可将简明英语请求路由到 70+ 个本地技能，支持语音回复以及离线符号化路由。"
+---
+
+Arka 是一款面向终端的**跨平台 AI 代理**。用简明英语说出你的需求 —— Arka 会将请求路由到合适的本地技能，运行它，并在你需要时用语音把答案念给你听。
+
+命令在本地运行。LLM 调用通过**回退编排器**分发到 **24 个提供商** —— 日常使用无需 Docker。
+
+<CardGroup cols={2}>
+  <Card title="快速开始" icon="rocket" href="/cn/quickstart">
+    在五分钟内完成安装并运行你的第一条命令。
+  </Card>
+  <Card title="技能目录" icon="puzzle-piece" href="/cn/guides/skills">
+    70+ 个内置技能，覆盖媒体、网络、文档、系统、开发和金融。
+  </Card>
+  <Card title="路由" icon="route" href="/cn/concepts/routing">
+    大多数请求通过离线符号规则实现零 LLM token 消耗。
+  </Card>
+  <Card title="安全" icon="shield-check" href="/cn/concepts/security">
+    提示注入拦截、风险操作提示、破坏性 shell 命令硬拦截。
+  </Card>
+</CardGroup>
+
+## Arka 能做什么
+
+```bash
+arka ask "what is Rust?"
+arka "convert 100 USD to INR"
+arka youtube research "python asyncio tutorial"
+arka stock invest "where to invest 3000 for 1 month"
+arka goal set up a venv and run pytest
+arka listen    # "hey arka, what's the weather"
+```
+
+## 核心能力
+
+- **70+ 本地技能** —— 媒体、网络、PDF RAG、Google Workspace、图表、股票、YouTube、语音
+- **离线优先路由** —— 120+ 条符号规则；仅在必要时调用 LLM
+- **24 提供商 LLM 故障切换** —— Gemini、Groq、OpenAI、Anthropic、Ollama、vLLM、OpenRouter 等
+- **语音** —— 唤醒词监听、多轮对话、TTS 回复
+- **安全网关** —— 默认开启
+- **插件** —— 通过 `skill.json` 触发器扩展
+
+## 平台模式
+
+| 平台 | 模式 |
+| -------- | ---- |
+| **全平台 (macOS, Windows, Linux)** | 通过 pip + [fish shell](https://fishshell.com) 获得完整 70+ 技能 |
+| **无 fish** | 便携式 Python：chat、web、calc、weather、插件 |
+| **Linux + fish 登录 shell** | 完整技能 + 语音自启 + systemd 单元 |
+
+## 文档导航
+
+### 使用 Arka
+
+<CardGroup cols={2}>
+  <Card title="CLI 参考" icon="terminal" href="/cn/guides/cli">命令、别名和子命令</Card>
+  <Card title="技能目录" icon="puzzle-piece" href="/cn/guides/skills">完整的内置技能列表</Card>
+</CardGroup>
+
+### 对话与搜索
+
+<CardGroup cols={2}>
+  <Card title="对话与网络答案" icon="message-circle" href="/cn/guides/chat">网络搜索、计算、天气、地图</Card>
+  <Card title="记忆" icon="database" href="/cn/guides/memory">Supermemory 和本地召回</Card>
+</CardGroup>
+
+### 文档与媒体
+
+<CardGroup cols={2}>
+  <Card title="PDF RAG" icon="file-text" href="/cn/guides/pdf-rag">摄取和查询 PDF</Card>
+  <Card title="图表" icon="chart-bar" href="/cn/guides/charts">Matplotlib PNG 图表</Card>
+  <Card title="视觉" icon="eye" href="/cn/guides/vision">图片、蓝图、屏幕截取</Card>
+  <Card title="YouTube" icon="play" href="/cn/guides/youtube">研究、下载、批量</Card>
+</CardGroup>
+
+### 集成与金融
+
+<CardGroup cols={2}>
+  <Card title="Google Workspace" icon="mail" href="/cn/guides/google-workspace">Gmail 与日历</Card>
+  <Card title="插件" icon="plug" href="/cn/guides/plugins">第三方 skill.json 扩展</Card>
+  <Card title="股票情报" icon="chart-line" href="/cn/guides/stocks">市场新闻、基本面、情绪</Card>
+</CardGroup>
+
+### 代理与运维
+
+<CardGroup cols={2}>
+  <Card title="语音" icon="microphone" href="/cn/guides/voice">唤醒词、STT、TTS</Card>
+  <Card title="目标代理" icon="bot" href="/cn/guides/goal-agent">自主多步骤任务</Card>
+  <Card title="专业领域" icon="briefcase" href="/cn/guides/professions">来源可追溯的领域答案</Card>
+  <Card title="可观测性" icon="activity" href="/cn/guides/observability">SigNoz 与 OpenTelemetry</Card>
+  <Card title="测试" icon="flask" href="/cn/guides/testing">pytest 测试套件</Card>
+  <Card title="配置" icon="settings" href="/cn/reference/configuration">环境变量与默认值</Card>
+</CardGroup>
+
+<Note>
+  基于 GPL-2.0 开源。PyPI 包：`arka-agent`。
+</Note>

@@ -1,0 +1,90 @@
+---
+title: "股票智能"
+description: "使用 Arka 的 stock 技能，在终端获取市场新闻、基本面、情绪分析、宏观事件以及 AI 辅助的投资研究。"
+keywords: ["stock", "finance", "investing", "market", "predictions"]
+---
+
+Arka 包含一个 **stock** 技能（别名：`stock_analysis`），用于市场情报 —— 新闻、实时价格、基本面、情绪、宏观事件和投资研究。
+
+## 快速示例
+
+```bash
+arka stock news
+arka stock prices RELIANCE.NS TCS.NS
+arka stock analyze AAPL
+arka stock fundamentals RELIANCE.NS TCS.NS
+arka stock invest "where to invest 3000 for 1 month"
+arka stock emotion 20
+arka stock macro 8
+```
+
+也支持自然语言：
+
+```bash
+arka "stock news for banking sector"
+arka "where to invest 5000 for 3 months"
+arka predict opportunities in RELIANCE.NS and banking sector
+```
+
+## 命令
+
+| 命令 | 描述 |
+| ------- | ----------- |
+| `stock news` | 市场新闻源 |
+| `stock prices [TICKER…]` | 实时价格（未指定时使用默认自选列表） |
+| `stock policy TICKER` | 政策与监管扫描 |
+| `stock strategy TICKER` | AI 回测 + ML 信号 |
+| `stock analyze TICKER` | `strategy` 的别名 |
+| `stock volatility T1,T2 period interval` | 波动率对比 |
+| `stock dashboard` | Streamlit 股票智能中心 |
+| `stock fundamentals TICKER…` | 与同行比较负债/权益、ROE、市盈率、利润率 |
+| `stock emotion [N]` | 新闻净情绪 + 群体买卖预测 |
+| `stock macro [N]` | 灾难/资源/地缘政治 → 股票影响 |
+| `stock funding [N]` | 近期 VC/PE/IPO 交易 + 上市同行映射 |
+| `stock competition [TICKERS…]` | 同行记分板 + 竞争新闻 |
+| `stock invest <question>` | 深度投资研究（路由至 `predictions --domain stocks --deep`） |
+| `stock compare [AMT] [HORIZON]` | 基于新闻和数据排序的顶级选项（无 LLM） |
+| `stock predict <topic>` | 通过 Arka predictions 进行股票机会分析 |
+| `stock context [TICKER…]` | 纯文本调试信息包 |
+
+别名：`macro` → `stock macro`，`emotion` → `stock emotion`。
+
+## Predictions 能力
+
+`predictions` 技能处理跨领域的更广泛机会分析：
+
+```bash
+predictions --domain stocks RELIANCE.NS and banking sector opportunities
+predictions --domain stocks --deep "where to invest 3000 for 1 month"
+predictions history
+```
+
+领域：`antiques`、`stocks`、`strategy`、`all`。
+
+## 设置
+
+stock 桥接会连接到一个 **stock_analysis** 项目。默认路径为：
+
+```
+~/Projects/python/products/stock_analysis
+```
+
+在 `.env` 中覆盖：
+
+```env
+STOCK_PROJECT=/path/to/stock_analysis
+```
+
+如果找不到该项目，`stock news` 和 `stock prices` 仍可通过 Arka 附带的桥接脚本使用。高级功能（`dashboard`、`strategy`）需要完整项目。
+
+## 相关技能
+
+| 技能 | 示例 |
+| ----- | ------- |
+| `currency_convert` | `arka convert 100 USD to INR` |
+| `price_check` | `arka price check iPhone 16` |
+| `chart` | `chart line AAPL TSLA --range 1y` |
+
+<Note>
+  Stock 技能通过符号规则路由 "where to invest"、"stock news" 和 "analyze TICKER" 等短语。使用 `arka route "your query"` 预览路由。
+</Note>

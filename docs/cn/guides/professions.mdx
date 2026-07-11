@@ -1,0 +1,38 @@
+---
+title: "跨专业领域的源可追溯研究"
+description: "在 13 个专业领域获取带引用、以证据为先的答案 —— 健康、法律、生命科学、金融、工程等 —— 来自 Arka 精心策划的信息源注册表。"
+keywords: ["professions", "research", "citations", "domains"]
+---
+
+Arka 的 professions 是**精心策划的信息源注册表** —— 而非角色扮演提示。Agent 首先收集证据，然后进行带引用的综合。
+
+## 领域
+
+`health`、`nutrition`、`startup`、`investor`、`teacher`、`legal`、`engineer`、`journalism`、`marketing`、`finance`、`counselor`、`chef`、`life_sciences`
+
+生物医学研究插件的完整指南：[生命科学市场](/cn/guides/life-sciences)
+
+## 命令
+
+```bash
+profession list
+profession sources journalism
+profession ask legal what is an NDA
+profession setup nutrition    # clone + index local repo
+```
+
+## 自然语言
+
+```bash
+arka "as a news anchor how do I open a breaking story"
+```
+
+路由是严格的 —— 像“糖尿病症状”这样的通用问题仍会走 `web_answer`。professions 仅在明确提及角色或已保存的记忆 + 关键字时才会激活。
+
+## 与 web_answer 有何不同
+
+| | web_answer | profession |
+| --- | --- | --- |
+| 信息源 | DuckDuckGo + 抓取 | 精选 RSS、可信网页、本地仓库 |
+| 引用 | 可选 | 必需 |
+| 激活 | 事实的默认方式 | 明确提及角色/领域 |

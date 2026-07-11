@@ -1,0 +1,172 @@
+---
+title: "内置技能目录"
+description: "Arka 的 70+ 内置技能目录，涵盖媒体、网络搜索、文档、系统控制、开发者工具与金融自动化。"
+keywords: ["skills", "automation", "features"]
+---
+
+Arka 内置 **70+ 项技能**。用自然语言说出你的需求，路由器会选择合适的技能。
+
+<CardGroup cols={3}>
+  <Card title="聊天与网络" icon="message-circle" href="/cn/guides/chat">网络问答、计算、天气</Card>
+  <Card title="记忆" icon="database" href="/cn/guides/memory">记住并回忆事实</Card>
+  <Card title="PDF RAG" icon="file-text" href="/cn/guides/pdf-rag">导入并查询 PDF</Card>
+  <Card title="图表" icon="chart-bar" href="/cn/guides/charts">折线、条形、饼图、散点</Card>
+  <Card title="视觉" icon="eye" href="/cn/guides/vision">图片与蓝图</Card>
+  <Card title="YouTube" icon="play" href="/cn/guides/youtube">研究与下载</Card>
+  <Card title="Google" icon="mail" href="/cn/guides/google-workspace">Gmail 与日历</Card>
+  <Card title="股票" icon="chart-line" href="/cn/guides/stocks">市场情报</Card>
+  <Card title="语音" icon="microphone" href="/cn/guides/voice">唤醒词与 TTS</Card>
+  <Card title="Goal agent" icon="bot" href="/cn/guides/goal-agent">多步骤自动化</Card>
+  <Card title="生命科学" icon="dna" href="/cn/guides/life-sciences">PubMed、基因组学、生物信息</Card>
+  <Card title="插件" icon="plug" href="/cn/guides/plugins">第三方技能</Card>
+  <Card title="CLI" icon="terminal" href="/cn/guides/cli">完整命令参考</Card>
+  <Card title="路由学习" icon="route" href="/cn/guides/route-learn">教授短语 → 技能</Card>
+  <Card title="竞赛" icon="trophy" href="/cn/guides/competitions">黑客松与 ML 竞赛</Card>
+  <Card title="每日简报" icon="newspaper" href="/cn/guides/daily-brief">早间科技头条</Card>
+  <Card title="选择模型" icon="cpu" href="/cn/guides/select-model">硬件感知的 LLM 推荐</Card>
+  <Card title="Gemini CLI" icon="sparkles" href="/cn/guides/gemini-cli">Google Gemini CLI</Card>
+  <Card title="发布到 X" icon="share" href="/cn/guides/post-x">缩短并发布 URL</Card>
+  <Card title="ASCII 艺术" icon="image" href="/cn/guides/ascii-art">文字与图片横幅</Card>
+  <Card title="书签" icon="bookmark" href="/cn/guides/bookmarks">保存与回忆 URL</Card>
+  <Card title="仓库健康" icon="heart-pulse" href="/cn/guides/repo-health">Lint 与测试检查</Card>
+  <Card title="生成数据" icon="table" href="/cn/guides/generate-data">CSV、JSON 与伪数据集</Card>
+  <Card title="数据问答" icon="table-columns" href="/cn/guides/data-ask">查询 CSV、JSON 等</Card>
+  <Card title="Docker 状态" icon="container" href="/cn/guides/docker-status">容器与日志</Card>
+  <Card title="剪贴板历史" icon="clipboard" href="/cn/guides/clipboard-history">回忆过往剪贴内容</Card>
+</CardGroup>
+
+## 媒体
+
+| 技能 | 示例 |
+| ---- | ---- |
+| `play_spotify` | `arka play bohemian rhapsody on spotify` |
+| `play_youtube` | `arka play lofi beats on youtube` |
+| `play_movie` | `arka play inception` |
+| `compose_video` | `arka compose a video about climate change` |
+| `compose_slides` | `arka make slides about climate change` · `arka convert deck.pptx to pdf` · `-f all` |
+| `generate_thumbnail` | `arka generate thumbnail for my video` |
+
+## YouTube
+
+完整指南：[YouTube 研究与下载](/cn/guides/youtube)
+
+| 技能 | 示例 |
+| ---- | ---- |
+| `youtube_research` | `arka youtube research "python asyncio tutorial" --limit 5` |
+| `youtube_download` | `youtube_download <url> --audio` |
+| `youtube_bulk` | `youtube_bulk download PLxxx --wait` |
+| `youtube_transcript` | `youtube_transcript <url> --summarize` |
+| `find_videos` | `find_videos swimming tutorial` |
+| `playlist_summarize` | `arka summarize youtube PLxxx` |
+
+## 网络与聊天
+
+| 技能 | 示例 |
+| ---- | ---- |
+| `web_answer` | `arka ask who won IPL 2025` |
+| `deep_web_answer` | `arka /latest AI regulation news` |
+| `search_web` | `arka search rust async tutorials` |
+| `calc` | `arka calc 2^10 + sqrt(144)` |
+| `hyperlocal_weather` | `arka weather near me` |
+
+## 文档与视觉
+
+| 技能 | 示例 |
+| ---- | ---- |
+| `pdf_ingest` | `pdf_ingest ~/Documents/resume.pdf` |
+| `pdf_ask` | `pdf_ask --doc resume.pdf "summarize skills"` |
+| `pdf_tools` | `pdf_tools merge a.pdf b.pdf -o combined.pdf` |
+| `pdf_tools` | `pdf_tools compress report.pdf` |
+| `pdf_tools` | `pdf_tools edit doc.pdf --text 'Approved'` |
+| `drawing_ask` | `drawing_ask plan.pdf "extract door schedule"` |
+| `describe_image` | `arka describe photo.jpg` |
+| `describe_screen` | `arka describe my screen` |
+
+## 生产力
+
+| 技能 | 示例 |
+| ---- | ---- |
+| `google` | `arka google gmail --unread --summarize` |
+| `remind` | `arka remind me in 2 hours to call mom` |
+| `routines` | `routines add daily 9am "check email"` |
+| `todo` | `arka add buy milk to todo` |
+| `daily_brief` | `arka daily brief` |
+| `route_learn` | `arka teach route "ping ops" to system_monitor` |
+| `competitions` | `arka find hackathons for computer vision` |
+| `post_x` | `arka post this on my X https://example.com` |
+| `ascii_art` | `arka make ascii art HELLO` |
+| `select_model` | `arka select best model for my pc` |
+| `gemini_cli` | `arka gemini explain asyncio` |
+| `persona` | `arka persona list` · `arka persona chat elon` · `arka persona create coach` |
+| `elon` | `elon "should I learn Rust?"` · `elon chat` · `talk to elon about rockets`（快捷方式） |
+
+## 系统
+
+| 技能 | 示例 |
+| ---- | ---- |
+| `weather` | `arka what's the weather` |
+| `system_monitor` | `arka system monitor` |
+| `disk_breakdown` | `arka how much disk is videos taking` |
+| `app_usage` | `arka usage report` |
+| `screenshot` | `arka screenshot` |
+
+## 开发
+
+| 技能 | 示例 |
+| ---- | ---- |
+| `install_uv` | `arka install uv` |
+| `install_app` | `arka install docker` |
+| `git_summary` | `arka git summary` |
+| `lint_python` | `arka lint this file` |
+| `github_repo` | `arka github repo stats for arka-agent/arka` |
+| `goal` | `arka goal set up venv and run pytest` |
+
+## 金融与股票
+
+完整指南：[股票情报](/cn/guides/stocks)
+
+| 技能 | 示例 |
+| ---- | ---- |
+| `stock` | `arka stock news` |
+| `stock` | `arka stock analyze AAPL` |
+| `stock` | `arka stock fundamentals RELIANCE.NS` |
+| `stock` | `arka stock invest "where to invest 3000 for 1 month"` |
+| `predictions` | `predictions --domain stocks --deep "banking sector"` |
+| `currency_convert` | `arka convert 100 USD to INR` |
+| `kalshi` | `kalshi search bitcoin` |
+| `price_check` | `arka price check iPhone 16` |
+| `macro` | `arka stock macro 8` |
+| `emotion` | `arka stock emotion 20` |
+
+## 图表
+
+完整指南：[图表与图形](/cn/guides/charts)
+
+生成 matplotlib PNG 图表并保存到 `~/Pictures/arka-generated/`：
+
+```bash
+chart line AAPL TSLA --range 1y
+arka phone sales Apple 230 Samsung 210 Xiaomi 140
+```
+
+支持的类型：折线图、条形图、饼图、散点图、直方图、帕累托图。
+
+## 记忆
+
+完整指南：[长期记忆](/cn/guides/memory)
+
+| 技能 | 示例 |
+| ---- | ---- |
+| `agent_remember` | `agent_remember I prefer Hindi TTS` |
+| `agent_recall` | `agent_recall what TTS do I prefer` |
+| `supermemory` | `supermemory status` |
+
+## 行业专长
+
+完整指南：[行业领域](/cn/guides/professions)
+
+12 个行业领域，配有精选的信息源注册表：健康、法律、新闻、建筑等等。每个领域都新增了带引用感知的研究技能。
+
+<Tip>
+  运行 `arka help` 查看你的安装中所有可用的技能。列表会随平台模式和已安装的扩展而变化。
+</Tip>

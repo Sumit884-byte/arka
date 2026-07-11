@@ -1,0 +1,92 @@
+---
+title: "个性化你的 Arka 体验"
+description: "引导向导保存你的兴趣并推荐内置技能，附带示例命令 —— 无需 LLM。"
+keywords: ["onboarding", "personalize", "skills", "getting started"]
+---
+
+`arka personalize` 帮助新用户快速上手。回答一份简短的问卷（或传入参数），将配置保存到 `~/.config/arka/personalize.json`，即可查看按优先级排序的技能推荐及示例命令。
+
+## 快速开始
+
+```bash
+arka personalize wizard
+arka personalize recommend
+arka personalize quickstart
+```
+
+非交互模式（CI、脚本或无 TTY 环境）：
+
+```bash
+arka personalize wizard --interests finance,pdf --experience beginner --platform mac -y
+```
+
+## 自然语言
+
+```bash
+arka personalize me
+arka recommend skills
+arka what skills should I use
+arka get started with arka
+```
+
+## 命令
+
+| 命令 | 功能 |
+| ---- | ---- |
+| `personalize` / `personalize wizard` | 交互式问卷；保存配置 |
+| `personalize recommend` | 根据已保存的兴趣按顺序推荐技能 |
+| `personalize status` | 显示已保存的配置 |
+| `personalize reset` | 清除配置 |
+| `personalize quickstart` | 5 步清单（setup → doctor → personalize → 尝试热门技能） |
+
+## 兴趣标签
+
+运行向导时可任意组合选择：
+
+| 标签 | 涵盖内容 |
+| ---- | -------- |
+| `finance` | 股票、货币、每日简报、价格查询 |
+| `pdf` | 合并/压缩 PDF、PDF 问答 |
+| `voice` | 唤醒词、STT、TTS |
+| `dev` | GitHub、Docker、仓库健康、PR 检查 |
+| `productivity` | 提醒、例行程序、书签 |
+| `research` | 网络搜索、YouTube 研究、数据问答 |
+| `google` | Gmail、Calendar OAuth |
+| `memory` | 统一记忆、会话笔记 |
+| `media` | YouTube、幻灯片、视频、缩略图 |
+
+## 示例输出
+
+```
+Your profile: finance, pdf (beginner)
+
+Recommended skills:
+  1. pdf_tools — Merge, split, compress, and edit PDFs
+     Try: pdf_tools merge a.pdf b.pdf -o combined.pdf
+  2. stocks [needs GROQ_API_KEY] — Stock quotes, fundamentals, and market context
+     Try: stocks AAPL
+```
+
+有门槛限制的技能仍会出现在推荐中，但会标注缺少的条件（API key、二进制文件或操作系统）。
+
+## 配置文件
+
+存储于 `~/.config/arka/personalize.json`：
+
+```json
+{
+  "interests": ["finance", "pdf"],
+  "experience": "beginner",
+  "platforms": ["mac"],
+  "has_api_keys": true,
+  "uses_fish": true,
+  "completed_at": "2026-07-11T12:00:00Z",
+  "onboarding_done": true
+}
+```
+
+## 相关内容
+
+- [快速开始](/cn/quickstart) —— 安装并运行第一条命令
+- [技能目录](/cn/guides/skills) —— 完整的内置技能列表
+- [选择模型](/cn/guides/select-model) —— 引导完成后的硬件感知 LLM 推荐

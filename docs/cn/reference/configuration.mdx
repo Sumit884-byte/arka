@@ -1,0 +1,117 @@
+---
+title: "配置、环境变量与 API 密钥设置"
+description: "使用环境变量、.env 文件和配置路径来配置 Arka，并了解覆盖默认值和添加 API 密钥的优先级规则。"
+keywords: ["configuration", "env", "settings"]
+---
+
+出于安全、故障切换和本地优先路由的考虑，Arka 默认已开启。仅当你想要覆盖某项或添加 API 密钥时才需要 `.env`。
+
+## 配置路径
+
+| 操作系统 | 配置 | 缓存 |
+| -- | ------ | ----- |
+| Linux | `~/.config/arka/` | `~/.cache/arka/` |
+| macOS | `~/Library/Application Support/arka/` | `~/Library/Caches/arka/` |
+| Windows | `%APPDATA%\arka\` | `%LOCALAPPDATA%\arka\` |
+
+可通过 `ARKA_CONFIG_DIR`（或 `CONFIG_DIR`）、`INSTALL_HOME`（旧版 `ARKA_HOME`）或 `ARKA_CACHE_DIR`（或 `CACHE_DIR`）覆盖。
+
+设置 `ARKA_CONFIG_DIR=/path/to/my-arka-config` 会将**所有**用户配置移到该处 —— 包括 `.env`、`mcp.json`、`hub/`、`agent-memory/`、`skills/` 及相关路径。
+
+```bash
+# 显示当前根路径 + shell 导出片段
+arka config path
+
+# 初始化新的配置目录（不会自动移动）
+arka config init --dir ~/my-arka-config
+
+# 备份 / 恢复整个配置树
+arka config backup -o ~/backups/arka-2026-07-11.tar.gz
+arka config restore ~/backups/arka-2026-07-11.tar.gz
+
+# 列出路径与大小
+arka config list
+```
+
+用户配置包含 `.env`、`charts.yaml`、`llm-skill-models.json` 和 `skills/`（插件）。
+
+## 优先级
+
+| 层级 | 说明 | 何时生效 |
+| ----- | ---------- | --------- |
+| Shell 环境 | `export GEMINI_API_KEY=…` | 进程中已设置时 |
+| 用户 `.env` | `~/.config/arka/.env` | 启动时填充未设置的变量 |
+| 开发目录 `.env` | git 克隆中的 `arka/.env` | 填充尚未设置的变量 |
+| 旧版 fish `.env` | `~/.config/fish/.env` | 若存在仍会读取 |
+| 代码默认值 | 内置于 Python / `config.fish` | 变量缺失时 |
+
+诸如 `your_gemini_api_key_here` 的占位值会被忽略。
+
+## 键名
+
+优先使用短名称。旧版 `ARKA_*` 键仍可用（`ARKA_ROUTE_MODE` → `ROUTE_MODE`）：
+
+```env
+ROUTE_MODE=symbolic
+LLM_AUTO_FALLBACK=1
+AGENT_SPEAK=1
+SECURITY=1
+```
+
+## 内置默认值
+
+| 领域 | 默认值 | 覆盖方式 |
+| ---- | ------- | -------- |
+| 安全 | 所有层开启（`SECURITY=1`） | 将任一层设为 `0` |
+| NL 路由 | 优先离线规则（`ROUTE_MODE=symbolic`） | `ai`、`symbolic_only`、`ai_only` |
+| LLM 故障切换 | 遇 429/401/超时自动切换（`LLM_AUTO_FALLBACK=1`） | `LLM_AUTO_FALLBACK=0` |
+| 密钥轮换 | 先轮换备份密钥（`API_KEY_ROTATION=1`） | `API_KEY_ROTATION=0` |
+| 语音 TTS | 朗读回复（`AGENT_SPEAK=1`） | `AGENT_SPEAK=0` |
+| 唤醒监听 | 关闭直至 `arka listen` | `AGENT_WAKE_AUTO=1` |
+| 记忆 | 有密钥时使用云端，否则本地（`MEMORY=auto`） | `local` 或 `supermemory` |
+| 目标代理 | 25 步（`GOAL_MAX_STEPS=25`） | `GOAL_MAX_STEPS=30` |
+| YouTube 研究 | 2 个视频（`YT_RESEARCH_MAX=2`） | `--limit N` 或环境变量 |
+| 提醒 | 默认 1 小时（`REMIND_DEFAULT=1h`） | 传入显式时间 |
+| 模型标签 | 在答案下方显示（`SHOW_MODEL=1`） | `SHOW_MODEL=0` |
+
+## 关键 API 密钥
+
+```env
+GEMINI_API_KEY=your_key_here
+GROQ_API_KEY=your_key_here
+AI_PREFERRED_PROVIDER=gemini
+AI_PREFERRED_MODEL=gemini-2.0-flash
+```
+
+可从 [Google AI Studio](https://aistudio.google.com) 和 [Groq Console](https://console.groq.com) 获取免费额度密钥。
+
+## 可选附加组件
+
+按需安装功能组：
+
+| 附加组件 | 增加内容 |
+| ----- | ---- |
+| `[chat]` | 网络搜索、Agno、trafilatura、sympy |
+| `[voice]` | vosk、sounddevice |
+| `[pdf]` | PrivateGPT 客户端 |
+| `[charts]` | matplotlib |
+| `[drawings]` | Pillow、pymupdf |
+| `[video]` | Pillow、edge-tts |
+| `[all]` | 以上全部 |
+
+## 应用更改
+
+```bash
+arka reload              # 重新读取 .env + config.fish
+arka reload --listen     # 同时重启唤醒监听
+```
+
+首次安装时，`arka setup` 会根据软件包模板初始化 `~/.config/arka/.env`。
+
+## 完整参考
+
+规范的环境变量参考：仓库中的 `src/arka/env.example`（约 500 行）。
+
+<Note>
+  故障切换详情参见 [LLM 编排](/cn/concepts/llm)。安全层参见[安全](/cn/concepts/security)。常见修复参见[故障排查](/cn/reference/troubleshooting)。
+</Note>

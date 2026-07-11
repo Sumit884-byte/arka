@@ -1,0 +1,134 @@
+---
+title: "频道会话和子 Agent 委托"
+description: "webhook 和 CLI 的按频道会话连续性、静默令牌以及隔离的后台子 Agent。"
+keywords: ["message sessions", "subagent", "gateway", "cross-platform", "channel"]
+---
+
+Arka 提供**频道会话**和**子 Agent 委托** —— 这些模式受 [Hermes Agent](https://github.com/NousResearch/hermes-agent) 启发，并非独立的产品集成。它们添加了按频道的对话连续性、webhook 会话交接以及隔离的后台子 Agent。
+
+## 特性
+
+| 概念 | Arka 特性 |
+| ------- | ------------ |
+| 按聊天会话存储 | `message_session` —— 以 `channel:chat_id` 为键 |
+| 跨平台连续性 | 当 `channel`/`chat_id` 匹配时，webhook + `arka ask` 共享同一会话 |
+| 静默令牌 | `[SILENT]`、`NO_REPLY` 抑制 webhook 出站投递 |
+| 子 Agent 委托 | `subagent spawn` —— 隔离的后台 Agent 任务 |
+
+Arka **不**附带完整的网关适配器（Telegram、Discord 等）。使用 [webhook 入口](/cn/guides/openclaw-features) 和频道桥接，然后在其上附加频道会话。
+
+## 消息会话
+
+按频道的对话轮次存储在 `~/.config/arka/message-sessions/`：
+
+```bash
+message_session push cli default user "Start the deploy checklist"
+message_session push cli default assistant "Step 1: run tests"
+message_session context cli default
+message_session resume cli default
+message_session list
+message_session reset telegram 123456789
+message_session status
+```
+
+会话以 `channel:chat_id` 为键（例如 `webhook:slack`、`cli:default`、`telegram:987654321`）。
+
+### CLI 连续性
+
+当 `MESSAGE_SESSIONS=1`（默认）时，`arka ask` 和聊天引擎会自动读取和写入 `cli:default` 会话（可通过 `MESSAGE_SESSION_CHANNEL` 和 `MESSAGE_SESSION_CHAT_ID` 覆盖）。在终端开始一个话题，通过 webhook 使用相同的频道和聊天 ID 继续，或反之亦然。
+
+### Webhook 连续性
+
+当 `WEBHOOK_ENABLED=1` 时，入站 POST 请求体可以包含：
+
+```json
+{
+  "text": "What's the deploy status?",
+  "channel": "telegram",
+  "chat_id": "123456789"
+}
+```
+
+Arka 会追加用户轮次，将先前的会话上下文注入 Agent 提示，存储助手回复，并在响应中返回 `chat_id`。
+
+### 静默令牌
+
+显式静默令牌允许群聊和自动化在不发送出站文本的情况下存储一个轮次：
+
+- `[SILENT]`
+- `SILENT`
+- `NO_REPLY`
+- `NO REPLY`
+
+当 Agent 的最终响应恰好是其中之一（不区分大小写）时，webhook 会返回 `"silent": true` 和空的 `output` 字段。该轮次仍会存储在会话转录中。
+
+### 环境变量
+
+| 变量 | 默认值 | 用途 |
+| -------- | ------- | ------- |
+| `MESSAGE_SESSIONS` | `1` | 启用（`0` 禁用） |
+| `MESSAGE_SESSIONS_DIR` | `~/.config/arka/message-sessions` | 存储根目录 |
+| `MESSAGE_SESSION_IDLE_MINUTES` | `0` | 空闲分钟后自动重置（`0` = 从不） |
+| `MESSAGE_SESSION_MAX_TURNS` | `40` | 每个会话保留的最大轮次数 |
+| `MESSAGE_SESSION_CHANNEL` | `cli` | CLI 聊天的默认频道 |
+| `MESSAGE_SESSION_CHAT_ID` | `default` | CLI 聊天的默认聊天 ID |
+
+旧版 `HERMES_SESSIONS*` 变量仍作为别名受支持。
+
+入站轮次会被净化 —— 存储前会阻止注入模式和不安全内容。
+
+## 子 Agent 委托
+
+为并行工作流生成隔离的后台 Agent：
+
+```bash
+subagent spawn "Summarize today's git log"
+subagent list
+subagent resume abc123def4
+subagent status
+```
+
+每个子 Agent 通过 Python 聊天引擎运行（并回退到 fish `agent`）。任务记录存储在 `~/.cache/fish-agent/subagents/`。
+
+### 安全门禁
+
+| 门禁 | 阻止时机 |
+| ---- | ----------- |
+| `SUBAGENT_SECURITY=1` | 任务未通过 `SECURITY_LLM` 提示验证 |
+| `SUBAGENT_MAX` | 并发运行的 Agent 超过限制 |
+| `SUBAGENT_MAX_CHARS` | 任务文本过长 |
+
+设置 `SUBAGENT_SYNC=1` 可同步运行（用于测试）。
+
+### 环境变量
+
+| 变量 | 默认值 | 用途 |
+| -------- | ------- | ------- |
+| `SUBAGENT_ENABLED` | `1` | 启用（`0` 禁用） |
+| `SUBAGENT_DIR` | `~/.cache/fish-agent/subagents` | 存储根目录 |
+| `SUBAGENT_MAX` | `3` | 最大并发后台 Agent 数 |
+| `SUBAGENT_TIMEOUT` | `600` | 每个 Agent 超时时间（秒） |
+| `SUBAGENT_SECURITY` | `1` | 对生成任务应用安全门禁 |
+
+旧版 `HERMES_SUBAGENT*` 变量仍作为别名受支持。
+
+子 Agent 可以通过 `--session-channel` 和 `--session-chat-id` 附加到消息会话。
+
+## 技能清单门禁
+
+插件门禁使用 `metadata.openclaw`、`metadata.arka` 或 `metadata.hermes` —— 全部以相同方式合并。详见 [OpenClaw 启发的门禁](/cn/guides/openclaw-features)。
+
+## 心跳集成
+
+`heartbeat status` 报告频道会话和子 Agent 数量：
+
+```bash
+heartbeat status
+```
+
+## 相关特性
+
+- [上下文层](/cn/guides/memory#context-layers) —— 记忆、会话笔记和频道轮次如何协同工作
+- [会话记忆](/cn/guides/openclaw-features) —— 长期 Markdown 笔记（`MEMORY.md`）
+- [Webhook](/cn/guides/openclaw-features) —— 已验证的外部入口
+- [安全](/cn/concepts/security) —— 全局 `SECURITY`、`SECURITY_LLM` 和 `SECURITY_ACTIONS` 标志

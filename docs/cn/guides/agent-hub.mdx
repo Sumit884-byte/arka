@@ -1,0 +1,201 @@
+---
+title: "Agent Hub"
+description: "为 ollama launch 智能体提供共享的 MCP、内存和技能 — 由 Arka 管理的中枢，Claude Code、Hermes、OpenClaw 和其他智能体都可以使用。"
+keywords: ["agent hub", "ollama launch", "mcp", "shared memory", "openclaw", "hermes", "unification"]
+---
+
+**Arka Agent Hub** 是一个共享的互操作层，服务于通过 `ollama launch` 启动的编码智能体。Arka 不会打补丁或分叉外部智能体 — 它会导出规范的配置文件，在您选择加入时将 MCP 合并到已知的智能体路径中，并设置任何智能体都可以读取的环境变量。
+
+## 共享的内容
+
+| 中枢路径 | 来源 | 用途 |
+| -------- | ------ | ------- |
+| `~/.config/arka/hub/mcp.json` | `~/.config/arka/mcp.json` | 单一的 MCP 配置（与 Cursor 兼容） |
+| `~/.config/arka/hub/memory/summary.json` | 统一内存 + 会话 | 轻量级事实和会话索引 |
+| `~/.config/arka/hub/memory/context.md` | 统一内存 + 会话 | 人类可读的上下文包 |
+| `~/.config/arka/hub/memory/README.md` | 生成 | 每个智能体应如何加载上下文 |
+| `~/.config/arka/hub/skills/manifest.json` | `discover_skills()` | 其他智能体可读的已安装 Arka 技能 |
+| `~/.config/arka/hub/skills/INSTALL.md` | 生成 | 技能安装说明 |
+| `~/.config/arka/hub/launch.env` | 生成 | 任何智能体都可 source 的环境契约 |
+| `~/.config/arka/hub/agents.json` | 静态注册表 | 智能体目录 + 上次同步时间戳 |
+
+## 快速开始
+
+```bash
+# Export-only sync (v1 behavior — no agent config writes)
+arka agent_hub sync
+
+# Full unification: merge MCP into agent configs + memory tails
+arka agent_hub sync --unify
+
+# List supported ollama launch agents
+arka agent_hub list
+
+# Launch with shared env vars (syncs first by default)
+arka agent_hub launch claude
+arka agent_hub launch hermes
+arka agent_hub launch openclaw
+
+# Probe which agent configs exist on this machine
+arka agent_hub detect
+
+# Show per-agent MCP merge status
+arka agent_hub adapters
+
+# Import memory export back into Arka
+arka agent_hub import-memory path/to/export.json
+
+# Check sync state and unify status
+arka agent_hub status
+
+# Verify ollama + hub paths + per-agent unify status
+arka agent_hub doctor
+```
+
+来自 fish：
+
+```fish
+agent_hub sync
+agent_hub sync --unify
+agent_hub detect
+agent_hub launch claude
+source ~/.config/arka/hub/launch.env
+```
+
+自然语言：
+
+```fish
+agent "sync agent hub"
+agent "launch claude code"
+agent "shared mcp for agents"
+agent "detect agent hub configs"
+```
+
+## 完全统一 (v2)
+
+**仅导出**（`agent_hub sync`）会复制中枢文件并写入 `launch.env` — 安全，不会更改外部配置。
+
+**完全统一**（`agent_hub sync --unify`）还会：
+
+1. **MCP 合并** — 将中枢 `mcpServers` 添加到每个智能体已知的配置路径（如果文件缺失则创建）。除非您传递 `--replace`，否则会保留现有的用户服务器。
+2. **内存包** — 写入 `context.md`、`memory/README.md`，并可选地将 OpenClaw `MEMORY.md` 的尾部复制到 `hub/memory/openclaw_memory_tail.md`。
+3. **技能文档** — 写入 `skills/INSTALL.md`，包含清单路径和环境变量。
+4. **启动契约** — 使用完整的环境变量集重新生成 `launch.env`。
+
+```bash
+# Safe merge (add missing MCP servers only)
+arka agent_hub sync --unify
+
+# Destructive: replace agent MCP with hub servers
+arka agent_hub sync --unify --replace
+```
+
+在 `--unify` 运行之前，Arka 会自动将您的配置目录备份到 `config/backups/arka-config-YYYY-MM-DD.tar.gz`（默认开启）。使用 `ARKA_CONFIG_BACKUP_ON_UNIFY=0` 禁用，或随时手动运行 `arka config backup`。
+
+使用 `agent_hub detect` 查看本地存在哪些配置文件，使用 `agent_hub adapters` 查看哪些会合并或已经合并。
+
+## 支持的智能体
+
+| 键 | 名称 | 启动命令 |
+| --- | ---- | -------------- |
+| `claude` | Claude Code | `ollama launch claude` |
+| `codex-app` | Codex App | `ollama launch codex-app` |
+| `hermes` | Hermes Agent | `ollama launch hermes` |
+| `openclaw` | OpenClaw | `ollama launch openclaw` |
+| `opencode` | OpenCode | `ollama launch opencode` |
+| `codex` | Codex CLI | `ollama launch codex` |
+| `copilot` | GitHub Copilot Agent | `ollama launch copilot` |
+| `droid` | Droid | `ollama launch droid` |
+| `pi` | Pi Agent | `ollama launch pi` |
+
+每个智能体都有已记录的 MCP 配置路径（Cursor、Claude Desktop、`~/.codex/mcp.json` 等）。`sync --unify` 会合并到该智能体的所有路径。
+
+## 环境契约
+
+当您运行 `agent_hub launch` 或 source `launch.env` 时，Arka 会设置：
+
+| 变量 | 指向 |
+| -------- | --------- |
+| `ARKA_HUB_DIR` | 中枢根目录（`~/.config/arka/hub/`） |
+| `ARKA_MCP_CONFIG` | 中枢 MCP 配置 |
+| `ARKA_MEMORY_DIR` | 中枢内存导出 |
+| `ARKA_CONTEXT_MD` | 人类可读的 `memory/context.md` |
+| `ARKA_SKILLS_MANIFEST` | 技能清单 JSON |
+| `ARKA_SKILLS_DIR` | 技能目录 |
+| `MCP_CONFIG` | 与 `ARKA_MCP_CONFIG` 相同（供读取它的智能体） |
+
+智能体特定别名（仅在有记录的地方）：
+
+| 智能体 | 附加变量 |
+| ----- | -------------- |
+| OpenClaw | `OPENCLAW_MCP_CONFIG` → 中枢 MCP 路径 |
+| Claude / Codex / Copilot | 用于插件目录的 `ARKA_SKILLS_DIR` |
+
+```bash
+source ~/.config/arka/hub/launch.env
+```
+
+## 内存导入
+
+将 JSON 或 markdown 内存导出重新导入到 Arka 统一内存和会话笔记：
+
+```bash
+arka agent_hub import-memory ~/.config/arka/hub/memory/summary.json
+arka agent_hub import-memory ./notes.md
+```
+
+导入的文本在写入内存之前会经过 Arka 安全网关。
+
+## MCP 适配器
+
+`agent_hub sync` 会在 `~/.config/arka/hub/adapters/` 下写入**片段文件**，展示如何将中枢 MCP 服务器合并到 Cursor 或 Claude Desktop 配置中。
+
+使用 `--unify`，Arka 会将中枢服务器直接合并到每个智能体已记录的 MCP 路径中（默认仅添加）。
+
+要用中枢服务器完全覆盖智能体 MCP：
+
+```bash
+arka agent_hub sync --unify --replace
+```
+
+传统的 `--force` 仍然会合并到 Cursor/Claude Desktop 适配器目标中。
+
+## 范围导出（边缘 / ClawBox）
+
+在始终在线的边缘设备（Jetson Orin、ClawBox）上，限制中枢导出的内容，以避免共享上下文变成共享信任：
+
+```env
+ARKA_MEMORY_TRUST_MAX=team
+ARKA_HUB_MEMORY_SCOPE=team:clawbox
+```
+
+| 设置 | 效果 |
+| ------- | ------ |
+| `ARKA_MEMORY_TRUST_MAX` | 将召回和中枢导出上限限制为 `global`、`team`、`workflow` 或 `run` 层级 |
+| `ARKA_HUB_MEMORY_SCOPE` | 将中枢的 `summary.json` / `context.md` 过滤到一个团队（例如 `team:clawbox`） |
+
+**推荐的边缘模式：**
+
+```bash
+# Export-only — no writes to agent configs
+arka agent_hub sync
+
+# Do NOT run sync --unify on edge unless you intend to merge MCP into agent configs
+source ~/.config/arka/hub/launch.env
+```
+
+中枢导出在事实上包含 `trust_tier` 和 `provenance`，加上用于范围化工作流内存的 `scratchpad_preview`。
+
+从模板创建有范围的团队：
+
+```bash
+arka team create clawbox --template clawbox-edge
+```
+
+## 相关指南
+
+- [MCP 集成](/cn/guides/mcp) — 在 `~/.config/arka/mcp.json` 中配置服务器
+- [内存](/cn/guides/memory) — 导出到中枢的统一内存层
+- [技能](/cn/guides/skills) — 技能清单中列出的插件
+- [受 OpenClaw 启发的功能](/cn/guides/openclaw-features) — 会话内存和技能网关
+- [受 Hermes 启发的功能](/cn/guides/hermes-features) — 频道会话和子智能体

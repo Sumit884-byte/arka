@@ -1,0 +1,64 @@
+---
+title: "命令别名、子命令同义词与技能名"
+description: "Arka 的命令别名、代理名称覆盖、子命令同义词以及技能名等价项的参考，可让你以多种方式调用同一功能。"
+keywords: ["aliases", "commands", "synonyms"]
+---
+
+Arka 在多个层级上使用别名：主命令名、辅助函数、子命令同义词和技能名等价项。
+
+## 主命令
+
+| 命令 | 说明 |
+| ------- | ---------- |
+| `arka` | 默认入口 |
+| `agent` | 始终可用；相同的 NL 路由器 |
+| 自定义名称 | 在 `.env` 中设置 `AGENT_NAME=mybot` |
+
+唤醒短语中包含代理名称：**"hey arka, …"**
+
+## 子命令同义词
+
+| 同义词 | 映射到 |
+| -------- | ------- |
+| `reload` / `refresh` / `relink` | 重新加载配置 |
+| `start` / `up` | 启动服务 |
+| `stop` / `down` | 停止服务 |
+| `youtube` / `yt` | YouTube 命令 |
+| `youtube_bulk` / `yt_bulk` | 批量下载 |
+| `youtube_download` / `yt_download` | 单个下载 |
+| `youtube_research` / `yt_research` | YouTube 研究 |
+| `predict` / `predictions` / `forecast` | 预测能力 |
+| `stock` / `stocks` / `market` | 股票情报 |
+| `skills` / `plugins` / `extensions` | 插件管理 |
+| `supermemory` / `sm` / `memory-cloud` | 云端记忆 |
+| `pdf` / `document` / `docs` | PDF RAG |
+| `download` / `dl` | 下载媒体 |
+
+## 技能名等价项
+
+| 名称 | 备注 |
+| ----- | ----- |
+| `stock` / `stock_analysis` | 市场桥接 |
+| `pass` / `generate_password` | 密码保险箱 |
+| `doc_*` / `pdf_*` | 文档 RAG |
+| `macro` | `stock macro` 的别名 |
+| `emotion` | `stock emotion` 的别名 |
+
+## Fish shell 辅助函数
+
+| 函数 | 等价于 |
+| -------- | ---------- |
+| `agent_route` | 预览路由但不执行 |
+| `agent_trace` | 最近一次路由决策 |
+| `agent_why` | 解释技能选择 |
+| `yt_research` | `youtube_research` |
+| `yt_bulk` | `youtube_bulk` |
+| `yt_download` | `youtube_download` |
+
+## 在你的机器上发现
+
+```bash
+arka help
+arka skills list
+grep AGENT_NAME ~/.config/arka/.env
+```

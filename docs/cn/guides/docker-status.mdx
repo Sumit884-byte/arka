@@ -1,0 +1,27 @@
+---
+title: "Docker 状态"
+description: "从终端列出 Docker 容器和镜像、跟踪日志并检查守护进程健康状况。"
+keywords: ["docker", "containers", "logs", "devops"]
+---
+
+无需记忆 `docker ps` 参数即可快速查看 Docker。
+
+## 自然语言
+
+```bash
+arka show docker containers
+arka docker logs for api
+arka list docker images
+arka docker health
+```
+
+## CLI 命令
+
+| 命令 | 描述 |
+| ------- | ----------- |
+| `docker_status ps` | 运行中的容器及其状态和端口 |
+| `docker_status images` | 本地镜像及其大小和存在时长 |
+| `docker_status logs <container> [--tail N]` | 跟踪容器日志（默认 50 行） |
+| `docker_status health` | 守护进程健康摘要 |
+
+需要 `docker` CLI。在运行检查之前请先启动 Docker Desktop（或守护进程）。

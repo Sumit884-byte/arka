@@ -1,0 +1,62 @@
+---
+title: "硬件感知的模型选择"
+description: "探测你的 CPU、内存、GPU 和硬盘，为不同任务推荐 LLM 模型 —— 可选地应用到 ai-skill-model 配置中。"
+keywords: ["llm", "model", "hardware", "ollama"]
+---
+
+模型顾问会探测你的机器，为 Arka 的技能配置（`route`、`chat`、`summarize` 等）**按任务推荐 LLM 模型**。
+
+## 自然语言
+
+```bash
+arka select best model for my pc
+arka what llm model should I use
+arka optimize models for my hardware
+arka best models for my mac
+arka auto configure models from my hardware --apply
+```
+
+## CLI
+
+```bash
+select_model                    # 显示推荐
+select_model --apply            # 写入 llm-skill-models.json
+select_model --json             # 机器可读输出
+select_model probe              # 仅显示硬件快照
+```
+
+## 硬件等级
+
+| 等级 | 典型硬件 | 策略 |
+| ---- | -------- | ---- |
+| `minimal` | 低内存、无 GPU | 仅使用云端、小而快的模型 |
+| `cloud_light` | 笔记本、无本地 LLM | 快速云 API |
+| `balanced` | 8–16 GB 内存 | 云端为主，可选小型本地模型 |
+| `local_capable` | 16+ GB 内存、有 GPU | 结合 Ollama 与云端处理重任务 |
+| `local_heavy` | 32+ GB 内存、强 GPU | 优先使用本地 Ollama 模型 |
+
+顾问会检查 CPU 核心数、内存、GPU（CUDA/MPS/Metal）、硬盘空间、电池状态以及已安装的 Ollama 模型。
+
+## 应用推荐
+
+```bash
+select_model --apply
+# 或
+arka auto apply models for my hardware
+```
+
+这会写入 `~/.config/arka/llm-skill-models.json`。你可以随时覆盖单个配置：
+
+```bash
+arka ai-skill-model chat gemini/gemini-2.0-flash
+```
+
+## 要求
+
+- 使用云端等级至少需要一个云端 API key（`GEMINI_API_KEY`、`GROQ_API_KEY` 等）。
+- 使用本地等级需要运行 `ollama serve` 并已拉取相应模型。
+
+## 相关内容
+
+- [LLM 概念](/cn/concepts/llm) —— 提供商与故障切换
+- [配置参考](/cn/reference/configuration) —— `ai-skill-model` 设置

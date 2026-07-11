@@ -1,0 +1,118 @@
+---
+title: "会话记忆、心跳和技能门禁"
+description: "OpenClaw 启发的 Arka 特性 —— Markdown 会话记忆、Agent 心跳，以及针对 requires、OS 和权限的技能清单门禁。"
+keywords: ["session memory", "heartbeat", "openclaw", "skill gates", "permissions"]
+---
+
+Arka 包含几个受 **OpenClaw 启发** 的特性（并非独立的 OpenClaw 产品集成）。它们为第三方插件添加了持久化会话笔记、Agent 健康跟踪，以及声明式技能门禁。
+
+## 会话记忆
+
+存储在 `~/.config/arka/agent-memory/` 下的基于 Markdown 的会话笔记：
+
+- `MEMORY.md` —— 长期笔记（自动修剪）
+- `daily/YYYY-MM-DD.md` —— 每日会话笔记
+
+```bash
+session_memory append "Prefers morning standups at 9am"
+session_memory append "Always use dark terminal theme" --long-term
+session_memory search standup
+session_memory context "plan my morning routine"
+session_memory status
+```
+
+当 `SESSION_MEMORY=1` 时，召回的上下文会通过 `context_for()` 注入 Agent 循环中。
+
+### 环境变量
+
+| 变量 | 默认值 | 用途 |
+| -------- | ------- | ------- |
+| `SESSION_MEMORY` | `1` | 启用（`0` 禁用） |
+| `SESSION_MEMORY_DIR` | `~/.config/arka/agent-memory` | 存储根目录 |
+| `MEMORY_LONGTERM_MAX_LINES` | `100` | `MEMORY.md` 中保留的最大行数 |
+| `MEMORY_AUTO_LONGTERM` | `0` | 自动将每次追加提升为长期记忆 |
+
+存储前会对笔记进行净化 —— 注入模式和不安全内容会被阻止。
+
+## 心跳
+
+跟踪最后一次 Agent 活动、安全标志、例程数量和记忆统计。
+
+```bash
+heartbeat status
+heartbeat ping goal.completed
+```
+
+心跳数据写入 `~/.cache/fish-agent/heartbeat.json`。会话记忆和例程等子系统在活动时会自动调用 `ping()`。
+
+## 技能清单门禁
+
+第三方插件可以在 `skill.json` 中声明 **OpenClaw 风格的门禁**。Arka 在发现、路由和执行期间应用它们。
+
+### 顶层字段
+
+```json
+{
+  "name": "my_skill",
+  "requires": {
+    "bins": ["ffmpeg"],
+    "anyBins": ["docker", "podman"],
+    "env": ["MY_API_KEY"]
+  },
+  "os": ["darwin", "linux"],
+  "permissions": ["read", "network"]
+}
+```
+
+### `metadata.openclaw`（或 `metadata.arka` / `metadata.hermes`）
+
+相同的字段可以位于 `metadata.openclaw`、`metadata.arka` 或 `metadata.hermes` 下，以兼容 OpenClaw 风格和 Hermes 风格的清单：
+
+```json
+{
+  "name": "my_skill",
+  "metadata": {
+    "openclaw": {
+      "requires": { "env": ["MY_API_KEY"] },
+      "os": ["darwin"],
+      "permissions": ["network"]
+    }
+  }
+}
+```
+
+Arka 在解析时会将这些元数据块中的任何一个合并到顶层的 `requires`、`os` 和 `permissions` 字段中。
+
+### 门禁行为
+
+| 门禁 | 阻止时机 |
+| ---- | ----------- |
+| `os` | 当前平台未列出 |
+| `requires.bins` | 二进制文件未在 `PATH` 中找到 |
+| `requires.anyBins` | 列出的二进制文件均未找到 |
+| `requires.env` | 环境变量未设置 |
+| `permissions` | 权限不在 `SKILL_PERMISSIONS` 允许列表中 |
+
+被门禁阻止的技能：
+
+- 在 `arka skills list` 中**标记**为 `[gated: reason]`
+- 被 `match_command()` **跳过**，使路由不会匹配到不可用的插件
+- 在 `run_skill()` 处作为安全网**阻止**
+
+### 环境变量
+
+| 变量 | 默认值 | 用途 |
+| -------- | ------- | ------- |
+| `SKILL_PERMISSIONS` | `read,write,network,shell` | 允许的权限标签 |
+| `SKILLS_PATH` | — | 搜索插件的额外目录 |
+
+另请参阅：[安装插件](/cn/guides/plugins) 以及 `src/arka/skills/examples/demo_echo/skill.json` 中的示例。
+
+## 相关安全
+
+例程和 webhook 应用独立的加固层：
+
+- `ROUTINES_SECURITY=1` —— 针对已调度任务的符号动作检查
+- Webhook 入站验证会阻止注入负载
+
+它们与 [安全](/cn/concepts/security) 中记录的全局 `SECURITY`、`SECURITY_LLM` 和 `SECURITY_ACTIONS` 标志协同工作。

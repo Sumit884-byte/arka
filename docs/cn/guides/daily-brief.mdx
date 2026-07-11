@@ -1,0 +1,54 @@
+---
+title: "每日和科技简报"
+description: "获取个性化的早间科技简报，包含今日头条、来源 URL、OpenAI 更新日志感知，以及记忆驱动的主题选择。"
+keywords: ["brief", "news", "headlines", "tech"]
+---
+
+每日简报技能提供 **个性化新闻摘要** —— 默认偏向科技，附带可点击的来源 URL 并过滤过时日期。
+
+## 自然语言
+
+```bash
+arka daily brief
+arka morning tech brief
+arka today's tech brief personalized for me
+arka daily tech brief
+arka news brief
+arka morning brief
+```
+
+标题风格的请求也会路由到这里：
+
+```bash
+arka give me 10 concise tech news headlines
+arka bullet headlines for AI startups
+```
+
+## 你能得到什么
+
+- **仅今日** 的头条 —— 过时日期和旧年份会被过滤掉。
+- 每个条目在可用时会在破折号后包含 **来源 URL**。
+- **OpenAI 更新日志** 项目优先使用 `platform.openai.com/docs/changelog` 的官方 URL。
+- 可用时来自 Supermemory 上下文的 **个性化**（兴趣、过往简报偏好）。
+- 没有像 "Here are 10 headlines" 这样的前言 —— 仅列出条目。
+
+## 配置
+
+```env
+# 抓取 URL 内容以丰富简报时的最大词数（默认 30）
+BRIEF_URL_WORDS=30
+
+# 启用简报项的 URL 内容抓取（默认关闭）
+BRIEF_URL_LIMIT_ENABLED=1
+```
+
+## 路由工作原理
+
+诸如 `daily brief`、`tech brief`、`morning brief` 和 `news brief` 之类的短语会路由到 `daily_brief` —— 而不是通用的 `web_answer`。
+
+"brief" 的其他用法（例如 "brief summary of kubernetes"）仍走通用网络回答路径。
+
+## 相关
+
+- [聊天和搜索](/cn/guides/chat) —— `web_answer` 和深度搜索
+- [长期记忆](/cn/guides/memory) —— 个性化上下文

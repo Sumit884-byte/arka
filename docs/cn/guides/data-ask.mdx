@@ -1,0 +1,73 @@
+---
+title: "数据问答"
+description: "用自然语言询问 CSV、JSON、TSV、YAML、XML、Parquet、Excel 和 SQL dump 文件 —— 单个文件或整个文件夹皆可。"
+keywords: ["data", "csv", "json", "analyze", "query", "ask", "tsv", "folder"]
+---
+
+对本地数据文件提问 —— 行数、总计、Top 值、摘要等。查询单个文件、整个文件夹，或仅限某些格式。
+
+## 自然语言
+
+```bash
+arka ask data users.csv "how many rows?"
+arka ask data ./data/ "what is total revenue?"
+data_ask reports/ "summarize all files"
+data_ask folder ./exports --question "how many records total?"
+arka analyze csv files in data/ "top 10 products"
+arka query_data sales.json "what is total revenue by category?"
+```
+
+## CLI 命令
+
+| 命令 | 说明 |
+| ---- | ---- |
+| `data_ask users.csv "how many rows?"` | 对文件提问 |
+| `data_ask ./data/ --format csv "average salary?"` | 只查询文件夹中的 CSV 文件 |
+| `data_ask ./reports/ --formats csv,json "list all columns"` | 按多种格式筛选 |
+| `data_ask folder ./exports --question "how many records total?"` | 显式的文件夹模式 |
+| `ask_data sales.json "total by category"` | `data_ask` 的别名 |
+| `query_data report.tsv` | 未提供问题时进行摘要 |
+| `analyze_data data.jsonl "top 5 products"` | `data_ask` 的别名 |
+
+## 支持的格式
+
+`csv`、`json`、`jsonl`、`tsv`、`yaml`、`yml`、`xml`、`parquet`、`xlsx`、`xls`、`sql`
+
+用于更丰富解析的可选依赖：
+
+| 格式 | 包 |
+| ---- | -- |
+| Parquet | `pyarrow` 或 `pandas` |
+| Excel (xlsx) | `openpyxl` 或 `pandas` |
+| YAML | `pyyaml` |
+
+若未安装 pandas，表格类文件仍可通过 Python 标准库（`csv`、`json`）加载。
+
+## 文件夹与格式过滤
+
+当路径是目录时，Arka 会按扩展名发现数据文件（非递归，仅顶层）。使用 `--format` 或 `--formats` 限制加载哪些类型。
+
+大文件夹会受上下文大小限制：
+
+- 每次查询最多 **5 个文件**
+- 已加载文件累计最多 **500 行**
+- 文件较大时会返回每文件样本与列统计
+
+## 工作原理
+
+1. 从扩展名检测文件格式，可选地按 `--format` 过滤
+2. 从一个或多个文件加载数据行（截断时返回样本 + 统计）
+3. 将结构化上下文与你的问题发送给 LLM
+4. 在终端打印答案
+
+此技能用于 **查询现有文件**。要创建伪造的示例数据集，请使用 [生成数据](/cn/guides/generate-data)。
+
+## 示例
+
+```bash
+data_ask ~/Downloads/orders.csv "what are the top 3 products by quantity?"
+data_ask ./data/ --format csv "average salary?"
+query_data metrics.jsonl "average latency by region"
+analyze_data inventory.parquet
+data_ask reports/ "summarize all files"
+```

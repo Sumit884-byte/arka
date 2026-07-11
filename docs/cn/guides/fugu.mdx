@@ -1,0 +1,148 @@
+---
+title: "Sakana Fugu 编排器"
+description: "从 Arka 使用 Sakana Fugu 的多智能体编排 — 作为 LLM 提供商、Codex 桥接以及 Agent Hub 对等节点。"
+keywords: ["fugu", "sakana", "orchestrator", "multi-agent", "codex"]
+---
+
+[**Sakana Fugu**](https://sakana.ai/fugu/) 是 Sakana AI 推出的一款经过学习的多智能体编排器。它暴露一个**兼容 OpenAI 的 API**（`https://api.sakana.ai/v1`），可跨一组前沿模型进行路由、委派、验证并综合结果。从您代码的角度看，它表现得像一个模型 — `fugu`（快速）或 `fugu-ultra`（更深入）。
+
+Arka 通过三种方式集成 Fugu：
+
+1. **LLM 提供商** — 在故障转移链、团队和技能中使用 `sakana` / `fugu`
+2. **`arka fugu` CLI** — 通过 Fugu 进行一次性提示
+3. **Agent Hub + MCP** — 与 Fugu（通过 Codex）共享 Arka 的内存、技能和工具
+
+## 快速开始
+
+```bash
+# 1. Create an API key at https://console.sakana.ai
+# 2. Add to ~/.config/arka/.env
+SAKANA_API_KEY=your_key_here
+
+# 3. Verify
+arka fugu status
+
+# 4. Ask Fugu
+arka fugu explain how TLS handshake works
+arka fugu ultra design a multi-region failover plan
+```
+
+## LLM 提供商
+
+Fugu 被注册为提供商 `sakana`（别名 `fugu`）：
+
+```env
+SAKANA_API_KEY=your_key_here
+AI_PREFERRED_PROVIDER=sakana
+AI_PREFERRED_MODEL=fugu
+# SAKANA_MODELS=fugu,fugu-ultra
+```
+
+在故障转移链中使用：
+
+```env
+LLM_FALLBACK=sakana:fugu,gemini:gemini-2.5-flash,groq:llama-3.3-70b-versatile
+```
+
+单个技能的覆盖：
+
+```bash
+arka ai-skill-model research sakana/fugu-ultra
+```
+
+## 智能体团队
+
+```yaml
+# ~/.config/arka/teams/research.yaml
+name: research
+members:
+  - role: lead
+    kind: model
+    id: fugu-ultra
+    provider: sakana
+  - role: reviewer
+    kind: model
+    id: gemini-2.0-flash
+    provider: gemini
+```
+
+或使用提供商默认值：
+
+```yaml
+  - role: orchestrator
+    kind: provider
+    id: sakana
+```
+
+## Codex 桥接
+
+Fugu 的主要框架是 **OpenAI Codex**。安装 Sakana 提供商包：
+
+```bash
+curl -fsSL https://sakana.ai/fugu/install | bash
+SAKANA_API_KEY=your_key codex -p fugu
+```
+
+与 Codex/Fugu 共享 Arka 工具：
+
+```bash
+# Export hub memory, skills, and MCP registry
+arka fugu sync
+
+# Merge Arka MCP servers into ~/.codex/mcp.json (includes arka mcp serve)
+arka fugu sync --unify
+```
+
+这会在 [Agent Hub](/cn/guides/agent-hub) 中注册 Fugu，并将共享的 `hub/mcp.json` 合并到 Codex 的 MCP 配置中，这样 Fugu 就可以调用 `arka_ask`、`arka_skill`、`arka_team_run` 以及其他 Arka MCP 工具。
+
+## MCP：外部编排器 → Arka
+
+任何支持 MCP 客户端的编排器（包括通过 Codex 使用 Fugu）都可以将 Arka 作为工具服务器使用：
+
+```json
+{
+  "mcpServers": {
+    "arka": {
+      "command": "arka",
+      "args": ["mcp", "serve"]
+    }
+  }
+}
+```
+
+安装片段：
+
+```bash
+arka mcp install --agent cursor --write-config
+arka agent_hub sync --unify
+```
+
+## HTTP webhook（替代入口）
+
+对于以 POST JSON 而非 MCP 进行通信的编排器：
+
+```bash
+WEBHOOK_ENABLED=1
+WEBHOOK_TOKEN=your-secret
+arka webhook serve
+```
+
+向 `http://127.0.0.1:8767/v1/inbox` 发送 POST 请求，带上 `channel` + `chat_id` 以维持会话连续性。有关会话模式，请参阅 [Hermes 功能](/cn/guides/hermes-features)。
+
+## Fugu 是什么（不是什么）
+
+| | Fugu | Arka |
+| --- | --- | --- |
+| **角色** | 多模型编排器（路由到前沿 LLM） | 本地智能体中枢（技能、内存、MCP、团队） |
+| **接口** | 兼容 OpenAI 的 REST API | CLI、fish、MCP 服务器、webhook |
+| **MCP** | 通过 Codex 框架 | 原生客户端 + 服务器 |
+| **自托管** | 仅 API（闭源权重） | 完全本地 |
+
+Fugu 处理**调用哪些模型以及如何协调它们**。Arka 处理**您环境中有哪些工具、内存和工作流可用**。两者一起：Fugu 编排推理；Arka 提供工具箱。
+
+## 相关
+
+- [LLM 故障转移](/cn/concepts/llm) — 提供商注册表和 `sakana` 短名称
+- [Agent Hub](/cn/guides/agent-hub) — 跨智能体 MCP/内存同步
+- [MCP](/cn/guides/mcp) — `arka mcp serve` 工具接口
+- [智能体团队](/cn/guides/agent-teams) — 带 `provider: sakana` 的 `kind: model`
