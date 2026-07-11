@@ -1,10 +1,10 @@
 ---
 title: "Agent Hub"
 description: "Shared MCP, memory, and skills for ollama launch agents — one Arka-managed hub that Claude Code, Hermes, OpenClaw, and other agents can consume."
-keywords: ["agent hub", "ollama launch", "mcp", "shared memory", "openclaw", "hermes"]
+keywords: ["agent hub", "ollama launch", "mcp", "shared memory", "openclaw", "hermes", "unification"]
 ---
 
-The **Arka Agent Hub** is a shared interoperability layer for coding agents launched via `ollama launch`. Arka does not patch or fork external agents — it exports canonical config files and environment variables that any agent can read.
+The **Arka Agent Hub** is a shared interoperability layer for coding agents launched via `ollama launch`. Arka does not patch or fork external agents — it exports canonical config files, merges MCP into known agent paths when you opt in, and sets environment variables that any agent can read.
 
 ## What gets shared
 
@@ -12,14 +12,21 @@ The **Arka Agent Hub** is a shared interoperability layer for coding agents laun
 | -------- | ------ | ------- |
 | `~/.config/arka/hub/mcp.json` | `~/.config/arka/mcp.json` | Single MCP config (Cursor-compatible) |
 | `~/.config/arka/hub/memory/summary.json` | unified memory + sessions | Lightweight facts and session index |
+| `~/.config/arka/hub/memory/context.md` | unified memory + sessions | Human-readable context bundle |
+| `~/.config/arka/hub/memory/README.md` | generated | How each agent should load context |
 | `~/.config/arka/hub/skills/manifest.json` | `discover_skills()` | Installed Arka skills other agents can read |
+| `~/.config/arka/hub/skills/INSTALL.md` | generated | Skill install instructions |
+| `~/.config/arka/hub/launch.env` | generated | Sourceable env contract for any agent |
 | `~/.config/arka/hub/agents.json` | static registry | Agent catalog + last sync timestamps |
 
 ## Quick start
 
 ```bash
-# Refresh hub exports from Arka
+# Export-only sync (v1 behavior — no agent config writes)
 arka agent_hub sync
+
+# Full unification: merge MCP into agent configs + memory tails
+arka agent_hub sync --unify
 
 # List supported ollama launch agents
 arka agent_hub list
@@ -29,10 +36,19 @@ arka agent_hub launch claude
 arka agent_hub launch hermes
 arka agent_hub launch openclaw
 
-# Check sync state and adapter hints
+# Probe which agent configs exist on this machine
+arka agent_hub detect
+
+# Show per-agent MCP merge status
+arka agent_hub adapters
+
+# Import memory export back into Arka
+arka agent_hub import-memory path/to/export.json
+
+# Check sync state and unify status
 arka agent_hub status
 
-# Verify ollama + hub paths
+# Verify ollama + hub paths + per-agent unify status
 arka agent_hub doctor
 ```
 
@@ -40,7 +56,10 @@ From fish:
 
 ```fish
 agent_hub sync
+agent_hub sync --unify
+agent_hub detect
 agent_hub launch claude
+source ~/.config/arka/hub/launch.env
 ```
 
 Natural language:
@@ -49,7 +68,29 @@ Natural language:
 agent "sync agent hub"
 agent "launch claude code"
 agent "shared mcp for agents"
+agent "detect agent hub configs"
 ```
+
+## Full unification (v2)
+
+**Export-only** (`agent_hub sync`) copies hub files and writes `launch.env` — safe, no external config changes.
+
+**Full unification** (`agent_hub sync --unify`) additionally:
+
+1. **MCP merge** — Adds hub `mcpServers` into each agent's known config path (creates file if missing). Existing user servers are preserved unless you pass `--replace`.
+2. **Memory bundle** — Writes `context.md`, `memory/README.md`, and optionally copies the tail of OpenClaw `MEMORY.md` into `hub/memory/openclaw_memory_tail.md`.
+3. **Skills docs** — Writes `skills/INSTALL.md` with manifest paths and env vars.
+4. **Launch contract** — Regenerates `launch.env` with the full env var set.
+
+```bash
+# Safe merge (add missing MCP servers only)
+arka agent_hub sync --unify
+
+# Destructive: replace agent MCP with hub servers
+arka agent_hub sync --unify --replace
+```
+
+Use `agent_hub detect` to see which config files exist locally, and `agent_hub adapters` to see what would merge or is already merged.
 
 ## Supported agents
 
@@ -65,30 +106,57 @@ agent "shared mcp for agents"
 | `droid` | Droid | `ollama launch droid` |
 | `pi` | Pi Agent | `ollama launch pi` |
 
+Each agent has documented MCP config paths (Cursor, Claude Desktop, `~/.codex/mcp.json`, etc.). `sync --unify` merges into all paths for that agent.
+
 ## Environment contract
 
-When you run `agent_hub launch`, Arka sets:
+When you run `agent_hub launch` or source `launch.env`, Arka sets:
 
 | Variable | Points to |
 | -------- | --------- |
 | `ARKA_HUB_DIR` | Hub root (`~/.config/arka/hub/`) |
 | `ARKA_MCP_CONFIG` | Hub MCP config |
 | `ARKA_MEMORY_DIR` | Hub memory exports |
+| `ARKA_CONTEXT_MD` | Human-readable `memory/context.md` |
+| `ARKA_SKILLS_MANIFEST` | Skills manifest JSON |
+| `ARKA_SKILLS_DIR` | Skills directory |
 | `MCP_CONFIG` | Same as `ARKA_MCP_CONFIG` (for agents that read it) |
 
-Agents that support these env vars pick up shared MCP and memory without Arka modifying their internals.
+Agent-specific aliases (only where documented):
+
+| Agent | Extra variable |
+| ----- | -------------- |
+| OpenClaw | `OPENCLAW_MCP_CONFIG` → hub MCP path |
+| Claude / Codex / Copilot | `ARKA_SKILLS_DIR` for plugin dirs |
+
+```bash
+source ~/.config/arka/hub/launch.env
+```
+
+## Memory import
+
+Import JSON or markdown memory exports back into Arka unified memory and session notes:
+
+```bash
+arka agent_hub import-memory ~/.config/arka/hub/memory/summary.json
+arka agent_hub import-memory ./notes.md
+```
+
+Imported text passes through Arka security gates before writing to memory.
 
 ## MCP adapters
 
-`agent_hub sync` writes **snippet files** under `~/.config/arka/hub/adapters/` showing how to merge hub MCP servers into Cursor or Claude Desktop configs. By default Arka does **not** overwrite your live configs.
+`agent_hub sync` writes **snippet files** under `~/.config/arka/hub/adapters/` showing how to merge hub MCP servers into Cursor or Claude Desktop configs.
 
-To merge hub MCP into external configs:
+With `--unify`, Arka merges hub servers directly into each agent's documented MCP paths (add-only by default).
+
+To fully overwrite agent MCP with hub servers:
 
 ```bash
-arka agent_hub sync --force
+arka agent_hub sync --unify --replace
 ```
 
-Use `--force` only when you want Arka to write merged `mcpServers` into documented adapter paths.
+Legacy `--force` still merges into Cursor/Claude Desktop adapter targets.
 
 ## Related guides
 

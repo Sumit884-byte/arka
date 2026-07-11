@@ -5,11 +5,15 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 from arka.integrations.agent_hub import (
+    format_adapters,
     format_agent_list,
+    format_detect,
     format_doctor,
     format_status,
+    import_memory,
     launch_agent,
     nl_to_argv,
     sync_all,
@@ -22,22 +26,42 @@ def cmd_list(_args: argparse.Namespace) -> int:
 
 
 def cmd_sync(args: argparse.Namespace) -> int:
-    result = sync_all(force_adapters=args.force, use_symlink=args.symlink)
+    result = sync_all(
+        force_adapters=args.force,
+        use_symlink=args.symlink,
+        unify=args.unify,
+        replace=args.replace,
+    )
     print(f"synced_at\t{result.get('synced_at')}")
+    print(f"unified\t{result.get('unified')}")
     mcp = result.get("mcp") or {}
     print(f"mcp\t{mcp.get('mode', '?')}\t{mcp.get('destination', '')}")
     memory = result.get("memory") or {}
     print(
         f"memory\t{memory.get('summary', '')}\t"
+        f"context={memory.get('context_md', '')}\t"
         f"facts={memory.get('fact_count', 0)} sessions={memory.get('session_count', 0)}"
     )
     skills = result.get("skills") or {}
-    print(f"skills\t{skills.get('manifest', '')}\tcount={skills.get('count', 0)}")
+    print(
+        f"skills\t{skills.get('manifest', '')}\t"
+        f"install={skills.get('install_md', '')}\tcount={skills.get('count', 0)}"
+    )
+    print(f"launch_env\t{result.get('launch_env', '')}")
     print(f"registry\t{result.get('registry', '')}")
     adapters = result.get("adapters") or []
     for row in adapters:
         written = "written" if row.get("written") else "snippet-only"
         print(f"adapter\t{row.get('label')}\t{written}\t{row.get('target')}")
+    unify_rows = result.get("unify_mcp") or []
+    for row in unify_rows:
+        print(
+            f"unify_mcp\t{row.get('agent')}\t{row.get('path')}\t"
+            f"ok={row.get('ok')}\t{row.get('detail', '')}"
+        )
+    openclaw = result.get("openclaw_memory")
+    if openclaw:
+        print(f"openclaw_memory\t{openclaw.get('source')}\t{openclaw.get('destination')}")
     return 0
 
 
@@ -50,6 +74,27 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
     text, code = format_doctor()
     print(text)
     return code
+
+
+def cmd_detect(_args: argparse.Namespace) -> int:
+    print(format_detect())
+    return 0
+
+
+def cmd_adapters(_args: argparse.Namespace) -> int:
+    print(format_adapters())
+    return 0
+
+
+def cmd_import_memory(args: argparse.Namespace) -> int:
+    result = import_memory(Path(args.path))
+    print(f"source\t{result.get('source')}")
+    print(f"ok\t{result.get('ok')}")
+    print(f"facts_imported\t{result.get('facts_imported', 0)}")
+    print(f"notes_imported\t{result.get('notes_imported', 0)}")
+    for err in result.get("errors") or []:
+        print(f"error\t{err}", file=sys.stderr)
+    return 0 if result.get("ok") else 1
 
 
 def cmd_launch(args: argparse.Namespace) -> int:
@@ -83,9 +128,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     sync_p = sub.add_parser("sync", help="Refresh hub exports from Arka")
     sync_p.add_argument(
+        "--unify",
+        action="store_true",
+        help="Full unification: merge MCP into agent configs, sync memory tails",
+    )
+    sync_p.add_argument(
+        "--replace",
+        action="store_true",
+        help="With --unify: replace agent MCP servers with hub (destructive)",
+    )
+    sync_p.add_argument(
         "--force",
         action="store_true",
-        help="Overwrite external MCP configs with hub servers (Cursor/Claude Desktop)",
+        help="Overwrite Cursor/Claude adapter targets with hub MCP servers",
     )
     sync_p.add_argument(
         "--symlink",
@@ -94,7 +149,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     sub.add_parser("status", help="Show sync state and configured agents")
-    sub.add_parser("doctor", help="Check ollama and hub paths")
+    sub.add_parser("doctor", help="Check ollama, hub paths, and unify status")
+    sub.add_parser("detect", help="Probe filesystem for agent config files")
+    sub.add_parser("adapters", help="List per-agent MCP merge status")
+
+    import_p = sub.add_parser("import-memory", help="Import memory export into Arka")
+    import_p.add_argument("path", help="JSON or markdown memory export path")
 
     launch_p = sub.add_parser("launch", help="Run ollama launch with shared hub env")
     launch_p.add_argument("name", help="Agent key (claude, hermes, openclaw, …)")
@@ -130,6 +190,9 @@ def main(argv: list[str] | None = None) -> int:
         "sync": cmd_sync,
         "status": cmd_status,
         "doctor": cmd_doctor,
+        "detect": cmd_detect,
+        "adapters": cmd_adapters,
+        "import-memory": cmd_import_memory,
         "launch": cmd_launch,
         "parse": cmd_parse,
     }
@@ -142,28 +205,40 @@ def _print_help() -> None:
 
 Usage:
   arka agent_hub list                 List agents + launch commands
-  arka agent_hub sync                 Copy MCP, export memory + skills manifest
-  arka agent_hub sync --force         Also merge hub MCP into Cursor/Claude configs
+  arka agent_hub sync                 Export-only: copy MCP, memory, skills (v1)
+  arka agent_hub sync --unify         Full unification: merge MCP into agent configs
+  arka agent_hub sync --unify --replace  Replace agent MCP with hub servers
+  arka agent_hub detect               Probe which agent configs exist locally
+  arka agent_hub adapters             Show per-agent MCP merge status
+  arka agent_hub import-memory <path> Import JSON/markdown memory into Arka
   arka agent_hub status               Sync timestamps and adapter hints
-  arka agent_hub doctor               Check ollama + hub paths
+  arka agent_hub doctor               Check ollama, hub paths, unify status
   arka agent_hub launch <name>        ollama launch with ARKA_HUB_* env vars
 
 Shared paths (~/.config/arka/hub/):
   mcp.json              Canonical MCP (from ~/.config/arka/mcp.json)
   memory/summary.json   Lightweight memory export
+  memory/context.md     Human-readable context bundle
+  memory/README.md      How agents should load context
   skills/manifest.json  Installed Arka skills
+  skills/INSTALL.md     Skill install instructions
+  launch.env            Sourceable env contract
   agents.json           Registry + last sync times
 
 Environment:
   ARKA_HUB_DIR              Hub root (default ~/.config/arka/hub)
   ARKA_MCP_CONFIG           MCP config path passed to agents
   ARKA_MEMORY_DIR           Memory export directory
+  ARKA_CONTEXT_MD           Human-readable context markdown
+  ARKA_SKILLS_MANIFEST      Skills manifest path
   AGENT_HUB_SYNC_ON_LAUNCH  Sync before launch (default 1)
 
 Examples:
   arka agent_hub sync
+  arka agent_hub sync --unify
+  arka agent_hub detect
   arka agent_hub launch claude
-  arka agent_hub launch hermes
+  source ~/.config/arka/hub/launch.env
   agent "sync agent hub"
   agent "launch claude code"
 """

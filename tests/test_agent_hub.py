@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -39,6 +40,7 @@ def test_agent_catalog():
         "pi",
     }
     assert AGENTS["claude"]["ollama_launch"] == "claude"
+    assert "mcp_merge_key" in AGENTS["claude"]
 
 
 def test_resolve_agent_aliases():
@@ -66,9 +68,124 @@ def test_sync_mcp_copy(hub_paths):
     assert "demo" in data["mcpServers"]
 
 
+def test_merge_mcp_add_only(hub_paths, tmp_path):
+    from arka.integrations.agent_hub import _hub_mcp_servers, hub_mcp_path, merge_mcp_into_path
+
+    hub_mcp_path().parent.mkdir(parents=True, exist_ok=True)
+    hub_mcp_path().write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "arka": {"command": "arka-mcp"},
+                    "new": {"command": "new-mcp"},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    agent_cfg = tmp_path / "agent" / "mcp.json"
+    agent_cfg.parent.mkdir(parents=True)
+    agent_cfg.write_text(
+        json.dumps({"mcpServers": {"local": {"command": "local"}, "arka": {"command": "old"}}}),
+        encoding="utf-8",
+    )
+    from arka.integrations.agent_hub import _hub_mcp_servers
+
+    result = merge_mcp_into_path(agent_cfg, _hub_mcp_servers(), create=True, replace=False)
+    assert result["ok"] is True
+    merged = json.loads(agent_cfg.read_text(encoding="utf-8"))
+    assert "local" in merged["mcpServers"]
+    assert merged["mcpServers"]["arka"]["command"] == "old"
+    assert "new" in merged["mcpServers"]
+
+
+def test_merge_mcp_replace(hub_paths, tmp_path):
+    from arka.integrations.agent_hub import _hub_mcp_servers, hub_mcp_path, merge_mcp_into_path
+
+    hub_mcp_path().parent.mkdir(parents=True, exist_ok=True)
+    hub_mcp_path().write_text(
+        json.dumps({"mcpServers": {"hub-only": {"command": "hub"}}}),
+        encoding="utf-8",
+    )
+    agent_cfg = tmp_path / "mcp.json"
+    agent_cfg.write_text(
+        json.dumps({"mcpServers": {"local": {"command": "local"}}}),
+        encoding="utf-8",
+    )
+    result = merge_mcp_into_path(agent_cfg, _hub_mcp_servers(), replace=True)
+    assert result["ok"] is True
+    merged = json.loads(agent_cfg.read_text(encoding="utf-8"))
+    assert "local" not in merged["mcpServers"]
+    assert "hub-only" in merged["mcpServers"]
+
+
+def test_detect_agents(hub_paths, tmp_path, monkeypatch):
+    from arka.integrations import agent_hub
+    from arka.integrations.agent_hub import detect_agents, hub_mcp_path
+
+    hub_mcp_path().parent.mkdir(parents=True, exist_ok=True)
+    hub_mcp_path().write_text(json.dumps({"mcpServers": {"x": {}}}), encoding="utf-8")
+    codex_path = tmp_path / "codex_mcp.json"
+    codex_path.write_text(json.dumps({"mcpServers": {}}), encoding="utf-8")
+    monkeypatch.setitem(agent_hub.AGENTS["codex"], "mcp_paths", [str(codex_path)])
+
+    rows = detect_agents()
+    codex_row = next(r for r in rows if r["agent"] == "codex")
+    assert codex_row["mcp_config_exists"] is True
+    assert codex_row["mcp_configs"][0]["exists"] is True
+
+
+def test_unify_mcp(hub_paths, tmp_path, monkeypatch):
+    from arka.integrations import agent_hub
+    from arka.integrations.agent_hub import hub_mcp_path, unify_mcp
+
+    hub_mcp_path().parent.mkdir(parents=True, exist_ok=True)
+    hub_mcp_path().write_text(
+        json.dumps({"mcpServers": {"shared": {"command": "shared"}}}),
+        encoding="utf-8",
+    )
+    agent_cfg = tmp_path / "pi_mcp.json"
+    monkeypatch.setitem(agent_hub.AGENTS["pi"], "mcp_paths", [str(agent_cfg)])
+    for key in agent_hub.AGENTS:
+        if key != "pi":
+            monkeypatch.setitem(agent_hub.AGENTS[key], "mcp_paths", [])
+
+    rows = unify_mcp()
+    pi_rows = [r for r in rows if r["agent"] == "pi"]
+    assert len(pi_rows) == 1
+    assert pi_rows[0]["ok"] is True
+    assert agent_cfg.is_file()
+    data = json.loads(agent_cfg.read_text(encoding="utf-8"))
+    assert "shared" in data["mcpServers"]
+
+
+def test_list_adapters(hub_paths, tmp_path, monkeypatch):
+    from arka.integrations import agent_hub
+    from arka.integrations.agent_hub import hub_mcp_path, list_adapters
+
+    hub_mcp_path().parent.mkdir(parents=True, exist_ok=True)
+    hub_mcp_path().write_text(
+        json.dumps({"mcpServers": {"hub": {"command": "hub"}}}),
+        encoding="utf-8",
+    )
+    agent_cfg = tmp_path / "droid_mcp.json"
+    agent_cfg.write_text(json.dumps({"mcpServers": {}}), encoding="utf-8")
+    monkeypatch.setitem(agent_hub.AGENTS["droid"], "mcp_paths", [str(agent_cfg)])
+    for key in agent_hub.AGENTS:
+        if key != "droid":
+            monkeypatch.setitem(agent_hub.AGENTS[key], "mcp_paths", [])
+    monkeypatch.setattr(agent_hub, "ADAPTER_TARGETS", {})
+
+    rows = list_adapters()
+    droid = next(r for r in rows if r["agent"] == "droid")
+    assert droid["would_add"] == ["hub"]
+    assert droid["fully_merged"] is False
+
+
 def test_sync_all_creates_exports(hub_paths, monkeypatch):
     from arka.integrations.agent_hub import (
         hub_agents_json_path,
+        hub_launch_env_path,
         hub_memory_dir,
         hub_skills_dir,
         sync_all,
@@ -87,11 +204,100 @@ def test_sync_all_creates_exports(hub_paths, monkeypatch):
 
     sync_all()
     assert (hub_memory_dir() / "summary.json").is_file()
+    assert (hub_memory_dir() / "context.md").is_file()
+    assert (hub_memory_dir() / "README.md").is_file()
     assert (hub_skills_dir() / "manifest.json").is_file()
+    assert (hub_skills_dir() / "INSTALL.md").is_file()
+    assert hub_launch_env_path().is_file()
     assert hub_agents_json_path().is_file()
     registry = json.loads(hub_agents_json_path().read_text(encoding="utf-8"))
     assert len(registry["agents"]) == 9
     assert registry["last_sync"]["mcp"]
+
+
+def test_sync_unify_writes_mcp(hub_paths, tmp_path, monkeypatch):
+    from arka.integrations import agent_hub
+    from arka.integrations.agent_hub import sync_all
+
+    hub_paths["mcp"].write_text(
+        json.dumps({"mcpServers": {"unified": {"command": "u"}}}),
+        encoding="utf-8",
+    )
+    agent_cfg = tmp_path / "hermes_mcp.json"
+    monkeypatch.setitem(agent_hub.AGENTS["hermes"], "mcp_paths", [str(agent_cfg)])
+    for key in agent_hub.AGENTS:
+        if key != "hermes":
+            monkeypatch.setitem(agent_hub.AGENTS[key], "mcp_paths", [])
+    monkeypatch.setattr(agent_hub, "ADAPTER_TARGETS", {})
+    monkeypatch.setattr("arka.agent.skills.discover_skills", lambda **_: [])
+    monkeypatch.setattr(
+        "arka.core.unified_memory.status",
+        lambda **_: {"unified_memory": True, "facts": {}, "notes": {}},
+    )
+    monkeypatch.setattr("arka.integrations.message_sessions.list_sessions", lambda **_: [])
+
+    result = sync_all(unify=True)
+    assert result["unified"] is True
+    assert agent_cfg.is_file()
+    data = json.loads(agent_cfg.read_text(encoding="utf-8"))
+    assert "unified" in data["mcpServers"]
+
+
+def test_write_launch_env(hub_paths):
+    from arka.integrations.agent_hub import hub_launch_env_path, launch_env, write_launch_env_file
+
+    path = write_launch_env_file("openclaw")
+    assert path == hub_launch_env_path()
+    text = path.read_text(encoding="utf-8")
+    assert "export ARKA_HUB_DIR=" in text
+    assert "export ARKA_CONTEXT_MD=" in text
+    assert "export ARKA_SKILLS_MANIFEST=" in text
+    assert "export OPENCLAW_MCP_CONFIG=" in text
+    env = launch_env("claude")
+    assert env["ARKA_SKILLS_MANIFEST"]
+    assert env["ARKA_CONTEXT_MD"]
+    assert env["ARKA_SKILLS_DIR"]
+
+
+def test_import_memory_json(hub_paths, tmp_path, monkeypatch):
+    from arka.integrations.agent_hub import import_memory
+
+    export = tmp_path / "export.json"
+    export.write_text(
+        json.dumps(
+            {
+                "facts": [{"text": "user prefers pytest"}],
+                "long_term_notes": ["meeting at 3pm"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "arka.integrations.agent_hub._import_fact",
+        lambda text: (True, None),
+    )
+    monkeypatch.setattr(
+        "arka.integrations.agent_hub._import_note",
+        lambda text, **_: (True, None),
+    )
+    result = import_memory(export)
+    assert result["ok"] is True
+    assert result["facts_imported"] == 1
+    assert result["notes_imported"] == 1
+
+
+def test_import_memory_markdown(hub_paths, tmp_path, monkeypatch):
+    from arka.integrations.agent_hub import import_memory
+
+    export = tmp_path / "notes.md"
+    export.write_text("# Notes\n\n- First note\n- Second note\n", encoding="utf-8")
+    monkeypatch.setattr(
+        "arka.integrations.agent_hub._import_note",
+        lambda text, **_: (True, None),
+    )
+    result = import_memory(export)
+    assert result["ok"] is True
+    assert result["notes_imported"] == 2
 
 
 def test_launch_env(hub_paths):
@@ -102,6 +308,7 @@ def test_launch_env(hub_paths):
     assert env["ARKA_MCP_CONFIG"].endswith("mcp.json")
     assert env["MCP_CONFIG"] == env["ARKA_MCP_CONFIG"]
     assert env["ARKA_AGENT_NAME"] == "Claude Code"
+    assert env["ARKA_SKILLS_DIR"]
 
 
 def test_launch_agent_runs_ollama(hub_paths, monkeypatch):
@@ -118,6 +325,7 @@ def test_launch_agent_runs_ollama(hub_paths, monkeypatch):
     assert args[0][:3] == ["ollama", "launch", "hermes"]
     assert "ARKA_HUB_DIR" in kwargs["env"]
     assert "ARKA_MCP_CONFIG" in kwargs["env"]
+    assert "ARKA_CONTEXT_MD" in kwargs["env"]
 
 
 def test_launch_unknown_agent():
@@ -135,6 +343,8 @@ def test_nl_to_argv_routes():
     assert nl_to_argv("launch claude code") == ["launch", "claude"]
     assert nl_to_argv("ollama launch hermes") == ["launch", "hermes"]
     assert nl_to_argv("shared mcp for agents") == ["status"]
+    assert nl_to_argv("detect agent hub configs") == ["detect"]
+    assert nl_to_argv("agent hub adapters") == ["adapters"]
     assert nl_to_argv("hello world") is None
 
 
@@ -146,6 +356,8 @@ def test_doctor_checks(hub_paths, monkeypatch):
     names = {c["name"] for c in checks}
     assert "ollama" in names
     assert "hub_dir_writable" in names
+    assert "hub_launch_env" in names
+    assert "unify_claude" in names
     assert any(c["name"] == "hub_dir_writable" and c["ok"] for c in checks)
 
 
@@ -158,6 +370,17 @@ def test_format_list_and_status(hub_paths):
     status = format_status()
     assert "hub\t" in status
     assert "claude" in status
+    assert "launch_env\t" in status
+
+
+def test_format_detect_and_adapters(hub_paths):
+    from arka.integrations.agent_hub import format_adapters, format_detect
+
+    hub_paths["mcp"].write_text(json.dumps({"mcpServers": {}}), encoding="utf-8")
+    detect = format_detect()
+    assert "hub\t" in detect
+    adapters = format_adapters()
+    assert "hub_servers\t" in adapters
 
 
 def test_cli_list(capsys):
@@ -186,3 +409,37 @@ def test_cli_sync(capsys, hub_paths, monkeypatch):
     out = capsys.readouterr().out
     assert "synced_at\t" in out
     assert "mcp\t" in out
+    assert "launch_env\t" in out
+
+
+def test_cli_detect_and_adapters(capsys, hub_paths):
+    from arka.integrations.agent_hub_cli import main
+
+    hub_paths["mcp"].write_text(json.dumps({"mcpServers": {}}), encoding="utf-8")
+    assert main(["detect"]) == 0
+    out = capsys.readouterr().out
+    assert "configs=" in out
+
+    assert main(["adapters"]) == 0
+    out = capsys.readouterr().out
+    assert "hub_servers\t" in out
+
+
+def test_cli_import_memory(capsys, tmp_path, monkeypatch):
+    from arka.integrations.agent_hub_cli import main
+
+    export = tmp_path / "mem.json"
+    export.write_text(json.dumps({"facts": [{"text": "test fact"}]}), encoding="utf-8")
+    monkeypatch.setattr(
+        "arka.integrations.agent_hub_cli.import_memory",
+        lambda path: {
+            "source": str(path),
+            "ok": True,
+            "facts_imported": 1,
+            "notes_imported": 0,
+            "errors": [],
+        },
+    )
+    assert main(["import-memory", str(export)]) == 0
+    out = capsys.readouterr().out
+    assert "facts_imported\t1" in out
