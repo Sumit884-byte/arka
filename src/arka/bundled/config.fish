@@ -12476,6 +12476,15 @@ function memory_promote --description "Promote scratchpad entry to global facts"
     memory_scope promote $argv
 end
 
+function memory --description "Unified memory — remember, recall, status, scope, scratchpad, promote"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        $py (_arka_py_script arka_memory.py)
+        return $status
+    end
+    $py (_arka_py_script arka_memory.py) $argv
+end
+
 function subagent --description "Isolated sub-agent delegation (background tasks)"
     set -l py (_arka_python)
     if test (count $argv) -eq 0

@@ -154,6 +154,9 @@ def main(argv: list[str] | None = None) -> int:
     if args[0] == "workflow":
         return run_script("arka_teams.py", ["workflow", *args[1:]])
 
+    if args[0] == "memory":
+        return run_script("arka_memory.py", args[1:])
+
     if args[0] == "remind":
         rest = args[1:]
         if not rest:

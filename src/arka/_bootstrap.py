@@ -21,6 +21,7 @@ LEGACY_MODULES: dict[str, str] = {
     "arka_memory_detect": "arka.core.memory_detect",
     "arka_session_memory": "arka.core.session_memory",
     "arka_unified_memory": "arka.core.unified_memory",
+    "arka_memory": "arka.integrations.memory_cli",
     "arka_personalize": "arka.core.personalize",
     "arka_config": "arka.core.config_backup",
     "arka_llm": "arka.llm.cli",

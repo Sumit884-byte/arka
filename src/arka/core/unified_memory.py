@@ -402,7 +402,7 @@ def _cmd_scope_status(_args: argparse.Namespace) -> int:
     return 0
 
 
-def main() -> int:
+def run_cli(argv: list[str]) -> int:
     load_env_file()
     parser = argparse.ArgumentParser(description="Unified memory facade for Arka")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -440,7 +440,7 @@ def main() -> int:
     promote_p = scope_sub.add_parser("promote", help="Promote scratchpad entry to global facts")
     promote_p.add_argument("id")
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if args.cmd == "remember":
         code, err = remember(
             args.text,
@@ -477,6 +477,11 @@ def main() -> int:
         print("Usage: scope status|promote <id>|scratchpad list|show <id>", file=sys.stderr)
         return 1
     return 1
+
+
+def main(argv: list[str] | None = None) -> int:
+    raw = list(argv if argv is not None else sys.argv[1:])
+    return run_cli(raw)
 
 
 if __name__ == "__main__":
