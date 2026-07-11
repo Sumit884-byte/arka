@@ -12071,6 +12071,28 @@ function agent_hub --description "Shared MCP, memory, and skills for ollama laun
     $py (_arka_py_script arka_agent_hub.py) $argv
 end
 
+function team --description "Agent teams — agents, models, and providers by role"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        $py (_arka_py_script arka_teams.py) team list
+        echo ""
+        echo "Usage: team list|show <name>|create <name>|run <name> --task \"...\""
+        return 0
+    end
+    $py (_arka_py_script arka_teams.py) team $argv
+end
+
+function workflow --description "Team workflows — sequential and parallel orchestration"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        $py (_arka_py_script arka_teams.py) workflow list
+        echo ""
+        echo "Usage: workflow list|show <name>|create <name>|run <name> --task \"...\""
+        return 0
+    end
+    $py (_arka_py_script arka_teams.py) workflow $argv
+end
+
 function mcp --description "Model Context Protocol — list, add, tools, call, status"
     set -l py (_arka_python)
     if test (count $argv) -eq 0
@@ -16257,6 +16279,8 @@ function agent --description "Run commands safely: executes safe commands automa
         echo "  arka mcp add <name>    - Add stdio or HTTP MCP server"
         echo "  agent_hub list|sync    - Shared hub for ollama launch agents"
         echo "  arka agent_hub launch  - Launch agent with ARKA_HUB_* env vars"
+        echo "  team list|run          - Agent teams across models and providers"
+        echo "  workflow list|run      - Sequential/parallel team workflows"
         echo "  gemini_cli <prompt>    - Google Gemini CLI agent (npm @google/gemini-cli)"
         echo "  arka gemini status     - Check Gemini CLI install (same as gemini_cli status)"
         echo "  cleanup_downloads      - Remove .zip/.deb/.tar.gz clutter from Downloads"

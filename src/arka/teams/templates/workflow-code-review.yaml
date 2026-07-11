@@ -1,0 +1,16 @@
+name: code-review
+team: code-review
+steps:
+  - member: lead
+    action: plan
+    prompt: "Review scope and checklist for this code change:\n\n{task}"
+  - parallel:
+      - member: analyst
+        action: analyze
+        prompt: "Review for bugs, style, and missing tests:\n\n{task}\n\nChecklist:\n{step_1}"
+      - member: local-fallback
+        action: verify
+        prompt: "Second-pass review for edge cases:\n\n{step_1}"
+  - member: lead
+    action: synthesize
+    prompt: "Produce final review summary with severity-tagged findings:\n\n{results}"

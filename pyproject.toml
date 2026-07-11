@@ -119,6 +119,7 @@ arka = [
     "requirements/*.txt",
     "pdf/privategpt/*",
     "env.example",
+    "teams/templates/*",
     "skills/**/*",
     "professions/**/*",
 ]

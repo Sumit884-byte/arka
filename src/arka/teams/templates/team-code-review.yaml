@@ -1,0 +1,16 @@
+name: code-review
+description: Code review team — lead reviewer, fast analyst, local sanity check
+members:
+  - kind: agent
+    id: codex
+    role: lead
+  - kind: model
+    id: llama-3.3-70b-versatile
+    provider: groq
+    role: analyst
+  - kind: provider
+    id: ollama
+    role: local-fallback
+defaults:
+  memory: unified
+  workflow: code-review

@@ -51,6 +51,8 @@ def _known_paths() -> list[tuple[str, Path]]:
         ("config_root", cfg),
         ("env", env_file()),
         ("hub", _hub_dir()),
+        ("teams", cfg / "teams"),
+        ("workflows", cfg / "workflows"),
         ("mcp", cfg / "mcp.json"),
         ("personalize", cfg / "personalize.json"),
         ("platform", cfg / "platform.json"),

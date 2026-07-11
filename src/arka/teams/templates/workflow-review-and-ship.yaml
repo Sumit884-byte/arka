@@ -1,0 +1,16 @@
+name: review-and-ship
+team: research
+steps:
+  - member: lead
+    action: plan
+    prompt: "Break down this task into clear steps and success criteria:\n\n{task}"
+  - parallel:
+      - member: analyst
+        action: analyze
+        prompt: "Analyze the task and produce findings:\n\n{task}\n\nPlan:\n{step_1}"
+      - member: local-fallback
+        action: verify
+        prompt: "Sanity-check the plan for gaps or risks:\n\n{step_1}"
+  - member: lead
+    action: synthesize
+    prompt: "Merge the team outputs into one actionable answer:\n\nTask: {task}\n\n{results}"

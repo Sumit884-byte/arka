@@ -77,6 +77,7 @@ LEGACY_MODULES: dict[str, str] = {
     "arka_heartbeat": "arka.integrations.heartbeat",
     "arka_message_sessions": "arka.integrations.message_sessions",
     "arka_subagent": "arka.integrations.subagent",
+    "arka_teams": "arka.integrations.teams_cli",
     "arka_webhook": "arka.integrations.webhook",
     "arka_sports": "arka.integrations.sports",
     "arka_currency": "arka.integrations.currency",

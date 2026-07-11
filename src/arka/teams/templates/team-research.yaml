@@ -1,0 +1,17 @@
+name: research
+description: Deep research team — lead planner, cloud analyst, local verifier
+members:
+  - kind: agent
+    id: claude
+    role: lead
+  - kind: model
+    id: gemini-2.0-flash
+    provider: gemini
+    role: analyst
+  - kind: provider
+    id: ollama
+    role: local-fallback
+defaults:
+  memory: unified
+  mcp: true
+  workflow: review-and-ship

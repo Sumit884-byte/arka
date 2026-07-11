@@ -148,6 +148,12 @@ def main(argv: list[str] | None = None) -> int:
     if args[0] in ("agent_hub", "agent-hub", "hub"):
         return run_script("arka_agent_hub.py", args[1:])
 
+    if args[0] in ("team", "teams"):
+        return run_script("arka_teams.py", ["team", *args[1:]])
+
+    if args[0] == "workflow":
+        return run_script("arka_teams.py", ["workflow", *args[1:]])
+
     if args[0] == "remind":
         rest = args[1:]
         if not rest:

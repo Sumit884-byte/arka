@@ -71,6 +71,7 @@
           "guides/gemini-cli",
           "guides/mcp",
           "guides/agent-hub",
+          "guides/agent-teams",
           "guides/post-x"
         ]
       },

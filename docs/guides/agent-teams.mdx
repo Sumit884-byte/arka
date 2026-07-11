@@ -1,0 +1,154 @@
+---
+title: "Agent Teams"
+description: "Form teams across agents, models, and providers — then run sequential or parallel workflows with shared memory."
+keywords: ["agent teams", "workflows", "multi-agent", "orchestration", "providers", "agent hub"]
+---
+
+**Agent Teams** let you group coding agents (from [Agent Hub](/guides/agent-hub)), cloud models, and local providers into named roles, then run **workflows** that hand work between them.
+
+## Concepts
+
+| Piece | What it is | Stored at |
+| ----- | ---------- | --------- |
+| **Team** | Named roles (`lead`, `analyst`, …) mapped to agents, models, or providers | `~/.config/arka/teams/` |
+| **Workflow** | Steps for a team — sequential, parallel, or round-robin handoff | `~/.config/arka/workflows/` |
+| **Run** | Execute a workflow with a task string; results pass between steps via `{task}`, `{results}`, `{step_N}` | CLI |
+
+Member kinds:
+
+- `agent` — ollama launch agent from Agent Hub (`claude`, `codex`, `hermes`, …)
+- `model` — specific model + provider (`gpt-4o` + `openai`, `gemini-2.0-flash` + `gemini`)
+- `provider` — provider default model (`ollama`, `groq`, …)
+
+## Quick start
+
+Starter teams and workflows are seeded on first use:
+
+```bash
+arka team list
+arka workflow list
+
+arka team show research --resolve
+arka team run research --task "Summarize Rust async patterns"
+
+arka workflow run review-and-ship --task "Plan a v2 auth redesign"
+arka workflow run code-review --task "Review PR #42: add JWT refresh"
+```
+
+From fish:
+
+```fish
+team list
+team run research --task "Compare Postgres vs SQLite for edge caches"
+workflow run code-review --task "Review auth middleware changes"
+```
+
+## Example team
+
+```yaml
+name: research
+description: Deep research team
+members:
+  - kind: agent
+    id: claude
+    role: lead
+  - kind: model
+    id: gemini-2.0-flash
+    provider: gemini
+    role: analyst
+  - kind: provider
+    id: ollama
+    role: local-fallback
+defaults:
+  memory: unified
+  mcp: true
+  workflow: review-and-ship
+```
+
+## Example workflow
+
+```yaml
+name: review-and-ship
+team: research
+steps:
+  - member: lead
+    action: plan
+    prompt: "Break down: {task}"
+  - parallel:
+      - member: analyst
+        action: analyze
+        prompt: "Analyze: {task}\n\nPlan:\n{step_1}"
+      - member: local-fallback
+        action: verify
+        prompt: "Sanity-check: {step_1}"
+  - member: lead
+    action: synthesize
+    prompt: "Merge results: {results}"
+```
+
+## CLI reference
+
+```bash
+arka team list
+arka team show <name> [--resolve]
+arka team create <name> [--template research]
+arka team run <name> --task "..." [--workflow <name>]
+
+arka workflow list
+arka workflow show <name>
+arka workflow create <name> [--template review-and-ship] [--team research]
+arka workflow run <name> --task "..."
+```
+
+`--resolve` prints how each role maps to a concrete agent or LLM target.
+
+## Runtime behavior
+
+1. **Load** team + workflow YAML/JSON from config dir (or bundled templates).
+2. **Resolve** members — agents via Agent Hub catalog; models/providers via LLM registry.
+3. **Recall** unified memory when `defaults.memory: unified`.
+4. **Execute** steps:
+   - Agent roles → `answer_question` with role context (lightweight v1; not full `ollama launch`).
+   - Model/provider roles → `LlmOrchestrator` with a fixed provider/model chain.
+   - Parallel blocks → thread pool (`TEAM_MAX_PARALLEL`, default 4).
+5. **Pass** outputs forward via template variables.
+
+## Bundled templates
+
+| Template | Type | Roles |
+| -------- | ---- | ----- |
+| `research` | team | lead (claude), analyst (gemini), local-fallback (ollama) |
+| `code-review` | team | lead (codex), analyst (groq), local-fallback (ollama) |
+| `review-and-ship` | workflow | plan → parallel analyze/verify → synthesize |
+| `code-review` | workflow | review checklist → parallel review → summary |
+
+Create from templates:
+
+```bash
+arka team create my-research --template research
+arka workflow create my-ship --template review-and-ship --team my-research
+```
+
+## Environment
+
+```bash
+ARKA_TEAMS_DIR=~/.config/arka/teams
+ARKA_WORKFLOWS_DIR=~/.config/arka/workflows
+TEAM_MAX_PARALLEL=4
+```
+
+Teams and workflows are included in `arka config backup`.
+
+## v1 limitations (v2 roadmap)
+
+- Agent steps use Arka chat routing, not full interactive `ollama launch` sessions.
+- No round-robin mode yet — use explicit workflow steps.
+- No live MCP tool calls per step (hub MCP is shared via memory/context only).
+- Workflow conditions, retries, and human-in-the-loop gates are not implemented.
+- Provider health checks run at LLM call time, not at team resolve time.
+
+## Related
+
+- [Agent Hub](/guides/agent-hub) — shared MCP, memory, and agent catalog
+- [LLM fallback](/concepts/llm) — provider/model routing used by model/provider roles
+- [Memory](/guides/memory) — unified memory injected into team runs
