@@ -594,7 +594,7 @@ def main(argv: list[str] | None = None) -> int:
     p_parse = sub.add_parser("parse", help="Parse NL into personalize argv (internal)")
     p_parse.add_argument("text")
 
-    args = parser.parse_args(argv)
+    args = parser.parse_args(argv if argv is not None else [])
     cmd = args.cmd
 
     if cmd is None:

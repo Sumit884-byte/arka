@@ -62,7 +62,7 @@ def main(argv: list[str] | None = None) -> int:
     if args[0] == "personalize":
         from arka.core.personalize import main as personalize_main
 
-        return personalize_main(args[1:] or None)
+        return personalize_main(args[1:])
 
     if args[0] in ("refetch", "update", "sync"):
         return _cmd_refetch(args[1:])

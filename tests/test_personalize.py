@@ -137,6 +137,102 @@ class PersonalizeOutputTests(unittest.TestCase):
         self.assertIn("Try:", out)
 
 
+class PersonalizeDispatchTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.config = Path(self.tmp.name)
+
+    @mock.patch("arka.core.personalize.config_dir")
+    @mock.patch("arka.core.personalize.sys.stdin")
+    def test_main_empty_argv_defaults_to_wizard(
+        self, stdin: mock.MagicMock, config_dir: mock.MagicMock
+    ) -> None:
+        from arka.core.personalize import main
+
+        config_dir.return_value = self.config
+        stdin.isatty.return_value = False
+        with mock.patch("sys.argv", ["arka", "personalize"]):
+            buf = StringIO()
+            with mock.patch("sys.stdout", buf):
+                code = main([])
+        self.assertEqual(code, 0)
+        self.assertIn("Profile saved", buf.getvalue())
+        self.assertTrue((self.config / "personalize.json").is_file())
+
+    @mock.patch("arka.core.personalize.config_dir")
+    def test_main_recommend_subcommand(self, config_dir: mock.MagicMock) -> None:
+        from arka.core.personalize import main
+
+        config_dir.return_value = self.config
+        save_profile(
+            {
+                "interests": ["finance"],
+                "experience": "beginner",
+                "platforms": ["mac"],
+                "onboarding_done": True,
+            }
+        )
+        buf = StringIO()
+        with mock.patch("sys.stdout", buf):
+            code = main(["recommend"])
+        self.assertEqual(code, 0)
+        self.assertIn("Recommended skills:", buf.getvalue())
+
+    @mock.patch("arka.core.personalize.config_dir")
+    def test_main_status_subcommand(self, config_dir: mock.MagicMock) -> None:
+        from arka.core.personalize import main
+
+        config_dir.return_value = self.config
+        save_profile(
+            {
+                "interests": ["dev"],
+                "experience": "intermediate",
+                "platforms": ["linux"],
+                "onboarding_done": True,
+            }
+        )
+        buf = StringIO()
+        with mock.patch("sys.stdout", buf):
+            code = main(["status"])
+        self.assertEqual(code, 0)
+        self.assertIn("Interests:    dev", buf.getvalue())
+
+    @mock.patch("arka.core.personalize.config_dir")
+    @mock.patch("arka.core.personalize.sys.stdin")
+    def test_cli_personalize_no_subcommand(
+        self, stdin: mock.MagicMock, config_dir: mock.MagicMock
+    ) -> None:
+        from arka.cli import main as cli_main
+
+        config_dir.return_value = self.config
+        stdin.isatty.return_value = False
+        buf = StringIO()
+        with mock.patch("sys.stdout", buf):
+            code = cli_main(["personalize"])
+        self.assertEqual(code, 0)
+        self.assertIn("Profile saved", buf.getvalue())
+
+    @mock.patch("arka.core.personalize.config_dir")
+    def test_dispatch_personalize_skill(self, config_dir: mock.MagicMock) -> None:
+        from arka.dispatch import run_skill
+
+        config_dir.return_value = self.config
+        save_profile(
+            {
+                "interests": ["pdf"],
+                "experience": "beginner",
+                "platforms": ["mac"],
+                "onboarding_done": True,
+            }
+        )
+        buf = StringIO()
+        with mock.patch("sys.stdout", buf):
+            code = run_skill("personalize recommend")
+        self.assertEqual(code, 0)
+        self.assertIn("pdf_tools", buf.getvalue())
+
+
 class PersonalizeRoutingTests(unittest.TestCase):
     def test_is_personalize_query(self) -> None:
         self.assertTrue(is_personalize_query("personalize me"))
