@@ -6790,11 +6790,18 @@ end
 function repo_map --description "Lightweight repo structure map for agent context"
     set -l py (_arka_python)
     set -l script (_arka_py_script arka_repo_map.py)
+    if test (count $argv) -ge 1; and test $argv[1] = --
+        set -e argv[1]
+    end
     if test (count $argv) -eq 0
         $py $script map
         return $status
     end
-    $py $script $argv
+    if test $argv[1] = route -o $argv[1] = map
+        $py $script $argv
+        return $status
+    end
+    $py $script map $argv
 end
 
 function generate_data --description "Generate sample or real-world datasets (CSV, JSON, World Bank, PubMed, URL)"
