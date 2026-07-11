@@ -77,7 +77,8 @@
         "group": "Finance",
         "icon": "chart-line",
         "pages": [
-          "guides/stocks"
+          "guides/stocks",
+          "guides/kalshi"
         ]
       },
       {

@@ -1922,7 +1922,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         store_password pass \
         open_file list_files search_files find_files_by_size browse_web activate_venv create_venv fix_venv \
         write_script run_script ollama_run lint_python cheat qr_code shorten_url \
-        crypto_price currency_convert convert currency pomodoro sports_score live_scores system_monitor excuse bored open_app create_skill \
+        crypto_price currency_convert convert currency kalshi pomodoro sports_score live_scores system_monitor excuse bored open_app create_skill \
         calculate_bmi send_whatsapp whatsapp_listen search_stores download_file extract_and_run \
         create_desktop_app fix_graphics_driver install_app install_apt install_brew install_flatpak \
         install_snap install_package install_uv stock_analysis stock macro emotion \
@@ -2372,6 +2372,8 @@ function skills --description "Show what commands the agent can auto-run"
                 echo (set_color green)"  sports_score   "(set_color normal)"[ipl|nfl|nba|epl|cricket|…] — live match scores (ESPN)"
             case currency_convert convert currency
                 echo (set_color green)"  currency_convert "(set_color normal)"<amount> <from> <to> — live FX rates (USD, EUR, INR, …)"
+            case kalshi
+                echo (set_color green)"  kalshi         "(set_color normal)"search <topic> | market <TICKER> | trending | status — Kalshi prediction odds"
             case wifi_info
                 echo (set_color green)"  wifi_info      "(set_color normal)"Current Wi-Fi network + signal"
             case generate_image
@@ -8382,6 +8384,26 @@ function currency --description "Alias for currency_convert"
     currency_convert $argv
 end
 
+function kalshi --description "Kalshi prediction market odds (read-only public API)"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        echo "Usage: kalshi search <keywords>"
+        echo "       kalshi market <TICKER>"
+        echo "       kalshi trending"
+        echo "       kalshi status"
+        echo "       arka 'kalshi predictions on bitcoin'"
+        return 1
+    end
+    set -l out (_arka_capture_output $py (_arka_py_script arka_kalshi.py) $argv)
+    set -l st $status
+    if test $st -ne 0
+        echo $out >&2
+        return $st
+    end
+    _arka_pretty_python_output "$out"
+    return 0
+end
+
 function sports_score --description "Live sports scores — IPL, cricket, NFL, NBA, soccer, F1, …"
     set -l py (_arka_python)
     if test (count $argv) -eq 0
@@ -10152,6 +10174,9 @@ function _agent_is_knowledge_question --description "True if user wants a factua
     if _agent_is_currency_request "$argv[1]"
         return 1
     end
+    if _agent_is_kalshi_request "$argv[1]"
+        return 1
+    end
     if _agent_is_post_x_request "$argv[1]"
         return 1
     end
@@ -10368,6 +10393,9 @@ function _agent_is_general_chat --description "True if plain conversational inpu
     if _agent_is_docker_status_request "$argv[1]"
         return 1
     end
+    if _agent_is_kalshi_request "$argv[1]"
+        return 1
+    end
     if _agent_is_mcp_request "$argv[1]"
         return 1
     end
@@ -10538,6 +10566,20 @@ end
 
 function _agent_is_currency_request --description "True if user wants currency conversion (internal)"
     test -n "$(_agent_build_currency_cmd "$argv[1]")"
+end
+
+function _agent_is_kalshi_request --description "True if user wants Kalshi prediction market data (internal)"
+    set -l clean (string lower (string trim -- "$argv[1]"))
+    string match -qr '(?i)\b(kalshi|prediction\s+market|kalshi\s+odds|kalshi\s+predictions?)\b' "$clean"
+end
+
+function _agent_build_kalshi_cmd --description "Build kalshi invocation from NL (internal)"
+    set -l py (_arka_python)
+    set -l cmd $argv[1]
+    set -l rest ($py (_arka_py_script arka_kalshi.py) parse -- $cmd 2>/dev/null)
+    if test (count $rest) -gt 0
+        echo "kalshi $rest"
+    end
 end
 
 function _agent_build_currency_cmd --description "Build currency_convert args from NL (internal)"
@@ -13706,6 +13748,13 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         echo "skill|sports_score $cmd|Live sports scores"
         return
     end
+    if _agent_is_kalshi_request "$cmd"
+        set -l kc (_agent_build_kalshi_cmd "$cmd")
+        if test -n "$kc"
+            echo "skill|$kc|Kalshi prediction market odds"
+            return
+        end
+    end
     if set -l cc_cmd (_agent_build_currency_cmd "$cmd")
         if test -n "$cc_cmd"
             echo "skill|$cc_cmd|Currency conversion"
@@ -16077,6 +16126,10 @@ function agent --description "Run commands safely: executes safe commands automa
         echo "  crypto_price [coins]   - Get real-time crypto prices (BTC, ETH, etc.) beautifully"
         echo "  currency_convert <amt> <from> <to> - Live currency conversion (USD, EUR, INR, …)"
         echo "  convert / currency       - Aliases for currency_convert"
+        echo "  kalshi search <topic>    - Kalshi prediction market search + odds"
+        echo "  kalshi market <TICKER>   - One Kalshi market quote"
+        echo "  kalshi trending          - Top Kalshi markets by 24h volume"
+        echo "  kalshi status            - Kalshi exchange status"
         echo "  sports_score [league]  - Live scores: IPL, cricket, NFL, NBA, EPL, F1, …"
         echo "  live_scores            - Alias for sports_score"
         echo "  lint_python <file>     - Lint Python code automatically using ruff or flake8"
@@ -16546,6 +16599,7 @@ function agent --description "Run commands safely: executes safe commands automa
         set -l stock_ticker (string upper (string match -r '(?i)([A-Z][A-Z0-9.-]{1,12})\s*$' "$cmd")[2])
         set interpreted "stock analyze $stock_ticker"
     else if string match -qr '(?i)(predict|prediction|forecast|opportunit).*(antique|stock|market|strategy|invest|collectible|portfolio)|^(predict|forecast)\s+' "$clean_cmd"
+        and not _agent_is_kalshi_request "$cmd"
         set -l pred_topic (string replace -r -i '^(?:predict|prediction|forecast|find|analyze|show)\s+(?:opportunities?\s+(?:in|for|about)\s+)?' '' "$cmd" | string trim)
         set -l pred_flags ""
         if string match -qr '(?i)\bantique|collectible|auction|vintage\b' "$clean_cmd"
@@ -16652,6 +16706,12 @@ function agent --description "Run commands safely: executes safe commands automa
         set -l sq (string replace -r -i '^(?:show|get|tell me|what is|what are|give me)\s+' '' "$cmd")
         set interpreted "sports_score $sq"
         set route_source offline
+    else if string match -qr '(?i)\b(kalshi|prediction\s+market|kalshi\s+odds|kalshi\s+predictions?)\b' "$clean_cmd"
+        set -l kc (_agent_build_kalshi_cmd "$cmd")
+        if test -n "$kc"
+            set interpreted $kc
+            set route_source offline
+        end
     else if set -l tp_match (_arka_match_third_party_skill "$cmd")
         if test -n "$tp_match"
             set interpreted $tp_match

@@ -203,6 +203,15 @@ def route_currency_convert(cmd: str) -> str | None:
     return "currency_convert " + " ".join(shlex.quote(a) for a in argv)
 
 
+def route_kalshi(cmd: str) -> str | None:
+    try:
+        from arka.integrations.kalshi import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd.strip())
+    return route or None
+
+
 def route_compose_video(cmd: str) -> str | None:
     try:
         from arka.media.compose_video import nl_to_argv
@@ -475,6 +484,7 @@ def route_offline_extras(cmd: str) -> str | None:
         route_post_x,
         route_find_files_by_size,
         route_currency_convert,
+        route_kalshi,
         route_remind,
         route_routines,
         route_chart,

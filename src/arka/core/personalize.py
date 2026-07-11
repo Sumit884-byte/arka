@@ -82,6 +82,12 @@ SKILL_CATALOG: dict[str, dict[str, Any]] = {
         "example": "currency_convert 100 USD to INR",
         "beginner": True,
     },
+    "kalshi": {
+        "interests": ["finance"],
+        "description": "Kalshi prediction market odds and trending markets",
+        "example": "kalshi search bitcoin",
+        "beginner": True,
+    },
     "daily_brief": {
         "interests": ["finance", "productivity", "research"],
         "description": "Morning weather + tech headlines",

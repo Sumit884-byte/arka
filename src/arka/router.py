@@ -446,11 +446,14 @@ def _route_offline(cmd: str) -> Route | None:
         )
 
     try:
-        from arka.routing.symbolic import route_currency_convert, route_daily_brief
+        from arka.routing.symbolic import route_currency_convert, route_daily_brief, route_kalshi
 
         currency_route = route_currency_convert(cmd)
         if currency_route:
             return Route(currency_route, source="offline")
+        kalshi_route = route_kalshi(cmd)
+        if kalshi_route:
+            return Route(kalshi_route, source="offline")
         brief_route = route_daily_brief(cmd)
         if brief_route:
             return Route(brief_route, source="offline")
@@ -611,6 +614,13 @@ def _is_knowledge_question(clean: str) -> bool:
         from arka.integrations.gemini_cli import wants_gemini_cli
 
         if wants_gemini_cli(clean):
+            return False
+    except ImportError:
+        pass
+    try:
+        from arka.integrations.kalshi import wants_kalshi
+
+        if wants_kalshi(clean):
             return False
     except ImportError:
         pass

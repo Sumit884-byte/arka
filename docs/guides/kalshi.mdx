@@ -1,0 +1,64 @@
+---
+title: "Kalshi prediction markets"
+description: "Fetch Kalshi prediction market odds, search open markets, and view trending contracts from the terminal — no API key required for public data."
+keywords: ["kalshi", "prediction markets", "odds", "finance"]
+---
+
+Arka includes a **kalshi** skill for read-only Kalshi prediction market data: search open markets, inspect a ticker, see trending contracts by 24h volume, and check exchange status.
+
+No trading — quotes and discovery only.
+
+## Quick examples
+
+```bash
+kalshi search bitcoin
+kalshi market KXBTC-25JUL-T100K
+kalshi trending
+kalshi status
+```
+
+Natural language also works:
+
+```bash
+arka "kalshi predictions on bitcoin"
+arka "what are kalshi odds for inflation"
+arka "kalshi trending"
+```
+
+## Commands
+
+| Command | Description |
+| ------- | ----------- |
+| `kalshi search <keywords>` | Search open markets by title/ticker keyword |
+| `kalshi market <TICKER>` | Full quote for one market (YES/NO, volume, close time) |
+| `kalshi trending` | Top open markets by 24h volume |
+| `kalshi status` | Kalshi exchange/trading status |
+
+## API approach
+
+The skill uses Kalshi's public **Trade API v2** (no API key required for read-only market data):
+
+- Base URL: `https://external-api.kalshi.com/trade-api/v2`
+- Endpoints: `GET /markets`, `GET /markets/{ticker}`, `GET /exchange/status`
+
+Kalshi has no dedicated keyword search endpoint, so `kalshi search` fetches open markets and filters client-side by keyword.
+
+## Optional configuration
+
+Add to `~/.config/arka/.env` only if you need a custom base URL or future authenticated endpoints:
+
+```bash
+# Optional — public read endpoints work without a key
+KALSHI_API_KEY=
+KALSHI_API_BASE=https://external-api.kalshi.com/trade-api/v2
+```
+
+## Related skills
+
+| Skill | Example |
+| ----- | ------- |
+| `stock` | `arka stock news` |
+| `currency_convert` | `arka convert 100 USD to INR` |
+| `predictions` | `predictions --domain stocks --deep "banking sector"` |
+
+See also: [Stock intelligence](/guides/stocks)

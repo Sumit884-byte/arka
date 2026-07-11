@@ -28,6 +28,7 @@ NL_CASES: tuple[tuple[str, str], ...] = (
     ("search kaggle competitions", "competitions"),
     ("teach route X to Y", "route_learn"),
     ("today's tech brief", "daily_brief"),
+    ("kalshi predictions on bitcoin", "kalshi"),
     ("how to close window on brave", "platform_howto"),
     ("gemini explain asyncio", "gemini_cli"),
 )
