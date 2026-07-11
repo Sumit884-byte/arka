@@ -405,9 +405,12 @@ def score_skills(profile: dict[str, Any], *, limit: int = 10) -> list[ScoredSkil
         overlap = len(interests & tags)
         if interests and overlap == 0:
             continue
-        score = float(overlap if interests else 1)
+        specificity = overlap / len(tags) if tags else 0.0
+        score = overlap * 2.0 + specificity
+        if name in interests:
+            score += 1.0
         if experience == "beginner" and meta.get("beginner"):
-            score += 0.5
+            score += 0.25
         os_filter = meta.get("os") or []
         if os_filter and platform not in os_filter:
             score -= 2.0
@@ -453,13 +456,47 @@ def nl_to_argv(cmd: str) -> list[str] | None:
     return ["recommend"]
 
 
+def _interest_keys() -> list[str]:
+    return sorted(VALID_INTERESTS)
+
+
+def _append_interest_pick(picks: list[str], idx: int) -> None:
+    keys = _interest_keys()
+    if 1 <= idx <= len(keys):
+        key = keys[idx - 1]
+        if key not in picks:
+            picks.append(key)
+
+
+def _parse_interest_input(raw: str) -> list[str]:
+    """Parse wizard interest input: names, comma/space lists, or digit runs like 123."""
+    text = (raw or "").strip().lower()
+    if not text:
+        return []
+
+    picks: list[str] = []
+    # Consecutive digits without separators: each digit is an option number (1-9).
+    if text.isdigit() and len(text) > 1:
+        for ch in text:
+            if ch.isdigit():
+                _append_interest_pick(picks, int(ch))
+        return picks
+
+    for part in re.split(r"[,;\s]+", text):
+        part = part.strip()
+        if not part:
+            continue
+        if part.isdigit():
+            _append_interest_pick(picks, int(part))
+        else:
+            token = _sanitize_token(part)
+            if token in VALID_INTERESTS and token not in picks:
+                picks.append(token)
+    return picks
+
+
 def _parse_interest_list(raw: str) -> list[str]:
-    out: list[str] = []
-    for part in re.split(r"[,;\s]+", raw.strip().lower()):
-        token = _sanitize_token(part)
-        if token in VALID_INTERESTS and token not in out:
-            out.append(token)
-    return out
+    return _parse_interest_input(raw)
 
 
 def run_wizard(
@@ -478,18 +515,7 @@ def run_wizard(
         for idx, key in enumerate(sorted(VALID_INTERESTS), start=1):
             print(f"  {idx}. {key} — {INTEREST_LABELS.get(key, key)}")
         raw = input("> ").strip()
-        picks: list[str] = []
-        for part in re.split(r"[,;\s]+", raw):
-            if part.isdigit():
-                idx = int(part)
-                keys = sorted(VALID_INTERESTS)
-                if 1 <= idx <= len(keys):
-                    picks.append(keys[idx - 1])
-            else:
-                token = _sanitize_token(part)
-                if token in VALID_INTERESTS:
-                    picks.append(token)
-        profile["interests"] = picks
+        profile["interests"] = _parse_interest_input(raw)
     elif not profile.get("interests"):
         profile["interests"] = ["productivity", "research"]
 

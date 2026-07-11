@@ -12,6 +12,8 @@ from unittest import mock
 
 from arka.core.personalize import (
     SKILL_CATALOG,
+    _parse_interest_input,
+    format_profile_summary,
     is_personalize_query,
     load_profile,
     nl_to_argv,
@@ -86,6 +88,38 @@ class PersonalizeScoringTests(unittest.TestCase):
         self.assertIn("GROQ_API_KEY", stocks.gate_label)
 
 
+class PersonalizeInterestParsingTests(unittest.TestCase):
+    def test_parse_consecutive_digits_123(self) -> None:
+        self.assertEqual(
+            _parse_interest_input("123"),
+            ["dev", "finance", "google"],
+        )
+
+    def test_parse_comma_separated_digits(self) -> None:
+        self.assertEqual(
+            _parse_interest_input("1,2,3"),
+            ["dev", "finance", "google"],
+        )
+
+    def test_parse_space_separated_digits(self) -> None:
+        self.assertEqual(
+            _parse_interest_input("1 2 3"),
+            ["dev", "finance", "google"],
+        )
+
+    def test_parse_interest_names(self) -> None:
+        self.assertEqual(
+            _parse_interest_input("dev,finance,google"),
+            ["dev", "finance", "google"],
+        )
+
+    def test_parse_single_digit(self) -> None:
+        self.assertEqual(_parse_interest_input("1"), ["dev"])
+
+    def test_parse_deduplicates_repeated_digits(self) -> None:
+        self.assertEqual(_parse_interest_input("112"), ["dev", "finance"])
+
+
 class PersonalizeWizardTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
@@ -105,6 +139,53 @@ class PersonalizeWizardTests(unittest.TestCase):
         self.assertTrue(profile["onboarding_done"])
         data = json.loads((self.config / "personalize.json").read_text(encoding="utf-8"))
         self.assertEqual(data["interests"], ["finance", "pdf"])
+
+    @mock.patch("arka.core.personalize.config_dir")
+    @mock.patch("arka.core.personalize.sys.stdin")
+    def test_wizard_interactive_digits_123(
+        self, stdin: mock.MagicMock, config_dir: mock.MagicMock
+    ) -> None:
+        config_dir.return_value = self.config
+        stdin.isatty.return_value = True
+        with mock.patch("builtins.input", side_effect=["123", "1"]):
+            profile = run_wizard(non_interactive=False)
+        self.assertEqual(profile["interests"], ["dev", "finance", "google"])
+        self.assertEqual(
+            format_profile_summary(profile),
+            "dev, finance, google (beginner)",
+        )
+        data = json.loads((self.config / "personalize.json").read_text(encoding="utf-8"))
+        self.assertEqual(data["interests"], ["dev", "finance", "google"])
+
+    @mock.patch("arka.core.personalize.config_dir")
+    def test_wizard_cli_interests_flag_123(self, config_dir: mock.MagicMock) -> None:
+        from arka.core.personalize import main
+
+        config_dir.return_value = self.config
+        buf = StringIO()
+        with mock.patch("sys.stdout", buf):
+            code = main(["wizard", "--interests", "123", "--experience", "beginner", "-y"])
+        self.assertEqual(code, 0)
+        out = buf.getvalue()
+        self.assertIn("dev, finance, google (beginner)", out)
+        data = json.loads((self.config / "personalize.json").read_text(encoding="utf-8"))
+        self.assertEqual(data["interests"], ["dev", "finance", "google"])
+
+
+class PersonalizeDevFinanceGoogleScoringTests(unittest.TestCase):
+    def test_dev_finance_google_profile_ranks_relevant_skills(self) -> None:
+        profile = {
+            "interests": ["dev", "finance", "google"],
+            "experience": "beginner",
+            "platforms": ["mac"],
+        }
+        recs = score_skills(profile, limit=10)
+        names = [r.name for r in recs]
+        self.assertIn("github_repo", names)
+        self.assertIn("stocks", names)
+        self.assertIn("google", names)
+        self.assertNotIn("ascii_art", names[:5])
+        self.assertNotIn("bookmarks", names[:5])
 
 
 class PersonalizeOutputTests(unittest.TestCase):
