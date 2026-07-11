@@ -10357,6 +10357,11 @@ function _agent_is_knowledge_question --description "True if user wants a factua
         and not string match -qr '(?i)^(what\s+(is\s+)?(the\s+)?(weather|time|date|ip|my\s+ip)|how\s+(much|many)\s+(disk|space|memory|ram)\s+(left|free|used)|explain\s+how\s+to\s+(install|download|setup|get|fix|use|run|create|open))' "$clean"
         return 0
     end
+    # Conceptual comparisons (git commit vs push, SQL vs NoSQL) — general knowledge, not shell advisory
+    if string match -qr '(?i)(\bvs\.?\b|\bversus\b|\bdifference\s+(between|of|in)\b|\bdifferences?\s+between\b|\bcompare\b|\bcomparison\b)' "$clean"
+        and not string match -qr '(?i)\b(this\s+(pc|computer|system|machine|mac|macbook|laptop)|my\s+(cpu|gpu|ram|disk|pc|computer|system|driver|terminal|shell|mac|macbook|machine|laptop))\b' "$clean"
+        return 0
+    end
     return 1
 end
 
@@ -10429,7 +10434,11 @@ function _agent_is_advisory_question --description "True if user wants an opinio
         return 0
     end
     # Hardware/software opinion, compatibility, recommendations
-    if string match -qr '(?i)(outdated|too\s+old|too\s+slow|good\s+enough|worth\s+(it|upgrading)|should\s+i\s+(upgrade|buy|get|replace)|enough\s+for|capable\s+of|can\s+i\s+run|will\s+it\s+run|recommend|comparison|compare|better\s+than|\bvs\.?\b|versus|bottleneck|specs?\s+for)' "$clean"
+    if string match -qr '(?i)(outdated|too\s+old|too\s+slow|good\s+enough|worth\s+(it|upgrading)|should\s+i\s+(upgrade|buy|get|replace)|enough\s+for|capable\s+of|can\s+i\s+run|will\s+it\s+run|recommend|better\s+than|bottleneck|specs?\s+for)' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)(\bvs\.?\b|\bversus\b|\bdifference\s+(between|of|in)\b|\bdifferences?\s+between\b|\bcompare\b|\bcomparison\b)' "$clean"
+        and string match -qr '(?i)\b(this\s+(pc|computer|system|machine|mac|macbook|laptop)|my\s+(cpu|gpu|ram|disk|pc|computer|system|driver|terminal|shell|mac|macbook|machine|laptop))\b' "$clean"
         return 0
     end
     # Open-ended questions about this machine (need local context)

@@ -675,6 +675,14 @@ def _is_knowledge_question(clean: str) -> bool:
         return False
     if re.match(r"^show\s+me\s+", clean) and not _SHOW_ME_IMAGE_HINT.search(clean):
         return True
+    if re.search(
+        r"(?i)(\bvs\.?\b|\bversus\b|\bdifference\s+(between|of|in)\b|\bdifferences?\s+between\b|\bcompare\b|\bcomparison\b)",
+        clean,
+    ) and not re.search(
+        r"(?i)\b(this\s+(pc|computer|system|machine|mac|macbook|laptop)|my\s+(cpu|gpu|ram|disk|pc|computer|system|driver|terminal|shell|mac|macbook|machine|laptop))\b",
+        clean,
+    ):
+        return True
     return bool(
         re.match(
             r"^(why |where |when |who |what |tell me |explain |describe |how old |how many |how much )",
