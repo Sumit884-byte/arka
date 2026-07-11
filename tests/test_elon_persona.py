@@ -12,6 +12,9 @@ from arka.agent.personas import base, elon, io
 
 @pytest.fixture
 def personas_tmp(monkeypatch, tmp_path: Path):
+    monkeypatch.delenv("CONFIG_DIR", raising=False)
+    monkeypatch.delenv("ARKA_PERSONAS_DIR", raising=False)
+    monkeypatch.delenv("PERSONAS_DIR", raising=False)
     monkeypatch.setenv("ARKA_CONFIG_DIR", str(tmp_path))
     io.ensure_layout()
     return tmp_path / "personas"

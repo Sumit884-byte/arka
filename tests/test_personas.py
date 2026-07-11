@@ -13,6 +13,9 @@ from arka.agent.personas import elon
 
 @pytest.fixture
 def personas_tmp(monkeypatch, tmp_path: Path):
+    monkeypatch.delenv("CONFIG_DIR", raising=False)
+    monkeypatch.delenv("ARKA_PERSONAS_DIR", raising=False)
+    monkeypatch.delenv("PERSONAS_DIR", raising=False)
     monkeypatch.setenv("ARKA_CONFIG_DIR", str(tmp_path))
     io.ensure_layout()
     return tmp_path / "personas"
@@ -35,6 +38,28 @@ def test_seed_and_load_elon(personas_tmp):
     assert persona.name == "elon"
     assert "simulated" in persona.system_prompt.lower()
     assert persona.formatted_disclaimer.startswith("Note:")
+
+
+def test_elon_persona_prompt_is_opinionated(personas_tmp):
+    io.seed_persona("elon")
+    persona = io.resolve_persona("elon")
+    prompt = persona.system_prompt.lower()
+    assert "no hedging" in prompt or "one-sided" in prompt
+    assert "good-natured" not in prompt
+
+
+def test_resolve_elon_refreshes_stale_bundled_prompt(personas_tmp):
+    io.seed_persona("elon")
+    stale = io.load_persona("elon")
+    stale.system_prompt = (
+        stale.system_prompt
+        + "\n  - Stay in character but keep responses helpful and good-natured"
+    )
+    io.save_persona(stale)
+
+    persona = io.resolve_persona("elon")
+    assert "good-natured" not in persona.system_prompt
+    assert "no hedging" in persona.system_prompt.lower()
 
 
 def test_list_personas(personas_tmp):

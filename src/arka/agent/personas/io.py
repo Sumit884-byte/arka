@@ -157,13 +157,34 @@ def ensure_layout() -> Path:
     return directory
 
 
+_BUNDLED_ELON_STALE_MARK = "keep responses helpful and good-natured"
+
+
+def _maybe_refresh_bundled_elon(persona: Persona) -> Persona:
+    """Upgrade seeded elon persona when it still uses the old neutral prompt."""
+    if persona.name != "elon":
+        return persona
+    if _BUNDLED_ELON_STALE_MARK not in persona.system_prompt:
+        return persona
+    try:
+        template = load_template("elon")
+    except FileNotFoundError:
+        return persona
+    if _BUNDLED_ELON_STALE_MARK in template.system_prompt:
+        return persona
+    save_persona(template)
+    return template
+
+
 def resolve_persona(name: str) -> Persona:
     """Load persona, seeding bundled template on first use."""
     ensure_layout()
     seeded = seed_persona(name)
     if seeded:
-        return load_persona(name)
-    return load_persona(name)
+        persona = load_persona(name)
+    else:
+        persona = load_persona(name)
+    return _maybe_refresh_bundled_elon(persona)
 
 
 def format_persona_list() -> str:
