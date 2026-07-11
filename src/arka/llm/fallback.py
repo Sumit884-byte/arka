@@ -1611,3 +1611,7 @@ def model_label(*, prefer_last: bool = True, task: str | None = None, skill: str
             continue
         return f"{provider}/{model_id}"
     return ""
+
+
+# Backward-compatible alias used by agent teams executor.
+LlmOrchestrator = LlmFallbackEngine
