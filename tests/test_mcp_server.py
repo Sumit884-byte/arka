@@ -14,10 +14,11 @@ def test_list_tool_definitions_schema():
 
     tools = list_tool_definitions()
     names = list_tool_names()
-    assert len(tools) == len(names) == 7
+    assert len(tools) == len(names) == 8
     assert "arka_ask" in names
     assert "arka_recall" in names
     assert "arka_heartbeat" in names
+    assert "arka_sessions" in names
     for tool in tools:
         assert tool["name"]
         assert tool["description"]
@@ -100,7 +101,7 @@ def test_mcp_server_stdio_roundtrip():
     server = ArkaMcpServer(stdin=inp, stdout=out)
     response = server.process_line(inp.getvalue().strip())
     assert response is not None
-    assert len(response["result"]["tools"]) == 7
+    assert len(response["result"]["tools"]) == 8
 
 
 def test_install_config_snippet():
@@ -170,6 +171,28 @@ def test_handle_arka_heartbeat_ping_and_status(tmp_path, monkeypatch):
     assert data.get("last_activity") == "test.mcp"
 
 
+def test_handle_arka_sessions_list_and_context(tmp_path, monkeypatch):
+    from arka.integrations.mcp_server import _handle_arka_sessions
+    from arka.integrations.message_sessions import push
+
+    monkeypatch.setenv("MESSAGE_SESSIONS_DIR", str(tmp_path))
+    monkeypatch.setenv("MESSAGE_SESSIONS", "1")
+    code, err = push("cli", "default", "user", "hello from mcp test", title="demo")
+    assert code == 0, err
+
+    listed = json.loads(_handle_arka_sessions({"action": "list", "limit": 10}))
+    assert len(listed) == 1
+    assert listed[0]["key"] == "cli:default"
+    assert listed[0]["turns"] == 1
+
+    status = json.loads(_handle_arka_sessions({"action": "status", "channel": "cli"}))
+    assert status["sessions"] == 1
+    assert status["session"]["turns"] == 1
+
+    ctx = _handle_arka_sessions({"action": "context", "channel": "cli", "chat_id": "default"})
+    assert "hello from mcp test" in ctx
+
+
 def test_doctor_spawns_client(monkeypatch):
     from arka.integrations.mcp_client import McpTool
     from arka.integrations.mcp_server import doctor
@@ -191,6 +214,7 @@ def test_doctor_spawns_client(monkeypatch):
                 "arka_skill",
                 "arka_repo_map",
                 "arka_heartbeat",
+                "arka_sessions",
                 "arka_team_run",
             ]]
 

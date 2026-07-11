@@ -161,6 +161,33 @@ def _handle_arka_heartbeat(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"heartbeat unavailable: {exc}") from exc
 
 
+def _handle_arka_sessions(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "list").strip().lower()
+    channel = str(arguments.get("channel") or "").strip() or None
+    chat_id = str(arguments.get("chat_id") or "").strip() or None
+    try:
+        from arka.integrations.message_sessions import context_for, list_sessions, status
+
+        if action == "list":
+            limit = int(arguments.get("limit") or 20)
+            return json.dumps(list_sessions(limit=max(1, min(limit, 200))), indent=2)
+        if action == "status":
+            return json.dumps(status(channel, chat_id), indent=2)
+        if action == "context":
+            if not channel:
+                raise ValueError("channel is required for context")
+            limit_chars = int(arguments.get("limit_chars") or 3000)
+            text = context_for(
+                channel,
+                chat_id or "default",
+                limit_chars=max(200, limit_chars),
+            )
+            return text or "(no session context)"
+        raise ValueError("action must be list, status, or context")
+    except ImportError as exc:
+        raise RuntimeError(f"message_sessions unavailable: {exc}") from exc
+
+
 def _handle_arka_team_run(arguments: dict[str, Any]) -> str:
     team = str(arguments.get("team") or arguments.get("name") or "").strip()
     task = str(arguments.get("task") or "").strip()
@@ -297,6 +324,40 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_heartbeat,
+        ),
+        ArkaMcpTool(
+            name="arka_sessions",
+            description="List Hermes-style channel sessions, status, or turn context for continuity.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["list", "status", "context"],
+                        "default": "list",
+                        "description": "list sessions, hub status, or transcript context",
+                    },
+                    "channel": {
+                        "type": "string",
+                        "description": "Channel name (required for context)",
+                    },
+                    "chat_id": {
+                        "type": "string",
+                        "description": "Chat id within the channel (default: default)",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max sessions when action=list",
+                        "default": 20,
+                    },
+                    "limit_chars": {
+                        "type": "integer",
+                        "description": "Max characters when action=context",
+                        "default": 3000,
+                    },
+                },
+            },
+            handler=_handle_arka_sessions,
         ),
         ArkaMcpTool(
             name="arka_team_run",
