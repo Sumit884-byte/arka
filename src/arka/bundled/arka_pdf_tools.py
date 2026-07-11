@@ -12,4 +12,4 @@ _shim_path.ensure()
 from arka._bootstrap import run_legacy_module
 
 if __name__ == "__main__":
-    raise SystemExit(run_legacy_module("arka.integrations.memory_cli"))
+    raise SystemExit(run_legacy_module("arka.pdf.tools"))

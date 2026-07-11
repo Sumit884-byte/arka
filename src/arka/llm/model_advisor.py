@@ -438,6 +438,7 @@ def _tier_profile_models(tier: str, hw: HardwareSnapshot) -> dict[str, tuple[str
             "pdf": (chat_balanced, "Cloud RAG Q&A"),
             "predictions": (chat_balanced, "Cloud analysis"),
             "compose_video": (chat_fast, "Fast script generation"),
+            "compose_slides": (chat_fast, "Fast slide script generation"),
             "default": (chat_fast, "General fast cloud default"),
         }
 
@@ -451,6 +452,7 @@ def _tier_profile_models(tier: str, hw: HardwareSnapshot) -> dict[str, tuple[str
             "pdf": (chat_balanced, "Cloud document Q&A"),
             "predictions": (chat_balanced, "Cloud market analysis"),
             "compose_video": (chat_balanced, "Cloud script writing"),
+            "compose_slides": (chat_balanced, "Cloud slide script writing"),
             "default": (chat_balanced, "General cloud default"),
         }
 
@@ -466,6 +468,7 @@ def _tier_profile_models(tier: str, hw: HardwareSnapshot) -> dict[str, tuple[str
             "pdf": (chat_balanced, "Cloud for PDF RAG"),
             "predictions": (chat_balanced, "Cloud for analysis"),
             "compose_video": (chat_balanced, "Cloud script generation"),
+            "compose_slides": (chat_balanced, "Cloud slide script generation"),
             "default": (chat, "Balanced default"),
         }
 
@@ -482,6 +485,7 @@ def _tier_profile_models(tier: str, hw: HardwareSnapshot) -> dict[str, tuple[str
             "pdf": (chat_balanced, "Cloud for document RAG"),
             "predictions": (chat_balanced, "Cloud for market data"),
             "compose_video": (chat, "Local script drafts"),
+            "compose_slides": (chat, "Local slide script drafts"),
             "default": (chat, "Local-capable default"),
         }
 
@@ -498,6 +502,7 @@ def _tier_profile_models(tier: str, hw: HardwareSnapshot) -> dict[str, tuple[str
         "pdf": (chat_balanced, "Cloud for heavy PDF RAG"),
         "predictions": (chat_balanced, "Cloud for live market data"),
         "compose_video": (chat, "Local script generation"),
+        "compose_slides": (chat, "Local slide script generation"),
         "default": (chat, "Local-first default"),
     }
 

@@ -53,6 +53,60 @@ class ClipboardHistoryTests(unittest.TestCase):
         assert result is not None
         self.assertEqual(result.skill.split()[0], "clipboard_history")
 
+    def test_router_ai_only_prefers_clipboard_history(self) -> None:
+        with mock.patch.dict(os.environ, {"ROUTE_MODE": "ai_only"}, clear=False):
+            result = route("show clipboard history")
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.skill, "clipboard_history list")
+        self.assertNotEqual(result.source, "llm")
+
+    def test_clipboard_caps_darwin_uses_pbpaste(self) -> None:
+        fake = {
+            "platform": "macos",
+            "capabilities": {
+                "clipboard_copy": "pbcopy",
+                "clipboard_paste": "pbpaste",
+            },
+        }
+        with mock.patch.object(ch, "detect_platform", return_value=fake):
+            paste, copy = ch._clipboard_caps()
+        self.assertEqual(paste, "pbpaste")
+        self.assertEqual(copy, "pbcopy")
+
+    def test_read_clipboard_darwin_calls_pbpaste(self) -> None:
+        fake_caps = ("pbpaste", "pbcopy")
+        completed = mock.Mock(returncode=0, stdout="real clipboard text\n", stderr="")
+        with (
+            mock.patch.object(ch, "_clipboard_caps", return_value=fake_caps),
+            mock.patch.object(ch.platform, "system", return_value="Darwin"),
+            mock.patch.object(ch, "_resolve_binary", return_value="/usr/bin/pbpaste") as resolve,
+            mock.patch.object(ch.subprocess, "run", return_value=completed) as run,
+        ):
+            text = ch.read_clipboard()
+        resolve.assert_called_once_with("pbpaste", darwin_default=ch._DARWIN_PBPASTE)
+        run.assert_called_once()
+        self.assertEqual(run.call_args.args[0], ["/usr/bin/pbpaste"])
+        self.assertEqual(text, "real clipboard text\n")
+
+    def test_read_clipboard_rejects_mock_stub(self) -> None:
+        completed = mock.Mock(returncode=0, stdout="(mocked\n", stderr="")
+        with (
+            mock.patch.object(ch, "_clipboard_caps", return_value=("pbpaste", "pbcopy")),
+            mock.patch.object(ch.platform, "system", return_value="Darwin"),
+            mock.patch.object(ch, "_resolve_binary", return_value="/usr/bin/pbpaste"),
+            mock.patch.object(ch.subprocess, "run", return_value=completed),
+        ):
+            text = ch.read_clipboard()
+        self.assertEqual(text, "")
+
+    def test_save_rejects_mock_stub_clipboard(self) -> None:
+        self._patch_store()
+        with mock.patch.object(ch, "_read_clipboard", return_value=""):
+            rc = ch.cmd_save(argparse_namespace())
+        self.assertEqual(rc, 1)
+        self.assertFalse(self.store.is_file())
+
 
 def argparse_namespace(**kwargs):
     from argparse import Namespace

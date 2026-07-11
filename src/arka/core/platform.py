@@ -67,6 +67,9 @@ def detect_platform() -> dict:
         elif shutil.which("xclip"):
             caps["clipboard_copy"] = "xclip"
             caps["clipboard_paste"] = "xclip"
+        elif shutil.which("xsel"):
+            caps["clipboard_copy"] = "xsel"
+            caps["clipboard_paste"] = "xsel"
         else:
             caps["clipboard_copy"] = None
             caps["clipboard_paste"] = None
@@ -75,7 +78,7 @@ def detect_platform() -> dict:
     elif plat == "windows":
         caps["open"] = "start"
         caps["clipboard_copy"] = "clip" if shutil.which("clip") else None
-        caps["clipboard_paste"] = None
+        caps["clipboard_paste"] = "powershell" if shutil.which("powershell") or shutil.which("powershell.exe") else None
         caps["stat_mtime"] = "windows"
         caps["package_manager"] = "winget"
     else:

@@ -5,15 +5,18 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import platform
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 try:
-    from arka.core.platform import detect_platform
+    from arka.core.platform import detect_platform, load_platform
     from arka.paths import config_dir, load_env_file
 
     load_env_file()
@@ -25,18 +28,39 @@ except ImportError:
     def config_dir() -> Path:
         return Path.home() / ".config" / "arka"
 
+    def load_platform() -> dict | None:
+        return None
+
     def detect_platform() -> dict:
         import platform as _platform
         from shutil import which
 
-        plat = "macos" if sys.platform == "darwin" else "linux"
+        sysname = _platform.system()
+        if sysname == "Darwin":
+            plat = "macos"
+        elif sysname == "Windows":
+            plat = "windows"
+        else:
+            plat = "linux"
         caps: dict[str, str | None] = {}
         if plat == "macos":
             caps["clipboard_copy"] = "pbcopy" if which("pbcopy") else None
             caps["clipboard_paste"] = "pbpaste" if which("pbpaste") else None
+        elif plat == "windows":
+            caps["clipboard_copy"] = "clip" if which("clip") else None
+            caps["clipboard_paste"] = "powershell" if which("powershell") or which("powershell.exe") else None
+        elif which("wl-copy"):
+            caps["clipboard_copy"] = "wl-copy"
+            caps["clipboard_paste"] = "wl-paste" if which("wl-paste") else None
+        elif which("xclip"):
+            caps["clipboard_copy"] = "xclip"
+            caps["clipboard_paste"] = "xclip"
+        elif which("xsel"):
+            caps["clipboard_copy"] = "xsel"
+            caps["clipboard_paste"] = "xsel"
         else:
-            caps["clipboard_copy"] = "xclip" if which("xclip") else None
-            caps["clipboard_paste"] = "xclip" if which("xclip") else None
+            caps["clipboard_copy"] = None
+            caps["clipboard_paste"] = None
         return {"platform": plat, "capabilities": caps}
 
 
@@ -53,6 +77,9 @@ _SAVE_RE = re.compile(r"(?i)\b(?:save|store|remember)\s+(?:this\s+)?(?:clipboard
 _LIST_RE = re.compile(r"(?i)\b(?:list|show)\s+(?:clipboard\s+)?history\b")
 _PASTE_RE = re.compile(r"(?i)\b(?:paste|restore)\s+(?:clipboard\s+)?(?:entry|item|#)?\s*(\d+)?\b")
 _CLEAR_RE = re.compile(r"(?i)\b(?:clear|wipe)\s+clipboard\s+history\b")
+_STUB_CLIPBOARD_RE = re.compile(r"^\(mock(?:ed)?\b", re.IGNORECASE)
+_DARWIN_PBPASTE = Path("/usr/bin/pbpaste")
+_DARWIN_PBCOPY = Path("/usr/bin/pbcopy")
 
 
 def _store_path() -> Path:
@@ -66,25 +93,113 @@ def _now_iso() -> str:
 
 
 def _clipboard_caps() -> tuple[str | None, str | None]:
-    info = detect_platform()
-    caps = info.get("capabilities") or {}
-    return caps.get("clipboard_paste"), caps.get("clipboard_copy")
+    paste = os.environ.get("CLIPBOARD_PASTE", "").strip() or None
+    copy = os.environ.get("CLIPBOARD_COPY", "").strip() or None
+    cached = load_platform()
+    if cached:
+        caps = cached.get("capabilities") or {}
+        paste = paste or caps.get("clipboard_paste")
+        copy = copy or caps.get("clipboard_copy")
+    if not paste or not copy:
+        info = detect_platform()
+        caps = info.get("capabilities") or {}
+        paste = paste or caps.get("clipboard_paste")
+        copy = copy or caps.get("clipboard_copy")
+    return paste, copy
+
+
+def _resolve_binary(name: str, *, darwin_default: Path | None = None) -> str | None:
+    path = shutil.which(name)
+    if path:
+        return path
+    if darwin_default and platform.system() == "Darwin" and darwin_default.is_file():
+        return str(darwin_default)
+    return None
+
+
+def _sanitize_clipboard_text(text: str) -> str:
+    clean = text.strip()
+    if not clean:
+        return ""
+    if _STUB_CLIPBOARD_RE.match(clean):
+        return ""
+    return text
+
+
+def _run(cmd: list[str], *, input_text: str | None = None) -> tuple[int, str, str]:
+    try:
+        proc = subprocess.run(
+            cmd,
+            input=input_text,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        return proc.returncode, proc.stdout or "", proc.stderr or ""
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return 1, "", str(exc)
+
+
+def _read_clipboard_darwin() -> str:
+    pbpaste = _resolve_binary("pbpaste", darwin_default=_DARWIN_PBPASTE)
+    if pbpaste:
+        code, out, _ = _run([pbpaste])
+        if code == 0:
+            text = _sanitize_clipboard_text(out)
+            if text:
+                return text
+    code, out, _ = _run(
+        [
+            "/usr/bin/osascript",
+            "-e",
+            'try\nreturn the clipboard as «class utf8»\nend try',
+        ],
+    )
+    if code == 0:
+        return _sanitize_clipboard_text(out)
+    return ""
 
 
 def _read_clipboard() -> str:
     paste_cmd, _ = _clipboard_caps()
     if not paste_cmd:
+        if platform.system() == "Darwin":
+            return _read_clipboard_darwin()
         return ""
-    if paste_cmd == "pbpaste":
-        code, out, _ = _run([paste_cmd])
-        return out if code == 0 else ""
+    if paste_cmd == "pbpaste" or platform.system() == "Darwin":
+        return _read_clipboard_darwin()
     if paste_cmd == "xclip":
-        code, out, _ = _run([paste_cmd, "-selection", "clipboard", "-o"])
-        return out if code == 0 else ""
+        xclip = _resolve_binary("xclip")
+        if not xclip:
+            return ""
+        code, out, _ = _run([xclip, "-selection", "clipboard", "-o"])
+        return _sanitize_clipboard_text(out) if code == 0 else ""
+    if paste_cmd == "xsel":
+        xsel = _resolve_binary("xsel")
+        if not xsel:
+            return ""
+        code, out, _ = _run([xsel, "--clipboard", "--output"])
+        return _sanitize_clipboard_text(out) if code == 0 else ""
     if paste_cmd == "wl-paste":
-        code, out, _ = _run([paste_cmd, "--no-newline"])
-        return out if code == 0 else ""
+        wl_paste = _resolve_binary("wl-paste")
+        if not wl_paste:
+            return ""
+        code, out, _ = _run([wl_paste, "--no-newline"])
+        return _sanitize_clipboard_text(out) if code == 0 else ""
+    if paste_cmd == "powershell":
+        powershell = _resolve_binary("powershell") or _resolve_binary("powershell.exe")
+        if not powershell:
+            return ""
+        code, out, _ = _run(
+            [powershell, "-NoProfile", "-Command", "Get-Clipboard -Raw"],
+        )
+        return _sanitize_clipboard_text(out) if code == 0 else ""
     return ""
+
+
+def read_clipboard() -> str:
+    """Read the current system clipboard (platform-aware)."""
+    return _read_clipboard()
 
 
 def _write_clipboard(text: str) -> bool:
@@ -93,11 +208,29 @@ def _write_clipboard(text: str) -> bool:
         return False
     try:
         if copy_cmd == "pbcopy":
-            proc = subprocess.run([copy_cmd], input=text, text=True, capture_output=True, timeout=10)
+            pbcopy = _resolve_binary("pbcopy", darwin_default=_DARWIN_PBCOPY)
+            if not pbcopy:
+                return False
+            proc = subprocess.run([pbcopy], input=text, text=True, capture_output=True, timeout=10)
             return proc.returncode == 0
         if copy_cmd == "xclip":
+            xclip = _resolve_binary("xclip")
+            if not xclip:
+                return False
             proc = subprocess.run(
-                [copy_cmd, "-selection", "clipboard"],
+                [xclip, "-selection", "clipboard"],
+                input=text,
+                text=True,
+                capture_output=True,
+                timeout=10,
+            )
+            return proc.returncode == 0
+        if copy_cmd == "xsel":
+            xsel = _resolve_binary("xsel")
+            if not xsel:
+                return False
+            proc = subprocess.run(
+                [xsel, "--clipboard", "--input"],
                 input=text,
                 text=True,
                 capture_output=True,
@@ -105,19 +238,32 @@ def _write_clipboard(text: str) -> bool:
             )
             return proc.returncode == 0
         if copy_cmd == "wl-copy":
-            proc = subprocess.run([copy_cmd], input=text, text=True, capture_output=True, timeout=10)
+            wl_copy = _resolve_binary("wl-copy")
+            if not wl_copy:
+                return False
+            proc = subprocess.run([wl_copy], input=text, text=True, capture_output=True, timeout=10)
+            return proc.returncode == 0
+        if copy_cmd == "clip":
+            clip = _resolve_binary("clip")
+            if not clip:
+                return False
+            proc = subprocess.run([clip], input=text, text=True, capture_output=True, timeout=10)
+            return proc.returncode == 0
+        if copy_cmd == "powershell":
+            powershell = _resolve_binary("powershell") or _resolve_binary("powershell.exe")
+            if not powershell:
+                return False
+            proc = subprocess.run(
+                [powershell, "-NoProfile", "-Command", "Set-Clipboard -Value $input"],
+                input=text,
+                text=True,
+                capture_output=True,
+                timeout=10,
+            )
             return proc.returncode == 0
     except (OSError, subprocess.TimeoutExpired):
         return False
     return False
-
-
-def _run(cmd: list[str]) -> tuple[int, str, str]:
-    try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
-        return proc.returncode, proc.stdout or "", proc.stderr or ""
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        return 1, "", str(exc)
 
 
 def _load() -> list[dict]:
