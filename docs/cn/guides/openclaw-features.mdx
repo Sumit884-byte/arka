@@ -20,6 +20,9 @@ session_memory append "Always use dark terminal theme" --long-term
 session_memory search standup
 session_memory context "plan my morning routine"
 session_memory status
+session_memory clear                # 今日日记笔记
+session_memory clear --long-term    # 重置 MEMORY.md
+session_memory clear --all
 ```
 
 当 `SESSION_MEMORY=1` 时，召回的上下文会通过 `context_for()` 注入 Agent 循环中。

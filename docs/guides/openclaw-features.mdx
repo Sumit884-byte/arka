@@ -20,6 +20,9 @@ session_memory append "Always use dark terminal theme" --long-term
 session_memory search standup
 session_memory context "plan my morning routine"
 session_memory status
+session_memory clear                # today's daily notes
+session_memory clear --long-term    # reset MEMORY.md
+session_memory clear --all
 ```
 
 Recalled context is injected into agent loops via `context_for()` when `SESSION_MEMORY=1`.

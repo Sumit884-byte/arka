@@ -294,7 +294,7 @@ def _handle_arka_routines(arguments: dict[str, Any]) -> str:
 def _handle_arka_session_memory(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "status").strip().lower()
     try:
-        from arka.core.session_memory import append, context_for, search, status
+        from arka.core.session_memory import append, clear, context_for, search, status
 
         if action == "append":
             text = str(arguments.get("text") or "").strip()
@@ -321,7 +321,10 @@ def _handle_arka_session_memory(arguments: dict[str, Any]) -> str:
             return text or "(no session memory context)"
         if action == "status":
             return json.dumps(status(), indent=2)
-        raise ValueError("action must be append, search, context, or status")
+        if action == "clear":
+            scope = str(arguments.get("scope") or "daily").strip()
+            return json.dumps(clear(scope=scope), indent=2)
+        raise ValueError("action must be append, search, context, status, or clear")
     except ImportError as exc:
         raise RuntimeError(f"session_memory unavailable: {exc}") from exc
 
@@ -694,15 +697,15 @@ def _build_tools() -> list[ArkaMcpTool]:
         ),
         ArkaMcpTool(
             name="arka_session_memory",
-            description="OpenClaw-style markdown session memory — append, search, context, or status.",
+            description="OpenClaw-style markdown session memory — append, search, context, status, or clear.",
             input_schema={
                 "type": "object",
                 "properties": {
                     "action": {
                         "type": "string",
-                        "enum": ["append", "search", "context", "status"],
+                        "enum": ["append", "search", "context", "status", "clear"],
                         "default": "status",
-                        "description": "append note, search notes, context for goal, or hub status",
+                        "description": "append, search, context, status, or clear notes",
                     },
                     "text": {
                         "type": "string",
@@ -715,6 +718,12 @@ def _build_tools() -> list[ArkaMcpTool]:
                     "query": {
                         "type": "string",
                         "description": "Search query when action=search",
+                    },
+                    "scope": {
+                        "type": "string",
+                        "enum": ["daily", "long_term", "all"],
+                        "description": "What to clear when action=clear",
+                        "default": "daily",
                     },
                     "long_term": {
                         "type": "boolean",

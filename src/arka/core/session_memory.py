@@ -195,6 +195,58 @@ def status() -> dict[str, object]:
     }
 
 
+def clear(*, scope: str = "daily") -> dict[str, object]:
+    """Clear OpenClaw-style markdown memory.
+
+    scope:
+      - daily: remove daily/*.md only
+      - long_term: reset MEMORY.md
+      - all: both
+    """
+    target = (scope or "daily").strip().lower().replace("-", "_")
+    if target in {"longterm", "memory", "lt"}:
+        target = "long_term"
+    if target not in {"daily", "long_term", "all"}:
+        raise ValueError("scope must be daily, long_term, or all")
+
+    removed_daily = 0
+    cleared_long_term = False
+
+    if target in {"daily", "all"}:
+        ddir = daily_dir()
+        if ddir.is_dir():
+            for path in ddir.glob("*.md"):
+                try:
+                    path.unlink()
+                    removed_daily += 1
+                except OSError:
+                    continue
+
+    if target in {"long_term", "all"}:
+        lt = long_term_path()
+        if lt.is_file():
+            lt.write_text("# Long-term memory\n\n", encoding="utf-8")
+            cleared_long_term = True
+        elif target == "long_term":
+            lt.parent.mkdir(parents=True, exist_ok=True)
+            lt.write_text("# Long-term memory\n\n", encoding="utf-8")
+            cleared_long_term = True
+
+    try:
+        from arka.integrations.heartbeat import ping
+
+        ping(f"memory.clear.{target}", source="session_memory")
+    except Exception:
+        pass
+
+    return {
+        "scope": target,
+        "removed_daily": removed_daily,
+        "cleared_long_term": cleared_long_term,
+        **status(),
+    }
+
+
 def print_status() -> None:
     info = status()
     print(f"Session memory: {'on' if info['enabled'] else 'off'}")
@@ -221,6 +273,16 @@ def main() -> int:
 
     sub.add_parser("status")
 
+    p = sub.add_parser("clear", help="Clear daily notes, MEMORY.md, or both")
+    p.add_argument(
+        "--scope",
+        choices=["daily", "long_term", "all"],
+        default="daily",
+        help="What to clear (default: daily)",
+    )
+    p.add_argument("--long-term", action="store_true", help="Alias for --scope long_term")
+    p.add_argument("--all", action="store_true", help="Alias for --scope all")
+
     args = parser.parse_args()
     if args.cmd == "append":
         return append(args.text, long_term=args.long_term)
@@ -238,6 +300,18 @@ def main() -> int:
         return 0
     if args.cmd == "status":
         print_status()
+        return 0
+    if args.cmd == "clear":
+        scope = args.scope
+        if args.all:
+            scope = "all"
+        elif args.long_term:
+            scope = "long_term"
+        info = clear(scope=scope)
+        print(
+            f"Cleared session memory ({info['scope']}): "
+            f"daily={info['removed_daily']} long_term={info['cleared_long_term']}"
+        )
         return 0
     return 1
 

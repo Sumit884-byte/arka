@@ -383,6 +383,14 @@ def test_handle_arka_session_memory(tmp_path, monkeypatch):
     status = json.loads(_handle_arka_session_memory({"action": "status"}))
     assert status["enabled"] is True
 
+    cleared = json.loads(
+        _handle_arka_session_memory({"action": "clear", "scope": "all"})
+    )
+    assert cleared["scope"] == "all"
+    assert cleared["removed_daily"] >= 1
+    assert cleared["cleared_long_term"] is True
+    assert json.loads(_handle_arka_session_memory({"action": "search", "query": "standup"})) == []
+
 
 def test_handle_arka_subagent_spawn_and_list(tmp_path, monkeypatch):
     from arka.integrations import subagent
