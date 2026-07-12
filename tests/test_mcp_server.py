@@ -15,7 +15,7 @@ def test_list_tool_definitions_schema():
 
     tools = list_tool_definitions()
     names = list_tool_names()
-    assert len(tools) == len(names) == 36
+    assert len(tools) == len(names) == 37
     assert "arka_ask" in names
     assert "arka_recall" in names
     assert "arka_heartbeat" in names
@@ -46,6 +46,7 @@ def test_list_tool_definitions_schema():
     assert "arka_password" in names
     assert "arka_urlkit" in names
     assert "arka_timekit" in names
+    assert "arka_jsonkit" in names
     assert "arka_repo_health" in names
     assert "arka_agent_hub" in names
     for tool in tools:
@@ -130,7 +131,7 @@ def test_mcp_server_stdio_roundtrip():
     server = ArkaMcpServer(stdin=inp, stdout=out)
     response = server.process_line(inp.getvalue().strip())
     assert response is not None
-    assert len(response["result"]["tools"]) == 36
+    assert len(response["result"]["tools"]) == 37
 
 
 def test_install_config_snippet():
@@ -634,6 +635,26 @@ def test_handle_arka_docker_health(monkeypatch):
     assert health["running_containers"] == 2
     ps = json.loads(_handle_arka_docker({"action": "ps"}))
     assert ps["containers"][0]["name"] == "api"
+
+
+def test_handle_arka_jsonkit_validate(monkeypatch):
+    from arka.core import jsonkit as jk
+    from arka.integrations.mcp_server import _handle_arka_jsonkit
+
+    monkeypatch.setattr(
+        jk,
+        "validate_payload",
+        lambda text: {"ok": True, "valid": True, "error": None, "type": "dict", "bytes": len(text)},
+    )
+    monkeypatch.setattr(
+        jk,
+        "get_payload",
+        lambda text, path: {"ok": True, "path": path, "type": "int", "value": 1, "json": "1"},
+    )
+    validated = json.loads(_handle_arka_jsonkit({"action": "validate", "json": "{}"}))
+    assert validated["valid"] is True
+    got = json.loads(_handle_arka_jsonkit({"action": "get", "json": "{\"a\":1}", "path": "a"}))
+    assert got["value"] == 1
 
 
 def test_handle_arka_timekit_now(monkeypatch):
@@ -1161,6 +1182,7 @@ def test_doctor_spawns_client(monkeypatch):
                 "arka_password",
                 "arka_urlkit",
                 "arka_timekit",
+                "arka_jsonkit",
                 "arka_repo_health",
                 "arka_agent_hub",
                 "arka_team_run",

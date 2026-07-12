@@ -580,6 +580,31 @@ def _handle_arka_docker(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"docker_status unavailable: {exc}") from exc
 
 
+def _handle_arka_jsonkit(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "validate").strip().lower()
+    try:
+        from arka.core import jsonkit as jk
+
+        text = str(arguments.get("json") or arguments.get("text") or arguments.get("data") or "")
+        if action == "validate":
+            return json.dumps(jk.validate_payload(text), indent=2)
+        if action == "pretty":
+            indent = int(arguments.get("indent") or 2)
+            return json.dumps(jk.pretty_payload(text, indent=indent), indent=2)
+        if action == "minify":
+            return json.dumps(jk.minify_payload(text), indent=2)
+        if action == "get":
+            path = str(arguments.get("path") or arguments.get("key") or "").strip()
+            if not path:
+                raise ValueError("path is required for get")
+            return json.dumps(jk.get_payload(text, path), indent=2)
+        raise ValueError("action must be validate, pretty, minify, or get")
+    except ValueError:
+        raise
+    except ImportError as exc:
+        raise RuntimeError(f"jsonkit unavailable: {exc}") from exc
+
+
 def _handle_arka_timekit(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "now").strip().lower()
     try:
@@ -1609,6 +1634,36 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_docker,
+        ),
+        ArkaMcpTool(
+            name="arka_jsonkit",
+            description=(
+                "JSON helpers — validate, pretty-print, minify, or get a value "
+                "by dotted path like a.b[0] (offline)."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["validate", "pretty", "minify", "get"],
+                        "default": "validate",
+                        "description": "validate, pretty, minify, or get",
+                    },
+                    "json": {"type": "string", "description": "JSON text input"},
+                    "text": {"type": "string", "description": "Alias for json"},
+                    "indent": {
+                        "type": "integer",
+                        "description": "Indent when action=pretty",
+                        "default": 2,
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "Dotted/bracket path when action=get",
+                    },
+                },
+            },
+            handler=_handle_arka_jsonkit,
         ),
         ArkaMcpTool(
             name="arka_timekit",
