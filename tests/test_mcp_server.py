@@ -272,6 +272,40 @@ def test_handle_arka_routines_list(tmp_path, monkeypatch):
     assert enabled[0]["id"] == "morning"
 
 
+def test_handle_arka_routines_add_and_remove(tmp_path, monkeypatch):
+    from arka.integrations.mcp_server import _handle_arka_routines
+
+    routine_file = tmp_path / "routines.json"
+    routine_file.write_text("[]", encoding="utf-8")
+    monkeypatch.setattr("arka.integrations.routines.ROUTINE_FILE", routine_file)
+    monkeypatch.setattr(
+        "arka.integrations.routines._security_gate_action",
+        lambda _action: True,
+    )
+    monkeypatch.setattr("arka.integrations.routines._uninstall_one", lambda _rid: None)
+
+    created = json.loads(
+        _handle_arka_routines(
+            {
+                "action": "add",
+                "schedule": "09:00",
+                "task": "check unread emails",
+                "name": "inbox-check",
+            }
+        )
+    )
+    assert created["id"] == "inbox-check"
+    assert created["schedule"] == "09:00"
+    assert "email" in created["action"].lower() or "agent" in created["action"].lower()
+
+    rows = json.loads(_handle_arka_routines({"action": "list"}))
+    assert any(r["id"] == "inbox-check" for r in rows)
+
+    removed = _handle_arka_routines({"action": "remove", "id": "inbox-check"})
+    assert "Removed routine inbox-check" in removed
+    assert json.loads(_handle_arka_routines({"action": "list"})) == []
+
+
 def test_handle_arka_session_memory(tmp_path, monkeypatch):
     from arka.core import session_memory
     from arka.integrations.mcp_server import _handle_arka_session_memory

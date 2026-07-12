@@ -222,13 +222,50 @@ def _handle_arka_sessions(arguments: dict[str, Any]) -> str:
 def _handle_arka_routines(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "list").strip().lower()
     try:
-        from arka.integrations.routines import list_routines
+        from arka.integrations.routines import (
+            _security_gate_action,
+            list_routines,
+            normalize_action,
+            routine_add,
+            routine_remove,
+        )
 
         if action == "list":
             enabled_only = bool(arguments.get("enabled_only", False))
             rows = list_routines(enabled_only=enabled_only)
             return json.dumps(rows, indent=2)
-        raise ValueError("action must be list")
+        if action == "add":
+            schedule = str(arguments.get("schedule") or "").strip()
+            task = str(
+                arguments.get("task")
+                or arguments.get("routine_action")
+                or ""
+            ).strip()
+            if not schedule:
+                raise ValueError("schedule is required for add")
+            if not task:
+                raise ValueError("task is required for add")
+            name = str(arguments.get("name") or arguments.get("id") or "").strip()
+            normalized = normalize_action(task) or task
+            if not _security_gate_action(normalized):
+                raise RuntimeError("routine blocked by security gate")
+            with contextlib.redirect_stdout(io.StringIO()):
+                rid = routine_add(schedule, normalized, name=name, auto_install=False)
+            return json.dumps(
+                {"id": rid, "schedule": schedule, "action": normalized, "enabled": True},
+                indent=2,
+            )
+        if action == "remove":
+            rid = str(arguments.get("id") or arguments.get("name") or "").strip()
+            if not rid:
+                raise ValueError("id is required for remove")
+            before = {r["id"] for r in list_routines()}
+            if rid not in before:
+                raise ValueError(f"No routine {rid}")
+            with contextlib.redirect_stdout(io.StringIO()):
+                routine_remove(rid)
+            return f"Removed routine {rid}"
+        raise ValueError("action must be list, add, or remove")
     except ImportError as exc:
         raise RuntimeError(f"routines unavailable: {exc}") from exc
 
@@ -493,19 +530,35 @@ def _build_tools() -> list[ArkaMcpTool]:
         ),
         ArkaMcpTool(
             name="arka_routines",
-            description="List OpenClaw-style scheduled routines (schedule → action pairs).",
+            description="OpenClaw-style scheduled routines — list, add, or remove (schedule → task).",
             input_schema={
                 "type": "object",
                 "properties": {
                     "action": {
                         "type": "string",
-                        "enum": ["list"],
+                        "enum": ["list", "add", "remove"],
                         "default": "list",
-                        "description": "list: return scheduled routines as JSON",
+                        "description": "list, add, or remove a scheduled routine",
+                    },
+                    "schedule": {
+                        "type": "string",
+                        "description": "When to run (daily, hourly, or HH:MM) for action=add",
+                    },
+                    "task": {
+                        "type": "string",
+                        "description": "Task/command to schedule for action=add",
+                    },
+                    "id": {
+                        "type": "string",
+                        "description": "Routine id (required for remove; optional name for add)",
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "Optional routine id when action=add",
                     },
                     "enabled_only": {
                         "type": "boolean",
-                        "description": "Only include enabled routines",
+                        "description": "Only include enabled routines when action=list",
                         "default": False,
                     },
                 },
