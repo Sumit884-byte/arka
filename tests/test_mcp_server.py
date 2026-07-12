@@ -352,6 +352,13 @@ def test_handle_arka_subagent_spawn_and_list(tmp_path, monkeypatch):
     )
     assert detail["task"] == "summarize logs"
 
+    resumed = json.loads(
+        _handle_arka_subagent({"action": "resume", "agent_id": payload["id"]})
+    )
+    assert resumed["id"] == payload["id"]
+    assert resumed["status"] == "done"
+    assert "mcp subagent done" in resumed.get("result", "")
+
 
 def test_doctor_spawns_client(monkeypatch):
     from arka.integrations.mcp_client import McpTool

@@ -308,7 +308,13 @@ def _handle_arka_session_memory(arguments: dict[str, Any]) -> str:
 def _handle_arka_subagent(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "list").strip().lower()
     try:
-        from arka.integrations.subagent import agent_status, list_agents, spawn, status_summary
+        from arka.integrations.subagent import (
+            agent_status,
+            list_agents,
+            resume_payload,
+            spawn,
+            status_summary,
+        )
 
         if action == "spawn":
             task = str(arguments.get("task") or "").strip()
@@ -330,6 +336,14 @@ def _handle_arka_subagent(arguments: dict[str, Any]) -> str:
         if action == "list":
             limit = int(arguments.get("limit") or 20)
             return json.dumps(list_agents(limit=max(1, min(limit, 100))), indent=2)
+        if action == "resume":
+            agent_id = str(arguments.get("agent_id") or arguments.get("id") or "").strip()
+            if not agent_id:
+                raise ValueError("agent_id is required for resume")
+            data = resume_payload(agent_id)
+            if not data:
+                raise ValueError(f"unknown sub-agent: {agent_id}")
+            return json.dumps(data, indent=2)
         if action == "status":
             agent_id = str(arguments.get("agent_id") or arguments.get("id") or "").strip()
             if agent_id:
@@ -338,7 +352,7 @@ def _handle_arka_subagent(arguments: dict[str, Any]) -> str:
                     raise ValueError(f"unknown sub-agent: {agent_id}")
                 return json.dumps(data, indent=2)
             return json.dumps(status_summary(), indent=2)
-        raise ValueError("action must be spawn, list, or status")
+        raise ValueError("action must be spawn, list, status, or resume")
     except ImportError as exc:
         raise RuntimeError(f"subagent unavailable: {exc}") from exc
 
@@ -631,15 +645,15 @@ def _build_tools() -> list[ArkaMcpTool]:
         ),
         ArkaMcpTool(
             name="arka_subagent",
-            description="Hermes-style sub-agent delegation — spawn background tasks, list, or inspect status.",
+            description="Hermes-style sub-agent delegation — spawn, list, status, or resume results.",
             input_schema={
                 "type": "object",
                 "properties": {
                     "action": {
                         "type": "string",
-                        "enum": ["spawn", "list", "status"],
+                        "enum": ["spawn", "list", "status", "resume"],
                         "default": "list",
-                        "description": "spawn task, list recent agents, or hub/agent status",
+                        "description": "spawn, list, status, or resume a sub-agent result",
                     },
                     "task": {
                         "type": "string",
@@ -647,7 +661,7 @@ def _build_tools() -> list[ArkaMcpTool]:
                     },
                     "agent_id": {
                         "type": "string",
-                        "description": "Sub-agent id when action=status",
+                        "description": "Sub-agent id when action=status or resume",
                     },
                     "sync": {
                         "type": "boolean",

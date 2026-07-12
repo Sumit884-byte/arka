@@ -265,12 +265,31 @@ def agent_status(agent_id: str) -> dict | None:
     return _load(agent_id)
 
 
-def resume(agent_id: str) -> int:
+def resume_payload(agent_id: str) -> dict | None:
+    """Return a resume-friendly snapshot of a sub-agent (Hermes-style result fetch)."""
     data = _load(agent_id)
+    if not data:
+        return None
+    return {
+        "id": data.get("id"),
+        "status": data.get("status"),
+        "task": data.get("task"),
+        "result": data.get("result"),
+        "exit_code": data.get("exit_code"),
+        "when": data.get("when"),
+        "started": data.get("started"),
+        "finished": data.get("finished"),
+        "session_channel": data.get("session_channel"),
+        "session_chat_id": data.get("session_chat_id"),
+    }
+
+
+def resume(agent_id: str) -> int:
+    data = resume_payload(agent_id)
     if not data:
         print(f"No sub-agent {agent_id}.", file=sys.stderr)
         return 1
-    print(f"Sub-agent {agent_id} [{data.get('status')}]")
+    print(f"Sub-agent {data.get('id')} [{data.get('status')}]")
     print(f"Task: {data.get('task', '')}")
     if data.get("result"):
         print(f"Result:\n{data.get('result')}")
