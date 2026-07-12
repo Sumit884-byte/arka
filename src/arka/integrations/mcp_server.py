@@ -580,6 +580,49 @@ def _handle_arka_docker(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"docker_status unavailable: {exc}") from exc
 
 
+def _handle_arka_timekit(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "now").strip().lower()
+    try:
+        from arka.core import timekit as tk
+
+        if action == "now":
+            tz = str(arguments.get("tz") or arguments.get("timezone") or "").strip() or None
+            return json.dumps(tk.now_payload(tz=tz), indent=2)
+        if action == "convert":
+            value = str(
+                arguments.get("datetime")
+                or arguments.get("value")
+                or arguments.get("text")
+                or ""
+            ).strip()
+            to_tz = str(arguments.get("to_tz") or arguments.get("to") or "").strip()
+            from_tz = str(arguments.get("from_tz") or arguments.get("from") or "").strip() or None
+            if not to_tz:
+                raise ValueError("to_tz is required for convert")
+            return json.dumps(
+                tk.convert_payload(value, to_tz=to_tz, from_tz=from_tz),
+                indent=2,
+            )
+        if action == "relative":
+            expression = str(
+                arguments.get("expression")
+                or arguments.get("text")
+                or arguments.get("offset")
+                or ""
+            ).strip()
+            tz = str(arguments.get("tz") or arguments.get("timezone") or "").strip() or None
+            base = str(arguments.get("base") or "").strip() or None
+            return json.dumps(
+                tk.relative_payload(expression, tz=tz, base=base),
+                indent=2,
+            )
+        raise ValueError("action must be now, convert, or relative")
+    except ValueError:
+        raise
+    except ImportError as exc:
+        raise RuntimeError(f"timekit unavailable: {exc}") from exc
+
+
 def _handle_arka_urlkit(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "parse").strip().lower()
     try:
@@ -1566,6 +1609,38 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_docker,
+        ),
+        ArkaMcpTool(
+            name="arka_timekit",
+            description=(
+                "Time helpers — current time in a timezone, convert datetimes, "
+                "or apply simple relative offsets like 2h / in 3 days (offline)."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["now", "convert", "relative"],
+                        "default": "now",
+                        "description": "now, convert, or relative",
+                    },
+                    "tz": {"type": "string", "description": "Timezone e.g. Asia/Kolkata"},
+                    "timezone": {"type": "string", "description": "Alias for tz"},
+                    "datetime": {"type": "string", "description": "ISO datetime for convert"},
+                    "to_tz": {"type": "string", "description": "Target timezone for convert"},
+                    "from_tz": {"type": "string", "description": "Source timezone if datetime is naive"},
+                    "expression": {
+                        "type": "string",
+                        "description": "Relative offset e.g. 2h, -30m, in 3 days",
+                    },
+                    "base": {
+                        "type": "string",
+                        "description": "Optional base ISO datetime for relative",
+                    },
+                },
+            },
+            handler=_handle_arka_timekit,
         ),
         ArkaMcpTool(
             name="arka_urlkit",
