@@ -580,6 +580,34 @@ def _handle_arka_docker(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"docker_status unavailable: {exc}") from exc
 
 
+def _handle_arka_textkit(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "uuid").strip().lower()
+    try:
+        from arka.core import textkit as tk
+
+        if action == "uuid":
+            version = int(arguments.get("version") or 4)
+            name = str(arguments.get("name") or "").strip() or None
+            namespace = str(arguments.get("namespace") or "url").strip() or "url"
+            return json.dumps(
+                tk.uuid_payload(version=version, name=name, namespace=namespace),
+                indent=2,
+            )
+        if action == "hash":
+            text = str(arguments.get("text") or arguments.get("data") or "")
+            algorithm = str(arguments.get("algorithm") or "sha256")
+            return json.dumps(tk.hash_payload(text, algorithm=algorithm), indent=2)
+        if action == "base64":
+            mode = str(arguments.get("mode") or arguments.get("op") or "encode")
+            text = str(arguments.get("text") or arguments.get("data") or "")
+            return json.dumps(tk.base64_payload(text, action=mode), indent=2)
+        raise ValueError("action must be uuid, hash, or base64")
+    except ValueError:
+        raise
+    except ImportError as exc:
+        raise RuntimeError(f"textkit unavailable: {exc}") from exc
+
+
 def _handle_arka_calendar(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "today").strip().lower()
     try:
@@ -1469,6 +1497,54 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_docker,
+        ),
+        ArkaMcpTool(
+            name="arka_textkit",
+            description=(
+                "Offline text utilities — generate UUIDs, hash strings "
+                "(sha256/md5/…), or base64 encode/decode."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["uuid", "hash", "base64"],
+                        "default": "uuid",
+                        "description": "uuid, hash, or base64",
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "Input text for hash or base64",
+                    },
+                    "algorithm": {
+                        "type": "string",
+                        "description": "Hash algorithm (sha256, sha512, sha1, md5)",
+                        "default": "sha256",
+                    },
+                    "mode": {
+                        "type": "string",
+                        "enum": ["encode", "decode"],
+                        "description": "Base64 mode when action=base64",
+                        "default": "encode",
+                    },
+                    "version": {
+                        "type": "integer",
+                        "description": "UUID version 4 or 5",
+                        "default": 4,
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "Name for uuid5",
+                    },
+                    "namespace": {
+                        "type": "string",
+                        "description": "uuid5 namespace: dns, url, oid, x500",
+                        "default": "url",
+                    },
+                },
+            },
+            handler=_handle_arka_textkit,
         ),
         ArkaMcpTool(
             name="arka_calendar",

@@ -15,7 +15,7 @@ def test_list_tool_definitions_schema():
 
     tools = list_tool_definitions()
     names = list_tool_names()
-    assert len(tools) == len(names) == 31
+    assert len(tools) == len(names) == 32
     assert "arka_ask" in names
     assert "arka_recall" in names
     assert "arka_heartbeat" in names
@@ -41,6 +41,7 @@ def test_list_tool_definitions_schema():
     assert "arka_personalize" in names
     assert "arka_platform" in names
     assert "arka_calendar" in names
+    assert "arka_textkit" in names
     assert "arka_repo_health" in names
     assert "arka_agent_hub" in names
     for tool in tools:
@@ -125,7 +126,7 @@ def test_mcp_server_stdio_roundtrip():
     server = ArkaMcpServer(stdin=inp, stdout=out)
     response = server.process_line(inp.getvalue().strip())
     assert response is not None
-    assert len(response["result"]["tools"]) == 31
+    assert len(response["result"]["tools"]) == 32
 
 
 def test_install_config_snippet():
@@ -631,6 +632,35 @@ def test_handle_arka_docker_health(monkeypatch):
     assert ps["containers"][0]["name"] == "api"
 
 
+def test_handle_arka_textkit_hash(monkeypatch):
+    from arka.core import textkit as tk
+    from arka.integrations.mcp_server import _handle_arka_textkit
+
+    monkeypatch.setattr(
+        tk,
+        "hash_payload",
+        lambda text, algorithm="sha256": {
+            "ok": True,
+            "algorithm": algorithm,
+            "hex": "abc",
+            "bytes": len(text.encode("utf-8")),
+        },
+    )
+    monkeypatch.setattr(
+        tk,
+        "uuid_payload",
+        lambda version=4, name=None, namespace="url": {
+            "ok": True,
+            "version": version,
+            "uuid": "00000000-0000-4000-8000-000000000000",
+        },
+    )
+    hashed = json.loads(_handle_arka_textkit({"action": "hash", "text": "hi"}))
+    assert hashed["hex"] == "abc"
+    uid = json.loads(_handle_arka_textkit({"action": "uuid"}))
+    assert uid["version"] == 4
+
+
 def test_handle_arka_calendar_today(monkeypatch):
     from arka.integrations import macos_calendar as cal_mod
     from arka.integrations.mcp_server import _handle_arka_calendar
@@ -1019,6 +1049,7 @@ def test_doctor_spawns_client(monkeypatch):
                 "arka_personalize",
                 "arka_platform",
                 "arka_calendar",
+                "arka_textkit",
                 "arka_repo_health",
                 "arka_agent_hub",
                 "arka_team_run",
