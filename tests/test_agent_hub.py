@@ -212,7 +212,9 @@ def test_sync_all_creates_exports(hub_paths, monkeypatch):
     assert hub_launch_env_path().is_file()
     assert hub_agents_json_path().is_file()
     registry = json.loads(hub_agents_json_path().read_text(encoding="utf-8"))
-    assert len(registry["agents"]) == 9
+    from arka.integrations.agent_hub import AGENTS
+
+    assert len(registry["agents"]) == len(AGENTS)
     assert registry["last_sync"]["mcp"]
 
 
@@ -363,11 +365,11 @@ def test_doctor_checks(hub_paths, monkeypatch):
 
 
 def test_format_list_and_status(hub_paths):
-    from arka.integrations.agent_hub import format_agent_list, format_status
+    from arka.integrations.agent_hub import AGENTS, format_agent_list, format_status
 
     listing = format_agent_list()
     assert "ollama launch claude" in listing
-    assert "count\t9" in listing
+    assert f"count\t{len(AGENTS)}" in listing
     status = format_status()
     assert "hub\t" in status
     assert "claude" in status

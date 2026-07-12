@@ -221,6 +221,17 @@ def route_kaggle(cmd: str) -> str | None:
     return route or None
 
 
+def route_convert_media(cmd: str) -> str | None:
+    try:
+        from arka.media.convert_media import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "convert_media " + " ".join(shlex.quote(a) for a in argv)
+
+
 def route_compose_video(cmd: str) -> str | None:
     try:
         from arka.media.compose_video import nl_to_argv
@@ -358,6 +369,15 @@ def route_repo_map(cmd: str) -> str | None:
 def route_generate_data(cmd: str) -> str | None:
     try:
         from arka.agent.generate_data import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
+
+
+def route_view_data(cmd: str) -> str | None:
+    try:
+        from arka.agent.view_data import route_command
     except ImportError:
         return None
     route = route_command(cmd)
@@ -525,6 +545,7 @@ def route_offline_extras(cmd: str) -> str | None:
         route_repo_health,
         route_repo_map,
         route_generate_data,
+        route_view_data,
         route_data_ask,
         route_docker_status,
         route_daily_brief,
@@ -551,6 +572,7 @@ def route_offline_extras(cmd: str) -> str | None:
         route_ascii_art,
         route_generate_image,
         route_download,
+        route_convert_media,
         route_compose_video,
         route_timer,
         route_search_web,

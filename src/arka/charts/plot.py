@@ -313,8 +313,26 @@ def _chart_title(text: str, *, drop: tuple[str, ...] = ()) -> str:
     return title
 
 
+def unwrap_shell_quotes(text: str) -> str:
+    """Strip nested fish/shell quoting wrappers from NL chart prompts."""
+    t = (text or "").strip()
+    if not t:
+        return ""
+    # Fish nested: ''"'make …'"''
+    nested = re.fullmatch(r"''\"'\"'(.*)'\"'\"''", t, flags=re.DOTALL)
+    if nested:
+        return nested.group(1).strip()
+    # Repeated peel of matching single/double quotes
+    for _ in range(4):
+        if len(t) >= 2 and t[0] == t[-1] and t[0] in {"'", '"'}:
+            t = t[1:-1].strip()
+            continue
+        break
+    return t
+
+
 def nl_to_argv(text: str) -> list[str]:
-    t = text.strip()
+    t = unwrap_shell_quotes(text.strip())
     if not t:
         return []
 

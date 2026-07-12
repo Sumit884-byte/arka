@@ -7,6 +7,17 @@ icon: "flask"
 
 Arka uses **pytest** for automated tests. The suite covers routing, LLM failover, vision, integrations, telemetry, and skill-specific behavior.
 
+## Continuous integration
+
+Pull requests and pushes to `main` run [`.github/workflows/ci.yml`](https://github.com/Sumit884-byte/arka/blob/main/.github/workflows/ci.yml):
+
+1. **Ruff** — `ruff check src/ tests/`
+2. **Pytest gate** — MCP, OpenClaw/Hermes, clipboard, agent hub, and LLM fallback suites (expand as other modules stabilize)
+
+Tag pushes still use the separate [Publish](https://github.com/Sumit884-byte/arka/blob/main/.github/workflows/publish.yml) workflow for PyPI.
+
+Locally you can still run the full suite with `pytest tests/`.
+
 ## Run tests
 
 From a dev checkout:
