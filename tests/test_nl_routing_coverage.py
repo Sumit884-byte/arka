@@ -63,6 +63,19 @@ class RouterSymbolicOnlyTests(unittest.TestCase):
                     msg=f"{phrase!r} -> {result.skill!r}",
                 )
 
+    def test_symbolic_only_prefers_python_over_fish_llm(self) -> None:
+        """Cursor-style offline gate: symbolic extras beat fish LLM fallbacks."""
+        from arka.router import Route
+
+        fake_fish = Route("python3 -c 'print(1)'", source="llm", kind="llm")
+        with mock.patch.dict(os.environ, {"ROUTE_MODE": "symbolic_only"}, clear=False):
+            with mock.patch("arka.router._route_via_fish", return_value=fake_fish):
+                result = route("view colored csv pubmed_sample.csv")
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.skill.split()[0], "view_data")
+        self.assertEqual(result.source, "offline")
+
 
 if __name__ == "__main__":
     unittest.main()

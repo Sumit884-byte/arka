@@ -64,7 +64,7 @@ Clear one-sided requests still use offline routing with zero tokens.
 | --- | --- |
 | `symbolic` | Offline rules first, LLM only when needed (default) |
 | `ai` | Prefer LLM routing |
-| `symbolic_only` | Never call LLM for routing |
+| `symbolic_only` | Never call LLM for routing; Python symbolic extras run before fish, and fish LLM previews are ignored |
 | `ai_only` | Always use LLM for routing |
 
 ```env

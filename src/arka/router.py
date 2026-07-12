@@ -90,8 +90,26 @@ def route(text: str) -> Route | None:
         except ImportError:
             pass
 
+        if mode == "symbolic_only":
+            try:
+                from arka.routing.symbolic import route_offline_extras
+
+                extra = route_offline_extras(cmd)
+                if extra:
+                    sym_route = Route(extra, source="offline")
+                    if span is not None:
+                        _finish_route_span(
+                            current,
+                            sym_route,
+                            decision="symbolic",
+                            start=route_start,
+                        )
+                    return sym_route
+            except ImportError:
+                pass
+
         fish_route = _route_via_fish(cmd)
-        if fish_route:
+        if fish_route and not (mode == "symbolic_only" and fish_route.kind == "llm"):
             if span is not None:
                 _finish_route_span(
                     current,
