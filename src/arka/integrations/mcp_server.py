@@ -526,7 +526,7 @@ def _build_tools() -> list[ArkaMcpTool]:
         ),
         ArkaMcpTool(
             name="arka_sessions",
-            description="Hermes-style channel sessions — list, read context, push turns, or reset.",
+            description="Hermes-style channel sessions — list, context, resume turns, push, or reset.",
             input_schema={
                 "type": "object",
                 "properties": {
