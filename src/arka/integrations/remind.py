@@ -328,6 +328,84 @@ def _add_reminder(text: str, *, at: str | None = None, in_spec: str | None = Non
     return rem, used_default
 
 
+def _reminder_row(rem: dict) -> dict[str, object]:
+    return {
+        "id": rem.get("id"),
+        "text": rem.get("text"),
+        "due_at": rem.get("due_at"),
+        "due": datetime.fromtimestamp(int(rem.get("due_at") or 0)).strftime("%Y-%m-%d %H:%M")
+        if rem.get("due_at")
+        else "",
+        "cancelled": bool(rem.get("cancelled")),
+        "done": _is_done(rem),
+        "pending_active": bool(rem.get("pending_active")),
+    }
+
+
+def list_reminders(*, include_done: bool = False, limit: int = 50) -> list[dict[str, object]]:
+    """Return structured reminders for CLI/MCP (OpenClaw always-on reminders)."""
+    items = sorted(_load_reminders(), key=lambda r: int(r.get("due_at") or 0))
+    out: list[dict[str, object]] = []
+    for rem in items:
+        if not isinstance(rem, dict):
+            continue
+        if rem.get("cancelled") and not include_done:
+            continue
+        if _is_done(rem) and not include_done:
+            continue
+        out.append(_reminder_row(rem))
+        if len(out) >= max(1, min(int(limit or 50), 200)):
+            break
+    return out
+
+
+def add_reminder(
+    text: str,
+    *,
+    at: str | None = None,
+    in_spec: str | None = None,
+    start: bool = True,
+) -> tuple[dict[str, object] | None, str | None]:
+    """Create a reminder. Returns (row, error)."""
+    message = (text or "").strip()
+    if not message and not at and not in_spec:
+        return None, "text is required (or provide at/in)"
+    try:
+        from arka.core.security import verify_user_prompt
+
+        gate = verify_user_prompt(message or "reminder")
+        if gate.status == "block":
+            return None, gate.reason
+    except ImportError:
+        pass
+    rem, used_default = _add_reminder(message, at=at, in_spec=in_spec)
+    if start:
+        try:
+            start_daemon()
+        except Exception:
+            pass
+    row = _reminder_row(rem)
+    row["used_default_delay"] = used_default
+    return row, None
+
+
+def cancel_reminder(reminder_id: str) -> tuple[list[dict[str, object]], str | None]:
+    """Cancel reminders whose id starts with reminder_id. Returns (cancelled rows, error)."""
+    rid = (reminder_id or "").strip().lower()
+    if not rid:
+        return [], "id is required"
+    items = _load_reminders()
+    cancelled: list[dict[str, object]] = []
+    for rem in items:
+        if str(rem.get("id", "")).lower().startswith(rid):
+            rem["cancelled"] = True
+            cancelled.append(_reminder_row(rem))
+    if not cancelled:
+        return [], f"No reminder matching id {rid!r}"
+    _save_reminders(items)
+    return cancelled, None
+
+
 def _format_rem(rem: dict) -> str:
     due = datetime.fromtimestamp(int(rem["due_at"])).strftime("%Y-%m-%d %H:%M")
     flags = []
@@ -490,17 +568,18 @@ def cmd_add(args: argparse.Namespace) -> int:
     text = _normalize_add_argv(text.split()) if text else ""
     if not text and not args.at and not args.in_spec:
         raise SystemExit("Usage: remind add [--in 30m | --at TIME] <message>")
-    rem, used_default = _add_reminder(text, at=args.at, in_spec=args.in_spec)
-    due = datetime.fromtimestamp(rem["due_at"]).strftime("%Y-%m-%d %H:%M")
-    print(f"✓ Reminder set for {due} — {rem['text']} (id {rem['id']})")
-    if used_default:
+    rem, err = add_reminder(text, at=args.at, in_spec=args.in_spec, start=True)
+    if err or rem is None:
+        raise SystemExit(err or "failed to add reminder")
+    due = rem.get("due") or "?"
+    print(f"✓ Reminder set for {due} — {rem.get('text')} (id {rem.get('id')})")
+    if rem.get("used_default_delay"):
         default_in = _parse_default_in_spec() or "1h"
         print(
             f"  (no time given — used default delay {default_in}; "
             f"override with 'in 30m …' or ARKA_REMIND_DEFAULT=30m)",
             file=sys.stderr,
         )
-    start_daemon()
     return 0
 
 
@@ -515,17 +594,11 @@ def cmd_list(_args: argparse.Namespace) -> int:
 
 
 def cmd_cancel(args: argparse.Namespace) -> int:
-    rid = args.id.strip().lower()
-    items = _load_reminders()
-    found = False
-    for rem in items:
-        if str(rem.get("id", "")).lower().startswith(rid):
-            rem["cancelled"] = True
-            found = True
-            print(f"Cancelled {rem.get('id')} — {rem.get('text')}")
-    if not found:
-        raise SystemExit(f"No reminder matching id {rid!r}")
-    _save_reminders(items)
+    cancelled, err = cancel_reminder(args.id)
+    if err:
+        raise SystemExit(err)
+    for rem in cancelled:
+        print(f"Cancelled {rem.get('id')} — {rem.get('text')}")
     return 0
 
 

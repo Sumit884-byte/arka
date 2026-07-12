@@ -390,6 +390,38 @@ def _handle_arka_project_rules(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"project_rules unavailable: {exc}") from exc
 
 
+def _handle_arka_remind(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "list").strip().lower()
+    try:
+        from arka.integrations.remind import add_reminder, cancel_reminder, list_reminders
+
+        if action == "list":
+            include_done = bool(arguments.get("include_done", False))
+            limit = int(arguments.get("limit") or 50)
+            return json.dumps(
+                list_reminders(include_done=include_done, limit=max(1, min(limit, 200))),
+                indent=2,
+            )
+        if action == "add":
+            text = str(arguments.get("text") or arguments.get("message") or "").strip()
+            at = str(arguments.get("at") or "").strip() or None
+            in_spec = str(arguments.get("in") or arguments.get("in_spec") or "").strip() or None
+            start = bool(arguments.get("start", False))
+            row, err = add_reminder(text, at=at, in_spec=in_spec, start=start)
+            if err or row is None:
+                raise RuntimeError(err or "failed to add reminder")
+            return json.dumps(row, indent=2)
+        if action == "cancel":
+            rid = str(arguments.get("id") or arguments.get("reminder_id") or "").strip()
+            cancelled, err = cancel_reminder(rid)
+            if err:
+                raise ValueError(err)
+            return json.dumps({"cancelled": cancelled}, indent=2)
+        raise ValueError("action must be list, add, or cancel")
+    except ImportError as exc:
+        raise RuntimeError(f"remind unavailable: {exc}") from exc
+
+
 def _handle_arka_team_run(arguments: dict[str, Any]) -> str:
     team = str(arguments.get("team") or arguments.get("name") or "").strip()
     task = str(arguments.get("task") or "").strip()
@@ -730,6 +762,53 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_project_rules,
+        ),
+        ArkaMcpTool(
+            name="arka_remind",
+            description="OpenClaw-style reminders — list, add, or cancel scheduled nudges.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["list", "add", "cancel"],
+                        "default": "list",
+                        "description": "list, add, or cancel a reminder",
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "Reminder message (may include 'in 30m' / 'at 5pm')",
+                    },
+                    "at": {
+                        "type": "string",
+                        "description": "Optional absolute time for action=add",
+                    },
+                    "in": {
+                        "type": "string",
+                        "description": "Optional relative delay (30m, 2h) for action=add",
+                    },
+                    "id": {
+                        "type": "string",
+                        "description": "Reminder id prefix when action=cancel",
+                    },
+                    "include_done": {
+                        "type": "boolean",
+                        "description": "Include cancelled/done when action=list",
+                        "default": False,
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max rows when action=list",
+                        "default": 50,
+                    },
+                    "start": {
+                        "type": "boolean",
+                        "description": "Start reminder daemon after add (default: false for MCP)",
+                        "default": False,
+                    },
+                },
+            },
+            handler=_handle_arka_remind,
         ),
         ArkaMcpTool(
             name="arka_team_run",

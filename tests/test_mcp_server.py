@@ -14,7 +14,7 @@ def test_list_tool_definitions_schema():
 
     tools = list_tool_definitions()
     names = list_tool_names()
-    assert len(tools) == len(names) == 12
+    assert len(tools) == len(names) == 13
     assert "arka_ask" in names
     assert "arka_recall" in names
     assert "arka_heartbeat" in names
@@ -23,6 +23,7 @@ def test_list_tool_definitions_schema():
     assert "arka_session_memory" in names
     assert "arka_subagent" in names
     assert "arka_project_rules" in names
+    assert "arka_remind" in names
     for tool in tools:
         assert tool["name"]
         assert tool["description"]
@@ -105,7 +106,7 @@ def test_mcp_server_stdio_roundtrip():
     server = ArkaMcpServer(stdin=inp, stdout=out)
     response = server.process_line(inp.getvalue().strip())
     assert response is not None
-    assert len(response["result"]["tools"]) == 12
+    assert len(response["result"]["tools"]) == 13
 
 
 def test_install_config_snippet():
@@ -377,6 +378,33 @@ def test_handle_arka_subagent_spawn_and_list(tmp_path, monkeypatch):
     assert "mcp subagent done" in resumed.get("result", "")
 
 
+def test_handle_arka_remind_add_list_cancel(tmp_path, monkeypatch):
+    from arka.integrations import remind
+    from arka.integrations.mcp_server import _handle_arka_remind
+
+    monkeypatch.setattr(remind, "REMINDERS_FILE", tmp_path / "reminders.json")
+    monkeypatch.setattr(remind, "start_daemon", lambda: 0)
+
+    created = json.loads(
+        _handle_arka_remind(
+            {"action": "add", "text": "stretch", "in": "30m", "start": False}
+        )
+    )
+    assert created["text"]
+    assert created["id"]
+    assert created["due_at"]
+
+    listed = json.loads(_handle_arka_remind({"action": "list"}))
+    assert len(listed) == 1
+    assert listed[0]["id"] == created["id"]
+
+    cancelled = json.loads(
+        _handle_arka_remind({"action": "cancel", "id": created["id"]})
+    )
+    assert cancelled["cancelled"][0]["id"] == created["id"]
+    assert json.loads(_handle_arka_remind({"action": "list"})) == []
+
+
 def test_doctor_spawns_client(monkeypatch):
     from arka.integrations.mcp_client import McpTool
     from arka.integrations.mcp_server import doctor
@@ -403,6 +431,7 @@ def test_doctor_spawns_client(monkeypatch):
                 "arka_session_memory",
                 "arka_subagent",
                 "arka_project_rules",
+                "arka_remind",
                 "arka_team_run",
             ]]
 
