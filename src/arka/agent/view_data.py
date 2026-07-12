@@ -257,6 +257,35 @@ def render_csv(
     return text, header, rows
 
 
+def preview_file(
+    path: str | Path,
+    *,
+    max_rows: int = 50,
+    plain: bool = True,
+    delimiter: str | None = None,
+) -> dict[str, object]:
+    """Load a CSV/TSV file and return a structured preview (MCP-friendly)."""
+    file_path = Path(path).expanduser()
+    if not file_path.is_file():
+        raise FileNotFoundError(f"file not found: {file_path}")
+    limit = max(1, min(int(max_rows or 50), 500))
+    with file_path.open(encoding="utf-8", errors="replace", newline="") as fh:
+        text, header, rows = render_csv(
+            fh,
+            plain=plain,
+            max_rows=limit,
+            delimiter=delimiter,
+        )
+    shown = rows if limit is None else rows[:limit]
+    return {
+        "path": str(file_path.resolve()),
+        "columns": header,
+        "row_count": len(rows),
+        "shown_rows": len(shown),
+        "table": text,
+    }
+
+
 def _extract_path(text: str) -> str | None:
     matches = []
     for m in _FILE_RE.finditer(text):

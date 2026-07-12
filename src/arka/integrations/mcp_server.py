@@ -424,6 +424,29 @@ def _handle_arka_project_rules(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"project_rules unavailable: {exc}") from exc
 
 
+def _handle_arka_view_data(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "preview").strip().lower()
+    try:
+        from arka.agent.view_data import preview_file
+
+        if action == "preview":
+            path = str(arguments.get("path") or arguments.get("file") or "").strip()
+            if not path:
+                raise ValueError("path is required for preview")
+            max_rows = int(arguments.get("max_rows") or arguments.get("limit") or 50)
+            delimiter = str(arguments.get("delimiter") or "").strip() or None
+            plain = bool(arguments.get("plain", True))
+            return json.dumps(
+                preview_file(path, max_rows=max_rows, plain=plain, delimiter=delimiter),
+                indent=2,
+            )
+        raise ValueError("action must be preview")
+    except FileNotFoundError as exc:
+        raise ValueError(str(exc)) from exc
+    except ImportError as exc:
+        raise RuntimeError(f"view_data unavailable: {exc}") from exc
+
+
 def _handle_arka_clipboard(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "list").strip().lower()
     try:
@@ -860,6 +883,41 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_webhook,
+        ),
+        ArkaMcpTool(
+            name="arka_view_data",
+            description="Preview CSV/TSV tables as plain text (csvlook-style) for agents.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["preview"],
+                        "default": "preview",
+                        "description": "preview: return table text and column metadata",
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "Path to a .csv or .tsv file",
+                    },
+                    "max_rows": {
+                        "type": "integer",
+                        "description": "Max data rows to include",
+                        "default": 50,
+                    },
+                    "delimiter": {
+                        "type": "string",
+                        "description": "Optional delimiter override (default: auto)",
+                    },
+                    "plain": {
+                        "type": "boolean",
+                        "description": "Disable ANSI colors (default: true for MCP)",
+                        "default": True,
+                    },
+                },
+                "required": ["path"],
+            },
+            handler=_handle_arka_view_data,
         ),
         ArkaMcpTool(
             name="arka_clipboard",

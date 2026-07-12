@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -14,7 +15,7 @@ def test_list_tool_definitions_schema():
 
     tools = list_tool_definitions()
     names = list_tool_names()
-    assert len(tools) == len(names) == 15
+    assert len(tools) == len(names) == 16
     assert "arka_ask" in names
     assert "arka_recall" in names
     assert "arka_heartbeat" in names
@@ -24,6 +25,7 @@ def test_list_tool_definitions_schema():
     assert "arka_subagent" in names
     assert "arka_project_rules" in names
     assert "arka_webhook" in names
+    assert "arka_view_data" in names
     assert "arka_clipboard" in names
     assert "arka_remind" in names
     for tool in tools:
@@ -108,7 +110,7 @@ def test_mcp_server_stdio_roundtrip():
     server = ArkaMcpServer(stdin=inp, stdout=out)
     response = server.process_line(inp.getvalue().strip())
     assert response is not None
-    assert len(response["result"]["tools"]) == 15
+    assert len(response["result"]["tools"]) == 16
 
 
 def test_install_config_snippet():
@@ -516,6 +518,21 @@ def test_handle_arka_webhook_status_and_health(tmp_path, monkeypatch):
     assert health["running"] is True
 
 
+def test_handle_arka_view_data_preview():
+    from arka.integrations.mcp_server import _handle_arka_view_data
+
+    fixture = Path(__file__).parent / "fixtures" / "pubmed_sample.csv"
+    payload = json.loads(
+        _handle_arka_view_data(
+            {"action": "preview", "path": str(fixture), "max_rows": 5, "plain": True}
+        )
+    )
+    assert "pmid" in payload["columns"]
+    assert payload["shown_rows"] >= 1
+    assert "42436396" in payload["table"]
+    assert "\033[" not in payload["table"]
+
+
 def test_doctor_spawns_client(monkeypatch):
     from arka.integrations.mcp_client import McpTool
     from arka.integrations.mcp_server import doctor
@@ -543,6 +560,7 @@ def test_doctor_spawns_client(monkeypatch):
                 "arka_subagent",
                 "arka_project_rules",
                 "arka_webhook",
+                "arka_view_data",
                 "arka_clipboard",
                 "arka_remind",
                 "arka_team_run",
