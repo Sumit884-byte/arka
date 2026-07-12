@@ -580,6 +580,31 @@ def _handle_arka_docker(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"docker_status unavailable: {exc}") from exc
 
 
+def _handle_arka_price(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "sources").strip().lower()
+    try:
+        from arka.agent import price_sources as ps
+
+        if action in ("sources", "list"):
+            return json.dumps(
+                ps.sources_payload(
+                    region=str(arguments.get("region") or "").strip() or None,
+                    product=str(arguments.get("product") or "").strip() or None,
+                    query=str(arguments.get("query") or arguments.get("text") or "").strip()
+                    or None,
+                ),
+                indent=2,
+            )
+        if action == "parse":
+            query = str(arguments.get("query") or arguments.get("text") or "").strip()
+            return json.dumps(ps.parse_price_payload(query), indent=2)
+        raise ValueError("action must be sources or parse")
+    except ValueError:
+        raise
+    except ImportError as exc:
+        raise RuntimeError(f"price_sources unavailable: {exc}") from exc
+
+
 def _handle_arka_config(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "list").strip().lower()
     try:
@@ -1319,6 +1344,37 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_docker,
+        ),
+        ArkaMcpTool(
+            name="arka_price",
+            description=(
+                "Product price-check helpers — list retailer sources by region/product "
+                "or parse a natural-language price query (no live scrape)."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["sources", "parse"],
+                        "default": "sources",
+                        "description": "sources: list retailers; parse: extract product/region",
+                    },
+                    "region": {
+                        "type": "string",
+                        "description": "india or us",
+                    },
+                    "product": {
+                        "type": "string",
+                        "description": "Product name for category-aware sources",
+                    },
+                    "query": {
+                        "type": "string",
+                        "description": "Natural-language query for parse or sources",
+                    },
+                },
+            },
+            handler=_handle_arka_price,
         ),
         ArkaMcpTool(
             name="arka_config",

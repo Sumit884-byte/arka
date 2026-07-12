@@ -298,6 +298,55 @@ def sources_for_product(product: str, *, region: str) -> list[tuple[str, str, st
     return [s for s in sources_for_region(region) if s[0] in allowed]
 
 
+
+def sources_payload(
+    *,
+    region: str | None = None,
+    product: str | None = None,
+    query: str | None = None,
+) -> dict[str, object]:
+    """Structured price-check sources for MCP / automation clients."""
+    product_name = (product or "").strip() or None
+    region_name = (region or "").strip().lower() or None
+    if query and query.strip():
+        product_name, region_name = parse_price_query(query.strip())
+    reg = region_name or "india"
+    if reg not in _REGION_SOURCES:
+        reg = "india"
+    rows = (
+        sources_for_product(product_name, region=reg)
+        if product_name
+        else sources_for_region(reg)
+    )
+    category = detect_price_product_category(product_name) if product_name else "generic"
+    return {
+        "region": reg,
+        "product": product_name or "",
+        "category": category,
+        "count": len(rows),
+        "sources": [
+            {"id": sid, "label": label, "site_bias": bias}
+            for sid, label, bias in rows
+        ],
+    }
+
+
+def parse_price_payload(query: str) -> dict[str, object]:
+    """Parse a natural-language price query for MCP clients."""
+    text = (query or "").strip()
+    if not text:
+        raise ValueError("query is required")
+    product, region = parse_price_query(text)
+    return {
+        "query": text,
+        "product": product,
+        "region": region,
+        "is_price_check": is_price_check_query(text),
+        "category": detect_price_product_category(product),
+        "sources": sources_payload(region=region, product=product)["sources"],
+    }
+
+
 def list_price_sources(region: str | None = None, product: str | None = None) -> list[tuple[str, str]]:
     reg = region or "india"
     if product:

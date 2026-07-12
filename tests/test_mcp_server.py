@@ -15,7 +15,7 @@ def test_list_tool_definitions_schema():
 
     tools = list_tool_definitions()
     names = list_tool_names()
-    assert len(tools) == len(names) == 25
+    assert len(tools) == len(names) == 26
     assert "arka_ask" in names
     assert "arka_recall" in names
     assert "arka_heartbeat" in names
@@ -35,6 +35,7 @@ def test_list_tool_definitions_schema():
     assert "arka_qr" in names
     assert "arka_sports" in names
     assert "arka_config" in names
+    assert "arka_price" in names
     assert "arka_repo_health" in names
     assert "arka_agent_hub" in names
     for tool in tools:
@@ -119,7 +120,7 @@ def test_mcp_server_stdio_roundtrip():
     server = ArkaMcpServer(stdin=inp, stdout=out)
     response = server.process_line(inp.getvalue().strip())
     assert response is not None
-    assert len(response["result"]["tools"]) == 25
+    assert len(response["result"]["tools"]) == 26
 
 
 def test_install_config_snippet():
@@ -625,6 +626,39 @@ def test_handle_arka_docker_health(monkeypatch):
     assert ps["containers"][0]["name"] == "api"
 
 
+def test_handle_arka_price_sources(monkeypatch):
+    from arka.agent import price_sources as ps
+    from arka.integrations.mcp_server import _handle_arka_price
+
+    monkeypatch.setattr(
+        ps,
+        "sources_payload",
+        lambda **kwargs: {
+            "region": "india",
+            "product": "iphone",
+            "category": "apple",
+            "count": 1,
+            "sources": [{"id": "apple_in", "label": "Apple India", "site_bias": "site:apple.com"}],
+        },
+    )
+    monkeypatch.setattr(
+        ps,
+        "parse_price_payload",
+        lambda query: {
+            "query": query,
+            "product": "iphone 16",
+            "region": "india",
+            "is_price_check": True,
+            "category": "apple",
+            "sources": [{"id": "apple_in", "label": "Apple India"}],
+        },
+    )
+    sources = json.loads(_handle_arka_price({"action": "sources", "product": "iphone"}))
+    assert sources["category"] == "apple"
+    parsed = json.loads(_handle_arka_price({"action": "parse", "query": "iphone 16 price in india"}))
+    assert parsed["product"] == "iphone 16"
+
+
 def test_handle_arka_config_list(monkeypatch, tmp_path):
     from arka.core import config_backup as cb
     from arka.integrations.mcp_server import _handle_arka_config
@@ -802,6 +836,7 @@ def test_doctor_spawns_client(monkeypatch):
                 "arka_qr",
                 "arka_sports",
                 "arka_config",
+                "arka_price",
                 "arka_repo_health",
                 "arka_agent_hub",
                 "arka_team_run",
