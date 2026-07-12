@@ -14,7 +14,7 @@ def test_list_tool_definitions_schema():
 
     tools = list_tool_definitions()
     names = list_tool_names()
-    assert len(tools) == len(names) == 14
+    assert len(tools) == len(names) == 15
     assert "arka_ask" in names
     assert "arka_recall" in names
     assert "arka_heartbeat" in names
@@ -23,6 +23,7 @@ def test_list_tool_definitions_schema():
     assert "arka_session_memory" in names
     assert "arka_subagent" in names
     assert "arka_project_rules" in names
+    assert "arka_webhook" in names
     assert "arka_clipboard" in names
     assert "arka_remind" in names
     for tool in tools:
@@ -107,7 +108,7 @@ def test_mcp_server_stdio_roundtrip():
     server = ArkaMcpServer(stdin=inp, stdout=out)
     response = server.process_line(inp.getvalue().strip())
     assert response is not None
-    assert len(response["result"]["tools"]) == 14
+    assert len(response["result"]["tools"]) == 15
 
 
 def test_install_config_snippet():
@@ -491,6 +492,30 @@ def test_handle_arka_clipboard_save_list_get_clear(tmp_path, monkeypatch):
     assert json.loads(_handle_arka_clipboard({"action": "list"})) == []
 
 
+def test_handle_arka_webhook_status_and_health(tmp_path, monkeypatch):
+    from arka.integrations import webhook
+    from arka.integrations.mcp_server import _handle_arka_webhook
+
+    monkeypatch.setattr(webhook, "PID_PATH", tmp_path / "arka_webhook.pid")
+    monkeypatch.setenv("WEBHOOK_ENABLED", "1")
+    monkeypatch.setenv("WEBHOOK_TOKEN", "test-token")
+    monkeypatch.setenv("WEBHOOK_HOST", "127.0.0.1")
+    monkeypatch.setenv("WEBHOOK_PORT", "8767")
+    (tmp_path / "arka_webhook.pid").write_text("12345", encoding="utf-8")
+
+    status = json.loads(_handle_arka_webhook({"action": "status"}))
+    assert status["enabled"] is True
+    assert status["token_set"] is True
+    assert status["running"] is True
+    assert status["pid"] == "12345"
+    assert status["inbox_url"].endswith("/v1/inbox")
+
+    health = json.loads(_handle_arka_webhook({"action": "health"}))
+    assert health["ok"] is True
+    assert health["webhook_enabled"] is True
+    assert health["running"] is True
+
+
 def test_doctor_spawns_client(monkeypatch):
     from arka.integrations.mcp_client import McpTool
     from arka.integrations.mcp_server import doctor
@@ -517,6 +542,7 @@ def test_doctor_spawns_client(monkeypatch):
                 "arka_session_memory",
                 "arka_subagent",
                 "arka_project_rules",
+                "arka_webhook",
                 "arka_clipboard",
                 "arka_remind",
                 "arka_team_run",

@@ -29,6 +29,40 @@ def _token() -> str:
     return (os.environ.get("WEBHOOK_TOKEN") or os.environ.get("REMOTE_TOKEN") or "").strip()
 
 
+def status_info() -> dict[str, object]:
+    """Structured webhook listener status (OpenClaw/Hermes-style gateway health)."""
+    pid = ""
+    if PID_PATH.is_file():
+        try:
+            pid = PID_PATH.read_text(encoding="utf-8").strip()
+        except OSError:
+            pid = ""
+    host = os.environ.get("WEBHOOK_HOST", "127.0.0.1")
+    port = int(os.environ.get("WEBHOOK_PORT", "8767"))
+    return {
+        "enabled": _enabled(),
+        "host": host,
+        "port": port,
+        "token_set": bool(_token()),
+        "pid": pid,
+        "running": bool(pid),
+        "inbox_url": f"http://{host}:{port}/v1/inbox",
+        "health_url": f"http://{host}:{port}/v1/health",
+    }
+
+
+def health_payload() -> dict[str, object]:
+    """Same shape as GET /v1/health for MCP clients."""
+    info = status_info()
+    return {
+        "ok": True,
+        "agent": os.environ.get("AGENT_NAME", "arka"),
+        "webhook_enabled": bool(info["enabled"]),
+        "running": bool(info["running"]),
+        "listen": info["inbox_url"],
+    }
+
+
 def _verify_inbound(text: str) -> tuple[bool, str]:
     """Treat all webhook payloads as untrusted external content."""
     text = (text or "").strip()
@@ -96,14 +130,7 @@ class WebhookHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         path = urlparse(self.path).path
         if path == "/v1/health":
-            self._json(
-                200,
-                {
-                    "ok": True,
-                    "agent": os.environ.get("AGENT_NAME", "arka"),
-                    "webhook_enabled": _enabled(),
-                },
-            )
+            self._json(200, health_payload())
             return
         self._json(404, {"ok": False, "error": "not found"})
 
@@ -207,18 +234,12 @@ def main() -> int:
     p.add_argument("--json", action="store_true")
 
     def _status(args: argparse.Namespace) -> int:
-        info = {
-            "enabled": _enabled(),
-            "host": os.environ.get("WEBHOOK_HOST", "127.0.0.1"),
-            "port": int(os.environ.get("WEBHOOK_PORT", "8767")),
-            "token_set": bool(_token()),
-            "pid": PID_PATH.read_text(encoding="utf-8").strip() if PID_PATH.is_file() else "",
-        }
+        info = status_info()
         if args.json:
             print(json.dumps(info, indent=2))
         else:
             print(f"Webhook: {'on' if info['enabled'] else 'off'}")
-            print(f"Listen: http://{info['host']}:{info['port']}/v1/inbox")
+            print(f"Listen: {info['inbox_url']}")
             print(f"Token configured: {info['token_set']}")
             if info["pid"]:
                 print(f"PID: {info['pid']}")

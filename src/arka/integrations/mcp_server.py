@@ -389,6 +389,20 @@ def _handle_arka_subagent(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"subagent unavailable: {exc}") from exc
 
 
+def _handle_arka_webhook(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "status").strip().lower()
+    try:
+        from arka.integrations.webhook import health_payload, status_info
+
+        if action == "status":
+            return json.dumps(status_info(), indent=2)
+        if action == "health":
+            return json.dumps(health_payload(), indent=2)
+        raise ValueError("action must be status or health")
+    except ImportError as exc:
+        raise RuntimeError(f"webhook unavailable: {exc}") from exc
+
+
 def _handle_arka_project_rules(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "context").strip().lower()
     root_raw = str(arguments.get("root") or "").strip()
@@ -830,6 +844,22 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_project_rules,
+        ),
+        ArkaMcpTool(
+            name="arka_webhook",
+            description="OpenClaw/Hermes-style webhook gateway — status or health (no serve via MCP).",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["status", "health"],
+                        "default": "status",
+                        "description": "status: listener config; health: /v1/health payload",
+                    },
+                },
+            },
+            handler=_handle_arka_webhook,
         ),
         ArkaMcpTool(
             name="arka_clipboard",
