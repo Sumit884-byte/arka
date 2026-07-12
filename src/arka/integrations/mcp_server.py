@@ -580,6 +580,27 @@ def _handle_arka_docker(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"docker_status unavailable: {exc}") from exc
 
 
+def _handle_arka_platform(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "show").strip().lower()
+    try:
+        from arka.core import platform as plat_mod
+
+        if action == "show":
+            return json.dumps(plat_mod.show_payload(), indent=2)
+        if action == "detect":
+            force = bool(arguments.get("force", False))
+            persist = bool(arguments.get("persist", True))
+            return json.dumps(
+                plat_mod.detect_payload(force=force, persist=persist),
+                indent=2,
+            )
+        raise ValueError("action must be show or detect")
+    except ValueError:
+        raise
+    except ImportError as exc:
+        raise RuntimeError(f"platform unavailable: {exc}") from exc
+
+
 def _handle_arka_personalize(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "status").strip().lower()
     try:
@@ -1434,6 +1455,35 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_docker,
+        ),
+        ArkaMcpTool(
+            name="arka_platform",
+            description=(
+                "Host platform — show cached OS/capabilities or run detection "
+                "(macos/linux/windows clipboard, open, package manager)."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["show", "detect"],
+                        "default": "show",
+                        "description": "show: cached/live profile; detect: (re)detect capabilities",
+                    },
+                    "force": {
+                        "type": "boolean",
+                        "description": "When action=detect, refresh even if cache exists",
+                        "default": False,
+                    },
+                    "persist": {
+                        "type": "boolean",
+                        "description": "When action=detect, write platform.json cache",
+                        "default": True,
+                    },
+                },
+            },
+            handler=_handle_arka_platform,
         ),
         ArkaMcpTool(
             name="arka_personalize",

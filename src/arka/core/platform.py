@@ -145,6 +145,53 @@ def cached_platform() -> str | None:
     return None
 
 
+
+def show_payload() -> dict[str, object]:
+    """Cached platform profile for MCP / automation clients."""
+    data = load_platform()
+    if not data:
+        live = detect_platform()
+        return {
+            "cached": False,
+            "cache_path": str(platform_json_path()),
+            "platform": live.get("platform"),
+            "system": live.get("system"),
+            "machine": live.get("machine"),
+            "detected_at": live.get("detected_at"),
+            "capabilities": live.get("capabilities") or {},
+            "note": "Platform not cached yet; showing live detection",
+        }
+    return {
+        "cached": True,
+        "cache_path": str(platform_json_path()),
+        "platform": data.get("platform"),
+        "system": data.get("system"),
+        "machine": data.get("machine"),
+        "detected_at": data.get("detected_at"),
+        "capabilities": data.get("capabilities") or {},
+    }
+
+
+def detect_payload(*, force: bool = False, persist: bool = True) -> dict[str, object]:
+    """Detect platform (optionally persist cache) for MCP clients."""
+    if persist:
+        data = ensure_platform(force=force)
+        cached = True
+    else:
+        data = detect_platform()
+        cached = False
+    return {
+        "cached": cached,
+        "cache_path": str(platform_json_path()),
+        "platform": data.get("platform"),
+        "system": data.get("system"),
+        "machine": data.get("machine"),
+        "detected_at": data.get("detected_at"),
+        "capabilities": data.get("capabilities") or {},
+        "force": bool(force),
+    }
+
+
 def cmd_detect(force: bool) -> int:
     data = ensure_platform(force=force)
     print(f"__PLATFORM__={data['platform']}")

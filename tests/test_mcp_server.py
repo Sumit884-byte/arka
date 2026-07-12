@@ -15,7 +15,7 @@ def test_list_tool_definitions_schema():
 
     tools = list_tool_definitions()
     names = list_tool_names()
-    assert len(tools) == len(names) == 29
+    assert len(tools) == len(names) == 30
     assert "arka_ask" in names
     assert "arka_recall" in names
     assert "arka_heartbeat" in names
@@ -39,6 +39,7 @@ def test_list_tool_definitions_schema():
     assert "arka_github" in names
     assert "arka_persona" in names
     assert "arka_personalize" in names
+    assert "arka_platform" in names
     assert "arka_repo_health" in names
     assert "arka_agent_hub" in names
     for tool in tools:
@@ -123,7 +124,7 @@ def test_mcp_server_stdio_roundtrip():
     server = ArkaMcpServer(stdin=inp, stdout=out)
     response = server.process_line(inp.getvalue().strip())
     assert response is not None
-    assert len(response["result"]["tools"]) == 29
+    assert len(response["result"]["tools"]) == 30
 
 
 def test_install_config_snippet():
@@ -629,6 +630,43 @@ def test_handle_arka_docker_health(monkeypatch):
     assert ps["containers"][0]["name"] == "api"
 
 
+def test_handle_arka_platform_show(monkeypatch):
+    from arka.core import platform as plat_mod
+    from arka.integrations.mcp_server import _handle_arka_platform
+
+    monkeypatch.setattr(
+        plat_mod,
+        "show_payload",
+        lambda: {
+            "cached": True,
+            "cache_path": "/tmp/platform.json",
+            "platform": "macos",
+            "system": "Darwin",
+            "machine": "arm64",
+            "detected_at": "2026-07-12T00:00:00+00:00",
+            "capabilities": {"clipboard_copy": "pbcopy"},
+        },
+    )
+    monkeypatch.setattr(
+        plat_mod,
+        "detect_payload",
+        lambda force=False, persist=True: {
+            "cached": persist,
+            "cache_path": "/tmp/platform.json",
+            "platform": "macos",
+            "system": "Darwin",
+            "machine": "arm64",
+            "detected_at": "2026-07-12T00:00:00+00:00",
+            "capabilities": {"clipboard_copy": "pbcopy"},
+            "force": force,
+        },
+    )
+    shown = json.loads(_handle_arka_platform({"action": "show"}))
+    assert shown["platform"] == "macos"
+    detected = json.loads(_handle_arka_platform({"action": "detect", "persist": False}))
+    assert detected["force"] is False
+
+
 def test_handle_arka_personalize_status(monkeypatch):
     from arka.core import personalize as pers
     from arka.integrations.mcp_server import _handle_arka_personalize
@@ -949,6 +987,7 @@ def test_doctor_spawns_client(monkeypatch):
                 "arka_github",
                 "arka_persona",
                 "arka_personalize",
+                "arka_platform",
                 "arka_repo_health",
                 "arka_agent_hub",
                 "arka_team_run",
