@@ -59,6 +59,107 @@ def docker_available() -> bool:
     return code == 0
 
 
+def health_payload() -> dict[str, object]:
+    """Structured Docker daemon health for MCP / automation clients."""
+    docker = _docker_bin()
+    if not docker:
+        return {
+            "docker_cli": False,
+            "daemon_running": False,
+            "running_containers": 0,
+            "detail": "Docker CLI not found",
+        }
+    code, _, err = _run([docker, "info"], timeout=15)
+    daemon_running = code == 0
+    detail = ""
+    if not daemon_running:
+        detail = err.strip().splitlines()[0] if err.strip() else "not running"
+    code2, out, _ = _run([docker, "ps", "-q"], timeout=15)
+    count = len([ln for ln in out.splitlines() if ln.strip()]) if code2 == 0 else 0
+    return {
+        "docker_cli": True,
+        "daemon_running": daemon_running,
+        "running_containers": count,
+        "detail": detail,
+    }
+
+
+def list_containers() -> dict[str, object]:
+    """List running containers as structured rows."""
+    docker = _docker_bin()
+    if not docker:
+        raise RuntimeError("Docker CLI not found. Install Docker Desktop or docker-engine.")
+    if not docker_available():
+        raise RuntimeError("Docker daemon is not running. Start Docker and retry.")
+    code, out, err = _run(
+        [docker, "ps", "--format", "{{.Names}}\t{{.Status}}\t{{.Image}}\t{{.Ports}}"],
+        timeout=30,
+    )
+    if code != 0:
+        raise RuntimeError((err or out or "docker ps failed").strip())
+    containers: list[dict[str, str]] = []
+    for line in (out or "").splitlines():
+        parts = line.split("\t")
+        if len(parts) < 2:
+            continue
+        containers.append(
+            {
+                "name": parts[0].strip(),
+                "status": parts[1].strip() if len(parts) > 1 else "",
+                "image": parts[2].strip() if len(parts) > 2 else "",
+                "ports": parts[3].strip() if len(parts) > 3 else "",
+            }
+        )
+    return {"count": len(containers), "containers": containers}
+
+
+def list_images(*, limit: int = 50) -> dict[str, object]:
+    """List local Docker images as structured rows."""
+    docker = _docker_bin()
+    if not docker:
+        raise RuntimeError("Docker CLI not found.")
+    code, out, err = _run(
+        [docker, "images", "--format", "{{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.Size}}\t{{.CreatedSince}}"],
+        timeout=30,
+    )
+    if code != 0:
+        raise RuntimeError((err or out or "docker images failed").strip())
+    limit = max(1, min(int(limit or 50), 200))
+    images: list[dict[str, str]] = []
+    for line in (out or "").splitlines():
+        parts = line.split("\t")
+        if len(parts) < 2:
+            continue
+        images.append(
+            {
+                "repository": parts[0].strip(),
+                "tag": parts[1].strip() if len(parts) > 1 else "",
+                "id": parts[2].strip() if len(parts) > 2 else "",
+                "size": parts[3].strip() if len(parts) > 3 else "",
+                "created": parts[4].strip() if len(parts) > 4 else "",
+            }
+        )
+        if len(images) >= limit:
+            break
+    return {"count": len(images), "images": images}
+
+
+def container_logs(name: str, *, tail: int = 50) -> dict[str, object]:
+    """Return recent logs for a container."""
+    docker = _docker_bin()
+    if not docker:
+        raise RuntimeError("Docker CLI not found.")
+    container = (name or "").strip()
+    if not container:
+        raise ValueError("container name is required")
+    limit = max(10, min(int(tail or 50), 500))
+    code, out, err = _run([docker, "logs", "--tail", str(limit), container], timeout=45)
+    text = (out + err).strip()
+    if code != 0 and not text:
+        raise RuntimeError(f"failed to read logs for {container}")
+    return {"container": container, "tail": limit, "logs": text}
+
+
 def _extract_container_name(text: str) -> str | None:
     patterns = (
         r"(?i)\b(?:for|from|container)\s+([a-zA-Z0-9][a-zA-Z0-9_.-]+)",
@@ -74,77 +175,67 @@ def _extract_container_name(text: str) -> str | None:
 
 
 def cmd_ps(_args: argparse.Namespace) -> int:
-    docker = _docker_bin()
-    if not docker:
-        print("Docker CLI not found. Install Docker Desktop or docker-engine.", file=sys.stderr)
+    try:
+        payload = list_containers()
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
         return 1
-    if not docker_available():
-        print("Docker daemon is not running. Start Docker and retry.", file=sys.stderr)
-        return 1
-    code, out, err = _run(
-        [docker, "ps", "--format", "table {{.Names}}\t{{.Status}}\t{{.Ports}}"],
-        timeout=30,
-    )
-    text = (out or err).strip()
-    if not text:
+    containers = payload.get("containers") or []
+    if not containers:
         print("No running containers.")
         return 0
     lines = ["Running containers:", ""]
-    lines.append(text)
+    lines.append("NAMES\tSTATUS\tPORTS")
+    for row in containers:
+        lines.append(f"{row.get('name')}\t{row.get('status')}\t{row.get('ports')}")
     print("\n".join(lines))
-    return code
+    return 0
 
 
 def cmd_images(_args: argparse.Namespace) -> int:
-    docker = _docker_bin()
-    if not docker:
-        print("Docker CLI not found.", file=sys.stderr)
+    try:
+        payload = list_images()
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
         return 1
-    code, out, err = _run(
-        [docker, "images", "--format", "table {{.Repository}}:{{.Tag}}\t{{.Size}}\t{{.CreatedSince}}"],
-        timeout=30,
-    )
-    text = (out or err).strip()
-    print(text or "No images found.")
-    return code
+    images = payload.get("images") or []
+    if not images:
+        print("No images found.")
+        return 0
+    lines = ["REPOSITORY:TAG\tSIZE\tCREATED"]
+    for row in images:
+        lines.append(
+            f"{row.get('repository')}:{row.get('tag')}\t{row.get('size')}\t{row.get('created')}"
+        )
+    print("\n".join(lines))
+    return 0
 
 
 def cmd_logs(args: argparse.Namespace) -> int:
-    docker = _docker_bin()
-    if not docker:
-        print("Docker CLI not found.", file=sys.stderr)
+    try:
+        payload = container_logs(args.container, tail=int(args.tail))
+    except (RuntimeError, ValueError) as exc:
+        print(str(exc), file=sys.stderr)
         return 1
-    name = (args.container or "").strip()
-    if not name:
-        print("Usage: docker_status logs <container> [--tail N]", file=sys.stderr)
-        return 1
-    tail = max(10, int(args.tail))
-    code, out, err = _run([docker, "logs", "--tail", str(tail), name], timeout=45)
-    text = (out + err).strip()
-    print(text or f"No logs for {name}")
-    return code
+    text = str(payload.get("logs") or "")
+    print(text or f"No logs for {args.container}")
+    return 0
 
 
 def cmd_health(_args: argparse.Namespace) -> int:
-    docker = _docker_bin()
-    if not docker:
+    info = health_payload()
+    if not info.get("docker_cli"):
         print("docker_cli=missing")
         print("daemon=unknown")
         return 1
-    if not which("docker"):
-        print("docker_cli=missing")
-        return 1
     print("docker_cli=ok")
-    code, _, err = _run([docker, "info"], timeout=15)
-    if code == 0:
+    if info.get("daemon_running"):
         print("daemon=running")
     else:
-        detail = err.strip().splitlines()[0] if err.strip() else "not running"
+        detail = str(info.get("detail") or "not running")
         print(f"daemon=stopped ({detail[:120]})")
-    code2, out, _ = _run([docker, "ps", "-q"], timeout=15)
-    count = len([ln for ln in out.splitlines() if ln.strip()]) if code2 == 0 else 0
-    print(f"running_containers={count}")
-    return 0 if code == 0 else 1
+    print(f"running_containers={info.get('running_containers', 0)}")
+    return 0 if info.get("daemon_running") else 1
 
 
 def wants_docker_status(text: str) -> bool:

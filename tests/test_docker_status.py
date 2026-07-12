@@ -26,6 +26,19 @@ class DockerStatusTests(unittest.TestCase):
             code = ds.cmd_health(argparse_namespace())
         self.assertEqual(code, 1)
 
+    def test_health_payload_missing_cli(self) -> None:
+        with mock.patch.object(ds, "_docker_bin", return_value=None):
+            payload = ds.health_payload()
+        self.assertFalse(payload["docker_cli"])
+        self.assertFalse(payload["daemon_running"])
+
+    def test_list_containers_requires_daemon(self) -> None:
+        with mock.patch.object(ds, "_docker_bin", return_value="docker"), mock.patch.object(
+            ds, "docker_available", return_value=False
+        ):
+            with self.assertRaises(RuntimeError):
+                ds.list_containers()
+
     def test_router_symbolic(self) -> None:
         with mock.patch.dict(os.environ, {"ROUTE_MODE": "symbolic_only"}, clear=False):
             result = route("show running docker containers")

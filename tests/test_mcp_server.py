@@ -15,7 +15,7 @@ def test_list_tool_definitions_schema():
 
     tools = list_tool_definitions()
     names = list_tool_names()
-    assert len(tools) == len(names) == 18
+    assert len(tools) == len(names) == 19
     assert "arka_ask" in names
     assert "arka_recall" in names
     assert "arka_heartbeat" in names
@@ -29,6 +29,7 @@ def test_list_tool_definitions_schema():
     assert "arka_clipboard" in names
     assert "arka_remind" in names
     assert "arka_bookmarks" in names
+    assert "arka_docker" in names
     assert "arka_agent_hub" in names
     for tool in tools:
         assert tool["name"]
@@ -112,7 +113,7 @@ def test_mcp_server_stdio_roundtrip():
     server = ArkaMcpServer(stdin=inp, stdout=out)
     response = server.process_line(inp.getvalue().strip())
     assert response is not None
-    assert len(response["result"]["tools"]) == 18
+    assert len(response["result"]["tools"]) == 19
 
 
 def test_install_config_snippet():
@@ -582,6 +583,42 @@ def test_handle_arka_bookmarks(tmp_path, monkeypatch):
     assert json.loads(_handle_arka_bookmarks({"action": "list"})) == []
 
 
+def test_handle_arka_docker_health(monkeypatch):
+    from arka.integrations import docker_status as ds
+    from arka.integrations.mcp_server import _handle_arka_docker
+
+    monkeypatch.setattr(
+        ds,
+        "health_payload",
+        lambda: {
+            "docker_cli": True,
+            "daemon_running": True,
+            "running_containers": 2,
+            "detail": "",
+        },
+    )
+    monkeypatch.setattr(
+        ds,
+        "list_containers",
+        lambda: {
+            "count": 1,
+            "containers": [
+                {
+                    "name": "api",
+                    "status": "Up",
+                    "image": "api:latest",
+                    "ports": "8080->80",
+                }
+            ],
+        },
+    )
+    health = json.loads(_handle_arka_docker({"action": "health"}))
+    assert health["daemon_running"] is True
+    assert health["running_containers"] == 2
+    ps = json.loads(_handle_arka_docker({"action": "ps"}))
+    assert ps["containers"][0]["name"] == "api"
+
+
 def test_doctor_spawns_client(monkeypatch):
     from arka.integrations.mcp_client import McpTool
     from arka.integrations.mcp_server import doctor
@@ -613,6 +650,7 @@ def test_doctor_spawns_client(monkeypatch):
                 "arka_clipboard",
                 "arka_remind",
                 "arka_bookmarks",
+                "arka_docker",
                 "arka_agent_hub",
                 "arka_team_run",
             ]]

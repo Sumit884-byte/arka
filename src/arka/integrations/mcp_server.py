@@ -550,6 +550,36 @@ def _handle_arka_bookmarks(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"bookmarks unavailable: {exc}") from exc
 
 
+def _handle_arka_docker(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "health").strip().lower()
+    try:
+        from arka.integrations import docker_status as ds
+
+        if action == "health":
+            return json.dumps(ds.health_payload(), indent=2)
+        if action in ("ps", "containers"):
+            return json.dumps(ds.list_containers(), indent=2)
+        if action == "images":
+            limit = int(arguments.get("limit") or 50)
+            return json.dumps(ds.list_images(limit=limit), indent=2)
+        if action == "logs":
+            name = str(
+                arguments.get("container")
+                or arguments.get("name")
+                or arguments.get("id")
+                or ""
+            ).strip()
+            tail = int(arguments.get("tail") or arguments.get("limit") or 50)
+            return json.dumps(ds.container_logs(name, tail=tail), indent=2)
+        raise ValueError("action must be health, ps, images, or logs")
+    except ValueError:
+        raise
+    except RuntimeError:
+        raise
+    except ImportError as exc:
+        raise RuntimeError(f"docker_status unavailable: {exc}") from exc
+
+
 def _handle_arka_agent_hub(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "status").strip().lower()
     try:
@@ -1110,6 +1140,39 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_bookmarks,
+        ),
+        ArkaMcpTool(
+            name="arka_docker",
+            description=(
+                "Docker status — health, running containers, images, or container logs "
+                "(OpenClaw-style local infra awareness)."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["health", "ps", "images", "logs"],
+                        "default": "health",
+                        "description": "health, ps (containers), images, or logs",
+                    },
+                    "container": {
+                        "type": "string",
+                        "description": "Container name when action=logs",
+                    },
+                    "tail": {
+                        "type": "integer",
+                        "description": "Log lines when action=logs",
+                        "default": 50,
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max images when action=images",
+                        "default": 50,
+                    },
+                },
+            },
+            handler=_handle_arka_docker,
         ),
         ArkaMcpTool(
             name="arka_agent_hub",
