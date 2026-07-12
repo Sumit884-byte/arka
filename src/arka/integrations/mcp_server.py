@@ -580,6 +580,27 @@ def _handle_arka_docker(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"docker_status unavailable: {exc}") from exc
 
 
+def _handle_arka_sports(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "scores").strip().lower()
+    try:
+        from arka.integrations import sports as sports_mod
+
+        if action in ("scores", "live"):
+            query = str(arguments.get("query") or arguments.get("league") or "").strip()
+            limit = int(arguments.get("limit") or arguments.get("limit_per_league") or 3)
+            return json.dumps(
+                sports_mod.scores_payload(query, limit_per_league=max(1, min(limit, 20))),
+                indent=2,
+            )
+        if action in ("leagues", "list"):
+            return json.dumps(sports_mod.leagues_payload(), indent=2)
+        raise ValueError("action must be scores or leagues")
+    except ValueError:
+        raise
+    except ImportError as exc:
+        raise RuntimeError(f"sports unavailable: {exc}") from exc
+
+
 def _handle_arka_qr(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "ascii").strip().lower()
     try:
@@ -1281,6 +1302,34 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_docker,
+        ),
+        ArkaMcpTool(
+            name="arka_sports",
+            description=(
+                "Live sports scores (ESPN) — fetch scores by league query "
+                "or list supported leagues (IPL, NFL, EPL, NBA, …)."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["scores", "leagues"],
+                        "default": "scores",
+                        "description": "scores: live scoreboard; leagues: supported aliases",
+                    },
+                    "query": {
+                        "type": "string",
+                        "description": "League/sport query e.g. ipl, nfl, epl, all",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max events per league",
+                        "default": 3,
+                    },
+                },
+            },
+            handler=_handle_arka_sports,
         ),
         ArkaMcpTool(
             name="arka_qr",

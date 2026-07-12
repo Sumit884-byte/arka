@@ -15,7 +15,7 @@ def test_list_tool_definitions_schema():
 
     tools = list_tool_definitions()
     names = list_tool_names()
-    assert len(tools) == len(names) == 23
+    assert len(tools) == len(names) == 24
     assert "arka_ask" in names
     assert "arka_recall" in names
     assert "arka_heartbeat" in names
@@ -33,6 +33,7 @@ def test_list_tool_definitions_schema():
     assert "arka_disk" in names
     assert "arka_currency" in names
     assert "arka_qr" in names
+    assert "arka_sports" in names
     assert "arka_repo_health" in names
     assert "arka_agent_hub" in names
     for tool in tools:
@@ -117,7 +118,7 @@ def test_mcp_server_stdio_roundtrip():
     server = ArkaMcpServer(stdin=inp, stdout=out)
     response = server.process_line(inp.getvalue().strip())
     assert response is not None
-    assert len(response["result"]["tools"]) == 23
+    assert len(response["result"]["tools"]) == 24
 
 
 def test_install_config_snippet():
@@ -623,6 +624,34 @@ def test_handle_arka_docker_health(monkeypatch):
     assert ps["containers"][0]["name"] == "api"
 
 
+def test_handle_arka_sports_leagues(monkeypatch):
+    from arka.integrations import sports as sports_mod
+    from arka.integrations.mcp_server import _handle_arka_sports
+
+    monkeypatch.setattr(
+        sports_mod,
+        "leagues_payload",
+        lambda: {"count": 1, "leagues": [{"label": "IPL", "sport": "cricket", "league_id": "8048", "aliases": ["ipl"]}]},
+    )
+    monkeypatch.setattr(
+        sports_mod,
+        "scores_payload",
+        lambda query="", limit_per_league=3: {
+            "ok": True,
+            "query": query,
+            "as_of": "2026-07-12 16:00",
+            "leagues": [{"label": "IPL", "ok": True, "count": 1}],
+            "events": [{"league": "IPL", "brief": "MI 180/4"}],
+            "count": 1,
+        },
+    )
+    leagues = json.loads(_handle_arka_sports({"action": "leagues"}))
+    assert leagues["count"] == 1
+    scores = json.loads(_handle_arka_sports({"action": "scores", "query": "ipl"}))
+    assert scores["ok"] is True
+    assert scores["events"][0]["league"] == "IPL"
+
+
 def test_handle_arka_qr_ascii(monkeypatch):
     from arka.integrations import qr_code as qr_mod
     from arka.integrations.mcp_server import _handle_arka_qr
@@ -740,6 +769,7 @@ def test_doctor_spawns_client(monkeypatch):
                 "arka_disk",
                 "arka_currency",
                 "arka_qr",
+                "arka_sports",
                 "arka_repo_health",
                 "arka_agent_hub",
                 "arka_team_run",

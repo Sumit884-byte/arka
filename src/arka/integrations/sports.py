@@ -231,6 +231,85 @@ def format_event(event: dict, *, league_label: str, sport: str = "") -> tuple[st
     return "\n".join(lines), brief, voice
 
 
+
+def scores_payload(query: str = "", *, limit_per_league: int = 3) -> dict[str, object]:
+    """Structured live scores for MCP / automation clients."""
+    leagues = resolve_leagues(query)
+    if not leagues:
+        return {
+            "ok": False,
+            "error": "Could not determine which sport or league to show.",
+            "query": query,
+            "leagues": [],
+            "events": [],
+        }
+
+    out_leagues: list[dict[str, object]] = []
+    events_out: list[dict[str, object]] = []
+    for sport, league_id, label in leagues:
+        entry: dict[str, object] = {
+            "sport": sport,
+            "league_id": league_id,
+            "label": label,
+            "ok": True,
+            "count": 0,
+            "error": "",
+        }
+        try:
+            data = fetch_scoreboard(sport, league_id)
+        except urllib.error.URLError as exc:
+            entry["ok"] = False
+            entry["error"] = str(exc)
+            out_leagues.append(entry)
+            continue
+
+        events = data.get("events") or []
+        entry["count"] = min(len(events), limit_per_league)
+        for event in events[:limit_per_league]:
+            display, brief, voice = format_event(event, league_label=label, sport=sport)
+            events_out.append(
+                {
+                    "league": label,
+                    "sport": sport,
+                    "id": event.get("id"),
+                    "name": event.get("name") or event.get("shortName") or "",
+                    "display": display,
+                    "brief": brief,
+                    "voice": voice,
+                }
+            )
+        out_leagues.append(entry)
+
+    return {
+        "ok": True,
+        "query": query,
+        "as_of": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "leagues": out_leagues,
+        "events": events_out,
+        "count": len(events_out),
+    }
+
+
+def leagues_payload() -> dict[str, object]:
+    """Supported leagues for MCP clients."""
+    seen: set[str] = set()
+    rows: list[dict[str, object]] = []
+    for key, (sport, league_id, label) in sorted(LEAGUES.items()):
+        if label in seen:
+            continue
+        seen.add(label)
+        keys = sorted({k for k, v in LEAGUES.items() if v[2] == label})
+        rows.append(
+            {
+                "label": label,
+                "sport": sport,
+                "league_id": league_id,
+                "aliases": keys,
+            }
+        )
+    return {"count": len(rows), "leagues": rows}
+
+
 def live_scores(query: str = "", *, limit_per_league: int = 3) -> str:
     leagues = resolve_leagues(query)
     if not leagues:
