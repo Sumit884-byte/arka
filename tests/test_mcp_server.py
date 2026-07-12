@@ -326,6 +326,41 @@ def test_handle_arka_routines_add_and_remove(tmp_path, monkeypatch):
     assert json.loads(_handle_arka_routines({"action": "list"})) == []
 
 
+def test_handle_arka_routines_enable_disable(tmp_path, monkeypatch):
+    from arka.integrations.mcp_server import _handle_arka_routines
+
+    routine_file = tmp_path / "routines.json"
+    routine_file.write_text(
+        json.dumps(
+            [
+                {
+                    "id": "brief",
+                    "schedule": "09:00",
+                    "action": "daily_brief",
+                    "enabled": True,
+                    "created": 1.0,
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("arka.integrations.routines.ROUTINE_FILE", routine_file)
+    monkeypatch.setattr("arka.integrations.routines._install_one", lambda _entry: None)
+    monkeypatch.setattr("arka.integrations.routines._uninstall_one", lambda _rid: None)
+
+    disabled = json.loads(
+        _handle_arka_routines({"action": "disable", "id": "brief"})
+    )
+    assert disabled["id"] == "brief"
+    assert disabled["enabled"] is False
+    assert json.loads(_handle_arka_routines({"action": "list", "enabled_only": True})) == []
+
+    enabled = json.loads(_handle_arka_routines({"action": "enable", "id": "brief"}))
+    assert enabled["enabled"] is True
+    rows = json.loads(_handle_arka_routines({"action": "list", "enabled_only": True}))
+    assert rows[0]["id"] == "brief"
+
+
 def test_handle_arka_session_memory(tmp_path, monkeypatch):
     from arka.core import session_memory
     from arka.integrations.mcp_server import _handle_arka_session_memory

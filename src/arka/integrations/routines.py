@@ -26,7 +26,7 @@ ROUTINE_FILE = CACHE / "routines.json"
 FISH_DIR = fish_config()
 LOG_FILE = CACHE / "arka_routines.log"
 
-_KNOWN_CMDS = frozenset({"add", "list", "install", "remove", "run", "parse", "help"})
+_KNOWN_CMDS = frozenset({"add", "list", "install", "remove", "run", "parse", "help", "enable", "disable"})
 
 
 def _load_json(path: Path, default: object) -> object:
@@ -278,6 +278,39 @@ def routine_remove(rid: str) -> None:
     print(f"No routine {rid}.")
 
 
+def routine_set_enabled(rid: str, enabled: bool) -> dict | None:
+    """Pause or resume a routine without deleting it (OpenClaw always-on toggle)."""
+    routines = _load_json(ROUTINE_FILE, [])
+    if not isinstance(routines, list):
+        return None
+    match: dict | None = None
+    for r in routines:
+        if isinstance(r, dict) and r.get("id") == rid:
+            r["enabled"] = bool(enabled)
+            match = r
+            break
+    if match is None:
+        return None
+    _save_json(ROUTINE_FILE, routines)
+    if enabled:
+        try:
+            _install_one(match)
+        except Exception:
+            pass
+    else:
+        try:
+            _uninstall_one(rid)
+        except Exception:
+            pass
+    return {
+        "id": str(match.get("id") or rid),
+        "schedule": str(match.get("schedule") or ""),
+        "action": str(match.get("action") or ""),
+        "enabled": bool(match.get("enabled", True)),
+        "created": match.get("created"),
+    }
+
+
 def routine_run(rid: str) -> int:
     routines = _load_json(ROUTINE_FILE, [])
     if not isinstance(routines, list):
@@ -512,6 +545,24 @@ def cmd_remove(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_enable(args: argparse.Namespace) -> int:
+    row = routine_set_enabled(args.id, True)
+    if not row:
+        print(f"No routine {args.id}.", file=sys.stderr)
+        return 1
+    print(f"Enabled routine {row['id']}.")
+    return 0
+
+
+def cmd_disable(args: argparse.Namespace) -> int:
+    row = routine_set_enabled(args.id, False)
+    if not row:
+        print(f"No routine {args.id}.", file=sys.stderr)
+        return 1
+    print(f"Disabled routine {row['id']}.")
+    return 0
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     return routine_run(args.id)
 
@@ -539,6 +590,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_rm = sub.add_parser("remove", help="Remove a routine by id")
     p_rm.add_argument("id")
     p_rm.set_defaults(func=cmd_remove)
+
+    p_en = sub.add_parser("enable", help="Re-enable a paused routine")
+    p_en.add_argument("id")
+    p_en.set_defaults(func=cmd_enable)
+
+    p_dis = sub.add_parser("disable", help="Pause a routine without deleting it")
+    p_dis.add_argument("id")
+    p_dis.set_defaults(func=cmd_disable)
 
     p_run = sub.add_parser("run", help="Run a routine once now (test)")
     p_run.add_argument("id")

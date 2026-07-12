@@ -240,6 +240,7 @@ def _handle_arka_routines(arguments: dict[str, Any]) -> str:
             normalize_action,
             routine_add,
             routine_remove,
+            routine_set_enabled,
         )
 
         if action == "list":
@@ -277,7 +278,15 @@ def _handle_arka_routines(arguments: dict[str, Any]) -> str:
             with contextlib.redirect_stdout(io.StringIO()):
                 routine_remove(rid)
             return f"Removed routine {rid}"
-        raise ValueError("action must be list, add, or remove")
+        if action in {"enable", "disable"}:
+            rid = str(arguments.get("id") or arguments.get("name") or "").strip()
+            if not rid:
+                raise ValueError(f"id is required for {action}")
+            row = routine_set_enabled(rid, action == "enable")
+            if not row:
+                raise ValueError(f"No routine {rid}")
+            return json.dumps(row, indent=2)
+        raise ValueError("action must be list, add, remove, enable, or disable")
     except ImportError as exc:
         raise RuntimeError(f"routines unavailable: {exc}") from exc
 
@@ -648,15 +657,15 @@ def _build_tools() -> list[ArkaMcpTool]:
         ),
         ArkaMcpTool(
             name="arka_routines",
-            description="OpenClaw-style scheduled routines — list, add, or remove (schedule → task).",
+            description="OpenClaw-style scheduled routines — list, add, remove, enable, or disable.",
             input_schema={
                 "type": "object",
                 "properties": {
                     "action": {
                         "type": "string",
-                        "enum": ["list", "add", "remove"],
+                        "enum": ["list", "add", "remove", "enable", "disable"],
                         "default": "list",
-                        "description": "list, add, or remove a scheduled routine",
+                        "description": "list, add, remove, enable, or disable a routine",
                     },
                     "schedule": {
                         "type": "string",
@@ -668,7 +677,7 @@ def _build_tools() -> list[ArkaMcpTool]:
                     },
                     "id": {
                         "type": "string",
-                        "description": "Routine id (required for remove; optional name for add)",
+                        "description": "Routine id (required for remove/enable/disable; optional name for add)",
                     },
                     "name": {
                         "type": "string",
