@@ -36,6 +36,17 @@ class RepoHealthTests(unittest.TestCase):
             self.assertIn("npm test", text)
             self.assertIn("npm run lint", text)
 
+    def test_scan_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "package.json").write_text(
+                '{"scripts":{"test":"jest","lint":"eslint ."}}', encoding="utf-8"
+            )
+            payload = rh.scan_payload(root)
+            self.assertEqual(payload["path"], str(root.resolve()))
+            names = [c["name"] for c in payload["checks"]]
+            self.assertIn("npm test", names)
+
     def test_route_scan_and_run(self) -> None:
         self.assertEqual(rh.route_command("repo health check"), "repo_health scan")
         self.assertEqual(rh.route_command("run project tests"), "repo_health run --test")

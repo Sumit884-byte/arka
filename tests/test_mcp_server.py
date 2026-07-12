@@ -15,7 +15,7 @@ def test_list_tool_definitions_schema():
 
     tools = list_tool_definitions()
     names = list_tool_names()
-    assert len(tools) == len(names) == 19
+    assert len(tools) == len(names) == 20
     assert "arka_ask" in names
     assert "arka_recall" in names
     assert "arka_heartbeat" in names
@@ -30,6 +30,7 @@ def test_list_tool_definitions_schema():
     assert "arka_remind" in names
     assert "arka_bookmarks" in names
     assert "arka_docker" in names
+    assert "arka_repo_health" in names
     assert "arka_agent_hub" in names
     for tool in tools:
         assert tool["name"]
@@ -113,7 +114,7 @@ def test_mcp_server_stdio_roundtrip():
     server = ArkaMcpServer(stdin=inp, stdout=out)
     response = server.process_line(inp.getvalue().strip())
     assert response is not None
-    assert len(response["result"]["tools"]) == 19
+    assert len(response["result"]["tools"]) == 20
 
 
 def test_install_config_snippet():
@@ -619,6 +620,19 @@ def test_handle_arka_docker_health(monkeypatch):
     assert ps["containers"][0]["name"] == "api"
 
 
+def test_handle_arka_repo_health_scan(tmp_path):
+    from arka.integrations.mcp_server import _handle_arka_repo_health
+
+    (tmp_path / "pyproject.toml").write_text("[project]\nname='demo'\n", encoding="utf-8")
+    (tmp_path / "tests").mkdir()
+    payload = json.loads(
+        _handle_arka_repo_health({"action": "scan", "path": str(tmp_path)})
+    )
+    assert payload["path"] == str(tmp_path.resolve())
+    assert payload["count"] >= 1
+    assert any(c["category"] in ("test", "lint") for c in payload["checks"])
+
+
 def test_doctor_spawns_client(monkeypatch):
     from arka.integrations.mcp_client import McpTool
     from arka.integrations.mcp_server import doctor
@@ -651,6 +665,7 @@ def test_doctor_spawns_client(monkeypatch):
                 "arka_remind",
                 "arka_bookmarks",
                 "arka_docker",
+                "arka_repo_health",
                 "arka_agent_hub",
                 "arka_team_run",
             ]]

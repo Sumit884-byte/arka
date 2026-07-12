@@ -173,38 +173,95 @@ def scan_text(root: Path) -> str:
     return "\n".join(lines)
 
 
-def run_checks(root: Path, *, categories: set[str] | None = None) -> str:
-    checks = detect_checks(root)
+def scan_payload(root: Path | str | None = None) -> dict:
+    """Structured repo health scan for MCP / automation clients."""
+    path = _project_root(str(root) if root is not None else None)
+    checks = detect_checks(path)
+    return {
+        "path": str(path),
+        "name": path.name,
+        "count": len(checks),
+        "checks": [
+            {
+                "name": chk.name,
+                "command": list(chk.command),
+                "category": chk.category,
+            }
+            for chk in checks
+        ],
+    }
+
+
+def run_payload(
+    root: Path | str | None = None,
+    *,
+    categories: set[str] | None = None,
+) -> dict:
+    """Run detected checks and return structured results."""
+    path = _project_root(str(root) if root is not None else None)
+    checks = detect_checks(path)
     if categories:
         checks = [c for c in checks if c.category in categories]
-    if not checks:
-        return scan_text(root)
-
-    lines = [f"Repo health run: {root.name}", ""]
-    passed = 0
-    failed = 0
-    skipped = 0
-
+    results: list[dict] = []
+    passed = failed = skipped = 0
     for chk in checks:
-        lines.append(f"▶ {chk.name}")
-        code, out, err = _run(chk.command, cwd=root, timeout=300)
+        code, out, err = _run(chk.command, cwd=path, timeout=300)
         combined = (out + err).strip()
         preview = "\n".join(combined.splitlines()[:8])
         if code == 0:
+            status = "passed"
             passed += 1
-            lines.append("  ✓ passed")
         elif code == 127 or "not found" in err.lower():
+            status = "skipped"
             skipped += 1
+        else:
+            status = "failed"
+            failed += 1
+        results.append(
+            {
+                "name": chk.name,
+                "category": chk.category,
+                "command": list(chk.command),
+                "status": status,
+                "exit_code": code,
+                "preview": preview,
+            }
+        )
+    return {
+        "path": str(path),
+        "name": path.name,
+        "passed": passed,
+        "failed": failed,
+        "skipped": skipped,
+        "results": results,
+        "ok": failed == 0,
+    }
+
+
+def run_checks(root: Path, *, categories: set[str] | None = None) -> str:
+    payload = run_payload(root, categories=categories)
+    if not payload.get("results"):
+        return scan_text(root)
+
+    lines = [f"Repo health run: {payload['name']}", ""]
+    for row in payload["results"]:
+        lines.append(f"▶ {row['name']}")
+        status = row["status"]
+        if status == "passed":
+            lines.append("  ✓ passed")
+        elif status == "skipped":
             lines.append("  ⊘ skipped (tool missing)")
         else:
-            failed += 1
-            lines.append(f"  ✗ failed (exit {code})")
+            lines.append(f"  ✗ failed (exit {row['exit_code']})")
+        preview = str(row.get("preview") or "")
         if preview:
             for pline in preview.splitlines():
                 lines.append(f"    {pline[:160]}")
         lines.append("")
 
-    lines.append(f"Summary: {passed} passed, {failed} failed, {skipped} skipped")
+    lines.append(
+        f"Summary: {payload['passed']} passed, {payload['failed']} failed, {payload['skipped']} skipped"
+    )
     return "\n".join(lines).strip()
 
 

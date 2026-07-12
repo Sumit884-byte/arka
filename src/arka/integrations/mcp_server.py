@@ -580,6 +580,31 @@ def _handle_arka_docker(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"docker_status unavailable: {exc}") from exc
 
 
+def _handle_arka_repo_health(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "scan").strip().lower()
+    try:
+        from arka.agent import repo_health as rh
+
+        path = str(arguments.get("path") or arguments.get("root") or "").strip() or None
+        if action == "scan":
+            return json.dumps(rh.scan_payload(path), indent=2)
+        if action == "run":
+            cats: set[str] | None = None
+            if bool(arguments.get("test")) and not bool(arguments.get("lint")):
+                cats = {"test"}
+            elif bool(arguments.get("lint")) and not bool(arguments.get("test")):
+                cats = {"lint"}
+            category = str(arguments.get("category") or "").strip().lower()
+            if category in ("test", "lint"):
+                cats = {category}
+            return json.dumps(rh.run_payload(path, categories=cats), indent=2)
+        raise ValueError("action must be scan or run")
+    except ValueError:
+        raise
+    except ImportError as exc:
+        raise RuntimeError(f"repo_health unavailable: {exc}") from exc
+
+
 def _handle_arka_agent_hub(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "status").strip().lower()
     try:
@@ -1173,6 +1198,44 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_docker,
+        ),
+        ArkaMcpTool(
+            name="arka_repo_health",
+            description=(
+                "Cursor-style repo health — scan for lint/test commands or run them "
+                "in the current project."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["scan", "run"],
+                        "default": "scan",
+                        "description": "scan: detect checks; run: execute checks",
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "Optional project root (default: git root / cwd)",
+                    },
+                    "test": {
+                        "type": "boolean",
+                        "description": "When action=run, only run test checks",
+                        "default": False,
+                    },
+                    "lint": {
+                        "type": "boolean",
+                        "description": "When action=run, only run lint checks",
+                        "default": False,
+                    },
+                    "category": {
+                        "type": "string",
+                        "enum": ["test", "lint"],
+                        "description": "Optional category filter when action=run",
+                    },
+                },
+            },
+            handler=_handle_arka_repo_health,
         ),
         ArkaMcpTool(
             name="arka_agent_hub",
