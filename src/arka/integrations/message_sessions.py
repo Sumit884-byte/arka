@@ -268,15 +268,48 @@ def list_sessions(*, limit: int = 20) -> list[dict]:
     return out
 
 
-def resume(channel: str, chat_id: str, *, limit: int = 12) -> int:
+def resume_payload(channel: str, chat_id: str, *, limit: int = 12) -> dict:
+    """Return structured session turns for MCP / programmatic resume."""
     key = session_key(channel, chat_id)
     data = _load_session(key)
     turns = data.get("turns") or []
-    if not isinstance(turns, list) or not turns:
-        print(f"No turns in session {key}.")
-        return 0
-    print(f"Session {key}" + (f" — {data.get('title')}" if data.get("title") else ""))
+    if not isinstance(turns, list):
+        turns = []
+    limit = max(1, min(int(limit or 12), 100))
+    rows: list[dict] = []
     for turn in turns[-limit:]:
+        if not isinstance(turn, dict):
+            continue
+        text = str(turn.get("text", "")).strip()
+        if not text:
+            continue
+        rows.append(
+            {
+                "role": str(turn.get("role", "user")),
+                "text": text,
+                "when": turn.get("when", ""),
+                "ts": turn.get("ts"),
+            }
+        )
+    return {
+        "key": key,
+        "channel": data.get("channel", channel),
+        "chat_id": data.get("chat_id", chat_id),
+        "title": data.get("title", ""),
+        "turns": rows,
+        "turn_count": len(turns),
+    }
+
+
+def resume(channel: str, chat_id: str, *, limit: int = 12) -> int:
+    payload = resume_payload(channel, chat_id, limit=limit)
+    rows = payload.get("turns") or []
+    if not rows:
+        print(f"No turns in session {payload.get('key')}.")
+        return 0
+    title = payload.get("title") or ""
+    print(f"Session {payload.get('key')}" + (f" — {title}" if title else ""))
+    for turn in rows:
         role = str(turn.get("role", "user")).upper()
         when = turn.get("when", "")
         text = str(turn.get("text", "")).strip()

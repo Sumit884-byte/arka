@@ -171,6 +171,7 @@ def _handle_arka_sessions(arguments: dict[str, Any]) -> str:
             list_sessions,
             push,
             reset,
+            resume_payload,
             status,
         )
 
@@ -189,6 +190,14 @@ def _handle_arka_sessions(arguments: dict[str, Any]) -> str:
                 limit_chars=max(200, limit_chars),
             )
             return text or "(no session context)"
+        if action == "resume":
+            if not channel:
+                raise ValueError("channel is required for resume")
+            limit = int(arguments.get("limit") or 12)
+            return json.dumps(
+                resume_payload(channel, chat_id or "default", limit=limit),
+                indent=2,
+            )
         if action == "push":
             if not channel:
                 raise ValueError("channel is required for push")
@@ -214,7 +223,7 @@ def _handle_arka_sessions(arguments: dict[str, Any]) -> str:
             if code != 0:
                 raise RuntimeError("session reset failed")
             return f"Session reset: {channel}:{chat_id or 'default'}"
-        raise ValueError("action must be list, status, context, push, or reset")
+        raise ValueError("action must be list, status, context, resume, push, or reset")
     except ImportError as exc:
         raise RuntimeError(f"message_sessions unavailable: {exc}") from exc
 
@@ -523,13 +532,13 @@ def _build_tools() -> list[ArkaMcpTool]:
                 "properties": {
                     "action": {
                         "type": "string",
-                        "enum": ["list", "status", "context", "push", "reset"],
+                        "enum": ["list", "status", "context", "resume", "push", "reset"],
                         "default": "list",
-                        "description": "list, status, context, push turn, or reset session",
+                        "description": "list, status, context, resume turns, push, or reset",
                     },
                     "channel": {
                         "type": "string",
-                        "description": "Channel name (required for context, push, reset)",
+                        "description": "Channel name (required for context, resume, push, reset)",
                     },
                     "chat_id": {
                         "type": "string",
@@ -551,7 +560,7 @@ def _build_tools() -> list[ArkaMcpTool]:
                     },
                     "limit": {
                         "type": "integer",
-                        "description": "Max sessions when action=list",
+                        "description": "Max sessions (list) or turns (resume)",
                         "default": 20,
                     },
                     "limit_chars": {

@@ -196,6 +196,17 @@ def test_handle_arka_sessions_list_and_context(tmp_path, monkeypatch):
     ctx = _handle_arka_sessions({"action": "context", "channel": "cli", "chat_id": "default"})
     assert "hello from mcp test" in ctx
 
+    resumed = json.loads(
+        _handle_arka_sessions(
+            {"action": "resume", "channel": "cli", "chat_id": "default", "limit": 5}
+        )
+    )
+    assert resumed["key"] == "cli:default"
+    assert resumed["title"] == "demo"
+    assert resumed["turn_count"] == 1
+    assert resumed["turns"][0]["text"] == "hello from mcp test"
+    assert resumed["turns"][0]["role"] == "user"
+
 
 def test_handle_arka_sessions_push_and_reset(tmp_path, monkeypatch):
     from arka.integrations.mcp_server import _handle_arka_sessions
