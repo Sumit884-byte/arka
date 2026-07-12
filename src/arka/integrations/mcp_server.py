@@ -580,6 +580,23 @@ def _handle_arka_docker(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"docker_status unavailable: {exc}") from exc
 
 
+def _handle_arka_config(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "list").strip().lower()
+    try:
+        from arka.core import config_backup as cb
+
+        if action == "list":
+            return json.dumps(cb.list_payload(), indent=2)
+        if action == "path":
+            path = str(arguments.get("path") or arguments.get("target") or "").strip() or None
+            return json.dumps(cb.path_payload(path), indent=2)
+        raise ValueError("action must be list or path")
+    except ValueError:
+        raise
+    except ImportError as exc:
+        raise RuntimeError(f"config_backup unavailable: {exc}") from exc
+
+
 def _handle_arka_sports(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "scores").strip().lower()
     try:
@@ -1302,6 +1319,29 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_docker,
+        ),
+        ArkaMcpTool(
+            name="arka_config",
+            description=(
+                "Arka config inventory — list known config files/dirs or show "
+                "config/cache paths and an export snippet (read-only)."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["list", "path"],
+                        "default": "list",
+                        "description": "list: inventory entries; path: config/cache roots",
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "Optional config root override when action=path",
+                    },
+                },
+            },
+            handler=_handle_arka_config,
         ),
         ArkaMcpTool(
             name="arka_sports",

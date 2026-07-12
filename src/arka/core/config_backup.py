@@ -97,6 +97,33 @@ def iter_config_entries() -> list[dict[str, Any]]:
     return rows
 
 
+
+def list_payload() -> dict[str, Any]:
+    """Structured config inventory for MCP / automation clients."""
+    from arka.paths import cache_dir, config_dir
+
+    entries = iter_config_entries()
+    return {
+        "config_dir": str(config_dir()),
+        "cache_dir": str(cache_dir()),
+        "count": len(entries),
+        "entries": entries,
+    }
+
+
+def path_payload(target: Path | str | None = None) -> dict[str, Any]:
+    """Config/cache path summary for MCP clients."""
+    from arka.paths import cache_dir, config_dir
+
+    cfg = (Path(target) if target else config_dir()).expanduser().resolve()
+    return {
+        "config_dir": str(cfg),
+        "cache_dir": str(cache_dir()),
+        "exists": cfg.exists(),
+        "export_snippet": export_snippet(cfg),
+    }
+
+
 def format_list() -> str:
     from arka.paths import config_dir
 

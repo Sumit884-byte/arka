@@ -15,7 +15,7 @@ def test_list_tool_definitions_schema():
 
     tools = list_tool_definitions()
     names = list_tool_names()
-    assert len(tools) == len(names) == 24
+    assert len(tools) == len(names) == 25
     assert "arka_ask" in names
     assert "arka_recall" in names
     assert "arka_heartbeat" in names
@@ -34,6 +34,7 @@ def test_list_tool_definitions_schema():
     assert "arka_currency" in names
     assert "arka_qr" in names
     assert "arka_sports" in names
+    assert "arka_config" in names
     assert "arka_repo_health" in names
     assert "arka_agent_hub" in names
     for tool in tools:
@@ -118,7 +119,7 @@ def test_mcp_server_stdio_roundtrip():
     server = ArkaMcpServer(stdin=inp, stdout=out)
     response = server.process_line(inp.getvalue().strip())
     assert response is not None
-    assert len(response["result"]["tools"]) == 24
+    assert len(response["result"]["tools"]) == 25
 
 
 def test_install_config_snippet():
@@ -624,6 +625,36 @@ def test_handle_arka_docker_health(monkeypatch):
     assert ps["containers"][0]["name"] == "api"
 
 
+def test_handle_arka_config_list(monkeypatch, tmp_path):
+    from arka.core import config_backup as cb
+    from arka.integrations.mcp_server import _handle_arka_config
+
+    monkeypatch.setattr(
+        cb,
+        "list_payload",
+        lambda: {
+            "config_dir": str(tmp_path),
+            "cache_dir": str(tmp_path / "cache"),
+            "count": 1,
+            "entries": [{"label": "env", "path": str(tmp_path / ".env"), "exists": False}],
+        },
+    )
+    monkeypatch.setattr(
+        cb,
+        "path_payload",
+        lambda target=None: {
+            "config_dir": str(tmp_path),
+            "cache_dir": str(tmp_path / "cache"),
+            "exists": True,
+            "export_snippet": f'export ARKA_CONFIG_DIR="{tmp_path}"\n',
+        },
+    )
+    listed = json.loads(_handle_arka_config({"action": "list"}))
+    assert listed["count"] == 1
+    path = json.loads(_handle_arka_config({"action": "path"}))
+    assert path["exists"] is True
+
+
 def test_handle_arka_sports_leagues(monkeypatch):
     from arka.integrations import sports as sports_mod
     from arka.integrations.mcp_server import _handle_arka_sports
@@ -770,6 +801,7 @@ def test_doctor_spawns_client(monkeypatch):
                 "arka_currency",
                 "arka_qr",
                 "arka_sports",
+                "arka_config",
                 "arka_repo_health",
                 "arka_agent_hub",
                 "arka_team_run",
