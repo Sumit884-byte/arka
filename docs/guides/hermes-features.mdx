@@ -63,6 +63,8 @@ Explicit silence tokens let group chats and automations store a turn without sen
 
 When the agent's final response is exactly one of these (case-insensitive), the webhook returns `"silent": true` and an empty `output` field. The turn is still stored in the session transcript.
 
+External MCP clients can check the same tokens with `arka_sessions` action `silence_check` (returns `{ "silent": true|false, "tokens": [...] }`).
+
 ### Environment variables
 
 | Variable | Default | Purpose |

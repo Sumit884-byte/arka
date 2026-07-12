@@ -108,6 +108,22 @@ def is_silence_token(text: str) -> bool:
     return (text or "").strip().lower() in SILENCE_TOKENS
 
 
+def silence_tokens() -> list[str]:
+    """Return known Hermes-style silence tokens (stable order)."""
+    return sorted(SILENCE_TOKENS)
+
+
+def silence_check(text: str) -> dict[str, object]:
+    """Structured silence-token check for MCP / webhooks."""
+    raw = text or ""
+    silent = is_silence_token(raw)
+    return {
+        "silent": silent,
+        "text": raw.strip(),
+        "tokens": silence_tokens(),
+    }
+
+
 def _load_session(key: str) -> dict:
     path = _session_path(key)
     if not path.is_file():

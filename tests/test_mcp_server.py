@@ -216,6 +216,23 @@ def test_handle_arka_sessions_list_and_context(tmp_path, monkeypatch):
     assert resumed["turns"][0]["role"] == "user"
 
 
+def test_handle_arka_sessions_silence_check():
+    from arka.integrations.mcp_server import _handle_arka_sessions
+
+    silent = json.loads(
+        _handle_arka_sessions({"action": "silence_check", "text": "[SILENT]"})
+    )
+    assert silent["silent"] is True
+    assert "[silent]" in silent["tokens"]
+
+    spoken = json.loads(
+        _handle_arka_sessions(
+            {"action": "silence_check", "text": "Deploy finished successfully"}
+        )
+    )
+    assert spoken["silent"] is False
+
+
 def test_handle_arka_sessions_push_and_reset(tmp_path, monkeypatch):
     from arka.integrations.mcp_server import _handle_arka_sessions
 

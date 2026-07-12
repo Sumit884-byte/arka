@@ -175,6 +175,7 @@ def _handle_arka_sessions(arguments: dict[str, Any]) -> str:
             push,
             reset,
             resume_payload,
+            silence_check,
             status,
         )
 
@@ -201,6 +202,11 @@ def _handle_arka_sessions(arguments: dict[str, Any]) -> str:
                 resume_payload(channel, chat_id or "default", limit=limit),
                 indent=2,
             )
+        if action == "silence_check":
+            text = str(arguments.get("text") or "").strip()
+            if not text:
+                raise ValueError("text is required for silence_check")
+            return json.dumps(silence_check(text), indent=2)
         if action == "push":
             if not channel:
                 raise ValueError("channel is required for push")
@@ -226,7 +232,9 @@ def _handle_arka_sessions(arguments: dict[str, Any]) -> str:
             if code != 0:
                 raise RuntimeError("session reset failed")
             return f"Session reset: {channel}:{chat_id or 'default'}"
-        raise ValueError("action must be list, status, context, resume, push, or reset")
+        raise ValueError(
+            "action must be list, status, context, resume, silence_check, push, or reset"
+        )
     except ImportError as exc:
         raise RuntimeError(f"message_sessions unavailable: {exc}") from exc
 
@@ -612,15 +620,23 @@ def _build_tools() -> list[ArkaMcpTool]:
         ),
         ArkaMcpTool(
             name="arka_sessions",
-            description="Hermes-style channel sessions — list, context, resume turns, push, or reset.",
+            description="Hermes-style channel sessions — list, context, resume, silence_check, push, or reset.",
             input_schema={
                 "type": "object",
                 "properties": {
                     "action": {
                         "type": "string",
-                        "enum": ["list", "status", "context", "resume", "push", "reset"],
+                        "enum": [
+                            "list",
+                            "status",
+                            "context",
+                            "resume",
+                            "silence_check",
+                            "push",
+                            "reset",
+                        ],
                         "default": "list",
-                        "description": "list, status, context, resume turns, push, or reset",
+                        "description": "list, status, context, resume, silence_check, push, or reset",
                     },
                     "channel": {
                         "type": "string",
@@ -638,7 +654,7 @@ def _build_tools() -> list[ArkaMcpTool]:
                     },
                     "text": {
                         "type": "string",
-                        "description": "Turn text when action=push",
+                        "description": "Turn text when action=push, or reply text when action=silence_check",
                     },
                     "title": {
                         "type": "string",
