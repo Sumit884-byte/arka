@@ -2,6 +2,7 @@
 title: "Agent Teams"
 description: "Form teams across agents, models, and providers — then run sequential or parallel workflows with shared memory."
 keywords: ["agent teams", "workflows", "multi-agent", "orchestration", "providers", "agent hub"]
+icon: "users"
 ---
 
 **Agent Teams** let you group coding agents (from [Agent Hub](/guides/agent-hub)), cloud models, and local providers into named roles, then run **workflows** that hand work between them.
@@ -9,7 +10,7 @@ keywords: ["agent teams", "workflows", "multi-agent", "orchestration", "provider
 ## Concepts
 
 | Piece | What it is | Stored at |
-| ----- | ---------- | --------- |
+| --- | --- | --- |
 | **Team** | Named roles (`lead`, `analyst`, …) mapped to agents, models, or providers | `~/.config/arka/teams/` |
 | **Workflow** | Steps for a team — sequential, parallel, or round-robin handoff | `~/.config/arka/workflows/` |
 | **Run** | Execute a workflow with a task string; results pass between steps via `{task}`, `{results}`, `{step_N}` | CLI |
@@ -17,7 +18,7 @@ keywords: ["agent teams", "workflows", "multi-agent", "orchestration", "provider
 Member kinds:
 
 - `agent` — ollama launch agent from Agent Hub (`claude`, `codex`, `hermes`, …)
-- `model` — specific model + provider (`gpt-4o` + `openai`, `gemini-2.0-flash` + `gemini`)
+- `model` — specific model \+ provider (`gpt-4o` \+ `openai`, `gemini-2.0-flash` \+ `gemini`)
 - `provider` — provider default model (`ollama`, `groq`, …)
 
 ## Quick start
@@ -154,7 +155,7 @@ Enable MCP context per step (or inherit from workflow/team defaults):
 ```
 
 | Setting | Effect |
-| ------- | ------ |
+| --- | --- |
 | `mcp: true` | Inject all configured MCP servers from `~/.config/arka/mcp.json` |
 | `mcp_servers: [github]` | Limit to named servers |
 | `defaults.mcp: true` | Enable for all steps unless overridden |
@@ -179,7 +180,7 @@ arka workflow run <name> --task "..."
 
 ## Runtime behavior
 
-1. **Load** team + workflow YAML/JSON from config dir (or bundled templates).
+1. **Load** team \+ workflow YAML/JSON from config dir (or bundled templates).
 2. **Resolve** members — agents via Agent Hub catalog; models/providers via LLM registry.
 3. **Recall** unified memory when `defaults.memory: unified`.
 4. **Execute** steps:
@@ -194,10 +195,10 @@ arka workflow run <name> --task "..."
 ## Bundled templates
 
 | Template | Type | Roles |
-| -------- | ---- | ----- |
+| --- | --- | --- |
 | `research` | team | lead (claude), analyst (gemini), local-fallback (ollama) |
 | `code-review` | team | lead (codex), analyst (groq), local-fallback (ollama) |
-| `clawbox-edge` | team | openclaw lead + ollama fallback; scoped memory for Jetson |
+| `clawbox-edge` | team | openclaw lead \+ ollama fallback; scoped memory for Jetson |
 | `review-and-ship` | workflow | plan → parallel analyze/verify → synthesize |
 | `code-review` | workflow | review checklist → parallel review → summary |
 | `brainstorm` | workflow | round-robin ideation across team roles |
@@ -235,9 +236,9 @@ defaults:
 ```
 
 | Mode | Recall | Step output |
-| ---- | ------ | ----------- |
+| --- | --- | --- |
 | `unified` (default) | Global unified memory | Not persisted |
-| `scoped` | Filtered by trust tier + team/workflow | Scratchpad with provenance |
+| `scoped` | Filtered by trust tier \+ team/workflow | Scratchpad with provenance |
 | `off` | None | Not persisted |
 
 Per-step override: `memory_scope: { write: run }` on a workflow step.

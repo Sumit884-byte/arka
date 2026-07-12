@@ -2,6 +2,7 @@
 title: "Testing Arka with the pytest suite"
 description: "Run Arka's pytest suite locally and in CI, understand what the test coverage areas exercise, and add new tests when contributing skills or plugins."
 keywords: ["testing", "pytest", "ci", "development"]
+icon: "flask"
 ---
 
 Arka uses **pytest** for automated tests. The suite covers routing, LLM failover, vision, integrations, telemetry, and skill-specific behavior.
@@ -37,7 +38,7 @@ The `tests/` directory contains **24 test modules** (~270 tests). They are organ
 ### Routing and NL parsing
 
 | Module | What it tests |
-| ------ | ------------- |
+| --- | --- |
 | `test_router_show_me.py` | "Show me" queries must not route to `describe_image` |
 | `test_router_github_repo.py` | GitHub repo skill routing |
 | `test_router_find_files_by_size.py` | File-size search routing |
@@ -45,7 +46,7 @@ The `tests/` directory contains **24 test modules** (~270 tests). They are organ
 ### LLM and providers
 
 | Module | What it tests |
-| ------ | ------------- |
+| --- | --- |
 | `test_llm_fallback.py` | Provider chain parsing, failover, per-skill models |
 | `test_vllm_cloud.py` | vLLM cloud provider integration |
 | `test_vllm_cross_platform.py` | vLLM on macOS/Linux/Windows |
@@ -54,7 +55,7 @@ The `tests/` directory contains **24 test modules** (~270 tests). They are organ
 ### Vision and media
 
 | Module | What it tests |
-| ------ | ------------- |
+| --- | --- |
 | `test_describe_image_resize.py` | Image resize before vision API calls |
 | `test_describe_image_ocr_output.py` | OCR output formatting |
 | `test_describe_screen.py` | Screen description skill |
@@ -65,7 +66,7 @@ The `tests/` directory contains **24 test modules** (~270 tests). They are organ
 ### Integrations
 
 | Module | What it tests |
-| ------ | ------------- |
+| --- | --- |
 | `test_currency_convert.py` | Currency conversion skill |
 | `test_price_check.py` | Price check skill |
 | `test_github_repo.py` | GitHub repo stats |
@@ -79,7 +80,7 @@ The `tests/` directory contains **24 test modules** (~270 tests). They are organ
 ### Observability
 
 | Module | What it tests |
-| ------ | ------------- |
+| --- | --- |
 | `test_telemetry.py` | OpenTelemetry tracing setup |
 | `test_signoz_setup.py` | SigNoz configuration |
 | `test_supermemory_obs.py` | Supermemory observability hooks |

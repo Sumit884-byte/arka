@@ -2,6 +2,7 @@
 title: "Life sciences (Anthropic marketplace)"
 description: "Use Anthropic's life-sciences marketplace from Arka — install PubMed, single-cell QC, Nextflow pipelines, and evidence-backed biomedical research."
 keywords: ["life sciences", "pubmed", "bioinformatics", "genomics", "plugins"]
+icon: "dna"
 ---
 
 Arka integrates [Anthropic's life-sciences marketplace](https://github.com/anthropics/life-sciences) — MCP servers and workflow skills for biomedical research, genomics, and drug discovery.
@@ -41,7 +42,7 @@ arka "install pubmed"
 
 ## Research with citations
 
-Use the bundled **life_sciences** profession domain for evidence-first answers:
+Use the bundled **life\_sciences** profession domain for evidence-first answers:
 
 ```bash
 arka profession ask life_sciences what are latest CAR-T trial endpoints
@@ -53,7 +54,7 @@ arka "as a biomedical researcher summarize crispr off-target risks"
 The upstream repo targets **Claude Code** (`/plugin marketplace add anthropics/life-sciences`). Arka adapts it for the terminal:
 
 1. **`life_sciences` meta-skill** — lists and installs marketplace plugins into `~/.config/arka/skills/`
-2. **Per-plugin skills** — each install gets `skill.json` + `run.py` with Arka triggers
+2. **Per-plugin skills** — each install gets `skill.json` \+ `run.py` with Arka triggers
 3. **Profession domain** — `life_sciences` adds PubMed/NIH-biased source registries for cited research
 
 Remote MCP servers that need authentication (BioRender, Synapse, Cortellis) install as stubs. Use Claude Code for full MCP access, or ask via `profession ask life_sciences`.
@@ -64,7 +65,7 @@ Remote MCP servers that need authentication (BioRender, Synapse, Cortellis) inst
 | --- | --- |
 | PubMed | `arka pubmed <query>` |
 | Single-cell QC | `arka single-cell-rna-qc data.h5ad` |
-| Nextflow | `arka nextflow-development` (requires Docker + Nextflow) |
+| Nextflow | `arka nextflow-development` (requires Docker \+ Nextflow) |
 | Scientific problem selection | `arka scientific-problem-selection <research question>` |
 
 <Tip>

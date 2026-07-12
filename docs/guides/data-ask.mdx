@@ -2,6 +2,7 @@
 title: "Data Q&A"
 description: "Ask natural-language questions about CSV, JSON, TSV, YAML, XML, Parquet, Excel, and SQL dump files — single files or entire folders."
 keywords: ["data", "csv", "json", "analyze", "query", "ask", "tsv", "folder"]
+icon: "table"
 ---
 
 Ask questions about local data files — row counts, totals, top values, summaries, and more. Query a single file, an entire folder, or only specific formats.
@@ -20,7 +21,7 @@ arka query_data sales.json "what is total revenue by category?"
 ## CLI commands
 
 | Command | Description |
-| ------- | ----------- |
+| --- | --- |
 | `data_ask users.csv "how many rows?"` | Ask a question about a file |
 | `data_ask ./data/ --format csv "average salary?"` | Query only CSV files in a folder |
 | `data_ask ./reports/ --formats csv,json "list all columns"` | Filter by multiple formats |
@@ -36,7 +37,7 @@ arka query_data sales.json "what is total revenue by category?"
 Optional dependencies for richer parsing:
 
 | Format | Package |
-| ------ | ------- |
+| --- | --- |
 | Parquet | `pyarrow` or `pandas` |
 | Excel (xlsx) | `openpyxl` or `pandas` |
 | YAML | `pyyaml` |
@@ -56,7 +57,7 @@ Large folders are capped for context size:
 ## How it works
 
 1. Detects file format(s) from extension(s), optionally filtered by `--format`
-2. Loads rows from one or more files (sample + stats when truncated)
+2. Loads rows from one or more files (sample \+ stats when truncated)
 3. Sends structured context to the LLM with your question
 4. Prints the answer in the terminal
 

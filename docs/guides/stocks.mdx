@@ -2,6 +2,7 @@
 title: "Stock intelligence"
 description: "Use Arka's stock skill for market news, fundamentals, sentiment analysis, macro events, and AI-assisted investment research from the terminal."
 keywords: ["stock", "finance", "investing", "market", "predictions"]
+icon: "arrow-trend-up"
 ---
 
 Arka includes a **stock** skill (alias: `stock_analysis`) for market intelligence — news, live prices, fundamentals, sentiment, macro events, and investment research.
@@ -29,21 +30,21 @@ arka predict opportunities in RELIANCE.NS and banking sector
 ## Commands
 
 | Command | Description |
-| ------- | ----------- |
+| --- | --- |
 | `stock news` | Market news feeds |
 | `stock prices [TICKER…]` | Live prices (default watchlist if none given) |
 | `stock policy TICKER` | Policy and regulatory scan |
-| `stock strategy TICKER` | AI backtest + ML signal |
+| `stock strategy TICKER` | AI backtest \+ ML signal |
 | `stock analyze TICKER` | Alias for `strategy` |
 | `stock volatility T1,T2 period interval` | Volatility comparison |
 | `stock dashboard` | Streamlit Stock Intelligence Hub |
 | `stock fundamentals TICKER…` | Debt/equity, ROE, P/E, margins vs peers |
-| `stock emotion [N]` | Net news sentiment + crowd buy/sell forecast |
+| `stock emotion [N]` | Net news sentiment \+ crowd buy/sell forecast |
 | `stock macro [N]` | Disaster/resource/geopolitics → stock impact |
-| `stock funding [N]` | Recent VC/PE/IPO deals + listed peer mapping |
-| `stock competition [TICKERS…]` | Peer scoreboard + rivalry news |
+| `stock funding [N]` | Recent VC/PE/IPO deals \+ listed peer mapping |
+| `stock competition [TICKERS…]` | Peer scoreboard \+ rivalry news |
 | `stock invest <question>` | Deep investment research (routes to `predictions --domain stocks --deep`) |
-| `stock compare [AMT] [HORIZON]` | Top options ranked from news + data (no LLM) |
+| `stock compare [AMT] [HORIZON]` | Top options ranked from news \+ data (no LLM) |
 | `stock predict <topic>` | Stocks opportunity analysis via Arka predictions |
 | `stock context [TICKER…]` | Plain-text debug bundle |
 
@@ -63,9 +64,9 @@ Domains: `antiques`, `stocks`, `strategy`, `all`.
 
 ## Setup
 
-The stock bridge connects to a **stock_analysis** project. By default it looks for:
+The stock bridge connects to a **stock\_analysis** project. By default it looks for:
 
-```
+```text
 ~/Projects/python/products/stock_analysis
 ```
 
@@ -80,7 +81,7 @@ If the project is not found, `stock news` and `stock prices` still work via the 
 ## Related skills
 
 | Skill | Example |
-| ----- | ------- |
+| --- | --- |
 | `currency_convert` | `arka convert 100 USD to INR` |
 | `price_check` | `arka price check iPhone 16` |
 | `chart` | `chart line AAPL TSLA --range 1y` |

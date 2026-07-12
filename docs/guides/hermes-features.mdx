@@ -2,6 +2,7 @@
 title: "Channel sessions and sub-agent delegation"
 description: "Per-channel session continuity for webhooks and CLI, silence tokens, and isolated background sub-agents."
 keywords: ["message sessions", "subagent", "gateway", "cross-platform", "channel"]
+icon: "sitemap"
 ---
 
 Arka provides **channel sessions** and **sub-agent delegation** — patterns inspired by [Hermes Agent](https://github.com/NousResearch/hermes-agent), not a separate product integration. They add per-channel conversation continuity, webhook session handoff, and isolated background sub-agents.
@@ -9,9 +10,9 @@ Arka provides **channel sessions** and **sub-agent delegation** — patterns ins
 ## Features
 
 | Concept | Arka feature |
-| ------- | ------------ |
+| --- | --- |
 | Per-chat session store | `message_session` — keyed by `channel:chat_id` |
-| Cross-platform continuity | Webhook + `arka ask` share the same session when `channel`/`chat_id` match |
+| Cross-platform continuity | Webhook \+ `arka ask` share the same session when `channel`/`chat_id` match |
 | Silence tokens | `[SILENT]`, `NO_REPLY` suppress webhook outbound delivery |
 | Sub-agent delegation | `subagent spawn` — isolated background agent tasks |
 
@@ -65,7 +66,7 @@ When the agent's final response is exactly one of these (case-insensitive), the 
 ### Environment variables
 
 | Variable | Default | Purpose |
-| -------- | ------- | ------- |
+| --- | --- | --- |
 | `MESSAGE_SESSIONS` | `1` | Enable (`0` to disable) |
 | `MESSAGE_SESSIONS_DIR` | `~/.config/arka/message-sessions` | Storage root |
 | `MESSAGE_SESSION_IDLE_MINUTES` | `0` | Auto-reset after idle minutes (`0` = never) |
@@ -93,7 +94,7 @@ Each sub-agent runs via the Python chat engine (with fish `agent` fallback). Tas
 ### Security gates
 
 | Gate | Blocks when |
-| ---- | ----------- |
+| --- | --- |
 | `SUBAGENT_SECURITY=1` | Task fails `SECURITY_LLM` prompt verification |
 | `SUBAGENT_MAX` | Concurrent running agents exceed limit |
 | `SUBAGENT_MAX_CHARS` | Task text too long |
@@ -103,7 +104,7 @@ Set `SUBAGENT_SYNC=1` to run synchronously (used in tests).
 ### Environment variables
 
 | Variable | Default | Purpose |
-| -------- | ------- | ------- |
+| --- | --- | --- |
 | `SUBAGENT_ENABLED` | `1` | Enable (`0` to disable) |
 | `SUBAGENT_DIR` | `~/.cache/fish-agent/subagents` | Storage root |
 | `SUBAGENT_MAX` | `3` | Max concurrent background agents |

@@ -2,6 +2,7 @@
 title: "Generate data"
 description: "Create fake or sample datasets, or fetch rows from World Bank, PubMed, URLs, and web search."
 keywords: ["generate", "data", "csv", "json", "fake", "sample", "mock", "world bank", "pubmed", "real"]
+icon: "database"
 ---
 
 Generate sample datasets from the terminal — or fetch **real-world** rows from APIs and public sources. Useful for tests, demos, prototypes, and quick data pulls.
@@ -31,7 +32,7 @@ Phrases with **real**, **actual**, **live**, **world bank**, **pubmed papers**, 
 ## CLI commands
 
 | Command | Description |
-| ------- | ----------- |
+| --- | --- |
 | `generate_data users --count 100 --format csv` | User records preset (synthetic) |
 | `generate_data --source worldbank --indicator gdp --country IN -f json` | World Bank GDP for India |
 | `generate_data --source pubmed --query "mRNA vaccines" -n 20 -f csv` | PubMed paper metadata |
@@ -42,7 +43,7 @@ Phrases with **real**, **actual**, **live**, **world bank**, **pubmed papers**, 
 ## Real-world sources
 
 | `--source` | Description | Key flags |
-| ---------- | ----------- | --------- |
+| --- | --- | --- |
 | `worldbank` | GDP, population, life expectancy, CO₂, unemployment, internet | `--indicator`, `--country`, `--year-from`, `--year-to` |
 | `pubmed` | Biomedical paper metadata (title, journal, year, URL) | `--query`, `--count` |
 | `url` | Fetch JSON array/object or CSV from any URL | `--url`, `--count` |
@@ -71,7 +72,7 @@ pip install faker
 Built-in presets infer columns automatically (synthetic mode only):
 
 | Preset | Columns |
-| ------ | ------- |
+| --- | --- |
 | `users` | id, name, email, age, phone |
 | `products` | id, name, price, category |
 | `sales` | date, product, quantity, revenue, region |

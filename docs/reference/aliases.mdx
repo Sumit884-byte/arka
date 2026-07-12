@@ -2,6 +2,7 @@
 title: "Command aliases, subcommand synonyms, and skill names"
 description: "Reference for Arka's command aliases, agent name overrides, subcommand synonyms, and skill-name equivalents that let you invoke the same feature multiple ways."
 keywords: ["aliases", "commands", "synonyms"]
+icon: "at"
 ---
 
 Arka uses aliases at several levels: the main command name, helper functions, subcommand synonyms, and skill-name equivalents.
@@ -9,7 +10,7 @@ Arka uses aliases at several levels: the main command name, helper functions, su
 ## Main command
 
 | Command | What it is |
-| ------- | ---------- |
+| --- | --- |
 | `arka` | Default entry point |
 | `agent` | Always available; same NL router |
 | Custom name | Set `AGENT_NAME=mybot` in `.env` |
@@ -19,7 +20,7 @@ Wake phrases include the agent name: **"hey arka, …"**
 ## Subcommand synonyms
 
 | Synonyms | Maps to |
-| -------- | ------- |
+| --- | --- |
 | `reload` / `refresh` / `relink` | Reload config |
 | `start` / `up` | Start services |
 | `stop` / `down` | Stop services |
@@ -37,7 +38,7 @@ Wake phrases include the agent name: **"hey arka, …"**
 ## Skill-name equivalents
 
 | Names | Notes |
-| ----- | ----- |
+| --- | --- |
 | `stock` / `stock_analysis` | Market bridge |
 | `pass` / `generate_password` | Password vault |
 | `doc_*` / `pdf_*` | Document RAG |
@@ -47,7 +48,7 @@ Wake phrases include the agent name: **"hey arka, …"**
 ## Fish shell helpers
 
 | Function | Equivalent |
-| -------- | ---------- |
+| --- | --- |
 | `agent_route` | Preview routing without executing |
 | `agent_trace` | Last routing decision |
 | `agent_why` | Explain skill choice |

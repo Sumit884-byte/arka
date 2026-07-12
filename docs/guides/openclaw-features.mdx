@@ -2,6 +2,7 @@
 title: "Session memory, heartbeat, and skill gates"
 description: "OpenClaw-inspired Arka features — markdown session memory, agent heartbeat, and skill manifest gates for requires, OS, and permissions."
 keywords: ["session memory", "heartbeat", "openclaw", "skill gates", "permissions"]
+icon: "heart-pulse"
 ---
 
 Arka includes several **OpenClaw-inspired** features (not a separate OpenClaw product integration). They add persistent session notes, agent health tracking, and declarative skill gates for third-party plugins.
@@ -26,7 +27,7 @@ Recalled context is injected into agent loops via `context_for()` when `SESSION_
 ### Environment variables
 
 | Variable | Default | Purpose |
-| -------- | ------- | ------- |
+| --- | --- | --- |
 | `SESSION_MEMORY` | `1` | Enable (`0` to disable) |
 | `SESSION_MEMORY_DIR` | `~/.config/arka/agent-memory` | Storage root |
 | `MEMORY_LONGTERM_MAX_LINES` | `100` | Max lines kept in `MEMORY.md` |
@@ -88,7 +89,7 @@ Arka merges any of these metadata blocks into the top-level `requires`, `os`, an
 ### Gate behavior
 
 | Gate | Blocks when |
-| ---- | ----------- |
+| --- | --- |
 | `os` | Current platform not listed |
 | `requires.bins` | Binary not found on `PATH` |
 | `requires.anyBins` | None of the listed binaries found |
@@ -104,7 +105,7 @@ Gated skills are:
 ### Environment variables
 
 | Variable | Default | Purpose |
-| -------- | ------- | ------- |
+| --- | --- | --- |
 | `SKILL_PERMISSIONS` | `read,write,network,shell` | Allowed permission tags |
 | `SKILLS_PATH` | — | Extra directories to search for plugins |
 

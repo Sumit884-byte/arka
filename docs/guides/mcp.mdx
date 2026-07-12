@@ -2,6 +2,7 @@
 title: "MCP integration"
 description: "Connect Arka to any Model Context Protocol (MCP) server — stdio or HTTP — list tools, call tools, and check health."
 keywords: ["mcp", "model context protocol", "integration", "tools"]
+icon: "network-wired"
 ---
 
 Arka can connect to **any MCP server** from the terminal — the same [Model Context Protocol](https://modelcontextprotocol.io) used by Cursor, Claude Desktop, and other AI clients.
@@ -68,14 +69,14 @@ agent "list mcp tools from signoz"
 }
 ```
 
-Stdio servers use `command` + `args`. Remote servers use `url` + optional `headers`. Optional `env` values support `${env:VAR_NAME}` substitution.
+Stdio servers use `command` \+ `args`. Remote servers use `url` \+ optional `headers`. Optional `env` values support `${env:VAR_NAME}` substitution.
 
 ## Transports
 
 | Transport | Config | Example |
-|-----------|--------|---------|
-| **stdio** | `command` + `args` | `npx -y @modelcontextprotocol/server-filesystem /tmp` |
-| **HTTP/SSE** | `url` + `headers` | SigNoz MCP at `http://localhost:8000/mcp` |
+| --- | --- | --- |
+| **stdio** | `command` \+ `args` | `npx -y @modelcontextprotocol/server-filesystem /tmp` |
+| **HTTP/SSE** | `url` \+ `headers` | SigNoz MCP at `http://localhost:8000/mcp` |
 
 Arka reuses the existing HTTP MCP client for remote servers and a built-in newline-delimited JSON-RPC client for stdio — no extra dependencies required.
 
@@ -99,7 +100,7 @@ arka mcp tools signoz
 ## Commands reference
 
 | Command | Description |
-|---------|-------------|
+| --- | --- |
 | `arka mcp list` | List configured MCP servers |
 | `arka mcp add <name> <command> [args...]` | Add stdio server |
 | `arka mcp add <name> --url <url>` | Add HTTP/SSE server |
@@ -167,7 +168,7 @@ Run `arka mcp install` to print the correct command for your machine.
 ### Exposed tools
 
 | Tool | Description |
-|------|-------------|
+| --- | --- |
 | `arka_ask` | Ask Arka (web, memory, calc, weather, chat) |
 | `arka_remember` | Store a fact, note, or channel turn |
 | `arka_recall` | Recall unified memory by goal |

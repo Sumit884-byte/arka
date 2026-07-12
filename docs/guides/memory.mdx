@@ -2,6 +2,7 @@
 title: "Long-term memory with Supermemory sync"
 description: "Persist facts across Arka sessions using Supermemory cloud sync with an automatic local cache fallback, plus natural-language remember and recall commands."
 keywords: ["memory", "supermemory", "remember", "recall"]
+icon: "brain"
 ---
 
 Arka remembers facts across sessions. With a [Supermemory](https://supermemory.ai) API key, memories sync to the cloud; otherwise Arka falls back to a local cache automatically.
@@ -9,7 +10,7 @@ Arka remembers facts across sessions. With a [Supermemory](https://supermemory.a
 ## Commands
 
 | Command | Example |
-| ------- | ------- |
+| --- | --- |
 | `agent_remember` | `agent_remember I prefer Hindi TTS` |
 | `agent_recall` | `agent_recall what TTS do I prefer` |
 | `supermemory status` | Show backend mode (api / local) |
@@ -40,7 +41,7 @@ Recalled context is injected into `arka ask`, research, and agent loops automati
 Arka uses several complementary context stores. Pick the layer that matches your use case:
 
 | Layer | Command / store | When to use |
-| ----- | --------------- | ----------- |
+| --- | --- | --- |
 | Facts (long-term) | `agent_remember`, Supermemory | Preferences, stable knowledge across weeks |
 | Session notes | `session_memory` | Markdown notes, daily journaling (`MEMORY.md`) |
 | Channel turns | `message_session` | Per chat/thread continuity (webhook, CLI, Telegram bridge) |
@@ -79,7 +80,7 @@ See [Channel sessions](/guides/hermes-features) and [Session memory](/guides/ope
 When `UNIFIED_MEMORY=1` (default), Arka routes recall through a single facade that aggregates facts, session notes, and channel turns — without duplicating channel context in `arka ask`.
 
 | Command | Example |
-| ------- | ------- |
+| --- | --- |
 | `memory remember` | `memory remember I prefer dark mode` |
 | `memory recall` | `memory recall "what theme do I prefer"` |
 | `memory status` | Show counts across all layers |
@@ -107,16 +108,16 @@ Existing commands (`agent_remember`, `session_memory`, `message_session`) still 
 Shared memory is useful only when trust boundaries are explicit. Scoped memory adds **trust tiers**, **write-time provenance**, and a **workflow scratchpad** separate from global facts.
 
 | Trust tier | Scope | Typical use |
-| ---------- | ----- | ----------- |
+| --- | --- | --- |
 | `global` | User-curated facts | Preferences, promoted workflow outputs |
 | `team` | Same team name | Cross-workflow team context (ClawBox edge) |
-| `workflow` | Team + workflow | Step handoff within one workflow |
+| `workflow` | Team \+ workflow | Step handoff within one workflow |
 | `run` | Single run ID | Ephemeral turn context |
 
 ### Commands
 
 | Command | Example |
-| ------- | ------- |
+| --- | --- |
 | `memory_scope status` | Trust cap, scratchpad count |
 | `memory_scope scratchpad list` | List scoped entries |
 | `memory_scope scratchpad list --team research` | Filter by team |

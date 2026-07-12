@@ -2,6 +2,7 @@
 title: "Agent Hub"
 description: "Shared MCP, memory, and skills for ollama launch agents — one Arka-managed hub that Claude Code, Hermes, OpenClaw, and other agents can consume."
 keywords: ["agent hub", "ollama launch", "mcp", "shared memory", "openclaw", "hermes", "unification"]
+icon: "hub"
 ---
 
 The **Arka Agent Hub** is a shared interoperability layer for coding agents launched via `ollama launch`. Arka does not patch or fork external agents — it exports canonical config files, merges MCP into known agent paths when you opt in, and sets environment variables that any agent can read.
@@ -9,15 +10,15 @@ The **Arka Agent Hub** is a shared interoperability layer for coding agents laun
 ## What gets shared
 
 | Hub path | Source | Purpose |
-| -------- | ------ | ------- |
+| --- | --- | --- |
 | `~/.config/arka/hub/mcp.json` | `~/.config/arka/mcp.json` | Single MCP config (Cursor-compatible) |
-| `~/.config/arka/hub/memory/summary.json` | unified memory + sessions | Lightweight facts and session index |
-| `~/.config/arka/hub/memory/context.md` | unified memory + sessions | Human-readable context bundle |
+| `~/.config/arka/hub/memory/summary.json` | unified memory \+ sessions | Lightweight facts and session index |
+| `~/.config/arka/hub/memory/context.md` | unified memory \+ sessions | Human-readable context bundle |
 | `~/.config/arka/hub/memory/README.md` | generated | How each agent should load context |
 | `~/.config/arka/hub/skills/manifest.json` | `discover_skills()` | Installed Arka skills other agents can read |
 | `~/.config/arka/hub/skills/INSTALL.md` | generated | Skill install instructions |
 | `~/.config/arka/hub/launch.env` | generated | Sourceable env contract for any agent |
-| `~/.config/arka/hub/agents.json` | static registry | Agent catalog + last sync timestamps |
+| `~/.config/arka/hub/agents.json` | static registry | Agent catalog \+ last sync timestamps |
 
 ## Quick start
 
@@ -97,7 +98,7 @@ Use `agent_hub detect` to see which config files exist locally, and `agent_hub a
 ## Supported agents
 
 | Key | Name | Launch command |
-| --- | ---- | -------------- |
+| --- | --- | --- |
 | `claude` | Claude Code | `ollama launch claude` |
 | `codex-app` | Codex App | `ollama launch codex-app` |
 | `hermes` | Hermes Agent | `ollama launch hermes` |
@@ -115,7 +116,7 @@ Each agent has documented MCP config paths (Cursor, Claude Desktop, `~/.codex/mc
 When you run `agent_hub launch` or source `launch.env`, Arka sets:
 
 | Variable | Points to |
-| -------- | --------- |
+| --- | --- |
 | `ARKA_HUB_DIR` | Hub root (`~/.config/arka/hub/`) |
 | `ARKA_MCP_CONFIG` | Hub MCP config |
 | `ARKA_MEMORY_DIR` | Hub memory exports |
@@ -127,7 +128,7 @@ When you run `agent_hub launch` or source `launch.env`, Arka sets:
 Agent-specific aliases (only where documented):
 
 | Agent | Extra variable |
-| ----- | -------------- |
+| --- | --- |
 | OpenClaw | `OPENCLAW_MCP_CONFIG` → hub MCP path |
 | Claude / Codex / Copilot | `ARKA_SKILLS_DIR` for plugin dirs |
 
@@ -170,7 +171,7 @@ ARKA_HUB_MEMORY_SCOPE=team:clawbox
 ```
 
 | Setting | Effect |
-| ------- | ------ |
+| --- | --- |
 | `ARKA_MEMORY_TRUST_MAX` | Caps recall and hub export to `global`, `team`, `workflow`, or `run` tier |
 | `ARKA_HUB_MEMORY_SCOPE` | Filters hub `summary.json` / `context.md` to one team (e.g. `team:clawbox`) |
 

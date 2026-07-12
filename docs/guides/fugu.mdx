@@ -2,6 +2,7 @@
 title: "Sakana Fugu orchestrator"
 description: "Use Sakana Fugu's multi-agent orchestration from Arka — as an LLM provider, Codex bridge, and Agent Hub peer."
 keywords: ["fugu", "sakana", "orchestrator", "multi-agent", "codex"]
+icon: "fish"
 ---
 
 [**Sakana Fugu**](https://sakana.ai/fugu/) is a learned multi-agent orchestrator from Sakana AI. It exposes a single **OpenAI-compatible API** (`https://api.sakana.ai/v1`) that routes, delegates, verifies, and synthesizes work across a pool of frontier models. From your code's perspective it behaves like one model — `fugu` (fast) or `fugu-ultra` (deeper).
@@ -10,7 +11,7 @@ Arka integrates Fugu in three ways:
 
 1. **LLM provider** — use `sakana` / `fugu` in failover chains, teams, and skills
 2. **`arka fugu` CLI** — one-shot prompts through Fugu
-3. **Agent Hub + MCP** — share Arka memory, skills, and tools with Fugu (via Codex)
+3. **Agent Hub \+ MCP** — share Arka memory, skills, and tools with Fugu (via Codex)
 
 ## Quick start
 
@@ -127,15 +128,15 @@ WEBHOOK_TOKEN=your-secret
 arka webhook serve
 ```
 
-POST to `http://127.0.0.1:8767/v1/inbox` with `channel` + `chat_id` for session continuity. See [Hermes features](/guides/hermes-features) for the session pattern.
+POST to `http://127.0.0.1:8767/v1/inbox` with `channel` \+ `chat_id` for session continuity. See [Hermes features](/guides/hermes-features) for the session pattern.
 
 ## What Fugu is (and isn't)
 
-| | Fugu | Arka |
+|  | Fugu | Arka |
 | --- | --- | --- |
 | **Role** | Multi-model orchestrator (routes to frontier LLMs) | Local agent hub (skills, memory, MCP, teams) |
 | **Interface** | OpenAI-compatible REST API | CLI, fish, MCP server, webhooks |
-| **MCP** | Via Codex harness | Native client + server |
+| **MCP** | Via Codex harness | Native client \+ server |
 | **Self-host** | API-only (closed weights) | Fully local |
 
 Fugu handles **which models to call and how to coordinate them**. Arka handles **what tools, memory, and workflows are available** in your environment. Together: Fugu orchestrates reasoning; Arka supplies the toolbox.

@@ -2,6 +2,7 @@
 title: "Generating matplotlib charts from the terminal"
 description: "Turn numbers into line, bar, pie, scatter, histogram, and pareto PNG charts using natural language or Arka CLI commands, powered by matplotlib."
 keywords: ["charts", "matplotlib", "graph", "plot"]
+icon: "chart-column"
 ---
 
 Turn numbers into PNG charts. Seven chart kinds supported via offline NL parsing — no LLM required for most requests.
@@ -13,7 +14,7 @@ pip install "arka-agent[charts]"
 ## Chart types
 
 | Kind | CLI | NL example |
-| ---- | --- | ---------- |
+| --- | --- | --- |
 | line | `chart line AAPL TSLA --range 1y` | `compare Apple and Tesla stock last year` |
 | bar | `chart bar --data "A:1,B:2"` | `phone sales Apple 230 Samsung 210` |
 | pie | `chart pie --data "A:40,B:30"` | `pie chart traffic organic 400 direct 300` |

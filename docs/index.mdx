@@ -1,6 +1,7 @@
 ---
 title: "Introduction to Arka"
 description: "Arka is a cross-platform AI terminal agent that routes plain-English requests to 70+ local skills, with voice replies and offline symbolic routing."
+icon: "book-open"
 ---
 
 Arka is a **cross-platform AI agent** for your terminal. Say what you want in plain English — Arka routes your request to the right local skill, runs it, and speaks the answer back if you want.
@@ -11,12 +12,15 @@ Commands run locally. LLM calls go through a **fallback orchestrator** across **
   <Card title="Quickstart" icon="rocket" href="/quickstart">
     Install and run your first command in under five minutes.
   </Card>
+
   <Card title="Skills catalog" icon="puzzle-piece" href="/guides/skills">
-    70+ built-in skills for media, web, docs, system, dev, and finance.
+    70\+ built-in skills for media, web, docs, system, dev, and finance.
   </Card>
+
   <Card title="Routing" icon="route" href="/concepts/routing">
     Zero LLM tokens for most requests via offline symbolic rules.
   </Card>
+
   <Card title="Security" icon="shield-check" href="/concepts/security">
     Prompt-injection blocks, risky-action prompts, destructive shell hard-blocks.
   </Card>
@@ -35,8 +39,8 @@ arka listen    # "hey arka, what's the weather"
 
 ## Key capabilities
 
-- **70+ local skills** — media, web, PDF RAG, Google Workspace, charts, stocks, YouTube, voice
-- **Offline-first routing** — 120+ symbolic rules; LLM only when needed
+- **70\+ local skills** — media, web, PDF RAG, Google Workspace, charts, stocks, YouTube, voice
+- **Offline-first routing** — 120\+ symbolic rules; LLM only when needed
 - **24-provider LLM failover** — Gemini, Groq, OpenAI, Anthropic, Ollama, vLLM, OpenRouter, and more
 - **Voice** — wake-word listener, multi-turn conversation, TTS replies
 - **Security gates** — on by default
@@ -45,53 +49,175 @@ arka listen    # "hey arka, what's the weather"
 ## Platform modes
 
 | Platform | Mode |
-| -------- | ---- |
-| **All (macOS, Windows, Linux)** | Full 70+ skills via pip + [fish shell](https://fishshell.com) |
+| --- | --- |
+| **All (macOS, Windows, Linux)** | Full 70\+ skills via pip \+ [fish shell](https://fishshell.com) |
 | **Without fish** | Portable Python: chat, web, calc, weather, plugins |
-| **Linux + fish login shell** | Full skills + voice autostart + systemd units |
+| **Linux \+ fish login shell** | Full skills \+ voice autostart \+ systemd units |
 
 ## Documentation map
 
 ### Using Arka
 
 <CardGroup cols={2}>
-  <Card title="CLI reference" icon="terminal" href="/guides/cli">Commands, aliases, and subcommands</Card>
-  <Card title="Skills catalog" icon="puzzle-piece" href="/guides/skills">Full built-in skill list</Card>
+  <Card title="CLI reference" icon="terminal" href="/guides/cli">
+    Commands, the agent alias, subcommands, and flags.
+  </Card>
+
+  <Card title="Skills catalog" icon="list-check" href="/guides/skills">
+    70\+ built-in skills spanning media, web, docs, and finance.
+  </Card>
+
+  <Card title="Teach custom routes" icon="graduation-cap" href="/guides/route-learn">
+    Persistent phrase-to-skill mappings that correct routing.
+  </Card>
+
+  <Card title="Competitions" icon="trophy" href="/guides/competitions">
+    Search hackathons and ML competitions across curated sources.
+  </Card>
+
+  <Card title="ASCII art" icon="font" href="/guides/ascii-art">
+    Text banners and image-to-ASCII in the terminal.
+  </Card>
+
+  <Card title="Generate data" icon="database" href="/guides/generate-data">
+    Fake, sample, or real datasets from World Bank, PubMed, and more.
+  </Card>
+
+  <Card title="Data Q&A" icon="table" href="/guides/data-ask">
+    Ask natural-language questions about CSV, JSON, Parquet, and SQL files.
+  </Card>
+
+  <Card title="Personalize" icon="user-gear" href="/guides/personalize">
+    Onboarding wizard that recommends skills based on your interests.
+  </Card>
 </CardGroup>
 
 ### Chat & search
 
 <CardGroup cols={2}>
-  <Card title="Chat & web answers" icon="message-circle" href="/guides/chat">Web search, calc, weather, maps</Card>
-  <Card title="Memory" icon="database" href="/guides/memory">Supermemory and local recall</Card>
+  <Card title="Chat & web search" icon="comments" href="/guides/chat">
+    Web search, deep-scrape RAG, math, weather, and session memory.
+  </Card>
+
+  <Card title="Persona chat" icon="masks-theater" href="/guides/personas">
+    Simulated character personas for fun and education.
+  </Card>
+
+  <Card title="Long-term memory" icon="brain" href="/guides/memory">
+    Supermemory sync with automatic local cache fallback.
+  </Card>
+
+  <Card title="Daily & tech brief" icon="newspaper" href="/guides/daily-brief">
+    Personalized morning headlines and OpenAI changelog awareness.
+  </Card>
 </CardGroup>
 
 ### Documents & media
 
 <CardGroup cols={2}>
-  <Card title="PDF RAG" icon="file-text" href="/guides/pdf-rag">Ingest and query PDFs</Card>
-  <Card title="Charts" icon="chart-bar" href="/guides/charts">Matplotlib PNG charts</Card>
-  <Card title="Vision" icon="eye" href="/guides/vision">Images, blueprints, screen capture</Card>
-  <Card title="YouTube" icon="play" href="/guides/youtube">Research, download, bulk</Card>
+  <Card title="PDF RAG" icon="file-pdf" href="/guides/pdf-rag">
+    PrivateGPT \+ Qdrant retrieval over local PDFs.
+  </Card>
+
+  <Card title="Charts" icon="chart-column" href="/guides/charts">
+    Matplotlib line, bar, pie, scatter, histogram, and pareto PNGs.
+  </Card>
+
+  <Card title="Vision & OCR" icon="image" href="/guides/vision">
+    Describe photos, extract text, and capture your screen.
+  </Card>
+
+  <Card title="YouTube" icon="youtube" href="/guides/youtube">
+    Research, download, and transcribe videos and playlists.
+  </Card>
 </CardGroup>
 
 ### Integrations & finance
 
 <CardGroup cols={2}>
-  <Card title="Google Workspace" icon="mail" href="/guides/google-workspace">Gmail and Calendar</Card>
-  <Card title="Plugins" icon="plug" href="/guides/plugins">Third-party skill.json extensions</Card>
-  <Card title="Stock intelligence" icon="chart-line" href="/guides/stocks">Market news, fundamentals, sentiment</Card>
+  <Card title="Gmail & Calendar" icon="envelope" href="/guides/google-workspace">
+    Read Gmail and Google Calendar via one-time OAuth.
+  </Card>
+
+  <Card title="Plugins" icon="puzzle-piece" href="/guides/plugins">
+    Extend Arka with `skill.json` triggers.
+  </Card>
+
+  <Card title="Life sciences" icon="dna" href="/guides/life-sciences">
+    Anthropic's marketplace for PubMed, genomics, and Nextflow.
+  </Card>
+
+  <Card title="Gemini CLI" icon="google" href="/guides/gemini-cli">
+    Interactive sessions, one-shot prompts, and subcommand passthrough.
+  </Card>
+
+  <Card title="Sakana Fugu" icon="fish" href="/guides/fugu">
+    Multi-agent orchestration as an LLM provider and Codex bridge.
+  </Card>
+
+  <Card title="MCP" icon="network-wired" href="/guides/mcp">
+    Connect to any Model Context Protocol server — stdio or HTTP.
+  </Card>
+
+  <Card title="Agent Hub" icon="hub" href="/guides/agent-hub">
+    Shared MCP, memory, and skills for ollama launch agents.
+  </Card>
+
+  <Card title="Agent Teams" icon="users" href="/guides/agent-teams">
+    Sequential or parallel workflows across agents, models, and providers.
+  </Card>
+
+  <Card title="Post to X" icon="x-twitter" href="/guides/post-x">
+    Fetch, LLM-shorten, and publish content to X/Twitter.
+  </Card>
+
+  <Card title="Stocks" icon="arrow-trend-up" href="/guides/stocks">
+    Market news, fundamentals, sentiment, and AI investment research.
+  </Card>
+
+  <Card title="Kalshi" icon="coins" href="/guides/kalshi">
+    Prediction market odds and trending contracts.
+  </Card>
+
+  <Card title="Kaggle" icon="folder-tree" href="/guides/kaggle">
+    Download and search Kaggle datasets from the terminal.
+  </Card>
 </CardGroup>
 
 ### Agent & operations
 
 <CardGroup cols={2}>
-  <Card title="Voice" icon="microphone" href="/guides/voice">Wake word, STT, TTS</Card>
-  <Card title="Goal agent" icon="bot" href="/guides/goal-agent">Autonomous multi-step tasks</Card>
-  <Card title="Professions" icon="briefcase" href="/guides/professions">Source-backed domain answers</Card>
-  <Card title="Observability" icon="activity" href="/guides/observability">SigNoz and OpenTelemetry</Card>
-  <Card title="Testing" icon="flask" href="/guides/testing">pytest suite</Card>
-  <Card title="Configuration" icon="settings" href="/reference/configuration">Env vars and defaults</Card>
+  <Card title="Voice" icon="microphone" href="/guides/voice">
+    Wake word, speech-to-text, and text-to-speech replies.
+  </Card>
+
+  <Card title="Goal agent" icon="bullseye" href="/guides/goal-agent">
+    Autonomous multi-step terminal tasks with security gates.
+  </Card>
+
+  <Card title="Repo map" icon="map" href="/guides/repo-map">
+    Lightweight project layout and Python symbol overview.
+  </Card>
+
+  <Card title="Session memory & heartbeat" icon="heart-pulse" href="/guides/openclaw-features">
+    Markdown session memory, heartbeat, and skill manifest gates.
+  </Card>
+
+  <Card title="Channel sessions" icon="sitemap" href="/guides/hermes-features">
+    Per-channel continuity for webhooks and CLI, plus sub-agents.
+  </Card>
+
+  <Card title="Profession research" icon="briefcase" href="/guides/professions">
+    Cited answers across 13 profession domains.
+  </Card>
+
+  <Card title="Observability" icon="chart-line" href="/guides/observability">
+    OpenTelemetry traces and SigNoz dashboards.
+  </Card>
+
+  <Card title="Testing" icon="flask" href="/guides/testing">
+    Run the pytest suite locally and in CI.
+  </Card>
 </CardGroup>
 
 <Note>

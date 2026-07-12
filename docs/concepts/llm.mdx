@@ -2,6 +2,7 @@
 title: "LLM orchestration with multi-provider failover"
 description: "How Arka orchestrates 24 LLM providers with automatic failover, API key rotation, per-task profiles, and per-skill model overrides."
 keywords: ["llm", "providers", "failover", "models"]
+icon: "sparkles"
 ---
 
 Arka's `LlmFallbackEngine` manages all LLM calls across **25 providers** with automatic failover, API key rotation, and per-task or per-skill model overrides.
@@ -14,7 +15,7 @@ Anthropic, OpenAI, Gemini, Groq, xAI, DeepSeek, Moonshot, Z.AI, MiniMax, Venice,
 
 The orchestrator builds a candidate list in order:
 
-1. `AI_PREFERRED_PROVIDER` + `AI_PREFERRED_MODEL` (if set)
+1. `AI_PREFERRED_PROVIDER` \+ `AI_PREFERRED_MODEL` (if set)
 2. Live model lists from each provider API (when keys allow)
 3. Built-in chain: Gemini 2.5/2.0 Flash → Groq Llama 3.3/3.1 → Ollama cloud/local
 
@@ -30,7 +31,7 @@ API_KEY_ROTATION=1
 ## Per-task profiles
 
 | Task | Used for |
-| ---- | -------- |
+| --- | --- |
 | `route` | Skill routing decisions |
 | `summarize` | Email and document summaries |
 | `chat` | Conversational replies |
@@ -103,7 +104,5 @@ python3 arka_llm.py reset-exhaustion
 ## Related
 
 <CardGroup cols={2}>
-  <Card title="Configuration" icon="settings" href="/reference/configuration">Env vars and API keys</Card>
-  <Card title="Chat & web" icon="message-circle" href="/guides/chat">Skills that use the orchestrator</Card>
-  <Card title="Troubleshooting" icon="wrench" href="/reference/troubleshooting">401, 429, and failover fixes</Card>
+    
 </CardGroup>

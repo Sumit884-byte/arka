@@ -2,6 +2,7 @@
 title: "Configuration, env vars, and API key setup"
 description: "Configure Arka using environment variables, .env files, and config paths, with precedence rules for overriding defaults and adding API keys."
 keywords: ["configuration", "env", "settings"]
+icon: "gear"
 ---
 
 Arka is on by default for safety, failover, and local-first routing. You only need a `.env` when you want to override something or add API keys.
@@ -9,7 +10,7 @@ Arka is on by default for safety, failover, and local-first routing. You only ne
 ## Config paths
 
 | OS | Config | Cache |
-| -- | ------ | ----- |
+| --- | --- | --- |
 | Linux | `~/.config/arka/` | `~/.cache/arka/` |
 | macOS | `~/Library/Application Support/arka/` | `~/Library/Caches/arka/` |
 | Windows | `%APPDATA%\arka\` | `%LOCALAPPDATA%\arka\` |
@@ -38,7 +39,7 @@ User config includes `.env`, `charts.yaml`, `llm-skill-models.json`, and `skills
 ## Precedence
 
 | Layer | What it is | Wins when |
-| ----- | ---------- | --------- |
+| --- | --- | --- |
 | Shell env | `export GEMINI_API_KEY=…` | Already set in process |
 | User `.env` | `~/.config/arka/.env` | Fills unset vars at startup |
 | Dev checkout `.env` | `arka/.env` in a git clone | Fills vars not already set |
@@ -61,7 +62,7 @@ SECURITY=1
 ## Built-in defaults
 
 | Area | Default | Override |
-| ---- | ------- | -------- |
+| --- | --- | --- |
 | Security | All layers on (`SECURITY=1`) | Set any layer to `0` |
 | NL routing | Offline rules first (`ROUTE_MODE=symbolic`) | `ai`, `symbolic_only`, `ai_only` |
 | LLM failover | Auto on 429/401/timeout (`LLM_AUTO_FALLBACK=1`) | `LLM_AUTO_FALLBACK=0` |
@@ -90,7 +91,7 @@ Get free-tier keys from [Google AI Studio](https://aistudio.google.com) and [Gro
 Install feature groups as needed:
 
 | Extra | Adds |
-| ----- | ---- |
+| --- | --- |
 | `[chat]` | Web search, Agno, trafilatura, sympy |
 | `[voice]` | vosk, sounddevice |
 | `[pdf]` | PrivateGPT client |

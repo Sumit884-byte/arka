@@ -2,6 +2,7 @@
 title: "符号与 LLM 路由管道"
 description: "Arka 的分层管道如何在回退到 LLM 之前，使用符号化离线匹配将自然语言路由到 120+ 个技能模式。"
 keywords: ["routing", "symbolic", "offline", "skills"]
+icon: "route"
 ---
 
 Arka 将每个请求都通过一个分层管道进行路由。大多数请求根本不会触及 LLM —— `config.fish` 中的符号规则可离线匹配 120+ 个技能模式。

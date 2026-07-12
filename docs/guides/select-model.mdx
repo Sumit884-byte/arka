@@ -2,6 +2,7 @@
 title: "Hardware-aware model selection"
 description: "Probe your CPU, RAM, GPU, and disk to recommend per-task LLM models — then optionally apply them to ai-skill-model profiles."
 keywords: ["llm", "model", "hardware", "ollama"]
+icon: "microchip"
 ---
 
 The model advisor probes your machine and recommends **per-task LLM models** for Arka's skill profiles (`route`, `chat`, `summarize`, etc.).
@@ -28,12 +29,12 @@ select_model probe              # hardware snapshot only
 ## Hardware tiers
 
 | Tier | Typical hardware | Strategy |
-| ---- | ---------------- | -------- |
+| --- | --- | --- |
 | `minimal` | Low RAM, no GPU | Cloud-only, tiny/fast models |
 | `cloud_light` | Laptop, no local LLM | Fast cloud APIs |
 | `balanced` | 8–16 GB RAM | Cloud primary, optional small local |
-| `local_capable` | 16+ GB RAM, GPU | Mix Ollama + cloud for heavy tasks |
-| `local_heavy` | 32+ GB RAM, strong GPU | Prefer local Ollama models |
+| `local_capable` | 16\+ GB RAM, GPU | Mix Ollama \+ cloud for heavy tasks |
+| `local_heavy` | 32\+ GB RAM, strong GPU | Prefer local Ollama models |
 
 The advisor checks CPU cores, RAM, GPU (CUDA/MPS/Metal), disk space, battery status, and installed Ollama models.
 
