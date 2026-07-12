@@ -49,6 +49,7 @@ def test_list_tool_definitions_schema():
     assert "arka_jsonkit" in names
     assert "arka_repo_health" in names
     assert "arka_agent_hub" in names
+    assert "arka_team_run" in names
     for tool in tools:
         assert tool["name"]
         assert tool["description"]
@@ -1119,6 +1120,23 @@ def test_handle_arka_disk_usage(monkeypatch):
     payload = json.loads(_handle_arka_disk({"action": "usage"}))
     assert payload["pct"] == "40%"
     assert payload["path"] == "/tmp/home"
+
+
+def test_handle_arka_disk_breakdown(monkeypatch):
+    from arka.core import disk as disk_mod
+    from arka.integrations.mcp_server import _handle_arka_disk
+
+    monkeypatch.setattr(
+        disk_mod,
+        "breakdown_payload",
+        lambda path=None: {
+            "home": "/tmp/home",
+            "categories": [{"name": "Downloads", "bytes": 1024}],
+        },
+    )
+    payload = json.loads(_handle_arka_disk({"action": "breakdown"}))
+    assert payload["home"] == "/tmp/home"
+    assert payload["categories"][0]["name"] == "Downloads"
 
 
 def test_handle_arka_repo_health_scan(tmp_path):
