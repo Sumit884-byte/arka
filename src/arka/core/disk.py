@@ -230,6 +230,53 @@ def category_sizes(home: Path) -> tuple[dict[str, int], dict[str, list[str]], li
     return totals, paths, notes
 
 
+def usage_payload(root: Path | str | None = None) -> dict[str, object]:
+    """Fast disk usage summary for MCP / automation clients."""
+    home = (Path(root) if root else HOME).expanduser()
+    if not home.exists():
+        home = HOME
+    home = home.resolve()
+    total, used, avail, pct, mount = df_summary(home)
+    return {
+        "path": str(home),
+        "mount": mount,
+        "total": total,
+        "used": used,
+        "avail": avail,
+        "pct": pct,
+    }
+
+
+def breakdown_payload(root: Path | str | None = None) -> dict[str, object]:
+    """Category disk breakdown for MCP / automation clients."""
+    data = collect_breakdown(Path(root) if root else None)
+    categories = [
+        {
+            "category": label,
+            "bytes": size,
+            "human": fmt_size(size),
+            "paths": data.paths.get(label, []),
+        }
+        for label, size in sorted(data.totals.items(), key=lambda item: -item[1])
+    ]
+    return {
+        "home": str(data.home),
+        "mount": data.mount,
+        "total": data.total,
+        "used": data.used,
+        "avail": data.avail,
+        "pct": data.pct,
+        "scanned_at": data.scanned_at,
+        "categories": categories,
+        "notes": data.notes,
+        "downloads_by_type": {
+            label: {"bytes": size, "human": fmt_size(size)}
+            for label, size in sorted(data.downloads_ext.items(), key=lambda item: -item[1])
+            if size > 0
+        },
+    }
+
+
 def collect_breakdown(root: Path | None = None) -> BreakdownData:
     home = (root or HOME).expanduser()
     if not home.exists():

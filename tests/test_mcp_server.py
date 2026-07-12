@@ -15,7 +15,7 @@ def test_list_tool_definitions_schema():
 
     tools = list_tool_definitions()
     names = list_tool_names()
-    assert len(tools) == len(names) == 20
+    assert len(tools) == len(names) == 21
     assert "arka_ask" in names
     assert "arka_recall" in names
     assert "arka_heartbeat" in names
@@ -30,6 +30,7 @@ def test_list_tool_definitions_schema():
     assert "arka_remind" in names
     assert "arka_bookmarks" in names
     assert "arka_docker" in names
+    assert "arka_disk" in names
     assert "arka_repo_health" in names
     assert "arka_agent_hub" in names
     for tool in tools:
@@ -114,7 +115,7 @@ def test_mcp_server_stdio_roundtrip():
     server = ArkaMcpServer(stdin=inp, stdout=out)
     response = server.process_line(inp.getvalue().strip())
     assert response is not None
-    assert len(response["result"]["tools"]) == 20
+    assert len(response["result"]["tools"]) == 21
 
 
 def test_install_config_snippet():
@@ -620,6 +621,27 @@ def test_handle_arka_docker_health(monkeypatch):
     assert ps["containers"][0]["name"] == "api"
 
 
+def test_handle_arka_disk_usage(monkeypatch):
+    from arka.core import disk as disk_mod
+    from arka.integrations.mcp_server import _handle_arka_disk
+
+    monkeypatch.setattr(
+        disk_mod,
+        "usage_payload",
+        lambda path=None: {
+            "path": "/tmp/home",
+            "mount": "/",
+            "total": "500G",
+            "used": "200G",
+            "avail": "300G",
+            "pct": "40%",
+        },
+    )
+    payload = json.loads(_handle_arka_disk({"action": "usage"}))
+    assert payload["pct"] == "40%"
+    assert payload["path"] == "/tmp/home"
+
+
 def test_handle_arka_repo_health_scan(tmp_path):
     from arka.integrations.mcp_server import _handle_arka_repo_health
 
@@ -665,6 +687,7 @@ def test_doctor_spawns_client(monkeypatch):
                 "arka_remind",
                 "arka_bookmarks",
                 "arka_docker",
+                "arka_disk",
                 "arka_repo_health",
                 "arka_agent_hub",
                 "arka_team_run",

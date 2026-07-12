@@ -580,6 +580,23 @@ def _handle_arka_docker(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"docker_status unavailable: {exc}") from exc
 
 
+def _handle_arka_disk(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "usage").strip().lower()
+    try:
+        from arka.core import disk as disk_mod
+
+        path = str(arguments.get("path") or arguments.get("root") or "").strip() or None
+        if action == "usage":
+            return json.dumps(disk_mod.usage_payload(path), indent=2)
+        if action in ("breakdown", "categories"):
+            return json.dumps(disk_mod.breakdown_payload(path), indent=2)
+        raise ValueError("action must be usage or breakdown")
+    except ValueError:
+        raise
+    except ImportError as exc:
+        raise RuntimeError(f"disk unavailable: {exc}") from exc
+
+
 def _handle_arka_repo_health(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "scan").strip().lower()
     try:
@@ -1198,6 +1215,29 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_docker,
+        ),
+        ArkaMcpTool(
+            name="arka_disk",
+            description=(
+                "Disk space — quick usage summary or home-folder breakdown by category "
+                "(videos, downloads, cache, etc.)."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["usage", "breakdown"],
+                        "default": "usage",
+                        "description": "usage: df summary; breakdown: category scan",
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "Optional path to measure (default: home directory)",
+                    },
+                },
+            },
+            handler=_handle_arka_disk,
         ),
         ArkaMcpTool(
             name="arka_repo_health",
