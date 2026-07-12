@@ -15,7 +15,7 @@ def test_list_tool_definitions_schema():
 
     tools = list_tool_definitions()
     names = list_tool_names()
-    assert len(tools) == len(names) == 34
+    assert len(tools) == len(names) == 35
     assert "arka_ask" in names
     assert "arka_recall" in names
     assert "arka_heartbeat" in names
@@ -44,6 +44,7 @@ def test_list_tool_definitions_schema():
     assert "arka_textkit" in names
     assert "arka_spotify" in names
     assert "arka_password" in names
+    assert "arka_urlkit" in names
     assert "arka_repo_health" in names
     assert "arka_agent_hub" in names
     for tool in tools:
@@ -128,7 +129,7 @@ def test_mcp_server_stdio_roundtrip():
     server = ArkaMcpServer(stdin=inp, stdout=out)
     response = server.process_line(inp.getvalue().strip())
     assert response is not None
-    assert len(response["result"]["tools"]) == 34
+    assert len(response["result"]["tools"]) == 35
 
 
 def test_install_config_snippet():
@@ -634,6 +635,26 @@ def test_handle_arka_docker_health(monkeypatch):
     assert ps["containers"][0]["name"] == "api"
 
 
+def test_handle_arka_urlkit_parse(monkeypatch):
+    from arka.core import urlkit as uk
+    from arka.integrations.mcp_server import _handle_arka_urlkit
+
+    monkeypatch.setattr(
+        uk,
+        "parse_payload",
+        lambda url: {"ok": True, "input": url, "host": "example.com", "path": "/a"},
+    )
+    monkeypatch.setattr(
+        uk,
+        "slugify_payload",
+        lambda text, max_length=80: {"ok": True, "input": text, "slug": "hello-world", "length": 11},
+    )
+    parsed = json.loads(_handle_arka_urlkit({"action": "parse", "url": "https://example.com/a"}))
+    assert parsed["host"] == "example.com"
+    slug = json.loads(_handle_arka_urlkit({"action": "slugify", "text": "Hello World"}))
+    assert slug["slug"] == "hello-world"
+
+
 def test_handle_arka_password_generate(monkeypatch):
     from arka.integrations import password_vault as vault
     from arka.integrations.mcp_server import _handle_arka_password
@@ -1101,6 +1122,7 @@ def test_doctor_spawns_client(monkeypatch):
                 "arka_textkit",
                 "arka_spotify",
                 "arka_password",
+                "arka_urlkit",
                 "arka_repo_health",
                 "arka_agent_hub",
                 "arka_team_run",

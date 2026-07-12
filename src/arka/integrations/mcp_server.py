@@ -580,6 +580,34 @@ def _handle_arka_docker(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"docker_status unavailable: {exc}") from exc
 
 
+def _handle_arka_urlkit(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "parse").strip().lower()
+    try:
+        from arka.core import urlkit as uk
+
+        if action == "parse":
+            url = str(arguments.get("url") or arguments.get("text") or "").strip()
+            return json.dumps(uk.parse_payload(url), indent=2)
+        if action == "normalize":
+            url = str(arguments.get("url") or arguments.get("text") or "").strip()
+            drop_fragment = arguments.get("drop_fragment")
+            if drop_fragment is None:
+                drop_fragment = True
+            return json.dumps(
+                uk.normalize_payload(url, drop_fragment=bool(drop_fragment)),
+                indent=2,
+            )
+        if action == "slugify":
+            text = str(arguments.get("text") or arguments.get("url") or "").strip()
+            max_length = int(arguments.get("max_length") or 80)
+            return json.dumps(uk.slugify_payload(text, max_length=max_length), indent=2)
+        raise ValueError("action must be parse, normalize, or slugify")
+    except ValueError:
+        raise
+    except ImportError as exc:
+        raise RuntimeError(f"urlkit unavailable: {exc}") from exc
+
+
 def _handle_arka_password(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "generate").strip().lower()
     try:
@@ -1538,6 +1566,37 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_docker,
+        ),
+        ArkaMcpTool(
+            name="arka_urlkit",
+            description=(
+                "URL helpers — parse components, normalize a URL, or slugify text "
+                "for paths/filenames (offline)."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["parse", "normalize", "slugify"],
+                        "default": "parse",
+                        "description": "parse, normalize, or slugify",
+                    },
+                    "url": {"type": "string", "description": "URL for parse/normalize"},
+                    "text": {"type": "string", "description": "Text for slugify (or URL alias)"},
+                    "drop_fragment": {
+                        "type": "boolean",
+                        "description": "Drop #fragment when normalizing",
+                        "default": True,
+                    },
+                    "max_length": {
+                        "type": "integer",
+                        "description": "Max slug length",
+                        "default": 80,
+                    },
+                },
+            },
+            handler=_handle_arka_urlkit,
         ),
         ArkaMcpTool(
             name="arka_password",
