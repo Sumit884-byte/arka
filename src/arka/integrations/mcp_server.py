@@ -580,6 +580,26 @@ def _handle_arka_docker(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"docker_status unavailable: {exc}") from exc
 
 
+def _handle_arka_spotify(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "search").strip().lower()
+    try:
+        from arka.integrations import spotify as spotify_mod
+
+        if action == "search":
+            query = str(
+                arguments.get("query")
+                or arguments.get("text")
+                or arguments.get("q")
+                or ""
+            ).strip()
+            return json.dumps(spotify_mod.search_payload(query), indent=2)
+        raise ValueError("action must be search")
+    except ValueError:
+        raise
+    except ImportError as exc:
+        raise RuntimeError(f"spotify unavailable: {exc}") from exc
+
+
 def _handle_arka_textkit(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "uuid").strip().lower()
     try:
@@ -1497,6 +1517,29 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_docker,
+        ),
+        ArkaMcpTool(
+            name="arka_spotify",
+            description=(
+                "Spotify search — resolve a song query to track id, URI, and URL "
+                "(search only; does not start playback)."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["search"],
+                        "default": "search",
+                        "description": "search: resolve query to a track",
+                    },
+                    "query": {
+                        "type": "string",
+                        "description": "Song or artist query",
+                    },
+                },
+            },
+            handler=_handle_arka_spotify,
         ),
         ArkaMcpTool(
             name="arka_textkit",

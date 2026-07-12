@@ -236,6 +236,39 @@ def _track_title(track_id: str) -> tuple[str, str]:
         return "", ""
 
 
+
+def search_payload(query: str) -> dict[str, object]:
+    """Structured Spotify track search for MCP / automation clients."""
+    q = (query or "").strip()
+    if not q:
+        raise ValueError("query is required")
+    hit = search_track(q)
+    if not hit:
+        return {
+            "ok": False,
+            "query": q,
+            "found": False,
+            "track": None,
+            "error": "No match",
+        }
+    track_id = str(hit.get("id") or "")
+    uri = str(hit.get("uri") or (f"spotify:track:{track_id}" if track_id else ""))
+    web_url = _spotify_web_url(uri) if uri else ""
+    return {
+        "ok": True,
+        "query": q,
+        "found": True,
+        "track": {
+            "id": track_id,
+            "name": hit.get("name") or "",
+            "artist": hit.get("artist") or "",
+            "uri": uri,
+            "url": web_url,
+        },
+        "error": None,
+    }
+
+
 def search_track(query: str) -> dict | None:
     """Resolve a song query to Spotify track metadata."""
     query = _normalize_query(query)
