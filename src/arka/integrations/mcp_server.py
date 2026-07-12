@@ -146,17 +146,20 @@ def _handle_arka_heartbeat(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "status").strip().lower()
     activity = str(arguments.get("activity") or "mcp.ping").strip()
     try:
-        from arka.integrations.heartbeat import ping, status
+        from arka.integrations.heartbeat import history, ping, status
 
         if action == "ping":
             ping(activity, source="mcp")
             return f"Heartbeat ping: {activity}"
+        if action == "history":
+            limit = int(arguments.get("limit") or 20)
+            return json.dumps(history(limit=max(1, min(limit, 100))), indent=2)
         if action == "status":
             buf = io.StringIO()
             with contextlib.redirect_stdout(buf):
                 status(json_out=bool(arguments.get("json")))
             return buf.getvalue().strip() or "Heartbeat status unavailable"
-        raise ValueError("action must be ping or status")
+        raise ValueError("action must be ping, status, or history")
     except ImportError as exc:
         raise RuntimeError(f"heartbeat unavailable: {exc}") from exc
 
@@ -500,20 +503,25 @@ def _build_tools() -> list[ArkaMcpTool]:
         ),
         ArkaMcpTool(
             name="arka_heartbeat",
-            description="Ping or read Arka agent heartbeat — routines, memory, and channel health (OpenClaw layer).",
+            description="OpenClaw-style agent heartbeat — ping, status, or recent activity history.",
             input_schema={
                 "type": "object",
                 "properties": {
                     "action": {
                         "type": "string",
-                        "enum": ["status", "ping"],
+                        "enum": ["status", "ping", "history"],
                         "default": "status",
-                        "description": "status: read health snapshot; ping: record activity",
+                        "description": "status snapshot, ping activity, or recent history",
                     },
                     "activity": {
                         "type": "string",
                         "description": "Activity label when action=ping",
                         "default": "mcp.ping",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max events when action=history",
+                        "default": 20,
                     },
                     "json": {
                         "type": "boolean",

@@ -174,6 +174,12 @@ def test_handle_arka_heartbeat_ping_and_status(tmp_path, monkeypatch):
     data = json.loads(json_text)
     assert data.get("last_activity") == "test.mcp"
 
+    _handle_arka_heartbeat({"action": "ping", "activity": "test.second"})
+    hist = json.loads(_handle_arka_heartbeat({"action": "history", "limit": 10}))
+    assert len(hist) >= 2
+    assert hist[-1]["activity"] == "test.second"
+    assert hist[-1]["source"] == "mcp"
+
 
 def test_handle_arka_sessions_list_and_context(tmp_path, monkeypatch):
     from arka.integrations.mcp_server import _handle_arka_sessions

@@ -192,6 +192,22 @@ class HeartbeatTests(unittest.TestCase):
                 data = json.loads(path.read_text(encoding="utf-8"))
                 self.assertEqual(data["last_activity"], "test.ping")
                 self.assertEqual(data["source"], "test")
+                self.assertEqual(len(data.get("history") or []), 1)
+                self.assertEqual(data["history"][0]["activity"], "test.ping")
+
+    def test_history_trims_and_returns_recent(self) -> None:
+        from arka.integrations import heartbeat
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "heartbeat.json"
+            with mock.patch.object(heartbeat, "HEARTBEAT_FILE", path):
+                with mock.patch.dict(os.environ, {"HEARTBEAT_HISTORY": "3"}):
+                    for i in range(5):
+                        heartbeat.ping(f"act.{i}", source="test")
+                    rows = heartbeat.history(limit=10)
+                    self.assertEqual(len(rows), 3)
+                    self.assertEqual(rows[0]["activity"], "act.2")
+                    self.assertEqual(rows[-1]["activity"], "act.4")
 
 
 if __name__ == "__main__":

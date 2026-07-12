@@ -24,6 +24,14 @@ except ImportError:
 
 
 HEARTBEAT_FILE = cache_dir() / "heartbeat.json"
+_DEFAULT_HISTORY = 20
+
+
+def _history_limit() -> int:
+    try:
+        return max(1, min(int(os.environ.get("HEARTBEAT_HISTORY", str(_DEFAULT_HISTORY))), 100))
+    except ValueError:
+        return _DEFAULT_HISTORY
 
 
 def _load() -> dict:
@@ -40,6 +48,21 @@ def _load() -> dict:
 def _save(data: dict) -> None:
     HEARTBEAT_FILE.parent.mkdir(parents=True, exist_ok=True)
     HEARTBEAT_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
+def _append_history(data: dict, *, activity: str, source: str, ts: float, when: str) -> None:
+    history = data.get("history")
+    if not isinstance(history, list):
+        history = []
+    history.append(
+        {
+            "ts": ts,
+            "when": when,
+            "activity": activity,
+            "source": source,
+        }
+    )
+    data["history"] = history[-_history_limit() :]
 
 
 def _routine_count() -> int:
@@ -106,10 +129,11 @@ def _memory_stats() -> dict[str, int]:
 def ping(activity: str, *, source: str = "arka") -> None:
     data = _load()
     now = time.time()
+    when = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now))
     data.update(
         {
             "ts": now,
-            "when": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now)),
+            "when": when,
             "last_activity": activity,
             "source": source,
             "agent": os.environ.get("AGENT_NAME", "arka"),
@@ -124,7 +148,30 @@ def ping(activity: str, *, source: str = "arka") -> None:
             "hermes": _channel_stats(),
         }
     )
+    _append_history(data, activity=activity, source=source, ts=now, when=when)
     _save(data)
+
+
+def history(*, limit: int = 20) -> list[dict]:
+    """Return recent heartbeat activity events (newest last)."""
+    data = _load()
+    rows = data.get("history")
+    if not isinstance(rows, list):
+        return []
+    clean: list[dict] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        clean.append(
+            {
+                "ts": row.get("ts"),
+                "when": row.get("when", ""),
+                "activity": row.get("activity", ""),
+                "source": row.get("source", ""),
+            }
+        )
+    limit = max(1, min(int(limit or 20), 100))
+    return clean[-limit:]
 
 
 def status(*, json_out: bool = False) -> int:
@@ -156,6 +203,11 @@ def status(*, json_out: bool = False) -> int:
         f"subagents_running={channels.get('subagents_running', 0)} "
         f"subagents_total={channels.get('subagents_total', 0)}"
     )
+    recent = history(limit=5)
+    if recent:
+        print(f"Recent activity ({len(recent)}):")
+        for row in recent:
+            print(f"  {row.get('when', '?')}  {row.get('activity', '?')}  ({row.get('source', '?')})")
     return 0
 
 
@@ -170,6 +222,10 @@ def main() -> int:
     p = sub.add_parser("status")
     p.add_argument("--json", action="store_true")
 
+    p = sub.add_parser("history")
+    p.add_argument("--limit", type=int, default=20)
+    p.add_argument("--json", action="store_true")
+
     args = parser.parse_args()
     if args.cmd == "ping":
         ping(args.activity, source="cli")
@@ -177,6 +233,17 @@ def main() -> int:
         return 0
     if args.cmd == "status":
         return status(json_out=args.json)
+    if args.cmd == "history":
+        rows = history(limit=args.limit)
+        if args.json:
+            print(json.dumps(rows, indent=2))
+            return 0
+        if not rows:
+            print("No heartbeat history yet.")
+            return 0
+        for row in rows:
+            print(f"{row.get('when', '?')}  {row.get('activity', '?')}  ({row.get('source', '?')})")
+        return 0
     return 1
 
 

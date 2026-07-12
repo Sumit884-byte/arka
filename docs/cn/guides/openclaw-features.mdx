@@ -41,9 +41,11 @@ session_memory status
 ```bash
 heartbeat status
 heartbeat ping goal.completed
+heartbeat history
+heartbeat history --json --limit 10
 ```
 
-心跳数据写入 `~/.cache/fish-agent/heartbeat.json`。会话记忆和例程等子系统在活动时会自动调用 `ping()`。
+心跳数据写入 `~/.cache/fish-agent/heartbeat.json`。每次 `ping()` 会追加到有界的 `history` 环形缓冲（默认 20 条；可用 `HEARTBEAT_HISTORY` 覆盖）。会话记忆和例程等子系统在活动时会自动调用 `ping()`。
 
 ## 技能清单门禁
 
