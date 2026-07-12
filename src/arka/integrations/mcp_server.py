@@ -580,6 +580,34 @@ def _handle_arka_docker(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"docker_status unavailable: {exc}") from exc
 
 
+def _handle_arka_persona(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "list").strip().lower()
+    try:
+        from arka.agent.personas import io as persona_io
+
+        if action == "list":
+            include_templates = bool(arguments.get("include_templates", False))
+            return json.dumps(
+                persona_io.list_payload(include_templates=include_templates),
+                indent=2,
+            )
+        if action == "show":
+            name = str(
+                arguments.get("name")
+                or arguments.get("persona")
+                or arguments.get("id")
+                or ""
+            ).strip()
+            return json.dumps(persona_io.show_payload(name), indent=2)
+        raise ValueError("action must be list or show")
+    except ValueError:
+        raise
+    except FileNotFoundError as exc:
+        raise ValueError(str(exc)) from exc
+    except ImportError as exc:
+        raise RuntimeError(f"personas unavailable: {exc}") from exc
+
+
 def _handle_arka_github(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "activity").strip().lower()
     try:
@@ -1387,6 +1415,34 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_docker,
+        ),
+        ArkaMcpTool(
+            name="arka_persona",
+            description=(
+                "Personas — list installed persona configs or show one persona's "
+                "metadata and system prompt (read-only)."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["list", "show"],
+                        "default": "list",
+                        "description": "list: inventory; show: details for one persona",
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "Persona slug when action=show",
+                    },
+                    "include_templates": {
+                        "type": "boolean",
+                        "description": "Include bundled templates when action=list",
+                        "default": False,
+                    },
+                },
+            },
+            handler=_handle_arka_persona,
         ),
         ArkaMcpTool(
             name="arka_github",

@@ -187,6 +187,59 @@ def resolve_persona(name: str) -> Persona:
     return _maybe_refresh_bundled_elon(persona)
 
 
+
+def list_payload(*, include_templates: bool = False) -> dict[str, object]:
+    """Structured persona inventory for MCP / automation clients."""
+    names = list_personas(include_templates=include_templates)
+    rows: list[dict[str, object]] = []
+    for name in names:
+        try:
+            persona = load_persona(name)
+            rows.append(
+                {
+                    "name": persona.name,
+                    "display_name": persona.display_name or persona.name,
+                    "description": persona.description,
+                    "voice": persona.voice or "",
+                    "source": persona.source or "",
+                }
+            )
+        except (ValueError, FileNotFoundError) as exc:
+            rows.append(
+                {
+                    "name": name,
+                    "display_name": name,
+                    "description": "",
+                    "voice": "",
+                    "source": "",
+                    "error": str(exc),
+                }
+            )
+    return {
+        "personas_dir": str(personas_dir()),
+        "count": len(rows),
+        "personas": rows,
+    }
+
+
+def show_payload(name: str) -> dict[str, object]:
+    """Structured persona details for MCP clients."""
+    slug = (name or "").strip()
+    if not slug:
+        raise ValueError("name is required")
+    persona = resolve_persona(slug)
+    return {
+        "name": persona.name,
+        "display_name": persona.display_name or persona.name,
+        "description": persona.description,
+        "disclaimer": persona.disclaimer,
+        "voice": persona.voice or "",
+        "source": persona.source or "",
+        "system_prompt": persona.system_prompt,
+        "system_prompt_chars": len(persona.system_prompt or ""),
+    }
+
+
 def format_persona_list() -> str:
     names = list_personas()
     if not names:
