@@ -31,7 +31,12 @@ docs/
 ├── guides/            # Feature guides
 ├── reference/         # Configuration, aliases, troubleshooting
 ├── logo/
-└── favicon.svg
+│   ├── icon.png       # Brand mark (terminal prompt + figure)
+│   ├── mark.svg       # Vector mark for scaling
+│   ├── light.svg      # Navbar logo (light theme)
+│   └── dark.svg       # Navbar logo (dark theme)
+├── favicon.svg
+└── favicon.png
 ```
 
 ## Mintlify dashboard setup

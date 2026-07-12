@@ -1,5 +1,4 @@
-<svg width="100" height="28" viewBox="0 0 100 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect x="0" y="2" width="24" height="24" rx="6" fill="#6366F1"/>
-  <path d="M8 20L12 8L16 20M9.5 16H14.5" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-  <text x="32" y="20" font-family="Inter, ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="18" font-weight="600" fill="#09090B" letter-spacing="-0.02em">Arka</text>
+<svg width="108" height="32" viewBox="0 0 108 32" fill="none" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <image x="0" y="2" width="28" height="28" href="icon.png" preserveAspectRatio="xMidYMid meet"/>
+  <text x="34" y="22" font-family="Inter, ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="18" font-weight="600" fill="#09090B" letter-spacing="-0.02em">Arka</text>
 </svg>
