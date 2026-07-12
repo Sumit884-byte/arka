@@ -14,12 +14,14 @@ def test_list_tool_definitions_schema():
 
     tools = list_tool_definitions()
     names = list_tool_names()
-    assert len(tools) == len(names) == 9
+    assert len(tools) == len(names) == 11
     assert "arka_ask" in names
     assert "arka_recall" in names
     assert "arka_heartbeat" in names
     assert "arka_sessions" in names
     assert "arka_routines" in names
+    assert "arka_session_memory" in names
+    assert "arka_subagent" in names
     for tool in tools:
         assert tool["name"]
         assert tool["description"]
@@ -102,7 +104,7 @@ def test_mcp_server_stdio_roundtrip():
     server = ArkaMcpServer(stdin=inp, stdout=out)
     response = server.process_line(inp.getvalue().strip())
     assert response is not None
-    assert len(response["result"]["tools"]) == 9
+    assert len(response["result"]["tools"]) == 11
 
 
 def test_install_config_snippet():
@@ -230,6 +232,52 @@ def test_handle_arka_routines_list(tmp_path, monkeypatch):
     assert enabled[0]["id"] == "morning"
 
 
+def test_handle_arka_session_memory(tmp_path, monkeypatch):
+    from arka.core import session_memory
+    from arka.integrations.mcp_server import _handle_arka_session_memory
+
+    monkeypatch.setattr(session_memory, "memory_root", lambda: tmp_path)
+    monkeypatch.setenv("SESSION_MEMORY", "1")
+
+    append_text = _handle_arka_session_memory(
+        {"action": "append", "text": "Prefers morning standups", "long_term": True}
+    )
+    assert "Session memory stored" in append_text
+
+    hits = json.loads(_handle_arka_session_memory({"action": "search", "query": "standup"}))
+    assert len(hits) >= 1
+    assert "standup" in hits[0]["text"].lower()
+
+    ctx = _handle_arka_session_memory({"action": "context", "goal": "standup"})
+    assert "standup" in ctx.lower()
+
+    status = json.loads(_handle_arka_session_memory({"action": "status"}))
+    assert status["enabled"] is True
+
+
+def test_handle_arka_subagent_spawn_and_list(tmp_path, monkeypatch):
+    from arka.integrations import subagent
+    from arka.integrations.mcp_server import _handle_arka_subagent
+
+    monkeypatch.setattr(subagent, "subagents_root", lambda: tmp_path)
+
+    with patch("arka.integrations.subagent._run_agent", return_value=("mcp subagent done", 0)):
+        payload = json.loads(
+            _handle_arka_subagent({"action": "spawn", "task": "summarize logs", "sync": True})
+        )
+    assert payload["status"] == "done"
+    assert "mcp subagent done" in payload.get("result", "")
+
+    listed = json.loads(_handle_arka_subagent({"action": "list", "limit": 5}))
+    assert len(listed) == 1
+    assert listed[0]["status"] == "done"
+
+    detail = json.loads(
+        _handle_arka_subagent({"action": "status", "agent_id": payload["id"]})
+    )
+    assert detail["task"] == "summarize logs"
+
+
 def test_doctor_spawns_client(monkeypatch):
     from arka.integrations.mcp_client import McpTool
     from arka.integrations.mcp_server import doctor
@@ -253,6 +301,8 @@ def test_doctor_spawns_client(monkeypatch):
                 "arka_heartbeat",
                 "arka_sessions",
                 "arka_routines",
+                "arka_session_memory",
+                "arka_subagent",
                 "arka_team_run",
             ]]
 

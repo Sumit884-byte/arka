@@ -202,6 +202,79 @@ def _handle_arka_routines(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"routines unavailable: {exc}") from exc
 
 
+def _handle_arka_session_memory(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "status").strip().lower()
+    try:
+        from arka.core.session_memory import append, context_for, search, status
+
+        if action == "append":
+            text = str(arguments.get("text") or "").strip()
+            if not text:
+                raise ValueError("text is required for append")
+            long_term = bool(arguments.get("long_term", False))
+            with contextlib.redirect_stdout(io.StringIO()):
+                code = append(text, long_term=long_term)
+            if code != 0:
+                raise RuntimeError("session memory append failed")
+            return f"Session memory stored: {text[:200]}"
+        if action == "search":
+            query = str(arguments.get("query") or arguments.get("goal") or "").strip()
+            limit = int(arguments.get("limit") or 8)
+            rows = search(query, limit=max(1, min(limit, 50)))
+            payload = [{"file": rel, "text": body} for rel, body in rows]
+            return json.dumps(payload, indent=2)
+        if action == "context":
+            goal = str(arguments.get("goal") or arguments.get("query") or "").strip()
+            if not goal:
+                raise ValueError("goal is required for context")
+            limit_chars = int(arguments.get("limit_chars") or 2500)
+            text = context_for(goal, limit_chars=max(200, limit_chars))
+            return text or "(no session memory context)"
+        if action == "status":
+            return json.dumps(status(), indent=2)
+        raise ValueError("action must be append, search, context, or status")
+    except ImportError as exc:
+        raise RuntimeError(f"session_memory unavailable: {exc}") from exc
+
+
+def _handle_arka_subagent(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "list").strip().lower()
+    try:
+        from arka.integrations.subagent import agent_status, list_agents, spawn, status_summary
+
+        if action == "spawn":
+            task = str(arguments.get("task") or "").strip()
+            if not task:
+                raise ValueError("task is required for spawn")
+            sync = bool(arguments.get("sync", False))
+            session_channel = str(arguments.get("session_channel") or "").strip()
+            session_chat_id = str(arguments.get("session_chat_id") or "").strip()
+            data, err = spawn(
+                task,
+                session_channel=session_channel,
+                session_chat_id=session_chat_id,
+                background=not sync,
+            )
+            if err:
+                raise RuntimeError(err)
+            assert data is not None
+            return json.dumps(data, indent=2)
+        if action == "list":
+            limit = int(arguments.get("limit") or 20)
+            return json.dumps(list_agents(limit=max(1, min(limit, 100))), indent=2)
+        if action == "status":
+            agent_id = str(arguments.get("agent_id") or arguments.get("id") or "").strip()
+            if agent_id:
+                data = agent_status(agent_id)
+                if not data:
+                    raise ValueError(f"unknown sub-agent: {agent_id}")
+                return json.dumps(data, indent=2)
+            return json.dumps(status_summary(), indent=2)
+        raise ValueError("action must be spawn, list, or status")
+    except ImportError as exc:
+        raise RuntimeError(f"subagent unavailable: {exc}") from exc
+
+
 def _handle_arka_team_run(arguments: dict[str, Any]) -> str:
     team = str(arguments.get("team") or arguments.get("name") or "").strip()
     task = str(arguments.get("task") or "").strip()
@@ -393,6 +466,91 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_routines,
+        ),
+        ArkaMcpTool(
+            name="arka_session_memory",
+            description="OpenClaw-style markdown session memory — append, search, context, or status.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["append", "search", "context", "status"],
+                        "default": "status",
+                        "description": "append note, search notes, context for goal, or hub status",
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "Note text when action=append",
+                    },
+                    "goal": {
+                        "type": "string",
+                        "description": "Recall goal when action=context (alias: query)",
+                    },
+                    "query": {
+                        "type": "string",
+                        "description": "Search query when action=search",
+                    },
+                    "long_term": {
+                        "type": "boolean",
+                        "description": "Also append to MEMORY.md when action=append",
+                        "default": False,
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max hits when action=search",
+                        "default": 8,
+                    },
+                    "limit_chars": {
+                        "type": "integer",
+                        "description": "Max characters when action=context",
+                        "default": 2500,
+                    },
+                },
+            },
+            handler=_handle_arka_session_memory,
+        ),
+        ArkaMcpTool(
+            name="arka_subagent",
+            description="Hermes-style sub-agent delegation — spawn background tasks, list, or inspect status.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["spawn", "list", "status"],
+                        "default": "list",
+                        "description": "spawn task, list recent agents, or hub/agent status",
+                    },
+                    "task": {
+                        "type": "string",
+                        "description": "Task prompt when action=spawn",
+                    },
+                    "agent_id": {
+                        "type": "string",
+                        "description": "Sub-agent id when action=status",
+                    },
+                    "sync": {
+                        "type": "boolean",
+                        "description": "Wait for completion when action=spawn (default: background)",
+                        "default": False,
+                    },
+                    "session_channel": {
+                        "type": "string",
+                        "description": "Optional channel for session context + result push",
+                    },
+                    "session_chat_id": {
+                        "type": "string",
+                        "description": "Chat id within session_channel",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max agents when action=list",
+                        "default": 20,
+                    },
+                },
+            },
+            handler=_handle_arka_subagent,
         ),
         ArkaMcpTool(
             name="arka_team_run",
