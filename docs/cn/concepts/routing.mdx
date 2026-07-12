@@ -64,7 +64,7 @@ Arka 将每个请求都通过一个分层管道进行路由。大多数请求根
 | ---- | -------- |
 | `symbolic` | 先离线规则，必要时调用 LLM（默认） |
 | `ai` | 优先使用 LLM 路由 |
-| `symbolic_only` | 永远不调用 LLM 进行路由 |
+| `symbolic_only` | 永远不调用 LLM 进行路由；Python 符号规则优先于 fish，并忽略 fish 的 LLM 预览 |
 | `ai_only` | 始终使用 LLM 进行路由 |
 
 ```env
