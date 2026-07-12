@@ -1187,6 +1187,32 @@ def format_agent_list() -> str:
     return "\n".join(lines)
 
 
+def status_payload() -> dict[str, Any]:
+    """Structured Agent Hub status for MCP / automation clients."""
+    registry = _load_agents_registry()
+    last_sync = registry.get("last_sync") or {}
+    return {
+        "hub": str(hub_dir()),
+        "mcp": str(hub_mcp_path()),
+        "memory": str(hub_memory_dir()),
+        "skills": str(hub_skills_dir() / "manifest.json"),
+        "registry": str(hub_agents_json_path()),
+        "launch_env": str(hub_launch_env_path()),
+        "context_md": str(hub_context_md_path()),
+        "agent_count": len(AGENTS),
+        "last_sync": last_sync,
+        "ollama_available": ollama_available(),
+        "agents": [
+            {
+                "key": key,
+                "name": meta.get("name", key),
+                "ollama_launch": meta.get("ollama_launch", key),
+            }
+            for key, meta in list_agents()
+        ],
+    }
+
+
 def format_status() -> str:
     registry = _load_agents_registry()
     last_sync = registry.get("last_sync") or {}

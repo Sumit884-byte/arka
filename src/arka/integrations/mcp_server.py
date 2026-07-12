@@ -513,6 +513,36 @@ def _handle_arka_remind(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"remind unavailable: {exc}") from exc
 
 
+def _handle_arka_agent_hub(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "status").strip().lower()
+    try:
+        from arka.integrations import agent_hub
+
+        if action == "status":
+            return json.dumps(agent_hub.status_payload(), indent=2)
+        if action == "adapters":
+            return json.dumps(agent_hub.list_adapters(), indent=2)
+        if action == "detect":
+            return json.dumps(agent_hub.detect_agents(), indent=2)
+        if action == "doctor":
+            return json.dumps(agent_hub.doctor(), indent=2)
+        if action in ("list", "agents"):
+            return json.dumps(
+                [
+                    {
+                        "key": key,
+                        "name": meta.get("name", key),
+                        "ollama_launch": meta.get("ollama_launch", key),
+                    }
+                    for key, meta in agent_hub.list_agents()
+                ],
+                indent=2,
+            )
+        raise ValueError("action must be status, adapters, detect, doctor, or list")
+    except ImportError as exc:
+        raise RuntimeError(f"agent_hub unavailable: {exc}") from exc
+
+
 def _handle_arka_team_run(arguments: dict[str, Any]) -> str:
     team = str(arguments.get("team") or arguments.get("name") or "").strip()
     task = str(arguments.get("task") or "").strip()
@@ -995,6 +1025,31 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_remind,
+        ),
+        ArkaMcpTool(
+            name="arka_agent_hub",
+            description=(
+                "Agent Hub inspection — status, adapters, detect installed agents, "
+                "or doctor checks (Hermes/OpenClaw multi-agent unification)."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["status", "adapters", "detect", "doctor", "list"],
+                        "default": "status",
+                        "description": (
+                            "status: hub paths and sync timestamps; "
+                            "adapters: MCP merge status per agent; "
+                            "detect: which agent configs exist; "
+                            "doctor: health checks; "
+                            "list: registered launch agents"
+                        ),
+                    },
+                },
+            },
+            handler=_handle_arka_agent_hub,
         ),
         ArkaMcpTool(
             name="arka_team_run",

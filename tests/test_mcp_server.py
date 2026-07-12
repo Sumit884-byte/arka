@@ -15,7 +15,7 @@ def test_list_tool_definitions_schema():
 
     tools = list_tool_definitions()
     names = list_tool_names()
-    assert len(tools) == len(names) == 16
+    assert len(tools) == len(names) == 17
     assert "arka_ask" in names
     assert "arka_recall" in names
     assert "arka_heartbeat" in names
@@ -28,6 +28,7 @@ def test_list_tool_definitions_schema():
     assert "arka_view_data" in names
     assert "arka_clipboard" in names
     assert "arka_remind" in names
+    assert "arka_agent_hub" in names
     for tool in tools:
         assert tool["name"]
         assert tool["description"]
@@ -110,7 +111,7 @@ def test_mcp_server_stdio_roundtrip():
     server = ArkaMcpServer(stdin=inp, stdout=out)
     response = server.process_line(inp.getvalue().strip())
     assert response is not None
-    assert len(response["result"]["tools"]) == 16
+    assert len(response["result"]["tools"]) == 17
 
 
 def test_install_config_snippet():
@@ -533,6 +534,21 @@ def test_handle_arka_view_data_preview():
     assert "\033[" not in payload["table"]
 
 
+def test_handle_arka_agent_hub_status(tmp_path, monkeypatch):
+    from arka.integrations import agent_hub
+    from arka.integrations.mcp_server import _handle_arka_agent_hub
+
+    monkeypatch.setattr(agent_hub, "hub_dir", lambda: tmp_path / "hub")
+    (tmp_path / "hub").mkdir()
+    payload = json.loads(_handle_arka_agent_hub({"action": "status"}))
+    assert payload["hub"] == str(tmp_path / "hub")
+    assert payload["agent_count"] >= 1
+    assert any(a["key"] for a in payload["agents"])
+
+    listed = json.loads(_handle_arka_agent_hub({"action": "list"}))
+    assert isinstance(listed, list) and listed
+
+
 def test_doctor_spawns_client(monkeypatch):
     from arka.integrations.mcp_client import McpTool
     from arka.integrations.mcp_server import doctor
@@ -563,6 +579,7 @@ def test_doctor_spawns_client(monkeypatch):
                 "arka_view_data",
                 "arka_clipboard",
                 "arka_remind",
+                "arka_agent_hub",
                 "arka_team_run",
             ]]
 
