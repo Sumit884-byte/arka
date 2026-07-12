@@ -14,7 +14,7 @@ def test_list_tool_definitions_schema():
 
     tools = list_tool_definitions()
     names = list_tool_names()
-    assert len(tools) == len(names) == 13
+    assert len(tools) == len(names) == 14
     assert "arka_ask" in names
     assert "arka_recall" in names
     assert "arka_heartbeat" in names
@@ -23,6 +23,7 @@ def test_list_tool_definitions_schema():
     assert "arka_session_memory" in names
     assert "arka_subagent" in names
     assert "arka_project_rules" in names
+    assert "arka_clipboard" in names
     assert "arka_remind" in names
     for tool in tools:
         assert tool["name"]
@@ -106,7 +107,7 @@ def test_mcp_server_stdio_roundtrip():
     server = ArkaMcpServer(stdin=inp, stdout=out)
     response = server.process_line(inp.getvalue().strip())
     assert response is not None
-    assert len(response["result"]["tools"]) == 13
+    assert len(response["result"]["tools"]) == 14
 
 
 def test_install_config_snippet():
@@ -405,6 +406,31 @@ def test_handle_arka_remind_add_list_cancel(tmp_path, monkeypatch):
     assert json.loads(_handle_arka_remind({"action": "list"})) == []
 
 
+def test_handle_arka_clipboard_save_list_get_clear(tmp_path, monkeypatch):
+    from arka.integrations import clipboard_history as ch
+    from arka.integrations.mcp_server import _handle_arka_clipboard
+
+    store = tmp_path / "clipboard_history.json"
+    monkeypatch.setattr(ch, "_store_path", lambda: store)
+
+    saved = json.loads(
+        _handle_arka_clipboard({"action": "save", "text": "paste me later"})
+    )
+    assert saved["index"] == 1
+    assert saved["duplicate"] is False
+
+    listed = json.loads(_handle_arka_clipboard({"action": "list"}))
+    assert len(listed) == 1
+    assert "paste me later" in listed[0]["preview"]
+
+    got = json.loads(_handle_arka_clipboard({"action": "get", "index": 1}))
+    assert got["text"] == "paste me later"
+
+    cleared = _handle_arka_clipboard({"action": "clear"})
+    assert "cleared" in cleared.lower()
+    assert json.loads(_handle_arka_clipboard({"action": "list"})) == []
+
+
 def test_doctor_spawns_client(monkeypatch):
     from arka.integrations.mcp_client import McpTool
     from arka.integrations.mcp_server import doctor
@@ -431,6 +457,7 @@ def test_doctor_spawns_client(monkeypatch):
                 "arka_session_memory",
                 "arka_subagent",
                 "arka_project_rules",
+                "arka_clipboard",
                 "arka_remind",
                 "arka_team_run",
             ]]

@@ -299,27 +299,111 @@ def wants_clipboard_history(text: str) -> bool:
     return False
 
 
-def cmd_save(_args: argparse.Namespace) -> int:
-    text = _read_clipboard().strip()
-    if not text:
-        print("Clipboard is empty or clipboard tools are unavailable.", file=sys.stderr)
-        return 1
+def list_entries(*, limit: int = 20) -> list[dict[str, object]]:
+    """Return structured clipboard history rows for MCP / programmatic use."""
     rows = _load()
-    if rows and rows[0].get("text") == text:
+    limit = max(1, min(int(limit or 20), _MAX_ENTRIES))
+    out: list[dict[str, object]] = []
+    for idx, row in enumerate(rows[:limit], start=1):
+        text = str(row.get("text") or "")
+        out.append(
+            {
+                "index": idx,
+                "preview": _preview(text, 100),
+                "chars": len(text),
+                "saved_at": row.get("saved_at", ""),
+            }
+        )
+    return out
+
+
+def save_entry(*, text: str | None = None) -> tuple[dict[str, object] | None, str | None]:
+    """Save clipboard (or provided text) into history. Returns (row, error)."""
+    body = (text if text is not None else _read_clipboard()).strip()
+    if not body:
+        return None, "clipboard empty or text required"
+    try:
+        from arka.core.security import sanitize_llm_context, verify_user_prompt
+
+        gate = verify_user_prompt(body)
+        if gate.status == "block":
+            return None, gate.reason
+        cleaned, _ = sanitize_llm_context(body)
+        body = (cleaned or body).strip()
+    except ImportError:
+        pass
+    if not body:
+        return None, "empty after sanitization"
+    rows = _load()
+    if rows and rows[0].get("text") == body:
+        return (
+            {
+                "index": 1,
+                "preview": _preview(body, 100),
+                "chars": len(body),
+                "saved_at": rows[0].get("saved_at", ""),
+                "duplicate": True,
+            },
+            None,
+        )
+    entry = {
+        "id": len(rows) + 1,
+        "text": body,
+        "preview": _preview(body),
+        "saved_at": _now_iso(),
+    }
+    rows.insert(0, entry)
+    _save(rows)
+    return (
+        {
+            "index": 1,
+            "preview": entry["preview"],
+            "chars": len(body),
+            "saved_at": entry["saved_at"],
+            "duplicate": False,
+        },
+        None,
+    )
+
+
+def get_entry(index: int) -> tuple[dict[str, object] | None, str | None]:
+    """Fetch a history entry by 1-based index (includes full text)."""
+    rows = _load()
+    try:
+        idx = int(index)
+    except (TypeError, ValueError):
+        return None, "index must be a number"
+    if idx < 1 or idx > len(rows):
+        return None, f"Invalid index {idx} (have {len(rows)} entries)"
+    row = rows[idx - 1]
+    text = str(row.get("text") or "")
+    return (
+        {
+            "index": idx,
+            "text": text,
+            "preview": _preview(text, 100),
+            "chars": len(text),
+            "saved_at": row.get("saved_at", ""),
+        },
+        None,
+    )
+
+
+def clear_entries() -> int:
+    _save([])
+    return 0
+
+
+def cmd_save(_args: argparse.Namespace) -> int:
+    row, err = save_entry()
+    if err or row is None:
+        print(err or "Clipboard is empty or clipboard tools are unavailable.", file=sys.stderr)
+        return 1
+    if row.get("duplicate"):
         print("Already saved (latest entry matches clipboard).")
         return 0
-    rows.insert(
-        0,
-        {
-            "id": len(rows) + 1,
-            "text": text,
-            "preview": _preview(text),
-            "saved_at": _now_iso(),
-        },
-    )
-    _save(rows)
-    print(f"Saved clipboard entry #1 ({len(text)} chars)")
-    print(_preview(text, 120))
+    print(f"Saved clipboard entry #1 ({row.get('chars')} chars)")
+    print(str(row.get("preview") or ""))
     return 0
 
 
@@ -339,21 +423,16 @@ def cmd_list(_args: argparse.Namespace) -> int:
 
 
 def cmd_paste(args: argparse.Namespace) -> int:
-    rows = _load()
-    try:
-        idx = int(args.index)
-    except ValueError:
-        print("Index must be a number", file=sys.stderr)
+    entry, err = get_entry(args.index)
+    if err or entry is None:
+        print(err or "entry not found", file=sys.stderr)
         return 1
-    if idx < 1 or idx > len(rows):
-        print(f"Invalid index {idx} (have {len(rows)} entries)", file=sys.stderr)
-        return 1
-    text = str(rows[idx - 1].get("text") or "")
+    text = str(entry.get("text") or "")
     if args.stdout:
         print(text, end="")
         return 0
     if _write_clipboard(text):
-        print(f"Restored entry #{idx} to clipboard ({len(text)} chars)")
+        print(f"Restored entry #{entry.get('index')} to clipboard ({len(text)} chars)")
         return 0
     print(text)
     print("(clipboard copy unavailable — printed above)", file=sys.stderr)
@@ -361,7 +440,7 @@ def cmd_paste(args: argparse.Namespace) -> int:
 
 
 def cmd_clear(_args: argparse.Namespace) -> int:
-    _save([])
+    clear_entries()
     print("Clipboard history cleared.")
     return 0
 

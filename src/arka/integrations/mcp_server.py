@@ -390,6 +390,40 @@ def _handle_arka_project_rules(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"project_rules unavailable: {exc}") from exc
 
 
+def _handle_arka_clipboard(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "list").strip().lower()
+    try:
+        from arka.integrations.clipboard_history import (
+            clear_entries,
+            get_entry,
+            list_entries,
+            save_entry,
+        )
+
+        if action == "list":
+            limit = int(arguments.get("limit") or 20)
+            return json.dumps(list_entries(limit=limit), indent=2)
+        if action == "save":
+            text = arguments.get("text")
+            text_arg = None if text is None else str(text)
+            row, err = save_entry(text=text_arg)
+            if err or row is None:
+                raise RuntimeError(err or "clipboard save failed")
+            return json.dumps(row, indent=2)
+        if action == "get":
+            index = arguments.get("index") or arguments.get("id") or 1
+            row, err = get_entry(int(index))
+            if err or row is None:
+                raise ValueError(err or "entry not found")
+            return json.dumps(row, indent=2)
+        if action == "clear":
+            clear_entries()
+            return "Clipboard history cleared"
+        raise ValueError("action must be list, save, get, or clear")
+    except ImportError as exc:
+        raise RuntimeError(f"clipboard_history unavailable: {exc}") from exc
+
+
 def _handle_arka_remind(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "list").strip().lower()
     try:
@@ -762,6 +796,36 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_project_rules,
+        ),
+        ArkaMcpTool(
+            name="arka_clipboard",
+            description="Clipboard history — list, save, get, or clear saved clips (Cursor-style pasteboard memory).",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["list", "save", "get", "clear"],
+                        "default": "list",
+                        "description": "list previews, save text/clipboard, get full entry, or clear",
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "Optional text to save (otherwise reads system clipboard)",
+                    },
+                    "index": {
+                        "type": "integer",
+                        "description": "1-based entry index when action=get",
+                        "default": 1,
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max rows when action=list",
+                        "default": 20,
+                    },
+                },
+            },
+            handler=_handle_arka_clipboard,
         ),
         ArkaMcpTool(
             name="arka_remind",
