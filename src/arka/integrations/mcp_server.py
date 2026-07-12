@@ -343,6 +343,27 @@ def _handle_arka_subagent(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"subagent unavailable: {exc}") from exc
 
 
+def _handle_arka_project_rules(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "context").strip().lower()
+    root_raw = str(arguments.get("root") or "").strip()
+    root = Path(root_raw).expanduser() if root_raw else None
+    try:
+        from arka.core.project_rules import context_for, list_rules, status
+
+        if action == "list":
+            return json.dumps(list_rules(root=root), indent=2)
+        if action == "status":
+            return json.dumps(status(root=root), indent=2)
+        if action == "context":
+            goal = str(arguments.get("goal") or arguments.get("query") or "").strip()
+            limit_chars = int(arguments.get("limit_chars") or 4000)
+            text = context_for(goal, root=root, limit_chars=max(200, limit_chars))
+            return text or "(no project rules found)"
+        raise ValueError("action must be list, status, or context")
+    except ImportError as exc:
+        raise RuntimeError(f"project_rules unavailable: {exc}") from exc
+
+
 def _handle_arka_team_run(arguments: dict[str, Any]) -> str:
     team = str(arguments.get("team") or arguments.get("name") or "").strip()
     task = str(arguments.get("task") or "").strip()
@@ -649,6 +670,35 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_subagent,
+        ),
+        ArkaMcpTool(
+            name="arka_project_rules",
+            description="Cursor-style project rules — list or read AGENTS.md, CLAUDE.md, .cursor/rules.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["list", "status", "context"],
+                        "default": "context",
+                        "description": "list files, status, or truncated context block",
+                    },
+                    "root": {
+                        "type": "string",
+                        "description": "Project root (default: walk up from cwd)",
+                    },
+                    "goal": {
+                        "type": "string",
+                        "description": "Optional goal to rank relevant rule files",
+                    },
+                    "limit_chars": {
+                        "type": "integer",
+                        "description": "Max characters when action=context",
+                        "default": 4000,
+                    },
+                },
+            },
+            handler=_handle_arka_project_rules,
         ),
         ArkaMcpTool(
             name="arka_team_run",

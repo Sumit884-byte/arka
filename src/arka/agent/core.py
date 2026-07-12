@@ -244,6 +244,20 @@ def memory_forget(ref: str) -> None:
 
 
 def memory_context_for(goal: str, *, limit: int = 3) -> str:
+    body = _memory_context_body(goal, limit=limit)
+    rules = ""
+    try:
+        from arka.core.project_rules import context_for as project_rules_context
+
+        rules = project_rules_context(goal, limit_chars=2000)
+    except ImportError:
+        pass
+    if rules and body:
+        return f"{rules}\n\n{body}"
+    return rules or body
+
+
+def _memory_context_body(goal: str, *, limit: int = 3) -> str:
     try:
         from arka.core.unified_memory import _enabled as unified_enabled
         from arka.core.unified_memory import recall as unified_recall

@@ -14,7 +14,7 @@ def test_list_tool_definitions_schema():
 
     tools = list_tool_definitions()
     names = list_tool_names()
-    assert len(tools) == len(names) == 11
+    assert len(tools) == len(names) == 12
     assert "arka_ask" in names
     assert "arka_recall" in names
     assert "arka_heartbeat" in names
@@ -22,6 +22,7 @@ def test_list_tool_definitions_schema():
     assert "arka_routines" in names
     assert "arka_session_memory" in names
     assert "arka_subagent" in names
+    assert "arka_project_rules" in names
     for tool in tools:
         assert tool["name"]
         assert tool["description"]
@@ -104,7 +105,7 @@ def test_mcp_server_stdio_roundtrip():
     server = ArkaMcpServer(stdin=inp, stdout=out)
     response = server.process_line(inp.getvalue().strip())
     assert response is not None
-    assert len(response["result"]["tools"]) == 11
+    assert len(response["result"]["tools"]) == 12
 
 
 def test_install_config_snippet():
@@ -377,6 +378,7 @@ def test_doctor_spawns_client(monkeypatch):
                 "arka_routines",
                 "arka_session_memory",
                 "arka_subagent",
+                "arka_project_rules",
                 "arka_team_run",
             ]]
 
