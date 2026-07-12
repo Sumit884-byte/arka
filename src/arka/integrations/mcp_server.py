@@ -580,6 +580,49 @@ def _handle_arka_docker(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"docker_status unavailable: {exc}") from exc
 
 
+def _handle_arka_github(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "activity").strip().lower()
+    try:
+        from arka.agent import github_repo as gh_mod
+
+        if action == "resolve":
+            query = str(
+                arguments.get("query")
+                or arguments.get("repo")
+                or arguments.get("text")
+                or ""
+            ).strip()
+            return json.dumps(gh_mod.resolve_repo_payload(query), indent=2)
+        if action == "activity":
+            owner = str(arguments.get("owner") or "").strip()
+            repo = str(arguments.get("repo") or "").strip()
+            query = str(arguments.get("query") or arguments.get("text") or "").strip()
+            if (not owner or not repo) and query:
+                resolved = gh_mod.resolve_repo_payload(query)
+                if not resolved.get("ok"):
+                    raise ValueError(str(resolved.get("error") or "could not resolve repo"))
+                owner = str(resolved["owner"])
+                repo = str(resolved["repo"])
+            if not owner or not repo:
+                # allow owner/repo in repo field
+                if "/" in repo and not owner:
+                    owner, _, repo = repo.partition("/")
+                elif "/" in owner and not repo:
+                    owner, _, repo = owner.partition("/")
+            if not owner or not repo:
+                raise ValueError("owner and repo are required (or provide query)")
+            days = int(arguments.get("days") or 7)
+            return json.dumps(
+                gh_mod.activity_payload(owner, repo, days=days),
+                indent=2,
+            )
+        raise ValueError("action must be activity or resolve")
+    except ValueError:
+        raise
+    except ImportError as exc:
+        raise RuntimeError(f"github_repo unavailable: {exc}") from exc
+
+
 def _handle_arka_price(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "sources").strip().lower()
     try:
@@ -1344,6 +1387,36 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_docker,
+        ),
+        ArkaMcpTool(
+            name="arka_github",
+            description=(
+                "GitHub repo activity — resolve owner/repo from text or fetch recent "
+                "commits and modified files (local git or gh API)."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["activity", "resolve"],
+                        "default": "activity",
+                        "description": "activity: commits/files; resolve: parse owner/repo",
+                    },
+                    "owner": {"type": "string", "description": "GitHub owner/org"},
+                    "repo": {"type": "string", "description": "Repository name or owner/repo"},
+                    "query": {
+                        "type": "string",
+                        "description": "Free text containing a GitHub repo reference",
+                    },
+                    "days": {
+                        "type": "integer",
+                        "description": "Lookback window in days",
+                        "default": 7,
+                    },
+                },
+            },
+            handler=_handle_arka_github,
         ),
         ArkaMcpTool(
             name="arka_price",

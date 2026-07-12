@@ -411,6 +411,89 @@ def _format_modified_files(
     return lines
 
 
+
+def activity_payload(
+    owner: str,
+    repo: str,
+    *,
+    days: int = 7,
+    max_commits: int = 20,
+    max_files: int = 60,
+) -> dict[str, object]:
+    """Structured repo activity for MCP / automation clients."""
+    days = max(1, min(int(days), 365))
+    max_commits = max(1, min(int(max_commits), 100))
+    max_files = max(1, min(int(max_files), 200))
+    commits: list[dict]
+    files: OrderedDict[str, int]
+    source = "GitHub API"
+    local_path: str | None = None
+
+    root = _find_local_clone(owner, repo)
+    try:
+        if root:
+            local_path = str(root)
+            try:
+                commits, files = _fetch_via_local_git(root, days=days)
+                source = "local git"
+            except RuntimeError:
+                if _gh_status() != "available":
+                    raise
+                commits, files = _fetch_via_gh_api(owner, repo, days=days)
+                source = "GitHub API"
+        elif _gh_status() == "available":
+            commits, files = _fetch_via_gh_api(owner, repo, days=days)
+        else:
+            return {
+                "ok": False,
+                "owner": owner,
+                "repo": repo,
+                "days": days,
+                "error": _activity_unavailable_message(owner, repo),
+                "commits": [],
+                "files": [],
+            }
+    except RuntimeError as exc:
+        return {
+            "ok": False,
+            "owner": owner,
+            "repo": repo,
+            "days": days,
+            "error": str(exc),
+            "commits": [],
+            "files": [],
+        }
+
+    file_rows = [
+        {"path": path, "commits": count}
+        for path, count in list(files.items())[:max_files]
+    ]
+    return {
+        "ok": True,
+        "owner": owner,
+        "repo": repo,
+        "full_name": f"{owner}/{repo}",
+        "days": days,
+        "since": _since_iso(days),
+        "source": source,
+        "local_path": local_path,
+        "commit_count": len(commits),
+        "file_count": len(files),
+        "commits": commits[:max_commits],
+        "files": file_rows,
+    }
+
+
+def resolve_repo_payload(text: str) -> dict[str, object]:
+    """Resolve owner/repo from free text for MCP clients."""
+    raw = (text or "").strip()
+    parsed = resolve_repo(raw) if raw else None
+    if not parsed:
+        return {"ok": False, "query": raw, "error": "could not resolve owner/repo"}
+    owner, repo = parsed
+    return {"ok": True, "query": raw, "owner": owner, "repo": repo, "full_name": f"{owner}/{repo}"}
+
+
 def fetch_repo_activity(owner: str, repo: str, *, days: int) -> str:
     commits: list[dict]
     files: OrderedDict[str, int]

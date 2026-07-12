@@ -15,7 +15,7 @@ def test_list_tool_definitions_schema():
 
     tools = list_tool_definitions()
     names = list_tool_names()
-    assert len(tools) == len(names) == 26
+    assert len(tools) == len(names) == 27
     assert "arka_ask" in names
     assert "arka_recall" in names
     assert "arka_heartbeat" in names
@@ -36,6 +36,7 @@ def test_list_tool_definitions_schema():
     assert "arka_sports" in names
     assert "arka_config" in names
     assert "arka_price" in names
+    assert "arka_github" in names
     assert "arka_repo_health" in names
     assert "arka_agent_hub" in names
     for tool in tools:
@@ -120,7 +121,7 @@ def test_mcp_server_stdio_roundtrip():
     server = ArkaMcpServer(stdin=inp, stdout=out)
     response = server.process_line(inp.getvalue().strip())
     assert response is not None
-    assert len(response["result"]["tools"]) == 26
+    assert len(response["result"]["tools"]) == 27
 
 
 def test_install_config_snippet():
@@ -626,6 +627,45 @@ def test_handle_arka_docker_health(monkeypatch):
     assert ps["containers"][0]["name"] == "api"
 
 
+def test_handle_arka_github_resolve(monkeypatch):
+    from arka.agent import github_repo as gh_mod
+    from arka.integrations.mcp_server import _handle_arka_github
+
+    monkeypatch.setattr(
+        gh_mod,
+        "resolve_repo_payload",
+        lambda text: {
+            "ok": True,
+            "query": text,
+            "owner": "Sumit884-byte",
+            "repo": "arka",
+            "full_name": "Sumit884-byte/arka",
+        },
+    )
+    monkeypatch.setattr(
+        gh_mod,
+        "activity_payload",
+        lambda owner, repo, days=7: {
+            "ok": True,
+            "owner": owner,
+            "repo": repo,
+            "days": days,
+            "commit_count": 1,
+            "commits": [{"sha": "abc1234", "message": "test"}],
+            "files": [],
+        },
+    )
+    resolved = json.loads(
+        _handle_arka_github({"action": "resolve", "query": "Sumit884-byte/arka"})
+    )
+    assert resolved["full_name"] == "Sumit884-byte/arka"
+    activity = json.loads(
+        _handle_arka_github({"action": "activity", "owner": "Sumit884-byte", "repo": "arka", "days": 3})
+    )
+    assert activity["ok"] is True
+    assert activity["commits"][0]["sha"] == "abc1234"
+
+
 def test_handle_arka_price_sources(monkeypatch):
     from arka.agent import price_sources as ps
     from arka.integrations.mcp_server import _handle_arka_price
@@ -837,6 +877,7 @@ def test_doctor_spawns_client(monkeypatch):
                 "arka_sports",
                 "arka_config",
                 "arka_price",
+                "arka_github",
                 "arka_repo_health",
                 "arka_agent_hub",
                 "arka_team_run",
