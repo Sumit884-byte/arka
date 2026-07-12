@@ -580,6 +580,25 @@ def _handle_arka_docker(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"docker_status unavailable: {exc}") from exc
 
 
+def _handle_arka_personalize(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "status").strip().lower()
+    try:
+        from arka.core import personalize as pers
+
+        if action == "status":
+            return json.dumps(pers.status_payload(), indent=2)
+        if action in ("recommend", "recommendations"):
+            limit = int(arguments.get("limit") or 8)
+            return json.dumps(pers.recommend_payload(limit=limit), indent=2)
+        if action == "quickstart":
+            return json.dumps(pers.quickstart_payload(), indent=2)
+        raise ValueError("action must be status, recommend, or quickstart")
+    except ValueError:
+        raise
+    except ImportError as exc:
+        raise RuntimeError(f"personalize unavailable: {exc}") from exc
+
+
 def _handle_arka_persona(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "list").strip().lower()
     try:
@@ -1415,6 +1434,30 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_docker,
+        ),
+        ArkaMcpTool(
+            name="arka_personalize",
+            description=(
+                "Personalization — profile status, ranked skill recommendations, "
+                "or quickstart steps (read-only)."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["status", "recommend", "quickstart"],
+                        "default": "status",
+                        "description": "status: profile; recommend: ranked skills; quickstart: setup steps",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max recommendations when action=recommend",
+                        "default": 8,
+                    },
+                },
+            },
+            handler=_handle_arka_personalize,
         ),
         ArkaMcpTool(
             name="arka_persona",

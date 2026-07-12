@@ -15,7 +15,7 @@ def test_list_tool_definitions_schema():
 
     tools = list_tool_definitions()
     names = list_tool_names()
-    assert len(tools) == len(names) == 28
+    assert len(tools) == len(names) == 29
     assert "arka_ask" in names
     assert "arka_recall" in names
     assert "arka_heartbeat" in names
@@ -38,6 +38,7 @@ def test_list_tool_definitions_schema():
     assert "arka_price" in names
     assert "arka_github" in names
     assert "arka_persona" in names
+    assert "arka_personalize" in names
     assert "arka_repo_health" in names
     assert "arka_agent_hub" in names
     for tool in tools:
@@ -122,7 +123,7 @@ def test_mcp_server_stdio_roundtrip():
     server = ArkaMcpServer(stdin=inp, stdout=out)
     response = server.process_line(inp.getvalue().strip())
     assert response is not None
-    assert len(response["result"]["tools"]) == 28
+    assert len(response["result"]["tools"]) == 29
 
 
 def test_install_config_snippet():
@@ -628,6 +629,40 @@ def test_handle_arka_docker_health(monkeypatch):
     assert ps["containers"][0]["name"] == "api"
 
 
+def test_handle_arka_personalize_status(monkeypatch):
+    from arka.core import personalize as pers
+    from arka.integrations.mcp_server import _handle_arka_personalize
+
+    monkeypatch.setattr(
+        pers,
+        "status_payload",
+        lambda: {
+            "profile_path": "/tmp/personalize.json",
+            "interests": ["coding"],
+            "experience": "beginner",
+            "platforms": ["macos"],
+            "has_api_keys": True,
+            "uses_fish": False,
+            "onboarding_done": True,
+            "completed_at": None,
+            "summary": "coding (beginner)",
+        },
+    )
+    monkeypatch.setattr(
+        pers,
+        "recommend_payload",
+        lambda limit=8: {
+            "profile_summary": "coding (beginner)",
+            "count": 1,
+            "skills": [{"name": "ask", "score": 1.0, "description": "q", "example": "arka ask", "available": True, "gate": ""}],
+        },
+    )
+    status = json.loads(_handle_arka_personalize({"action": "status"}))
+    assert status["interests"] == ["coding"]
+    recs = json.loads(_handle_arka_personalize({"action": "recommend", "limit": 3}))
+    assert recs["skills"][0]["name"] == "ask"
+
+
 def test_handle_arka_persona_list(monkeypatch):
     from arka.agent.personas import io as persona_io
     from arka.integrations.mcp_server import _handle_arka_persona
@@ -913,6 +948,7 @@ def test_doctor_spawns_client(monkeypatch):
                 "arka_price",
                 "arka_github",
                 "arka_persona",
+                "arka_personalize",
                 "arka_repo_health",
                 "arka_agent_hub",
                 "arka_team_run",

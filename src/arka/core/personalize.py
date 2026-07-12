@@ -560,6 +560,69 @@ def run_wizard(
     return profile
 
 
+
+def status_payload() -> dict[str, object]:
+    """Structured personalize status for MCP / automation clients."""
+    profile = load_profile()
+    return {
+        "profile_path": str(profile_path()),
+        "interests": list(profile.get("interests") or []),
+        "experience": profile.get("experience", "beginner"),
+        "platforms": list(profile.get("platforms") or []),
+        "has_api_keys": bool(profile.get("has_api_keys")),
+        "uses_fish": bool(profile.get("uses_fish")),
+        "onboarding_done": bool(profile.get("onboarding_done")),
+        "completed_at": profile.get("completed_at"),
+        "summary": format_profile_summary(profile),
+    }
+
+
+def recommend_payload(*, limit: int = 8) -> dict[str, object]:
+    """Ranked skill recommendations for MCP clients."""
+    profile = load_profile()
+    limit = max(1, min(int(limit), 25))
+    recs = score_skills(profile, limit=limit)
+    return {
+        "profile_summary": format_profile_summary(profile),
+        "count": len(recs),
+        "skills": [
+            {
+                "name": sk.name,
+                "score": sk.score,
+                "description": sk.description,
+                "example": sk.example,
+                "available": sk.gate_ok,
+                "gate": sk.gate_label,
+            }
+            for sk in recs
+        ],
+    }
+
+
+def quickstart_payload() -> dict[str, object]:
+    """Quickstart steps plus top recommended skills for MCP clients."""
+    profile = load_profile()
+    recs = score_skills(profile, limit=3)
+    return {
+        "steps": [
+            {"command": "arka setup", "purpose": "config dirs + venv + chat deps"},
+            {"command": "arka doctor", "purpose": "verify install and API keys"},
+            {"command": "arka personalize wizard", "purpose": "pick interests for skill tips"},
+            {"command": "arka personalize recommend", "purpose": "see ranked skills for you"},
+        ],
+        "try_skills": [
+            {
+                "name": sk.name,
+                "example": sk.example,
+                "available": sk.gate_ok,
+                "gate": sk.gate_label,
+            }
+            for sk in recs
+        ],
+        "profile_summary": format_profile_summary(profile),
+    }
+
+
 def format_profile_summary(profile: dict[str, Any]) -> str:
     interests = profile.get("interests") or []
     exp = profile.get("experience", "beginner")
