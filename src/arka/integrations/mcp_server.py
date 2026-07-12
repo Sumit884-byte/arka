@@ -580,6 +580,20 @@ def _handle_arka_docker(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"docker_status unavailable: {exc}") from exc
 
 
+def _handle_arka_calendar(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "today").strip().lower()
+    try:
+        from arka.integrations import macos_calendar as cal_mod
+
+        if action in ("today", "events"):
+            return json.dumps(cal_mod.today_payload(), indent=2)
+        raise ValueError("action must be today")
+    except ValueError:
+        raise
+    except ImportError as exc:
+        raise RuntimeError(f"calendar unavailable: {exc}") from exc
+
+
 def _handle_arka_platform(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "show").strip().lower()
     try:
@@ -1455,6 +1469,25 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_docker,
+        ),
+        ArkaMcpTool(
+            name="arka_calendar",
+            description=(
+                "macOS Calendar — list today's events from Calendar.app "
+                "(requires Calendar automation permission)."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["today"],
+                        "default": "today",
+                        "description": "today: events starting today",
+                    },
+                },
+            },
+            handler=_handle_arka_calendar,
         ),
         ArkaMcpTool(
             name="arka_platform",

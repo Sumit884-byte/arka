@@ -73,6 +73,33 @@ def _format_when(start: datetime | None, end: datetime | None) -> str:
     return label
 
 
+
+def today_payload() -> dict[str, object]:
+    """Structured today's calendar events for MCP / automation clients."""
+    events, error = fetch_today_events()
+    rows: list[dict[str, object]] = []
+    for event in events:
+        start = event.get("start")
+        end = event.get("end")
+        rows.append(
+            {
+                "summary": event.get("summary") or "",
+                "calendar": event.get("calendar") or "",
+                "when": event.get("when") or "",
+                "start": start.isoformat() if hasattr(start, "isoformat") and start else None,
+                "end": end.isoformat() if hasattr(end, "isoformat") and end else None,
+                "source": event.get("source") or "macos",
+            }
+        )
+    return {
+        "ok": error is None,
+        "available": _available(),
+        "error": error,
+        "count": len(rows),
+        "events": rows,
+    }
+
+
 def fetch_today_events() -> tuple[list[dict[str, Any]], str | None]:
     """Return (events, error). Each event has summary, start, end, calendar, when, source."""
     if not _available():

@@ -15,7 +15,7 @@ def test_list_tool_definitions_schema():
 
     tools = list_tool_definitions()
     names = list_tool_names()
-    assert len(tools) == len(names) == 30
+    assert len(tools) == len(names) == 31
     assert "arka_ask" in names
     assert "arka_recall" in names
     assert "arka_heartbeat" in names
@@ -40,6 +40,7 @@ def test_list_tool_definitions_schema():
     assert "arka_persona" in names
     assert "arka_personalize" in names
     assert "arka_platform" in names
+    assert "arka_calendar" in names
     assert "arka_repo_health" in names
     assert "arka_agent_hub" in names
     for tool in tools:
@@ -124,7 +125,7 @@ def test_mcp_server_stdio_roundtrip():
     server = ArkaMcpServer(stdin=inp, stdout=out)
     response = server.process_line(inp.getvalue().strip())
     assert response is not None
-    assert len(response["result"]["tools"]) == 30
+    assert len(response["result"]["tools"]) == 31
 
 
 def test_install_config_snippet():
@@ -630,6 +631,35 @@ def test_handle_arka_docker_health(monkeypatch):
     assert ps["containers"][0]["name"] == "api"
 
 
+def test_handle_arka_calendar_today(monkeypatch):
+    from arka.integrations import macos_calendar as cal_mod
+    from arka.integrations.mcp_server import _handle_arka_calendar
+
+    monkeypatch.setattr(
+        cal_mod,
+        "today_payload",
+        lambda: {
+            "ok": True,
+            "available": True,
+            "error": None,
+            "count": 1,
+            "events": [
+                {
+                    "summary": "Standup",
+                    "calendar": "Work",
+                    "when": "Sun Jul 12, 2026 · 10:00 AM",
+                    "start": "2026-07-12T10:00:00+05:30",
+                    "end": "2026-07-12T10:30:00+05:30",
+                    "source": "macos",
+                }
+            ],
+        },
+    )
+    payload = json.loads(_handle_arka_calendar({"action": "today"}))
+    assert payload["count"] == 1
+    assert payload["events"][0]["summary"] == "Standup"
+
+
 def test_handle_arka_platform_show(monkeypatch):
     from arka.core import platform as plat_mod
     from arka.integrations.mcp_server import _handle_arka_platform
@@ -988,6 +1018,7 @@ def test_doctor_spawns_client(monkeypatch):
                 "arka_persona",
                 "arka_personalize",
                 "arka_platform",
+                "arka_calendar",
                 "arka_repo_health",
                 "arka_agent_hub",
                 "arka_team_run",
