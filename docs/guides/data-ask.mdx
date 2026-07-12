@@ -30,6 +30,19 @@ arka query_data sales.json "what is total revenue by category?"
 | `query_data report.tsv` | Summarize when no question is given |
 | `analyze_data data.jsonl "top 5 products"` | Alias for `data_ask` |
 
+## View CSV as a colored table
+
+For **display** (not Q&A), use `view_data` — inspired by tools like `csvlook` / pretty printers:
+
+```bash
+view_data papers.csv
+view_csv papers.csv --plain
+show csv papers.csv as json
+cat data.tsv | view_data --formats csv,yaml
+```
+
+Colored columns print in the terminal; optional `--formats` writes exports under `~/arka-generated/` (override with `DATA_OUTPUT_DIR`). Analytic questions still route to `data_ask`.
+
 ## Supported formats
 
 `csv`, `json`, `jsonl`, `tsv`, `yaml`, `yml`, `xml`, `parquet`, `xlsx`, `xls`, `sql`

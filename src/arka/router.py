@@ -617,6 +617,13 @@ def _is_knowledge_question(clean: str) -> bool:
     except ImportError:
         pass
     try:
+        from arka.agent.view_data import wants_view_data
+
+        if wants_view_data(clean):
+            return False
+    except ImportError:
+        pass
+    try:
         from arka.agent.data_ask import wants_data_ask
 
         if wants_data_ask(clean):

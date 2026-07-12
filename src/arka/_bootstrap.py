@@ -60,6 +60,7 @@ LEGACY_MODULES: dict[str, str] = {
     "arka_repo_map": "arka.agent.repo_map",
     "arka_generate_data": "arka.agent.generate_data",
     "arka_data_ask": "arka.agent.data_ask",
+    "arka_view_data": "arka.agent.view_data",
     "arka_docker_status": "arka.integrations.docker_status",
     "arka_clipboard_history": "arka.integrations.clipboard_history",
     "arka_route_learn": "arka.agent.route_learn",

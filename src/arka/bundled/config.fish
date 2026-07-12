@@ -1937,7 +1937,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         agent_resume agent_research agent_nudge agent_watch agent_routine agent_fanout \
         agent_code agent_handoff agent_browser transcript_ask media_ask \
         meeting_agent study_agent inbox_agent compare_agent product_reviewer price_check profession pr_check github_repo competitions route_learn \
-        bookmarks repo_health repo_map generate_data data_gen data_ask ask_data query_data analyze_data docker_status clipboard_history mcp agent_hub gemini_cli persona elon talk_to_elon elon_chat \
+        bookmarks repo_health repo_map generate_data data_gen data_ask ask_data query_data analyze_data view_data view_csv show_csv docker_status clipboard_history mcp agent_hub gemini_cli persona elon talk_to_elon elon_chat \
         arka_ask semantic_memory supermemory speak_research voice_session handoff_notify remind routines predictions stock \
         rag_setup rag_status voice_agent wake_control \
         agent_ask web_answer deep_web_answer web_essay platform_howto calc chat_reset set_location files_preference_help google \
@@ -2269,6 +2269,8 @@ function skills --description "Show what commands the agent can auto-run"
                 echo (set_color green)"  pdf_ask / doc_ask   "(set_color normal)"[--doc DOC] <question> — Q&A / summarize"
             case data_ask ask_data query_data analyze_data
                 echo (set_color green)"  data_ask / query_data"(set_color normal)" <file|folder> [--format] [question] — Q&A over CSV/JSON/TSV"
+            case view_data view_csv show_csv pretty_csv display_csv
+                echo (set_color green)"  view_data / view_csv"(set_color normal)" <file.csv> [--formats csv,json] — colored table + save to ~/arka-generated/"
             case drawing_ask
                 echo (set_color green)"  drawing_ask     "(set_color normal)"<file.pdf|image> <question> — vision analysis (Gemini)"
             case describe_image
@@ -6854,6 +6856,26 @@ function analyze_data --description "Alias for data_ask — summarize or analyze
     data_ask $argv
 end
 
+function view_data --description "Pretty-print CSV/TSV with colored columns; saves to ~/arka-generated/"
+    if test (count $argv) -eq 0; and test -t 0
+        echo "Usage: view_data <file.csv> [--format json] [--formats csv,json,yaml]"
+        echo "       cat data.csv | view_data"
+        echo "Saves to ~/arka-generated/ by default (set DATA_OUTPUT_DIR to override)."
+        return 1
+    end
+    set -l py (_arka_python)
+    set -l script (_arka_py_script arka_view_data.py)
+    $py $script $argv
+end
+
+function view_csv --description "Alias for view_data — colored CSV table"
+    view_data $argv
+end
+
+function show_csv --description "Alias for view_data — colored CSV table"
+    view_data $argv
+end
+
 function docker_status --description "Docker containers, images, logs, and daemon health"
     set -l py (_arka_python)
     set -l script (_arka_py_script arka_docker_status.py)
@@ -9689,6 +9711,18 @@ function _agent_route_data_ask --description "Build data_ask invocation from NL 
     echo "$route"
 end
 
+function _agent_is_view_data_request --description "True if user wants colored CSV display (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_view_data.py) route "$argv[1]" 2>/dev/null | string trim)
+    test -n "$route"
+end
+
+function _agent_route_view_data --description "Build view_data invocation from NL (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_view_data.py) route "$argv[1]" 2>/dev/null | string trim)
+    echo "$route"
+end
+
 function _agent_is_docker_status_request --description "True if user wants docker status/logs (internal)"
     set -l py (_arka_python)
     set -l route ($py (_arka_py_script arka_docker_status.py) route "$argv[1]" 2>/dev/null | string trim)
@@ -10241,6 +10275,9 @@ function _agent_is_knowledge_question --description "True if user wants a factua
     if _agent_is_generate_data_request "$argv[1]"
         return 1
     end
+    if _agent_is_view_data_request "$argv[1]"
+        return 1
+    end
     if _agent_is_data_ask_request "$argv[1]"
         return 1
     end
@@ -10514,6 +10551,9 @@ function _agent_is_general_chat --description "True if plain conversational inpu
     if _agent_is_generate_data_request "$argv[1]"
         return 1
     end
+    if _agent_is_view_data_request "$argv[1]"
+        return 1
+    end
     if _agent_is_data_ask_request "$argv[1]"
         return 1
     end
@@ -10535,7 +10575,7 @@ function _agent_is_general_chat --description "True if plain conversational inpu
     if _agent_is_mcp_request "$argv[1]"
         return 1
     end
-    if string match -qr '(?i)^(select|best_model|model_select|gemini|gemini_cli|elon|talk_to_elon|elon_chat|life|bookmarks|mcp|docker|clipboard|competitions|route|teach|generate_data|data_ask|ask_data|query_data|analyze_data|repo_health|repo_map|post_x|daily_brief)\b' "$clean"
+    if string match -qr '(?i)^(select|best_model|model_select|gemini|gemini_cli|elon|talk_to_elon|elon_chat|life|bookmarks|mcp|docker|clipboard|competitions|route|teach|generate_data|view_data|view_csv|show_csv|data_ask|ask_data|query_data|analyze_data|repo_health|repo_map|post_x|daily_brief)\b' "$clean"
         return 1
     end
     if string match -qr '(?i)^(install|play|open|run|create|download|search|list|show|fix|set|take|timer|remind|weather|pdf|ingest|screenshot|spotify|whatsapp|send|loop|agent_|generate_image|generate_video|generate_password|chart|ascii|ascii_art|figlet|graph|plot|predictions|stock|translate|survive_lang|pr_check|cheat|excuse|bored)\b' "$clean"
@@ -10941,6 +10981,10 @@ function _agent_offline_route_cmd --description "Full symbolic NL to skill comma
     end
     if _agent_is_generate_data_request "$cmd"
         echo (_agent_route_generate_data "$cmd")
+        return 0
+    end
+    if _agent_is_view_data_request "$cmd"
+        echo (_agent_route_view_data "$cmd")
         return 0
     end
     if _agent_is_data_ask_request "$cmd"
@@ -13719,6 +13763,13 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
             return
         end
     end
+    if _agent_is_view_data_request "$cmd"
+        set -l vd (_agent_route_view_data "$cmd")
+        if test -n "$vd"
+            echo "skill|$vd|Colored CSV display and export"
+            return
+        end
+    end
     if _agent_is_data_ask_request "$cmd"
         set -l da (_agent_route_data_ask "$cmd")
         if test -n "$da"
@@ -13728,6 +13779,7 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
     end
     if string match -qr '(?i)^(analyze|check)\s+(?:stock\s+)?([A-Z][A-Z0-9.-]{1,12})\b' "$clean"
         and not _agent_is_repo_health_request "$cmd"
+        and not _agent_is_view_data_request "$cmd"
         and not _agent_is_data_ask_request "$cmd"
         set -l ticker (string upper (string match -r '(?i)([A-Z][A-Z0-9.-]{1,12})\s*$' "$cmd")[2])
         echo "skill|stock analyze $ticker|AI stock strategy backtest"
@@ -13736,6 +13788,13 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
     if string match -qr '(?i)(?:^|\b)(?:generate|create|make|design)\s+(?:an?\s+)?(?:youtube\s+)?thumbnail\b' "$clean"
         echo "skill|generate_thumbnail|YouTube thumbnail — Unsplash photo + title overlay"
         return
+    end
+    if _agent_is_view_data_request "$cmd"
+        set -l vd (_agent_route_view_data "$cmd")
+        if test -n "$vd"
+            echo "skill|$vd|Colored CSV display and export"
+            return
+        end
     end
     if _agent_is_data_ask_request "$cmd"
         set -l da (_agent_route_data_ask "$cmd")
@@ -13869,6 +13928,13 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         set -l rm (_agent_route_repo_map "$cmd")
         if test -n "$rm"
             echo "skill|$rm|Repo structure map"
+            return
+        end
+    end
+    if _agent_is_view_data_request "$cmd"
+        set -l vd (_agent_route_view_data "$cmd")
+        if test -n "$vd"
+            echo "skill|$vd|Colored CSV display and export"
             return
         end
     end
@@ -15759,6 +15825,14 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                                 return $status
                             end
                         end
+                        if _agent_is_view_data_request "$raw"
+                            set -l vd (_agent_route_view_data "$raw")
+                            if test -n "$vd"
+                                echo (set_color yellow)"💡 [View CSV]"(set_color normal)
+                                _agent_dispatch_one "$vd"
+                                return $status
+                            end
+                        end
                         if _agent_is_data_ask_request "$raw"
                             set -l da (_agent_route_data_ask "$raw")
                             if test -n "$da"
@@ -16930,6 +17004,9 @@ function agent --description "Run commands safely: executes safe commands automa
     else if _agent_is_repo_map_request "$cmd"
         set interpreted (_agent_route_repo_map "$cmd")
         set route_source offline
+    else if _agent_is_view_data_request "$cmd"
+        set interpreted (_agent_route_view_data "$cmd")
+        set route_source offline
     else if _agent_is_data_ask_request "$cmd"
         set interpreted (_agent_route_data_ask "$cmd")
         set route_source offline
@@ -17140,6 +17217,9 @@ function agent --description "Run commands safely: executes safe commands automa
         set route_source offline
     else if _agent_is_repo_map_request "$cmd"
         set interpreted (_agent_route_repo_map "$cmd")
+        set route_source offline
+    else if _agent_is_view_data_request "$cmd"
+        set interpreted (_agent_route_view_data "$cmd")
         set route_source offline
     else if _agent_is_data_ask_request "$cmd"
         set interpreted (_agent_route_data_ask "$cmd")

@@ -168,6 +168,14 @@ def downloads_dir() -> Path:
     return Path.home() / "Downloads"
 
 
+def generated_data_dir() -> Path:
+    """Default folder for saved tabular/data exports (view_data, generate_data)."""
+    override = os.environ.get("DATA_OUTPUT_DIR", "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
+    return Path.home() / "arka-generated"
+
+
 def load_env_file() -> None:
     from arka.env import load_env
 
