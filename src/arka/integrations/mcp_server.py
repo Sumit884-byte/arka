@@ -513,6 +513,43 @@ def _handle_arka_remind(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"remind unavailable: {exc}") from exc
 
 
+def _handle_arka_bookmarks(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "list").strip().lower()
+    try:
+        from arka.agent import bookmarks as bm
+
+        if action == "list":
+            tag = str(arguments.get("tag") or "").strip() or None
+            limit = int(arguments.get("limit") or 50)
+            return json.dumps(bm.list_bookmarks(tag=tag, limit=limit), indent=2)
+        if action == "save":
+            url = str(arguments.get("url") or arguments.get("link") or "").strip()
+            if not url:
+                raise ValueError("url is required for save")
+            title = str(arguments.get("title") or "").strip() or None
+            tags = arguments.get("tags")
+            note = str(arguments.get("note") or "").strip() or None
+            return json.dumps(
+                bm.save_bookmark(url, title=title, tags=tags, note=note),
+                indent=2,
+            )
+        if action == "search":
+            query = str(arguments.get("query") or arguments.get("q") or "").strip()
+            limit = int(arguments.get("limit") or 50)
+            return json.dumps(bm.search_bookmarks(query, limit=limit), indent=2)
+        if action == "get":
+            index = int(arguments.get("index") or arguments.get("id") or 0)
+            return json.dumps(bm.get_bookmark(index), indent=2)
+        if action == "delete":
+            index = int(arguments.get("index") or arguments.get("id") or 0)
+            return json.dumps(bm.delete_bookmark(index), indent=2)
+        raise ValueError("action must be list, save, search, get, or delete")
+    except ValueError:
+        raise
+    except ImportError as exc:
+        raise RuntimeError(f"bookmarks unavailable: {exc}") from exc
+
+
 def _handle_arka_agent_hub(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "status").strip().lower()
     try:
@@ -1025,6 +1062,54 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_remind,
+        ),
+        ArkaMcpTool(
+            name="arka_bookmarks",
+            description="Cursor-style bookmarks — list, save, search, get, or delete saved links.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["list", "save", "search", "get", "delete"],
+                        "default": "list",
+                        "description": "list, save, search, get, or delete bookmarks",
+                    },
+                    "url": {
+                        "type": "string",
+                        "description": "URL when action=save",
+                    },
+                    "title": {
+                        "type": "string",
+                        "description": "Optional title when action=save",
+                    },
+                    "tags": {
+                        "description": "Optional tags (comma string or array) when action=save",
+                    },
+                    "note": {
+                        "type": "string",
+                        "description": "Optional note when action=save",
+                    },
+                    "query": {
+                        "type": "string",
+                        "description": "Search keywords when action=search",
+                    },
+                    "tag": {
+                        "type": "string",
+                        "description": "Filter tag when action=list",
+                    },
+                    "index": {
+                        "type": "integer",
+                        "description": "1-based index when action=get or delete",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max rows for list/search",
+                        "default": 50,
+                    },
+                },
+            },
+            handler=_handle_arka_bookmarks,
         ),
         ArkaMcpTool(
             name="arka_agent_hub",

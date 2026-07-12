@@ -120,35 +120,100 @@ def _parse_tags(raw: str | None) -> list[str]:
     return [t.strip().lower() for t in re.split(r"[,;]", raw) if t.strip()]
 
 
+def list_bookmarks(*, tag: str | None = None, limit: int = 50) -> list[dict]:
+    """Return bookmark rows, optionally filtered by tag."""
+    rows = _load()
+    tag_key = (tag or "").strip().lower()
+    if tag_key:
+        rows = [r for r in rows if tag_key in (r.get("tags") or [])]
+    limit = max(1, min(int(limit or 50), 200))
+    return rows[:limit]
+
+
+def save_bookmark(
+    url: str,
+    *,
+    title: str | None = None,
+    tags: str | list[str] | None = None,
+    note: str | None = None,
+) -> dict:
+    """Save a URL bookmark and return the new entry."""
+    normalized = _normalize_url(url)
+    if not normalized:
+        raise ValueError("url is required")
+    rows = _load()
+    if isinstance(tags, list):
+        tag_list = [str(t).strip().lower() for t in tags if str(t).strip()]
+    else:
+        tag_list = _parse_tags(tags)
+    entry = {
+        "id": str(uuid.uuid4())[:8],
+        "url": normalized,
+        "title": (title or "").strip() or _title_from_url(normalized),
+        "tags": tag_list,
+        "note": (note or "").strip(),
+        "created": _now_iso(),
+    }
+    rows.insert(0, entry)
+    _save(rows)
+    return entry
+
+
+def search_bookmarks(query: str, *, limit: int = 50) -> list[dict]:
+    """Search bookmarks by title, URL, note, and tags."""
+    parts = [p for p in (query or "").strip().lower().split() if p]
+    if not parts:
+        raise ValueError("query is required")
+    hits: list[dict] = []
+    for row in _load():
+        hay = " ".join(
+            [
+                str(row.get("title") or ""),
+                str(row.get("url") or ""),
+                str(row.get("note") or ""),
+                " ".join(row.get("tags") or []),
+            ]
+        ).lower()
+        if all(part in hay for part in parts):
+            hits.append(row)
+    limit = max(1, min(int(limit or 50), 200))
+    return hits[:limit]
+
+
+def get_bookmark(index: int) -> dict:
+    """Return a bookmark by 1-based list index."""
+    rows = _load()
+    idx = int(index)
+    if idx < 1 or idx > len(rows):
+        raise ValueError(f"Invalid index {idx} (have {len(rows)} bookmarks)")
+    return rows[idx - 1]
+
+
+def delete_bookmark(index: int) -> dict:
+    """Delete a bookmark by 1-based list index and return the removed row."""
+    rows = _load()
+    idx = int(index)
+    if idx < 1 or idx > len(rows):
+        raise ValueError(f"Invalid index {idx} (have {len(rows)} bookmarks)")
+    removed = rows.pop(idx - 1)
+    _save(rows)
+    return removed
+
+
 def cmd_save(args: argparse.Namespace) -> int:
     url = _normalize_url(args.url)
     if not url:
         print("Usage: bookmarks save <url> [--title T] [--tags a,b] [--note N]", file=sys.stderr)
         return 1
+    entry = save_bookmark(url, title=args.title, tags=args.tags, note=args.note)
     rows = _load()
-    title = (args.title or "").strip() or _title_from_url(url)
-    tags = _parse_tags(args.tags)
-    note = (args.note or "").strip()
-    entry = {
-        "id": str(uuid.uuid4())[:8],
-        "url": url,
-        "title": title,
-        "tags": tags,
-        "note": note,
-        "created": _now_iso(),
-    }
-    rows.insert(0, entry)
-    _save(rows)
-    print(f"Saved bookmark #{len(rows)}: {title}")
-    print(url)
+    print(f"Saved bookmark #{len(rows)}: {entry.get('title')}")
+    print(entry.get("url") or "")
     return 0
 
 
 def cmd_list(args: argparse.Namespace) -> int:
-    rows = _load()
-    tag = (args.tag or "").strip().lower()
-    if tag:
-        rows = [r for r in rows if tag in (r.get("tags") or [])]
+    rows = list_bookmarks(tag=args.tag)
     if not rows:
         print("No bookmarks saved yet. Try: bookmarks save https://example.com --tags docs")
         return 0
@@ -172,19 +237,11 @@ def cmd_search(args: argparse.Namespace) -> int:
     if not query:
         print("Usage: bookmarks search <keywords>", file=sys.stderr)
         return 1
-    rows = _load()
-    hits: list[dict] = []
-    for row in rows:
-        hay = " ".join(
-            [
-                str(row.get("title") or ""),
-                str(row.get("url") or ""),
-                str(row.get("note") or ""),
-                " ".join(row.get("tags") or []),
-            ]
-        ).lower()
-        if all(part in hay for part in query.split()):
-            hits.append(row)
+    try:
+        hits = search_bookmarks(query)
+    except ValueError:
+        print("Usage: bookmarks search <keywords>", file=sys.stderr)
+        return 1
     if not hits:
         print(f"No bookmarks matching: {query}")
         return 1
@@ -197,31 +254,22 @@ def cmd_search(args: argparse.Namespace) -> int:
 
 
 def cmd_get(args: argparse.Namespace) -> int:
-    rows = _load()
     try:
-        idx = int(args.index)
-    except ValueError:
-        print("Index must be a number", file=sys.stderr)
+        row = get_bookmark(int(args.index))
+    except (TypeError, ValueError) as exc:
+        print(str(exc), file=sys.stderr)
         return 1
-    if idx < 1 or idx > len(rows):
-        print(f"Invalid index {idx} (have {len(rows)} bookmarks)", file=sys.stderr)
-        return 1
-    row = rows[idx - 1]
     print(row.get("url") or "")
     return 0
 
 
 def cmd_open(args: argparse.Namespace) -> int:
-    rows = _load()
     try:
-        idx = int(args.index)
-    except ValueError:
-        print("Index must be a number", file=sys.stderr)
+        row = get_bookmark(int(args.index))
+    except (TypeError, ValueError) as exc:
+        print(str(exc), file=sys.stderr)
         return 1
-    if idx < 1 or idx > len(rows):
-        print(f"Invalid index {idx}", file=sys.stderr)
-        return 1
-    url = rows[idx - 1].get("url") or ""
+    url = row.get("url") or ""
     if not url:
         print("Bookmark has no URL", file=sys.stderr)
         return 1
@@ -231,17 +279,11 @@ def cmd_open(args: argparse.Namespace) -> int:
 
 
 def cmd_delete(args: argparse.Namespace) -> int:
-    rows = _load()
     try:
-        idx = int(args.index)
-    except ValueError:
-        print("Index must be a number", file=sys.stderr)
+        removed = delete_bookmark(int(args.index))
+    except (TypeError, ValueError) as exc:
+        print(str(exc), file=sys.stderr)
         return 1
-    if idx < 1 or idx > len(rows):
-        print(f"Invalid index {idx}", file=sys.stderr)
-        return 1
-    removed = rows.pop(idx - 1)
-    _save(rows)
     print(f"Deleted: {removed.get('title') or removed.get('url')}")
     return 0
 

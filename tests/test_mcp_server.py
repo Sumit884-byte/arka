@@ -15,7 +15,7 @@ def test_list_tool_definitions_schema():
 
     tools = list_tool_definitions()
     names = list_tool_names()
-    assert len(tools) == len(names) == 17
+    assert len(tools) == len(names) == 18
     assert "arka_ask" in names
     assert "arka_recall" in names
     assert "arka_heartbeat" in names
@@ -28,6 +28,7 @@ def test_list_tool_definitions_schema():
     assert "arka_view_data" in names
     assert "arka_clipboard" in names
     assert "arka_remind" in names
+    assert "arka_bookmarks" in names
     assert "arka_agent_hub" in names
     for tool in tools:
         assert tool["name"]
@@ -111,7 +112,7 @@ def test_mcp_server_stdio_roundtrip():
     server = ArkaMcpServer(stdin=inp, stdout=out)
     response = server.process_line(inp.getvalue().strip())
     assert response is not None
-    assert len(response["result"]["tools"]) == 17
+    assert len(response["result"]["tools"]) == 18
 
 
 def test_install_config_snippet():
@@ -549,6 +550,38 @@ def test_handle_arka_agent_hub_status(tmp_path, monkeypatch):
     assert isinstance(listed, list) and listed
 
 
+def test_handle_arka_bookmarks(tmp_path, monkeypatch):
+    from arka.agent import bookmarks as bm
+    from arka.integrations.mcp_server import _handle_arka_bookmarks
+
+    store = tmp_path / "bookmarks.json"
+    monkeypatch.setattr(bm, "_store_path", lambda: store)
+
+    saved = json.loads(
+        _handle_arka_bookmarks(
+            {
+                "action": "save",
+                "url": "https://example.com/docs",
+                "title": "Docs",
+                "tags": "docs,arka",
+                "note": "ref",
+            }
+        )
+    )
+    assert saved["url"] == "https://example.com/docs"
+    assert "docs" in saved["tags"]
+
+    rows = json.loads(_handle_arka_bookmarks({"action": "list"}))
+    assert len(rows) == 1
+    hits = json.loads(_handle_arka_bookmarks({"action": "search", "query": "docs"}))
+    assert hits[0]["title"] == "Docs"
+    got = json.loads(_handle_arka_bookmarks({"action": "get", "index": 1}))
+    assert got["url"] == "https://example.com/docs"
+    deleted = json.loads(_handle_arka_bookmarks({"action": "delete", "index": 1}))
+    assert deleted["title"] == "Docs"
+    assert json.loads(_handle_arka_bookmarks({"action": "list"})) == []
+
+
 def test_doctor_spawns_client(monkeypatch):
     from arka.integrations.mcp_client import McpTool
     from arka.integrations.mcp_server import doctor
@@ -579,6 +612,7 @@ def test_doctor_spawns_client(monkeypatch):
                 "arka_view_data",
                 "arka_clipboard",
                 "arka_remind",
+                "arka_bookmarks",
                 "arka_agent_hub",
                 "arka_team_run",
             ]]
