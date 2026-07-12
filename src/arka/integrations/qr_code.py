@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import io
+from contextlib import redirect_stdout
 import shutil
 import subprocess
 import sys
@@ -30,6 +32,34 @@ def _render_python(text: str) -> bool:
     qr.make(fit=True)
     qr.print_ascii(invert=True)
     return True
+
+
+
+def ascii_payload(text: str) -> dict[str, object]:
+    """Structured QR ASCII art for MCP / automation clients."""
+    payload = (text or "").strip()
+    if not payload:
+        raise ValueError("text is required")
+    try:
+        import qrcode
+    except ImportError as exc:
+        raise RuntimeError(
+            "qrcode package missing. Install with: pip install qrcode"
+        ) from exc
+    code = qrcode.QRCode(border=1)
+    code.add_data(payload)
+    code.make(fit=True)
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        code.print_ascii(invert=True)
+    matrix = code.get_matrix()
+    return {
+        "text": payload,
+        "ascii": buf.getvalue().rstrip("\n"),
+        "version": code.version,
+        "modules": len(matrix),
+        "engine": "qrcode",
+    }
 
 
 def render_terminal(text: str) -> int:

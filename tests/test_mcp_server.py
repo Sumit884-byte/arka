@@ -15,7 +15,7 @@ def test_list_tool_definitions_schema():
 
     tools = list_tool_definitions()
     names = list_tool_names()
-    assert len(tools) == len(names) == 22
+    assert len(tools) == len(names) == 23
     assert "arka_ask" in names
     assert "arka_recall" in names
     assert "arka_heartbeat" in names
@@ -32,6 +32,7 @@ def test_list_tool_definitions_schema():
     assert "arka_docker" in names
     assert "arka_disk" in names
     assert "arka_currency" in names
+    assert "arka_qr" in names
     assert "arka_repo_health" in names
     assert "arka_agent_hub" in names
     for tool in tools:
@@ -116,7 +117,7 @@ def test_mcp_server_stdio_roundtrip():
     server = ArkaMcpServer(stdin=inp, stdout=out)
     response = server.process_line(inp.getvalue().strip())
     assert response is not None
-    assert len(response["result"]["tools"]) == 22
+    assert len(response["result"]["tools"]) == 23
 
 
 def test_install_config_snippet():
@@ -622,6 +623,26 @@ def test_handle_arka_docker_health(monkeypatch):
     assert ps["containers"][0]["name"] == "api"
 
 
+def test_handle_arka_qr_ascii(monkeypatch):
+    from arka.integrations import qr_code as qr_mod
+    from arka.integrations.mcp_server import _handle_arka_qr
+
+    monkeypatch.setattr(
+        qr_mod,
+        "ascii_payload",
+        lambda text: {
+            "text": text,
+            "ascii": "##",
+            "version": 1,
+            "modules": 21,
+            "engine": "qrcode",
+        },
+    )
+    payload = json.loads(_handle_arka_qr({"text": "https://example.com"}))
+    assert payload["text"] == "https://example.com"
+    assert payload["modules"] == 21
+
+
 def test_handle_arka_currency_convert(monkeypatch):
     from decimal import Decimal
 
@@ -718,6 +739,7 @@ def test_doctor_spawns_client(monkeypatch):
                 "arka_docker",
                 "arka_disk",
                 "arka_currency",
+                "arka_qr",
                 "arka_repo_health",
                 "arka_agent_hub",
                 "arka_team_run",

@@ -580,6 +580,26 @@ def _handle_arka_docker(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"docker_status unavailable: {exc}") from exc
 
 
+def _handle_arka_qr(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "ascii").strip().lower()
+    try:
+        from arka.integrations import qr_code as qr_mod
+
+        text = str(
+            arguments.get("text")
+            or arguments.get("url")
+            or arguments.get("data")
+            or ""
+        ).strip()
+        if action in ("ascii", "generate", "encode"):
+            return json.dumps(qr_mod.ascii_payload(text), indent=2)
+        raise ValueError("action must be ascii")
+    except ValueError:
+        raise
+    except ImportError as exc:
+        raise RuntimeError(f"qr_code unavailable: {exc}") from exc
+
+
 def _handle_arka_currency(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "convert").strip().lower()
     try:
@@ -1261,6 +1281,33 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_docker,
+        ),
+        ArkaMcpTool(
+            name="arka_qr",
+            description=(
+                "Generate a QR code as ASCII art from text or a URL "
+                "(useful for sharing links offline in the terminal)."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["ascii"],
+                        "default": "ascii",
+                        "description": "ascii: return QR as terminal ASCII art",
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "Text or URL to encode",
+                    },
+                    "url": {
+                        "type": "string",
+                        "description": "Alias for text when encoding a URL",
+                    },
+                },
+                            },
+            handler=_handle_arka_qr,
         ),
         ArkaMcpTool(
             name="arka_currency",
