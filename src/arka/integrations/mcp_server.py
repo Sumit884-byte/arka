@@ -580,6 +580,52 @@ def _handle_arka_docker(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"docker_status unavailable: {exc}") from exc
 
 
+def _handle_arka_currency(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "convert").strip().lower()
+    try:
+        from arka.integrations import currency as currency_mod
+
+        if action == "convert":
+            amount = arguments.get("amount")
+            if amount is None:
+                raise ValueError("amount is required")
+            from_ccy = str(
+                arguments.get("from")
+                or arguments.get("from_ccy")
+                or arguments.get("source")
+                or ""
+            ).strip()
+            to_ccy = str(
+                arguments.get("to")
+                or arguments.get("to_ccy")
+                or arguments.get("target")
+                or ""
+            ).strip()
+            if not from_ccy or not to_ccy:
+                raise ValueError("from and to currencies are required")
+            return json.dumps(
+                currency_mod.convert_payload(amount, from_ccy, to_ccy),
+                indent=2,
+            )
+        if action == "parse":
+            text = str(arguments.get("text") or arguments.get("query") or "").strip()
+            if not text:
+                raise ValueError("text is required for parse")
+            parsed = currency_mod.parse_convert(text)
+            if parsed is None:
+                raise ValueError(f"could not parse currency query: {text!r}")
+            amount, from_ccy, to_ccy = parsed
+            return json.dumps(
+                currency_mod.convert_payload(amount, from_ccy, to_ccy),
+                indent=2,
+            )
+        raise ValueError("action must be convert or parse")
+    except ValueError:
+        raise
+    except ImportError as exc:
+        raise RuntimeError(f"currency unavailable: {exc}") from exc
+
+
 def _handle_arka_disk(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "usage").strip().lower()
     try:
@@ -1215,6 +1261,41 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_docker,
+        ),
+        ArkaMcpTool(
+            name="arka_currency",
+            description=(
+                "Currency conversion — convert amounts between ISO currencies "
+                "or parse a natural-language query like '100 USD to INR'."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["convert", "parse"],
+                        "default": "convert",
+                        "description": "convert: explicit amount/from/to; parse: natural language",
+                    },
+                    "amount": {
+                        "type": "number",
+                        "description": "Amount when action=convert",
+                    },
+                    "from": {
+                        "type": "string",
+                        "description": "Source currency (ISO code or name)",
+                    },
+                    "to": {
+                        "type": "string",
+                        "description": "Target currency (ISO code or name)",
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "Natural-language query when action=parse",
+                    },
+                },
+            },
+            handler=_handle_arka_currency,
         ),
         ArkaMcpTool(
             name="arka_disk",

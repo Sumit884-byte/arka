@@ -395,6 +395,30 @@ def convert(amount: Decimal, from_ccy: str, to_ccy: str) -> ConversionResult:
     return fetch_conversion(amount, from_code, to_code)
 
 
+
+def convert_payload(
+    amount: Decimal | float | int | str,
+    from_ccy: str,
+    to_ccy: str,
+) -> dict[str, object]:
+    """Structured currency conversion for MCP / automation clients."""
+    amt = amount if isinstance(amount, Decimal) else Decimal(str(amount))
+    conv = convert(amt, from_ccy, to_ccy)
+    return {
+        "amount": str(conv.amount),
+        "from": conv.from_ccy,
+        "to": conv.to_ccy,
+        "rate": str(conv.rate),
+        "result": str(conv.result),
+        "formatted": {
+            "amount": _format_amount(conv.amount, ccy=conv.from_ccy),
+            "result": _format_amount(conv.result, ccy=conv.to_ccy),
+        },
+        "date": conv.date,
+        "source": conv.source,
+    }
+
+
 def format_result(conv: ConversionResult) -> str:
     """Pretty terminal output for a conversion."""
     amt = _format_amount(conv.amount, ccy=conv.from_ccy)
