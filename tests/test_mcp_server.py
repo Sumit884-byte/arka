@@ -15,7 +15,7 @@ def test_list_tool_definitions_schema():
 
     tools = list_tool_definitions()
     names = list_tool_names()
-    assert len(tools) == len(names) == 33
+    assert len(tools) == len(names) == 34
     assert "arka_ask" in names
     assert "arka_recall" in names
     assert "arka_heartbeat" in names
@@ -43,6 +43,7 @@ def test_list_tool_definitions_schema():
     assert "arka_calendar" in names
     assert "arka_textkit" in names
     assert "arka_spotify" in names
+    assert "arka_password" in names
     assert "arka_repo_health" in names
     assert "arka_agent_hub" in names
     for tool in tools:
@@ -127,7 +128,7 @@ def test_mcp_server_stdio_roundtrip():
     server = ArkaMcpServer(stdin=inp, stdout=out)
     response = server.process_line(inp.getvalue().strip())
     assert response is not None
-    assert len(response["result"]["tools"]) == 33
+    assert len(response["result"]["tools"]) == 34
 
 
 def test_install_config_snippet():
@@ -633,6 +634,27 @@ def test_handle_arka_docker_health(monkeypatch):
     assert ps["containers"][0]["name"] == "api"
 
 
+def test_handle_arka_password_generate(monkeypatch):
+    from arka.integrations import password_vault as vault
+    from arka.integrations.mcp_server import _handle_arka_password
+
+    monkeypatch.setattr(
+        vault,
+        "generate_payload",
+        lambda length=16, symbols=True: {
+            "ok": True,
+            "password": "Aa1!" + ("x" * max(0, length - 4)),
+            "length": length,
+            "symbols": symbols,
+            "stored": False,
+            "note": "One-shot password; not written to the vault",
+        },
+    )
+    payload = json.loads(_handle_arka_password({"action": "generate", "length": 12}))
+    assert payload["stored"] is False
+    assert payload["length"] == 12
+
+
 def test_handle_arka_spotify_search(monkeypatch):
     from arka.integrations import spotify as spotify_mod
     from arka.integrations.mcp_server import _handle_arka_spotify
@@ -1078,6 +1100,7 @@ def test_doctor_spawns_client(monkeypatch):
                 "arka_calendar",
                 "arka_textkit",
                 "arka_spotify",
+                "arka_password",
                 "arka_repo_health",
                 "arka_agent_hub",
                 "arka_team_run",

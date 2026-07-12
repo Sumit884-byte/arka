@@ -580,6 +580,27 @@ def _handle_arka_docker(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"docker_status unavailable: {exc}") from exc
 
 
+def _handle_arka_password(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "generate").strip().lower()
+    try:
+        from arka.integrations import password_vault as vault
+
+        if action in ("generate", "once"):
+            length = int(arguments.get("length") or 16)
+            symbols = arguments.get("symbols")
+            if symbols is None:
+                symbols = True
+            return json.dumps(
+                vault.generate_payload(length=length, symbols=bool(symbols)),
+                indent=2,
+            )
+        raise ValueError("action must be generate (vault store/get is not exposed via MCP)")
+    except ValueError:
+        raise
+    except ImportError as exc:
+        raise RuntimeError(f"password_vault unavailable: {exc}") from exc
+
+
 def _handle_arka_spotify(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "search").strip().lower()
     try:
@@ -1517,6 +1538,35 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_docker,
+        ),
+        ArkaMcpTool(
+            name="arka_password",
+            description=(
+                "Generate a strong one-shot password (not stored). "
+                "Vault get/set is intentionally not exposed via MCP."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["generate"],
+                        "default": "generate",
+                        "description": "generate: create a random password",
+                    },
+                    "length": {
+                        "type": "integer",
+                        "description": "Password length (8-128)",
+                        "default": 16,
+                    },
+                    "symbols": {
+                        "type": "boolean",
+                        "description": "Include symbol characters",
+                        "default": True,
+                    },
+                },
+            },
+            handler=_handle_arka_password,
         ),
         ArkaMcpTool(
             name="arka_spotify",

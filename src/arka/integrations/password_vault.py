@@ -217,6 +217,21 @@ def cmd_delete(name: str) -> int:
     return 0
 
 
+
+def generate_payload(*, length: int = 16, symbols: bool = True) -> dict[str, object]:
+    """Generate a one-shot password for MCP / automation clients (not stored)."""
+    length = max(8, min(int(length), 128))
+    password = _generate_password(length, symbols=bool(symbols))
+    return {
+        "ok": True,
+        "password": password,
+        "length": len(password),
+        "symbols": bool(symbols),
+        "stored": False,
+        "note": "One-shot password; not written to the vault",
+    }
+
+
 def cmd_once(length: int, *, symbols: bool) -> int:
     pwd = _generate_password(length, symbols=symbols)
     print(f"__PASSWORD__={pwd}")
