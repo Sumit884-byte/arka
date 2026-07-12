@@ -196,6 +196,46 @@ def test_handle_arka_sessions_list_and_context(tmp_path, monkeypatch):
     assert "hello from mcp test" in ctx
 
 
+def test_handle_arka_sessions_push_and_reset(tmp_path, monkeypatch):
+    from arka.integrations.mcp_server import _handle_arka_sessions
+
+    monkeypatch.setenv("MESSAGE_SESSIONS_DIR", str(tmp_path))
+    monkeypatch.setenv("MESSAGE_SESSIONS", "1")
+
+    push_text = _handle_arka_sessions(
+        {
+            "action": "push",
+            "channel": "cursor",
+            "chat_id": "proj-1",
+            "role": "assistant",
+            "text": "Implemented auth middleware",
+            "title": "Auth work",
+        }
+    )
+    assert "Session turn stored" in push_text
+
+    ctx = _handle_arka_sessions(
+        {"action": "context", "channel": "cursor", "chat_id": "proj-1"}
+    )
+    assert "Implemented auth middleware" in ctx
+    assert "ASSISTANT:" in ctx
+
+    status = json.loads(
+        _handle_arka_sessions({"action": "status", "channel": "cursor", "chat_id": "proj-1"})
+    )
+    assert status["session"]["turns"] == 1
+
+    reset_text = _handle_arka_sessions(
+        {"action": "reset", "channel": "cursor", "chat_id": "proj-1"}
+    )
+    assert "Session reset: cursor:proj-1" in reset_text
+
+    ctx_after = _handle_arka_sessions(
+        {"action": "context", "channel": "cursor", "chat_id": "proj-1"}
+    )
+    assert ctx_after == "(no session context)"
+
+
 def test_handle_arka_routines_list(tmp_path, monkeypatch):
     from arka.integrations.mcp_server import _handle_arka_routines
 

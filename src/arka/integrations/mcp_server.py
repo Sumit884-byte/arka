@@ -166,7 +166,13 @@ def _handle_arka_sessions(arguments: dict[str, Any]) -> str:
     channel = str(arguments.get("channel") or "").strip() or None
     chat_id = str(arguments.get("chat_id") or "").strip() or None
     try:
-        from arka.integrations.message_sessions import context_for, list_sessions, status
+        from arka.integrations.message_sessions import (
+            context_for,
+            list_sessions,
+            push,
+            reset,
+            status,
+        )
 
         if action == "list":
             limit = int(arguments.get("limit") or 20)
@@ -183,7 +189,32 @@ def _handle_arka_sessions(arguments: dict[str, Any]) -> str:
                 limit_chars=max(200, limit_chars),
             )
             return text or "(no session context)"
-        raise ValueError("action must be list, status, or context")
+        if action == "push":
+            if not channel:
+                raise ValueError("channel is required for push")
+            role = str(arguments.get("role") or "user").strip().lower()
+            text = str(arguments.get("text") or "").strip()
+            if not text:
+                raise ValueError("text is required for push")
+            title = str(arguments.get("title") or "").strip()
+            code, err = push(
+                channel,
+                chat_id or "default",
+                role,
+                text,
+                title=title,
+            )
+            if code != 0:
+                raise RuntimeError(err or "session push failed")
+            return f"Session turn stored: {text[:200]}"
+        if action == "reset":
+            if not channel:
+                raise ValueError("channel is required for reset")
+            code = reset(channel, chat_id or "default")
+            if code != 0:
+                raise RuntimeError("session reset failed")
+            return f"Session reset: {channel}:{chat_id or 'default'}"
+        raise ValueError("action must be list, status, context, push, or reset")
     except ImportError as exc:
         raise RuntimeError(f"message_sessions unavailable: {exc}") from exc
 
@@ -414,23 +445,37 @@ def _build_tools() -> list[ArkaMcpTool]:
         ),
         ArkaMcpTool(
             name="arka_sessions",
-            description="List Hermes-style channel sessions, status, or turn context for continuity.",
+            description="Hermes-style channel sessions — list, read context, push turns, or reset.",
             input_schema={
                 "type": "object",
                 "properties": {
                     "action": {
                         "type": "string",
-                        "enum": ["list", "status", "context"],
+                        "enum": ["list", "status", "context", "push", "reset"],
                         "default": "list",
-                        "description": "list sessions, hub status, or transcript context",
+                        "description": "list, status, context, push turn, or reset session",
                     },
                     "channel": {
                         "type": "string",
-                        "description": "Channel name (required for context)",
+                        "description": "Channel name (required for context, push, reset)",
                     },
                     "chat_id": {
                         "type": "string",
                         "description": "Chat id within the channel (default: default)",
+                    },
+                    "role": {
+                        "type": "string",
+                        "enum": ["user", "assistant", "system"],
+                        "description": "Turn role when action=push",
+                        "default": "user",
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "Turn text when action=push",
+                    },
+                    "title": {
+                        "type": "string",
+                        "description": "Optional session title when action=push",
                     },
                     "limit": {
                         "type": "integer",
