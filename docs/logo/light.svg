@@ -1,4 +1,11 @@
-<svg width="108" height="32" viewBox="0 0 108 32" fill="none" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-  <image x="0" y="2" width="28" height="28" href="icon.png" preserveAspectRatio="xMidYMid meet"/>
-  <text x="34" y="22" font-family="Inter, ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="18" font-weight="600" fill="#09090B" letter-spacing="-0.02em">Arka</text>
+<svg width="108" height="32" viewBox="0 0 108 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="arkaGradLight" x1="0" y1="0" x2="28" y2="28" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#6366F1"/>
+      <stop offset="100%" stop-color="#4F46E5"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="2" width="28" height="28" rx="7" fill="url(#arkaGradLight)"/>
+  <path d="M8 22 L14 8 L20 22 M10.5 17 L17.5 17" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <text x="36" y="22" font-family="Inter, ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="18" font-weight="700" fill="#09090B" letter-spacing="-0.02em">Arka</text>
 </svg>
