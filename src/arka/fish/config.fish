@@ -2225,6 +2225,9 @@ function _agent_is_mode_request --description "NL request to show/set operation 
         case mode 'show mode' 'current mode' 'what mode'
             return 0
     end
+    if string match -qr '(?i)^(?:arka\s+)?mode(?:\s+(list|ask|plan|agent|debug|multitask))?\s*$' "$cmd"
+        return 0
+    end
     if string match -qr '(?i)^(?:what|show|get)\s+(?:is\s+)?(?:the\s+)?(?:current\s+)?(?:operation\s+)?mode$' "$cmd"
         return 0
     end
@@ -2244,6 +2247,18 @@ end
 
 function _agent_build_mode_cmd --description "Build mode skill command from NL (internal)"
     set -l cmd (string lower (string trim -- "$argv[1]"))
+    if string match -qr '(?i)^(?:arka\s+)?mode(?:\s+(list|ask|plan|agent|debug|multitask))?\s*$' "$cmd"
+        set -l parts (string split -- " " "$cmd")
+        if test (count $parts) -ge 2; and string match -qr '(?i)^mode$' $parts[1]
+            echo mode $parts[2]
+            return
+        else if test (count $parts) -ge 3; and string match -qr '(?i)^mode$' $parts[2]
+            echo mode $parts[3]
+            return
+        end
+        echo mode
+        return
+    end
     if string match -qr '(?i)^(?:set|switch|change)\s+(?:the\s+)?(?:operation\s+)?mode\s+(?:to\s+)?(ask|plan|agent|debug|multitask)$' "$cmd"
         set -l parts (string split " " "$cmd")
         echo mode $parts[-1]
@@ -10083,6 +10098,9 @@ end
 
 function _agent_is_self_improve_request --description "True if user wants Arka self-improvement loop (internal)"
     set -l clean (string lower (string trim -- "$argv[1]"))
+    if string match -qr '(?i)^(?:arka\s+)?self\s+(memory|status)\s*$' "$clean"
+        return 0
+    end
     if string match -qr '(?i)^(?:self_improve|self improve)\b' "$clean"
         return 0
     end

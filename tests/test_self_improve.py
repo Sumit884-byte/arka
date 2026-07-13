@@ -34,6 +34,8 @@ class SelfImproveRoutingTests(unittest.TestCase):
         cases = (
             ("improve arka", "self_improve"),
             ("self improve", "self_improve"),
+            ("self memory", "self_improve memory"),
+            ("self status", "self_improve status"),
             ("arka improve itself", "self_improve"),
             ("loop to fix arka", "self_improve"),
             ("loop self fix failing tests", "self_improve fix failing tests"),

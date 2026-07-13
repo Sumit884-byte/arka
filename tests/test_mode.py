@@ -105,6 +105,10 @@ class ModeSymbolicRoutingTests(unittest.TestCase):
             "plan mode": "mode plan",
             "show mode": "mode",
             "what mode": "mode",
+            "mode debug": "mode debug",
+            "mode agent": "mode agent",
+            "mode list": "mode list",
+            "arka mode debug": "mode debug",
         }
         for phrase, expected in cases.items():
             with self.subTest(phrase=phrase):

@@ -44,7 +44,16 @@ _OPEN_PREFIX = re.compile(
 _BROWSER_SUFFIX = re.compile(r"(?i)\s+in\s+(?:the\s+|my\s+)?(?:default\s+)?browser\s*$")
 _KNOWN_CMDS = frozenset({"parse", "open"})
 
-# Reserved for other skills — not browser URL opens.
+# Bare tokens that are CLI/meta commands, not site names (avoid help.com).
+_RESERVED_OPEN_TARGETS = frozenset({"help", "skills", "?"})
+
+# Reserved for other skills — not browser URL opens (first token after open only).
+_RESERVED_OPEN_FIRST = re.compile(
+    r"(?i)^(?:open|browse|launch)\s+(?:the\s+)?(?:project|news|finance|file|app)\b"
+)
+_OPEN_URL_PREFIX = re.compile(
+    r"(?i)^(?:open|browse|launch)\s+(?:the\s+)?(?:url\s+)?https?://"
+)
 _NON_URL_OPEN = re.compile(
     r"(?i)\b(?:project|news|finance|file|app|folder|directory|terminal|editor|vscode|cursor)\b"
 )
@@ -72,6 +81,9 @@ def build_url(target: str) -> str | None:
 
     token = _normalize_token(raw)
     if not token:
+        return None
+
+    if token in _RESERVED_OPEN_TARGETS:
         return None
 
     if token in SITE_ALIASES:
@@ -129,11 +141,15 @@ def wants_open_url(text: str) -> bool:
         return False
     if is_play_youtube_intent(clean):
         return False
-    if _NON_URL_OPEN.search(clean):
+    if _OPEN_URL_PREFIX.search(clean):
+        return parse_open(clean) is not None
+    if _RESERVED_OPEN_FIRST.search(clean):
         return False
-    if re.search(r"(?i)\bopen\s+(?:project|news|finance|file|app)\b", clean):
+    if re.search(r"(?i)^open\s+kaggle\b", clean):
         return False
-    if re.search(r"(?i)\bopen\s+kaggle\b", clean):
+    if clean.lower() in _RESERVED_OPEN_TARGETS:
+        return False
+    if _NON_URL_OPEN.search(clean) and not re.search(r"(?i)^(?:open|browse|launch)\s+", clean):
         return False
     return parse_open(clean) is not None
 
@@ -148,11 +164,17 @@ def parse_open(text: str) -> str | None:
     if is_play_youtube_intent(t):
         return None
 
-    if re.search(r"(?i)\bopen\s+(?:project|news|finance|file|app)\b", lower):
+    if _OPEN_URL_PREFIX.search(t):
+        target = _extract_open_target(t)
+        if target:
+            return build_url(target)
+    if _RESERVED_OPEN_FIRST.search(t):
         return None
-    if re.search(r"(?i)\bopen\s+kaggle\b", lower):
+    if re.search(r"(?i)^open\s+kaggle\b", lower):
         return None
-    if _NON_URL_OPEN.search(t) and not re.search(r"(?i)^(?:open|browse)\s+", lower):
+    if lower in _RESERVED_OPEN_TARGETS:
+        return None
+    if _NON_URL_OPEN.search(t) and not re.search(r"(?i)^(?:open|browse|launch)\s+", lower):
         return None
 
     # Explicit browser-open phrasing.

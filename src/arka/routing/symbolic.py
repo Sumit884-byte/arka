@@ -740,9 +740,17 @@ def route_self_improve(cmd: str) -> str | None:
     return line or None
 
 
+def route_help(cmd: str) -> str | None:
+    clean = cmd.strip().lower()
+    if clean in ("help", "skills", "?"):
+        return "help"
+    return None
+
+
 def route_offline_extras(cmd: str) -> str | None:
     """Try supplemental NL routes not always available via fish bridge."""
     for fn in (
+        route_help,
         route_self_improve,
         route_mode,
         route_code_project,

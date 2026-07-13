@@ -264,10 +264,17 @@ def route_mode_nl(cmd: str) -> str | None:
         return "mode"
     if re.match(r"(?i)^(?:what|show|get)\s+(?:is\s+)?(?:the\s+)?(?:current\s+)?(?:operation\s+)?mode\b", lower):
         return "mode"
+    m = re.match(
+        r"(?i)^(?:arka\s+)?mode(?:\s+(list|ask|plan|agent|debug|multitask))?\s*$",
+        lower,
+    )
+    if m:
+        sub = (m.group(1) or "").lower()
+        return f"mode {sub}" if sub else "mode"
     m = re.match(r"(?i)^(?:set|switch|change)\s+(?:the\s+)?(?:operation\s+)?mode\s+(?:to\s+)?(\w+)\b", lower)
     if m:
         mode = m.group(1).lower()
-        if mode in VALID_MODES:
+        if mode in VALID_MODES or mode == "list":
             return f"mode {mode}"
     for mode in VALID_MODES:
         if re.match(rf"(?i)^(?:set\s+)?{re.escape(mode)}\s+mode$", lower):

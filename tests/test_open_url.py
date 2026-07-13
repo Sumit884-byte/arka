@@ -61,6 +61,13 @@ class OpenUrlParseTests(unittest.TestCase):
         self.assertIsNone(parse_open("open project myapp"))
         self.assertIsNone(parse_open("open news"))
         self.assertIsNone(parse_open("open finance"))
+        self.assertIsNone(parse_open("help"))
+        self.assertIsNone(parse_open("open help"))
+
+    def test_open_full_url(self) -> None:
+        self.assertTrue(wants_open_url("open https://news.ycombinator.com"))
+        hit = route_command("open https://news.ycombinator.com")
+        self.assertIn("news.ycombinator.com", hit)
 
     def test_nl_to_argv(self) -> None:
         self.assertEqual(nl_to_argv("open youtube"), ["https://youtube.com"])

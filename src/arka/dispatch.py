@@ -184,20 +184,23 @@ def run_skill(skill_line: str) -> int:
 
             code = code_agent(" ".join(rest))
         elif head in ("self_improve", "self"):
-            from arka.agent.self_improve import resolve_improve_args, run_self_improve
+            from arka.agent.self_improve import main as self_main, resolve_improve_args, run_self_improve
 
             argv = list(rest)
             if head == "self" and argv and argv[0] == "improve":
                 argv = argv[1:]
-            target, apply, max_rounds, max_steps, yes, auto_init = resolve_improve_args(argv)
-            code = run_self_improve(
-                target,
-                max_rounds=max_rounds,
-                max_steps=max_steps,
-                auto_init=auto_init,
-                yes=yes,
-                apply=apply,
-            )
+            if len(argv) == 1 and argv[0] in ("memory", "status"):
+                code = self_main([argv[0]])
+            else:
+                target, apply, max_rounds, max_steps, yes, auto_init = resolve_improve_args(argv)
+                code = run_self_improve(
+                    target,
+                    max_rounds=max_rounds,
+                    max_steps=max_steps,
+                    auto_init=auto_init,
+                    yes=yes,
+                    apply=apply,
+                )
         elif head.endswith(".py") and script_path(head).is_file():
             code = run_script(head, rest)
         else:

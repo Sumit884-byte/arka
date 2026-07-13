@@ -821,6 +821,10 @@ def route_command(text: str) -> str:
     if not raw:
         return ""
 
+    sub = re.match(r"(?i)^(?:arka\s+)?self\s+(memory|status)\s*$", raw)
+    if sub:
+        return f"self_improve {sub.group(1).lower()}"
+
     if not re.search(
         r"(?i)\b(?:self\s+improve|improve\s+(?:arka|yourself|itself)|arka\s+improve(?:\s+itself)?|"
         r"loop\s+to\s+fix\s+arka|fix\s+arka(?:\s+(?:tests|codebase))?|improve\s+the\s+arka\s+codebase|"
