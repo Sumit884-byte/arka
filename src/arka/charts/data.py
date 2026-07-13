@@ -530,22 +530,16 @@ def recommend_chart_type(dataset: ChartDataset, requested: str | None) -> ChartA
     share_snapshot = dataset.topic.endswith("_share") and not dataset.is_time_series
     if cats_look_like_years and len(dataset.series) == 1:
         best = "line"
-        alt = "bar"
     elif share_snapshot and len(dataset.categories) >= 2:
         best = "pie"
-        alt = "bar"
     elif dataset.is_multi_series and dataset.is_time_series:
         best = "grouped_bar"
-        alt = "line"
     elif dataset.is_time_series and len(dataset.series) == 1:
         best = "line"
-        alt = "bar"
     elif len(dataset.categories) >= 2 and len(dataset.series) == 1:
         best = "bar"
-        alt = "pie"
     else:
         best = "bar"
-        alt = "line"
 
     if req in {"", "auto"}:
         return ChartAdvice(requested="auto", recommended=best)

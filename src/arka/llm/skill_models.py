@@ -10,8 +10,6 @@ from typing import Any
 
 from arka.llm.fallback import _parse_skill_model_value, parse_chain
 from arka.llm.skill_profiles import (
-    SKILL_TASK_MAP,
-    TASK_PROFILES,
     default_model_for_profile,
     default_model_for_skill,
     known_skill_names,

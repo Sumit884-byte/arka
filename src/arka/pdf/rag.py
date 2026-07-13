@@ -533,7 +533,7 @@ def _extract_document_text(path: Path) -> str | None:
 
 
 def _index_document_turboquant(path: Path, text: str | None = None) -> tuple[bool, str]:
-    from arka.stock.turboquant_rag import index_document_text, sanitize_artifact
+    from arka.stock.turboquant_rag import index_document_text
 
     artifact = sanitize_id(path.name)
     if text is None:
@@ -971,7 +971,7 @@ def _parse_doc_and_question(text: str) -> tuple[str | None, str]:
         rf"^(?P<doc>[^\s]+)\s+(?P<q>{_ASK_VERBS}\b.+)$",
         rf"^(?:from|in)\s+(?P<doc>[^\s]+\.{_FILE_SUFFIX}|\S+(?:\s+\S+)?)\s*,?\s+(?P<q>.+)$",
         rf"^(?P<q>.+?)\s+(?:from|in)\s+(?P<doc>[^\s]+\.{_FILE_SUFFIX}|\S+(?:\s+\S+)?)\s*$",
-        rf"^(?P<q>.+?)\s+(?:in|from)\s+(?:document|pdf|file)\s+(?P<doc>\S.+?)\s*$",
+        r"^(?P<q>.+?)\s+(?:in|from)\s+(?:document|pdf|file)\s+(?P<doc>\S.+?)\s*$",
     ]
     for pat in patterns:
         m = re.match(pat, q, flags=re.I)

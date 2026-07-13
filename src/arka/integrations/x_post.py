@@ -1269,7 +1269,7 @@ def cmd_status(_args: argparse.Namespace) -> int:
     if state.get("version"):
         print(f"bird_version\t{state['version']}")
     if npm_msg:
-        print(f"node_npm\tmissing")
+        print("node_npm\tmissing")
         print(f"bird_install_hint\t{npm_msg.replace(chr(10), ' ')}")
     else:
         print("node_npm\tyes")
@@ -1285,7 +1285,7 @@ def cmd_install(args: argparse.Namespace) -> int:
     except RuntimeError as exc:
         raise SystemExit(str(exc)) from exc
     if not args.quiet:
-        print(f"bird_install\tok")
+        print("bird_install\tok")
         print(f"bird_path\t{path}")
         version = bird_version(path)
         if version:

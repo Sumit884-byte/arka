@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 
 try:
@@ -20,12 +19,8 @@ except ImportError:
 def main(argv: list[str] | None = None) -> int:
     load_env_file()
     from arka.routing.learned import (
-        delete_route,
         learn_from_trace,
         learn_route,
-        match_learned,
-        route_management_command,
-        wants_route_management,
     )
 
     parser = argparse.ArgumentParser(

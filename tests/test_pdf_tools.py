@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import io
 from pathlib import Path
 
 import pytest
 
 from arka.pdf.tools import (
-    CLI_NATIVE_CMDS,
     add_page_numbers,
     add_watermark,
     compare_pdfs,

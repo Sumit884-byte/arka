@@ -84,7 +84,6 @@ class TestSttInstallExecution(unittest.TestCase):
     def test_install_invokes_setup_local(self) -> None:
         from arka.agent import stt_install
 
-        ns = mock.Mock()
         with mock.patch("arka.media.transcript.cmd_setup_local", return_value=0) as setup:
             code = stt_install.cmd_install(["large-v3"])
         self.assertEqual(code, 0)

@@ -5,10 +5,8 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import shlex
-import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -635,7 +633,7 @@ def cmd_list() -> int:
         print(f"  {d.id:<12} {d.title}{proj}{tag}")
     pp = _load_plugins()
     if pp is not None and pp.discover_professions():
-        print(f"\nThird-party: profession plugins list  |  profession install <path|git-url>")
+        print("\nThird-party: profession plugins list  |  profession install <path|git-url>")
     print("\nUsage: profession ask <domain> <question>")
     print("       profession sources [domain]")
     print("       profession ask <question>   (uses saved profession from memory)")

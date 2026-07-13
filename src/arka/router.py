@@ -11,7 +11,7 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-from arka.paths import fish_config, script_path
+from arka.paths import script_path
 
 
 @dataclass
@@ -57,7 +57,7 @@ def route(text: str) -> Route | None:
         return None
 
     try:
-        from arka.telemetry import mark_ok, span
+        from arka.telemetry import span
     except ImportError:
         span = None  # type: ignore[assignment,misc]
     from contextlib import nullcontext
@@ -119,7 +119,27 @@ def route(text: str) -> Route | None:
                 )
             return fish_route
 
-        if fish_config() is not None and mode == "ai_only":
+        if mode == "ai_only":
+            integration = _route_ai_only_integrations(cmd)
+            if integration:
+                if span is not None:
+                    _finish_route_span(
+                        current,
+                        integration,
+                        decision="symbolic",
+                        start=route_start,
+                    )
+                return integration
+
+        fish_available = False
+        try:
+            from arka.fish_bridge import _find_fish
+
+            fish_available = _find_fish() is not None
+        except ImportError:
+            pass
+
+        if fish_available and mode == "ai_only":
             return None
 
         if mode in ("ai", "ai_only"):
@@ -179,6 +199,19 @@ def _finish_route_span(
     current.set_attribute("arka.route.decision", decision)
     current.set_attribute("arka.route.latency_ms", duration_ms(start))
     mark_ok(current)
+
+
+def _route_ai_only_integrations(cmd: str) -> Route | None:
+    """Bundled integration NL routes that apply in ROUTE_MODE=ai_only (fish parity)."""
+    try:
+        from arka.routing.symbolic import route_clipboard_history
+
+        hit = route_clipboard_history(cmd)
+        if hit:
+            return Route(hit, source="offline")
+    except ImportError:
+        pass
+    return None
 
 
 def _route_via_fish(cmd: str) -> Route | None:
@@ -518,8 +551,6 @@ def _route_offline(cmd: str) -> Route | None:
 
     if _is_council_request(clean):
         try:
-            import shlex
-
             from arka.agent.council import nl_to_argv
 
             argv = nl_to_argv(clean)

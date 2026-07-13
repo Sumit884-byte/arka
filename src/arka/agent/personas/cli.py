@@ -9,7 +9,7 @@ import shlex
 import subprocess
 import sys
 
-from arka.agent.personas.base import chat_once, chat_repl, sanitize_prompt
+from arka.agent.personas.base import chat_once, chat_repl
 from arka.agent.personas.io import (
     ensure_layout,
     format_persona_list,
@@ -50,7 +50,6 @@ def _generate_persona_draft(subject: str) -> Persona:
     from arka.agent.personas.base import _llm_reply
 
     slug = slugify(subject)
-    display = subject.strip().title()
     system = (
         "You draft YAML-ready fields for a simulated entertainment/education persona. "
         "Output ONLY valid JSON with keys: display_name, description, voice, system_prompt, disclaimer. "
@@ -145,7 +144,7 @@ def cmd_create(name: str, *, template: str | None = None, yes: bool = False) -> 
 
 def cmd_edit(name: str) -> int:
     slug = slugify(name)
-    persona = resolve_persona(slug)
+    resolve_persona(slug)
     editor = os.environ.get("EDITOR", "nano")
     from arka.agent.personas.io import _config_path, personas_dir
 

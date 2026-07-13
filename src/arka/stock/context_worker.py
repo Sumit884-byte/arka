@@ -67,7 +67,6 @@ def gather(tickers: list[str], *, include_ml: bool = True, ml_limit: int = 2) ->
 
     policy_lines: list[str] = []
     for ticker in tickers[:3]:
-        base = ticker.replace(".NS", "").replace(".BO", "")
         items = fetch_policy_news(ticker)
         if items:
             policy_lines.append(f"{ticker} policy headlines:")

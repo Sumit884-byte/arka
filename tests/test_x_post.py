@@ -17,7 +17,6 @@ from arka.integrations.x_post import (
     count_words,
     ensure_bird_exec_prefix,
     extract_urls_from_text,
-    git_remote_github_url,
     install_bird,
     is_blocked_github_url,
     main,

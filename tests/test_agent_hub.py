@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -90,7 +89,6 @@ def test_merge_mcp_add_only(hub_paths, tmp_path):
         json.dumps({"mcpServers": {"local": {"command": "local"}, "arka": {"command": "old"}}}),
         encoding="utf-8",
     )
-    from arka.integrations.agent_hub import _hub_mcp_servers
 
     result = merge_mcp_into_path(agent_cfg, _hub_mcp_servers(), create=True, replace=False)
     assert result["ok"] is True

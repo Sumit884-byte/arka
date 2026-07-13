@@ -347,7 +347,6 @@ def nl_to_argv(text: str) -> list[str]:
     t = text.strip()
     if not t:
         return []
-    low = t.lower()
     drawing_words = re.search(
         r"(?i)\b(drawing|blueprint|floor\s+plan|site\s+plan|elevation|section|schematic|"
         r"architectural|MEP|as[- ]built|plan\s+set|shop\s+drawing|visual\s+spec|"

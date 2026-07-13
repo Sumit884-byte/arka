@@ -12,7 +12,7 @@ import sys
 import webbrowser
 from email.message import EmailMessage
 from html import unescape as html_unescape
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlencode
@@ -117,7 +117,7 @@ def cmd_status() -> int:
         return 1
     email = tokens.get("email") or "unknown"
     print(f"Signed in as {email}")
-    print(f"Scopes: Gmail (read/compose/send), Calendar (read/events)")
+    print("Scopes: Gmail (read/compose/send), Calendar (read/events)")
     print(f"Token file: {oauth._token_file()}")
     return 0
 
@@ -370,7 +370,6 @@ def _gmail_fetch_row(mid: str, *, include_body: bool = False) -> dict[str, Any]:
 
 def _load_gmail_rows(args: argparse.Namespace) -> tuple[list[dict[str, Any]], str, str, int | None]:
     query, range_label = _gmail_query_from_args(args)
-    email = oauth.signed_in_email()
     if getattr(args, "summarize", False):
         cap = _gmail_summarize_cap()
         if args.all:

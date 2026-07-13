@@ -11,9 +11,7 @@ import shlex
 import shutil
 import subprocess
 import sys
-import time
 from datetime import datetime
-from pathlib import Path
 
 from arka.agent.core import (
     CACHE,
@@ -25,7 +23,6 @@ from arka.agent.core import (
     load_json,
     memory_context_for,
     memory_remember,
-    research,
     save_json,
 )
 

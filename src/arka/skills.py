@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import subprocess
 import sys
 
-from arka.dispatch import apply_env, python_executable, run_script, script_path
+from arka.dispatch import run_script
 
 
 def run_password(args: list[str]) -> int:

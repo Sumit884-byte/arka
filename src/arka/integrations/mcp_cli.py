@@ -10,7 +10,6 @@ import sys
 from arka.integrations.mcp_manager import (
     MCP_SDK_INSTALL_HINT,
     add_server,
-    all_status,
     call_tool,
     format_server_list,
     list_server_names,
@@ -83,7 +82,7 @@ def cmd_tools(args: argparse.Namespace) -> int:
         tools = list_tools(server)
     except KeyError:
         print(f"not configured\t{server}", file=sys.stderr)
-        print(f"hint\tarka mcp list", file=sys.stderr)
+        print("hint\tarka mcp list", file=sys.stderr)
         return 1
     except Exception as exc:
         print(f"error\t{exc}", file=sys.stderr)

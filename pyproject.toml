@@ -127,3 +127,7 @@ arka = [
     "skills/**/*",
     "professions/**/*",
 ]
+
+[tool.ruff.lint]
+# Optional-deps modules use lazy imports after env/setup (E402).
+ignore = ["E402"]

@@ -115,7 +115,7 @@ def demo_inference_latency(*, synthetic: bool = False) -> int:
     if not _require_tracing():
         return 1
 
-    from arka.telemetry import mark_ok, span
+    from arka.telemetry import span
 
     vllm_model = os.environ.get("VLLM_CLOUD_MODEL") or os.environ.get("VLLM_MODEL", "default")
     cloud_provider = os.environ.get("ARKA_DEMO_CLOUD_PROVIDER", "gemini")
@@ -482,7 +482,7 @@ def demo_e2e_observability(*, synthetic: bool = True) -> int:
     ui = _ui_url()
     print(f"E2E demo sent. Open {ui}/traces — filter arka.demo.scenario = {scenario}")
     print("1. Waterfall: route → vector_lookup → llm.attempt → tool.shell (E2E tracing)")
-    print(f"2. Click a slow LLM span → Logs tab shows correlated gen_ai.usage.* entries")
+    print("2. Click a slow LLM span → Logs tab shows correlated gen_ai.usage.* entries")
     print(f"3. Metrics: arka.llm.tokens + arka.agent.requests in {ui}/metrics")
     print("4. Alerts: arka signoz alert-create llm-p99-latency")
     return 0

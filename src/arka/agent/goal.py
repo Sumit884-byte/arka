@@ -7,10 +7,10 @@ import argparse
 import json
 import os
 import re
-import shlex
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 OUTPUT_LIMIT = int(os.environ.get("GOAL_OUTPUT_LIMIT", "8000"))
 DEFAULT_MAX = int(os.environ.get("GOAL_MAX_STEPS", "25"))
@@ -415,7 +415,7 @@ Rules:
         for step in range(1, max_steps + 1):
             step_ctx = (
                 span(
-                    f"arka.agent.goal.step",
+                    "arka.agent.goal.step",
                     attributes={"arka.agent.step": step, "arka.agent.max_steps": max_steps},
                 )
                 if span is not None

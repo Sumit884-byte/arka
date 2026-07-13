@@ -344,7 +344,7 @@ def _run_action(action: str) -> int:
     try:
         from arka.integrations.heartbeat import ping
 
-        ping(f"routine.run", source="routines")
+        ping("routine.run", source="routines")
     except ImportError:
         pass
     LOG_FILE.parent.mkdir(parents=True, exist_ok=True)

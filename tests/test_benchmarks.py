@@ -63,7 +63,7 @@ def test_benchmark_chain_entries(benchmark_env: Path):
 
 def test_apply_rankings_writes_skill_models(benchmark_env: Path, monkeypatch: pytest.MonkeyPatch):
     from arka.llm.benchmarks import apply_rankings, load_suite, run_suite, store_suite_run
-    from arka.llm.skill_models import load_skill_models_file, skill_models_path
+    from arka.llm.skill_models import load_skill_models_file
 
     monkeypatch.setenv("LLM_SKILL_MODELS", str(benchmark_env / "llm-skill-models.json"))
     suite = load_suite("default")

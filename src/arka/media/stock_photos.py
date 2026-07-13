@@ -13,7 +13,6 @@ from pathlib import Path
 
 from arka.media.unsplash import UnsplashPhoto, access_key as unsplash_key, download_photo as unsplash_download
 from arka.media.unsplash import search_photos as unsplash_search
-from arka.media.unsplash import setup_hint as unsplash_setup_hint
 from arka.media.unsplash import trigger_download as unsplash_trigger
 
 

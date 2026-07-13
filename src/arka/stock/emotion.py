@@ -489,7 +489,6 @@ def is_emotion_query(query: str) -> bool:
 
 def main() -> int:
     import argparse
-    import sys
 
     from arka.stock.ui import use_terminal_ui
 

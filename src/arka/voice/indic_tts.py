@@ -354,7 +354,7 @@ def main() -> int:
     sub.add_parser("start")
     sub.add_parser("stop")
     sub.add_parser("langs")
-    p_setup = sub.add_parser("setup")
+    sub.add_parser("setup")
     p_resolve = sub.add_parser("resolve-lang")
     p_resolve.add_argument("code", nargs="?", default="")
 

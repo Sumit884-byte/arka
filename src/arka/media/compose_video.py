@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import ast
-import asyncio
 import json
 import os
 import re
@@ -31,7 +30,7 @@ from arka.media.stock_photos import (
     setup_hint as stock_setup_hint,
     stock_search_query,
 )
-from arka.media.unsplash import UnsplashPhoto, access_key, download_photo, search_photos, setup_hint
+from arka.media.unsplash import access_key
 
 
 @dataclass
@@ -405,7 +404,7 @@ def extract_video_topic(text: str) -> str:
         r"(?:on|about|for|explaining)\s+(.+)$",
         rf"(?i)(?:^|\b)(?:please\s+)?(?:make|create|compose|build|render|produce|generate|arka)\s+"
         rf"(?:a\s+|an\s+)?{duration_gap}video\s+(?:on|about|for|explaining)\s+(.+)$",
-        rf"(?i)(?:^|\b)(?:youtube|info|tech|explainer)\s+video\s+(?:on|about|for|explaining)\s+(.+)$",
+        r"(?i)(?:^|\b)(?:youtube|info|tech|explainer)\s+video\s+(?:on|about|for|explaining)\s+(.+)$",
         rf"(?i)(?:^|\b)(?:make|create|compose|build|render|produce|generate|arka)\s+"
         rf"{duration_gap}video\s+(?:on|about|for|explaining)\s+(.+)$",
         rf"(?i)^compose\s+{duration_gap}video\s+(?:on|about|for|explaining)\s+(.+)$",

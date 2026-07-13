@@ -11,7 +11,6 @@ from arka.agent.daily_brief import (
     brief_url_limit_enabled,
     brief_url_words_limit,
     build_headlines_prompt,
-    context_block_looks_stale,
     current_brief_date,
     fetch_brief_memory_context,
     filter_stale_brief_context,

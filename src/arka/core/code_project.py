@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import re
@@ -278,7 +277,7 @@ def cmd_init(path: str) -> int:
         print(str(exc), file=sys.stderr)
         return 1
     print(f"Code project initialized: {root}")
-    print(f"  Write code with: arka code write \"<goal>\"")
+    print("  Write code with: arka code write \"<goal>\"")
     return 0
 
 

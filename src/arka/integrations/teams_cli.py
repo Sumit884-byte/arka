@@ -14,10 +14,7 @@ from arka.teams.io import (
     format_team_show,
     format_workflow_list,
     format_workflow_show,
-    list_teams,
-    list_workflows,
     load_team,
-    load_workflow,
     save_team,
     save_workflow,
     templates_dir,
@@ -50,7 +47,7 @@ def cmd_team_create(args: argparse.Namespace) -> int:
         src = templates_dir() / f"team-{template}.json"
     if not src.is_file():
         print(f"Unknown team template: {template}", file=sys.stderr)
-        print(f"Available: research, code-review, clawbox-edge", file=sys.stderr)
+        print("Available: research, code-review, clawbox-edge", file=sys.stderr)
         return 1
     from arka.teams.io import _load_text
 

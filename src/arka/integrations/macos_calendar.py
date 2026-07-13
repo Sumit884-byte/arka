@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import platform
-import re
 import subprocess
 from datetime import datetime, timezone
 from typing import Any

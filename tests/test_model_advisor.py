@@ -110,7 +110,6 @@ class ModelAdvisorRoutingTests(unittest.TestCase):
         self.assertEqual(hit.split()[0], "select_model")
 
     def test_route_offline_extras(self) -> None:
-        from arka.routing.symbolic import route_offline_extras
 
         hit = route_offline_extras("optimize models for my hardware")
         self.assertEqual(hit, "select_model")

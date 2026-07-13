@@ -139,7 +139,9 @@ def _notify(title: str, body: str) -> None:
     sys.stdout.write("\a")
     sys.stdout.flush()
     if sys.platform == "darwin" and shutil.which("osascript"):
-        esc = lambda s: s.replace("\\", "\\\\").replace('"', '\\"')
+        def esc(s: str) -> str:
+            return s.replace("\\", "\\\\").replace('"', '\\"')
+
         subprocess.run(
             [
                 "osascript",

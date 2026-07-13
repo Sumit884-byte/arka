@@ -18,15 +18,6 @@ except ImportError:
 
 def main(argv: list[str] | None = None) -> int:
     load_env_file()
-    from arka.llm.benchmarks import (
-        apply_rankings,
-        ensure_default_suite,
-        format_rankings_text,
-        list_suites,
-        load_suite,
-        run_suite,
-        store_suite_run,
-    )
 
     parser = argparse.ArgumentParser(
         description="Benchmark providers/models and use results for orchestration routing"

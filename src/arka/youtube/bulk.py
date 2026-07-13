@@ -18,7 +18,7 @@ import webbrowser
 from pathlib import Path
 
 from arka.core.progress import ProgressBar, progress_enabled
-from arka.core.compute import export_env_defaults, ffmpeg_threads, io_workers, log_compute_summary, yt_dlp_concurrent_fragments
+from arka.core.compute import export_env_defaults, ffmpeg_threads, log_compute_summary, yt_dlp_concurrent_fragments
 from arka.youtube.ytdlp_progress import build_format_opts, run_ytdlp_download
 
 PROJECT_DIR = Path(

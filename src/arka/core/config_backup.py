@@ -423,7 +423,7 @@ def cmd_restore(args: argparse.Namespace) -> int:
     if not result.get("ok"):
         print(f"error\t{result.get('error', 'restore failed')}", file=sys.stderr)
         return 1
-    print(f"ok\ttrue")
+    print("ok\ttrue")
     print(f"config_dir\t{result.get('config_dir')}")
     print(f"restored_from\t{result.get('restored_from')}")
     return 0

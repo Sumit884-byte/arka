@@ -108,7 +108,7 @@ def _mock_http_resp(body: dict | None = None, *, session: str = "", status: int 
 
 
 def test_connect_http_client_from_config(mcp_config):
-    from arka.integrations.mcp_manager import add_server, connect_client, list_tools
+    from arka.integrations.mcp_manager import add_server, connect_client
 
     add_server("signoz", url="http://localhost:8000/mcp", headers={"SIGNOZ-API-KEY": "k"})
 

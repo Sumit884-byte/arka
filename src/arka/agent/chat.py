@@ -1454,7 +1454,6 @@ def snippet_lookup(question: str) -> str:
 
 def evaluate_math(expression: str) -> str:
     try:
-        import sympy
         from sympy import (
             Eq,
             cos,
@@ -1647,7 +1646,6 @@ def parse_nearby_args(rest: list[str]) -> tuple[str, str]:
     if not rest:
         return "", ""
     joined = " ".join(rest).strip()
-    low = joined.lower()
     filter_tokens = set(POI_FILTER_TYPES) | {
         "eat",
         "places",

@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import argparse
 import re
 import subprocess
 import sys
 
 from arka import __version__
-from arka.dispatch import run_fish_skill, run_script, run_skill
+from arka.dispatch import run_script, run_skill
 from arka.env import load_env
 from arka.fish_bridge import delegate_fish_function, delegate_subcommand, delegate_to_fish
 from arka.paths import (
@@ -21,7 +20,6 @@ from arka.paths import (
     entry_script,
     env_file,
     fish_config,
-    package_dir,
 )
 from arka.platform_info import fish_install_hint, has_full_fish_agent, skill_mode, system
 from arka.router import route
@@ -402,7 +400,7 @@ def _execute_request(text: str) -> int:
         print_plan,
         try_multitask_delegate,
     )
-    from arka.dispatch import run_shell, run_skill
+    from arka.dispatch import run_shell
 
     r = route(text)
     if get_mode() == "debug":

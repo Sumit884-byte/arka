@@ -292,7 +292,7 @@ def test_cli_doctor(team_paths, capsys):
     assert "summary\t" in out
 
     capsys.readouterr()
-    code = main(["team", "doctor"])
+    main(["team", "doctor"])
     out = capsys.readouterr().out
     assert "summary\t" in out
     assert "team_research_config\tok" in out

@@ -224,7 +224,7 @@ def test_retry_exhaustion_marks_failure(team_paths):
 def test_mcp_injected_into_system(mock_resolve, mock_build, team_paths):
     from arka.teams.executor import RunContext, StepResult, execute_member
     from arka.teams.resolve import resolve_team
-    from arka.teams.schema import parse_team, parse_workflow, WorkflowStep
+    from arka.teams.schema import parse_team, parse_workflow
 
     mock_resolve.return_value = (True, ["github"])
     mock_build.return_value = "MCP: github tools listed"

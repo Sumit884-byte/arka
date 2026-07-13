@@ -89,7 +89,6 @@ def main() -> int:
         if not path:
             print("Usage: sarvam_stt.py --file <wav|mp3|mp4>", file=sys.stderr)
             return 1
-        from pathlib import Path
         import subprocess
 
         proc = subprocess.run(

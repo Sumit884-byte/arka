@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import shutil
 import subprocess
-import sys
 import time
 
 from _common import host_platform, log, poll_interval

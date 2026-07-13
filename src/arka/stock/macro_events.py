@@ -8,7 +8,7 @@ import re
 import subprocess
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 FISH_DIR = Path.home() / ".config" / "fish"
@@ -510,9 +510,8 @@ def is_macro_relevant_query(query: str) -> bool:
 
 def main() -> int:
     import argparse
-    import sys
 
-    from arka.stock.ui import use_color, use_terminal_ui
+    from arka.stock.ui import use_terminal_ui
 
     p = argparse.ArgumentParser(description="Macro event → stock impact scanner")
     p.add_argument("--limit", type=int, default=8)

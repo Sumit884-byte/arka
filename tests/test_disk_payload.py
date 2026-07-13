@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 
 from arka.core.disk import breakdown_payload, usage_payload
 

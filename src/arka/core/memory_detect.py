@@ -7,7 +7,6 @@ import argparse
 import json
 import os
 import re
-import sys
 from dataclasses import dataclass
 
 try:

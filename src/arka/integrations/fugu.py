@@ -133,7 +133,7 @@ def cmd_sync(args: argparse.Namespace) -> int:
     from arka.integrations.agent_hub import sync_all
 
     result = sync_all(unify=args.unify, replace=args.replace)
-    print(f"sync\tok")
+    print("sync\tok")
     print(f"synced_at\t{result.get('synced_at')}")
     if args.unify:
         for row in result.get("unify_mcp") or []:

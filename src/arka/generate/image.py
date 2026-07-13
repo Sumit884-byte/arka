@@ -201,7 +201,7 @@ def generate_pollinations(
         label = f"pollinations/{model}"
     else:
         url = f"https://image.pollinations.ai/prompt/{encoded}?width={width}&height={height}&nologo=true"
-        print(f"  Pollinations (flux, free) …", file=sys.stderr)
+        print("  Pollinations (flux, free) …", file=sys.stderr)
         data = _download_url(url)
         label = "pollinations/flux"
 

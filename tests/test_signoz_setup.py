@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 from unittest import mock
 
-import pytest
 
 
 def test_docker_status_missing_cli():

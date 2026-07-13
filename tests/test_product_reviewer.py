@@ -136,7 +136,7 @@ class ProductProfessionTests(unittest.TestCase):
         return stack
 
     def test_detect_product_reviewer_role(self) -> None:
-        from arka.agent.professions import detect, invalidate_profession_cache
+        from arka.agent.professions import invalidate_profession_cache
 
         with self._builtin_domains_ctx():
             invalidate_profession_cache()

@@ -6,7 +6,7 @@ from __future__ import annotations
 import os
 import re
 import sys
-from typing import Iterable, Sequence
+from typing import Sequence
 
 
 def use_color() -> bool:

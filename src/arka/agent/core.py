@@ -306,7 +306,7 @@ def _memory_context_body(goal: str, *, limit: int = 3) -> str:
             return session_ctx
         return _channel_memory_fallback()
     lines = [t for _, t in scored[:limit]]
-    local = "Relevant memories:\n" + "\n".join(f"- {l}" for l in lines)
+    local = "Relevant memories:\n" + "\n".join(f"- {line}" for line in lines)
     if session_ctx:
         return session_ctx + "\n\n" + local
     return local
@@ -643,7 +643,6 @@ from arka.integrations.routines import (  # noqa: E402
     routine_install,
     routine_list,
     routine_remove,
-    routine_run,
 )
 
 
@@ -918,7 +917,7 @@ def research(
             "End with a Sources: section naming every source used."
         )
     if contexts:
-        user_q = f"Sources:\n\n" + "\n\n---\n\n".join(contexts) + f"\n\nQuestion: {user_q}"
+        user_q = "Sources:\n\n" + "\n\n---\n\n".join(contexts) + f"\n\nQuestion: {user_q}"
     task = "research" if mode == "research" else "agent"
     answer = _llm(system, user_q, task=task)
     if not answer:

@@ -6,13 +6,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import shlex
 import signal
 import subprocess
 import sys
-import threading
-import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
@@ -135,7 +132,7 @@ class WebhookHandler(BaseHTTPRequestHandler):
         self._json(404, {"ok": False, "error": "not found"})
 
     def do_POST(self) -> None:
-        if not _auth_ok():
+        if not self._auth_ok():
             self._json(401, {"ok": False, "error": "unauthorized — set WEBHOOK_TOKEN"})
             return
         path = urlparse(self.path).path

@@ -166,7 +166,6 @@ def _stream_pyaudio(device_index: int | None) -> Iterator[bytes]:
     import pyaudio
 
     pa = pyaudio.PyAudio()
-    chunk = READ_FRAMES * 2  # bytes for int16 mono
     kwargs: dict = {
         "format": pyaudio.paInt16,
         "channels": 1,

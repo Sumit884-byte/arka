@@ -595,7 +595,7 @@ def cmd_setup_local(args: argparse.Namespace) -> int:
     print("  MEDIA_STT=local   # optional: force offline transcription")
     if env_path.is_file():
         print(f"  Add those lines to {env_path} to persist.")
-    print(f"Try: media_transcript <audio-or-video-file>")
+    print("Try: media_transcript <audio-or-video-file>")
     return 0
 
 

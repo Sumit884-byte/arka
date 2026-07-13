@@ -278,7 +278,6 @@ def _ensure_llm_sections(root: Path) -> None:
 
 
 def _summarize_path(status: str, path: str) -> str:
-    name = Path(path).name
     if status.startswith("A"):
         verb = "added"
     elif status.startswith("D"):

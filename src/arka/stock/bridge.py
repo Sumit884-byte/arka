@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import subprocess
 import sys
@@ -72,7 +71,7 @@ def run_script(script: str, script_args: list[str], *, timeout: int = 120) -> in
         stock_project_missing(str(STOCK_PROJECT))
         return 1
     if not path.is_file():
-        from arka.stock.ui import note, section
+        from arka.stock.ui import note
         from arka.stock.ui import banner
         banner("Stock script missing", icon="⚠️")
         note(f"Expected: {path}")

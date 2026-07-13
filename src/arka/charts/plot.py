@@ -7,7 +7,6 @@ import argparse
 import json
 import os
 import re
-import shlex
 import subprocess
 import sys
 import urllib.parse
@@ -77,6 +76,7 @@ HIST_COLOR = "#7c3aed"
 HIST_EDGE = "#5b21b6"
 PARETO_BAR = "#2563eb"
 PARETO_LINE = "#dc2626"
+PIE_INLINE_PCT_MIN = 5.0
 
 
 @dataclass
@@ -547,7 +547,10 @@ def nl_to_argv(text: str) -> list[str]:
         pass
 
     chart_words = r"(?i)\b(chart|graph|plot|visuali[sz]e|diagram)\b"
-    stock_words = r"(?i)\b(stock|stocks|share|shares|price|prices|market|ticker|equity)\b"
+    temporal_words = (
+        r"(?i)\b(?:last|past|over(?:\s+the)?)\s+(?:\d+\s+)?(?:day|days|week|weeks|month|months|year|years)\b"
+        r"|\b(?:1d|5d|1mo|3mo|6mo|1y|2y|5y|ytd|max)\b"
+    )
     bar_words = r"(?i)\b(bar|bars|column|sales|sold|units|phones|mobiles|devices)\b"
     pie_words = r"(?i)\b(pie|donut|doughnut|breakdown|proportion|percentage|percent|traffic\s+sources?|market\s+share)\b"
     scatter_words = r"(?i)\b(scatter|correlation|correlate|xy\s+plot|x-y)\b"
@@ -924,6 +927,21 @@ def _apply_chart_chrome(fig, ax, *, title: str, source: str = "") -> None:
     ax.set_title(title)
     if source:
         fig.text(0.01, 0.01, f"Source: {source}", fontsize=8, color="#64748b")
+
+def _pie_slice_percentages(values: list[float]) -> list[float]:
+    total = sum(values) or 1.0
+    return [100.0 * v / total for v in values]
+
+
+def _pie_use_legend(labels: list[str], values: list[float]) -> bool:
+    if any(len(lbl) > 14 for lbl in labels):
+        return True
+    if len(labels) > 5:
+        return True
+    pcts = _pie_slice_percentages(values)
+    small = sum(1 for p in pcts if p < PIE_INLINE_PCT_MIN)
+    return small >= 2 or any(p < 3 for p in pcts)
+
 
 def _compact_number(val: float) -> str:
     abs_v = abs(val)
@@ -1527,7 +1545,7 @@ def cmd_fetch(args: argparse.Namespace) -> int:
             source=scatter.source,
         )
         print(f"Source: {scatter.source}")
-        print(f"Chart type: scatter")
+        print("Chart type: scatter")
         print(f"Saved chart: {saved}")
         open_image(saved)
         return 0
@@ -1798,6 +1816,8 @@ def cmd_parse(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    from arka.charts.defaults import CHART_KINDS
+
     p = argparse.ArgumentParser(description="Draw line, bar, pie, and scatter charts")
     sub = p.add_subparsers(dest="cmd")
 

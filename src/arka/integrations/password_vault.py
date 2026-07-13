@@ -147,7 +147,7 @@ def cmd_set(name: str, password: str, *, force: bool) -> int:
     }
     _save_vault(vault)
     print(f"__NAME__={name}")
-    print(f"__STORED__=manual")
+    print("__STORED__=manual")
     print(f"__LENGTH__={len(password)}")
     return 0
 

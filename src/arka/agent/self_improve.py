@@ -889,7 +889,7 @@ def main(argv: list[str] | None = None) -> int:
     p_route = sub.add_parser("route", help="NL routing helper")
     p_route.add_argument("text", nargs="+")
 
-    p_status = sub.add_parser("status", help="Show Arka repo + code project status")
+    sub.add_parser("status", help="Show Arka repo + code project status")
     p_mem = sub.add_parser("memory", help="Show recent self-improve attempts")
     p_mem.add_argument("--json", action="store_true")
 

@@ -14,8 +14,6 @@ from pathlib import Path
 
 from arka.media.batch import (
     DEFAULT_MAX_ITEMS,
-    MERGE_QUESTION,
-    PER_ITEM_QUESTION,
     YT_FETCH_DELAY,
     _merge_digest,
     _research_allow_no_caption,

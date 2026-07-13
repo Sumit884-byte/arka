@@ -353,7 +353,7 @@ def live_scores(query: str = "", *, limit_per_league: int = 3) -> str:
 
     hint = ""
     if len(leagues) == 1:
-        hint = f"\n\nTip: say sports_score all for IPL, EPL, NBA, and NFL together."
+        hint = "\n\nTip: say sports_score all for IPL, EPL, NBA, and NFL together."
 
     return f"━━━ Answer ━━━\n{header}\n\n{body}\n\nBrief:\n{brief}\n\n{spoken}{hint}"
 

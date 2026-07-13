@@ -7,7 +7,6 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
 
 
 def test_list_tool_definitions_schema():
@@ -1074,7 +1073,6 @@ def test_handle_arka_qr_ascii(monkeypatch):
 
 
 def test_handle_arka_currency_convert(monkeypatch):
-    from decimal import Decimal
 
     from arka.integrations import currency as currency_mod
     from arka.integrations.mcp_server import _handle_arka_currency
