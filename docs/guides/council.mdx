@@ -1,0 +1,67 @@
+---
+title: "Arka Council"
+description: "Multi-persona deliberation — three simulated experts answer the same question, then Arka synthesizes consensus, tension, and a verdict."
+keywords: ["council", "deliberation", "personas", "synthesis"]
+icon: "users"
+---
+
+**Arka Council** runs one question past multiple simulated personas independently, then produces a structured synthesis — agreement, disagreement, and a clear verdict.
+
+<Warning>
+  Council members are **simulated** personas for brainstorming, not real people or authoritative advice.
+</Warning>
+
+## Quick start
+
+```bash
+arka council "should I learn Rust?"
+arka council should I quit my job to start a startup
+deliberate with arka on whether remote work is better
+ask the council about switching careers
+```
+
+## Output format
+
+```
+━━━ Arka Council ━━━
+Question: Should I learn Rust?
+
+── Socrates (simulated) ──
+  ...
+
+── Elon (simulated) ──
+  ...
+
+── Feynman (simulated) ──
+  ...
+
+── Synthesis ──
+  Consensus: ...
+  Tension: ...
+  Verdict: ...
+```
+
+Default council members: **Socrates**, **Elon**, **Feynman**. Each answers in 2–3 sentences before synthesis.
+
+## History
+
+Past questions are stored so repeats are avoided:
+
+```bash
+arka council list
+```
+
+Memory file: `~/.config/arka/council-memory.json`
+
+## Routing
+
+Natural-language triggers include `council`, `deliberate with arka`, and `ask the council`. Preview routing:
+
+```bash
+arka route "council should I learn Rust"
+```
+
+## Related
+
+- [Persona chat](/guides/personas) — single-character chat
+- [How routing works](/concepts/routing) — offline rules before LLM

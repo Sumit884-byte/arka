@@ -1,8 +1,29 @@
 ---
 title: "Week of July 13, 2026"
-description: "Weekly Arka changelog: CSV and TSV table previews are now exposed over MCP so connected agents can inspect tabular data cleanly."
+description: "Weekly Arka changelog: council deliberation, quiz practice, timezone conversion, slides finetuning, self-improve loop, and CI fixes."
 ---
 
 ## New features
 
-- **CSV/TSV table previews over MCP.** Connected agents can now request clean, structured previews of CSV and TSV files through Arka's MCP server — no ANSI escape codes or terminal formatting in the output. This makes it easier for external AI clients (Cursor, Claude Desktop, and other [MCP-compatible tools](/guides/mcp)) to inspect tabular data alongside Arka's [data Q&A skills](/guides/data-ask).
+- **[Arka Council](/guides/council).** Multi-persona deliberation — Socrates, Elon, and Feynman answer the same question independently, then Arka synthesizes consensus, tension, and a verdict.
+- **[Quiz practice](/guides/quiz-practice).** Infinite quizzes on any topic with per-topic memory so questions never repeat.
+- **[Timezone conversion](/guides/timezone-convert).** `arka convert 9am PDT to IST` and natural-language date/time conversion; disambiguates from currency `convert`.
+- **[Open URL](/guides/open-url).** `arka open youtube` opens sites in your default browser (distinct from `play_youtube`).
+- **[Interesting facts](/guides/interesting-fact).** Lightweight trivia without web search — `tell me something interesting`.
+- **[Self-improve loop](/guides/self-improve).** `arka self improve` analyzes the codebase and optionally applies fixes with `--apply`.
+- **[Operation modes](/guides/operation-modes).** `arka mode debug` for routing traces; default `agent` mode keeps output clean.
+- **[Compose slides](/guides/compose-slides).** Executive/pitch/academic style presets, action titles, validated pptx export with markdown fallback.
+- **Domain agents.** Astronomy, metallurgy, fact-check, science flow, Harvard ARK biomedical KG, repo context indexing.
+- **Provider CLI.** `arka provider list/set/show/models` with live OpenRouter autodetect.
+- **CSV/TSV table previews over MCP.** Clean structured previews for connected MCP clients.
+
+## Improvements
+
+- LLM fallback skips vLLM unless explicitly configured; traces hidden unless debug mode.
+- OpenRouter credit errors fall back to Gemini/Groq when keys are present.
+- Self-improve and goal agent use clean user-facing output (no llm.txt dumps in normal mode).
+- CI fixed: clipboard routing in `ai_only` mode, ruff lint clean across `src/` and `tests/`.
+
+## Docs
+
+- New guide pages for all features above; orphan guides (bookmarks, clipboard-history, docker-status, repo-health) added to navigation.

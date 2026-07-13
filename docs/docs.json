@@ -51,6 +51,8 @@
             "pages": [
               "guides/chat",
               "guides/personas",
+              "guides/council",
+              "guides/interesting-fact",
               "guides/memory",
               "guides/daily-brief"
             ]
@@ -60,9 +62,21 @@
             "icon": "file-text",
             "pages": [
               "guides/pdf-rag",
+              "guides/compose-slides",
               "guides/charts",
               "guides/vision",
               "guides/youtube"
+            ]
+          },
+          {
+            "group": "Learning & utilities",
+            "icon": "sparkles",
+            "pages": [
+              "guides/quiz-practice",
+              "guides/timezone-convert",
+              "guides/open-url",
+              "guides/bookmarks",
+              "guides/clipboard-history"
             ]
           },
           {
@@ -95,7 +109,10 @@
             "pages": [
               "guides/voice",
               "guides/goal-agent",
+              "guides/self-improve",
+              "guides/operation-modes",
               "guides/repo-map",
+              "guides/repo-health",
               "guides/openclaw-features",
               "guides/hermes-features",
               "guides/professions"
@@ -106,6 +123,7 @@
             "icon": "wrench",
             "pages": [
               "guides/observability",
+              "guides/docker-status",
               "guides/testing"
             ]
           },

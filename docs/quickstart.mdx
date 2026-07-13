@@ -33,6 +33,10 @@ Arka uses a docs-as-code approach — this site is built on [Mintlify](https://m
     pipx install "arka-agent[chat]"
     arka setup
     ```
+
+    <Note>
+      PyPI publish is coming soon. If `pipx install` returns 404, use the **Git clone** tab instead.
+    </Note>
   </Tab>
   <Tab title="Editable dev">
     For contributors working inside the repo.
@@ -88,7 +92,9 @@ Arka uses a docs-as-code approach — this site is built on [Mintlify](https://m
 
     ```bash
     arka "convert 100 USD to INR"
-    arka route "play bohemian rhapsody on spotify"
+    arka council "should I learn Rust?"
+    arka quiz python
+    arka route "convert 100 USD to INR"
     arka help
     ```
   </Step>
@@ -159,5 +165,13 @@ Follow the sidebar in order, or jump to what you need:
 
   <Card title="Voice" icon="microphone" href="/guides/voice">
     Wake word, STT, and TTS setup.
+  </Card>
+
+  <Card title="Arka Council" icon="users" href="/guides/council">
+    Multi-persona deliberation.
+  </Card>
+
+  <Card title="Changelog" icon="newspaper" href="/changelog/2026-07-13">
+    What's new this week.
   </Card>
 </CardGroup>

@@ -1,0 +1,52 @@
+---
+title: "Quiz practice"
+description: "Infinite quiz practice on any topic with memory — Arka never repeats a question you've already seen."
+keywords: ["quiz", "practice", "learning", "trivia", "memory"]
+icon: "graduation-cap"
+---
+
+**Quiz practice** generates unique questions on a topic, scores your answers, and keeps going until you stop. Previously asked questions are remembered so you always get something new.
+
+## Quick start
+
+```bash
+arka quiz python
+arka quiz practice rust loops
+quiz me on world history
+practice quiz biology mitosis
+```
+
+## Interactive flow
+
+1. Arka asks a question
+2. You type an answer
+3. Arka scores and explains
+4. Next unique question
+
+Press **Ctrl+C** or enter an empty answer to stop.
+
+## Commands
+
+| Command | Description |
+| --- | --- |
+| `arka quiz <topic>` | Start or continue a quiz on a topic |
+| `arka quiz_practice <topic> --count 1` | One question, then score |
+| `arka quiz_practice <topic> --reset` | Clear memory for that topic |
+| `arka quiz_practice list` | Show active topics and question counts |
+
+## Memory
+
+Per-topic history is stored at:
+
+```
+~/.config/arka/quiz-memory/<topic-slug>.json
+```
+
+Each file tracks `asked` questions and `scores` so the LLM avoids repeats.
+
+## Routing
+
+```bash
+arka route "quiz me on python decorators"
+# → quiz_practice 'python decorators'
+```

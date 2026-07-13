@@ -1,0 +1,50 @@
+---
+title: "Open URL in browser"
+description: "Open websites in your default browser from the terminal — YouTube, GitHub, Google, and full URLs."
+keywords: ["open", "browser", "url", "website"]
+icon: "arrow-up-right-from-square"
+---
+
+Open sites in your default system browser without leaving the terminal.
+
+## Quick start
+
+```bash
+arka open youtube
+arka open github.com
+arka open https://news.ycombinator.com
+arka browse google
+open google in browser
+```
+
+## Site aliases
+
+Common names map to URLs automatically:
+
+| Name | Opens |
+| --- | --- |
+| `youtube` | https://youtube.com |
+| `google` | https://google.com |
+| `github` | https://github.com |
+| `reddit` | https://reddit.com |
+| `wikipedia` | https://wikipedia.org |
+| `hackernews` / `hn` | https://news.ycombinator.com |
+
+Full `https://` URLs and `domain.tld` patterns work as-is.
+
+## vs play_youtube
+
+| Phrase | Skill |
+| --- | --- |
+| `arka open youtube` | Opens youtube.com in browser |
+| `arka play lofi on youtube` | YouTube playback skill |
+
+Arka disambiguates **open** (browser) from **play** / **watch** (media).
+
+## Commands
+
+| Command | Description |
+| --- | --- |
+| `arka open <site-or-url>` | Open in default browser |
+| `arka browse <site-or-url>` | Alias |
+| `open_url <target>` | Direct skill (fish) |

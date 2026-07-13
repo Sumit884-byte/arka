@@ -1,0 +1,63 @@
+---
+title: "Compose slides"
+description: "Generate executive-quality slide decks from a topic — pptx, pdf, html, or markdown with style presets."
+keywords: ["slides", "presentation", "pptx", "deck", "pitch"]
+icon: "presentation-screen"
+---
+
+Create structured slide decks from a topic. Arka uses presentation-specific prompts (action titles, speaker notes) — not video scripts.
+
+## Quick start
+
+```bash
+arka make slides about kubernetes networking
+arka pitch deck on AI infrastructure
+arka academic presentation on quantum computing
+compose_slides compose --topic "Python asyncio" --llm --style executive -f pptx
+```
+
+## Style presets
+
+| Style | Best for |
+| --- | --- |
+| `executive` | Business updates, clear action titles (default) |
+| `pitch` | Startup decks — hook → problem → solution → CTA |
+| `academic` | Research talks — precise terminology, methods |
+
+```bash
+compose_slides compose --topic "Series A" --style pitch -f pptx
+compose_slides compose --topic "CRISPR" --style academic -f all
+```
+
+## Export formats
+
+| Flag | Output |
+| --- | --- |
+| `-f pptx` | PowerPoint (requires `python-pptx`) |
+| `-f pdf` | PDF export |
+| `-f html` | HTML slideshow |
+| `-f md` | Marp markdown outline |
+| `-f all` | All formats |
+
+Slides save to `~/Documents/arka-slides/` by default.
+
+<Note>
+  If pptx validation fails, Arka removes the invalid file and saves a **markdown outline** instead.
+</Note>
+
+## Convert existing decks
+
+```bash
+compose_slides convert deck.pptx --format pdf
+```
+
+## Quality bar
+
+- One idea per slide
+- Action titles (not generic "Background")
+- 6–12 slides typical
+- Speaker notes in `narration`; minimal on-screen bullets
+
+## Related
+
+- [Skills catalog](/guides/skills) — `compose_slides` row in Media section

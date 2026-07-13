@@ -1,0 +1,41 @@
+---
+title: "Interesting facts"
+description: "Get a surprising fact on demand — lightweight LLM trivia without web search."
+keywords: ["fact", "trivia", "interesting", "fun"]
+icon: "lightbulb"
+---
+
+Ask for a short, surprising fact without triggering a full web search. Ideal for casual curiosity.
+
+## Quick start
+
+```bash
+arka do tell something interesting
+tell me something interesting
+give me a fun fact
+something cool about space
+random fact about biology
+```
+
+## With a topic
+
+```bash
+arka interesting_fact something interesting about quantum computing
+something cool about the ocean
+```
+
+Arka returns 2–4 sentences — one idea, plain language.
+
+## Routing
+
+These phrases route to `interesting_fact` **before** general chat or `web_answer`, so no search tokens are spent.
+
+```bash
+arka route "tell me something interesting"
+# → interesting_fact ...
+```
+
+## Related
+
+- [Quiz practice](/guides/quiz-practice) — interactive learning with scoring
+- [Arka Council](/guides/council) — multi-perspective deliberation

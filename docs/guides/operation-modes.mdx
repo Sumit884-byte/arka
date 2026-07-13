@@ -1,0 +1,59 @@
+---
+title: "Operation modes"
+description: "Control how Arka behaves — agent, ask, plan, debug, and multitask modes."
+keywords: ["mode", "debug", "ask", "plan", "agent"]
+icon: "toggle-on"
+---
+
+Arka supports **operation modes** that change routing verbosity, write permissions, and execution style. Default is **agent** (debug is off).
+
+## Modes
+
+| Mode | Behavior |
+| --- | --- |
+| `agent` | **Default** — full skill execution, clean output |
+| `ask` | Read-only; risky actions blocked |
+| `plan` | Structured steps printed, no execution |
+| `debug` | Shows routing traces, LLM fallback, vLLM status |
+| `multitask` | Background sub-agents for parallel work |
+
+## Switch modes
+
+```bash
+arka mode debug
+arka mode agent
+arka mode list
+```
+
+Or set in `~/.config/arka/.env`:
+
+```env
+ARKA_MODE=agent
+```
+
+## What debug mode shows
+
+Only in `debug` mode:
+
+- `arka_llm: fallback ok → groq/...`
+- `→ Interpreted: ...` / `▶ Running skill: ...`
+- vLLM / Ollama server startup messages
+- Self-improve full pytest output and goal-agent context
+
+Normal mode keeps output clean for non-developers.
+
+## Route mode (separate)
+
+`ROUTE_MODE` controls **how requests are routed**, not execution style:
+
+| Value | Behavior |
+| --- | --- |
+| `symbolic` | Offline rules first, LLM fallback (recommended) |
+| `ai_only` | LLM routing first |
+| `symbolic_only` | Never call LLM for routing |
+
+```env
+ROUTE_MODE=symbolic
+```
+
+See [How routing works](/concepts/routing).

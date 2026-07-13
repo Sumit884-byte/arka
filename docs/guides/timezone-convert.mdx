@@ -1,0 +1,51 @@
+---
+title: "Timezone conversion"
+description: "Convert times between timezones with natural language — PDT to IST, July 13 at 9am, and more."
+keywords: ["timezone", "convert", "PDT", "IST", "UTC"]
+icon: "clock"
+---
+
+Convert dates and times between timezones without web search. Arka parses natural language and uses `zoneinfo` for accurate DST handling.
+
+## Quick start
+
+```bash
+arka convert 9am PDT to IST
+arka convert July 13 at 9:00am PDT to IST
+arka what is this in ist July 13 at 9:00am PDT
+timezone_convert 'July 13 9:00am PDT to IST'
+```
+
+<Note>
+  The `convert` command auto-detects **timezone** vs **currency**. `arka convert 100 USD to INR` still routes to currency conversion.
+</Note>
+
+## Supported patterns
+
+- Time + abbreviations: `9am PDT`, `3:30 PM EST`
+- Dates: `July 13`, `2026-07-13`
+- Direction: `to IST`, `in IST`, `PDT to IST`
+
+## Common abbreviations
+
+| Abbrev | Zone |
+| --- | --- |
+| PDT / PST | America/Los_Angeles |
+| EST / EDT | America/New_York |
+| IST | Asia/Kolkata (Indian Standard Time) |
+| UTC / GMT | UTC |
+
+<Warning>
+  **IST** maps to Indian Standard Time (`Asia/Kolkata`), not Israel Standard Time.
+</Warning>
+
+## Routing
+
+```bash
+arka route "convert 9am PDT to IST"
+# → timezone_convert ...
+```
+
+## Related
+
+- [Currency conversion](/guides/skills#finance-and-stocks) — `arka convert 100 USD to INR`

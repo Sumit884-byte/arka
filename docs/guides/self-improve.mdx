@@ -1,0 +1,58 @@
+---
+title: "Self-improve loop"
+description: "Arka analyzes its own codebase, proposes fixes, and optionally applies them with safety gates."
+keywords: ["self-improve", "goal", "automation", "codebase"]
+icon: "arrows-rotate"
+---
+
+**Self-improve** lets Arka inspect its own repository — tests, routing, docs — and produce an improvement plan. Use `--apply` to run the goal agent and implement fixes.
+
+## Quick start
+
+```bash
+arka self improve              # plan only (dry-run)
+arka self improve routing      # focused plan
+arka self improve --apply      # implement via goal agent
+arka self memory               # past improvement attempts
+arka self status               # repo + memory path
+```
+
+Natural language:
+
+```bash
+improve arka
+self improve routing
+improve arka llm fallback
+```
+
+## Output (normal mode)
+
+```
+━━━ Arka Self-Improve ━━━
+Focus: routing
+Checking: tests, routing, docs
+
+✗ Tests: 1 failure (memory_detect)
+✓ Routing: symbolic.py (40 route_* handlers)
+○ Plan: fix import in tests/test_memory_detect.py
+
+Next: arka self improve routing --apply
+```
+
+<Note>
+  Full diagnostics (pytest traces, llm.txt context) appear only in [debug mode](/guides/operation-modes).
+</Note>
+
+## Safety
+
+| Rule | Behavior |
+| --- | --- |
+| Plan-only default | No file writes without `--apply` |
+| `--apply` requires agent mode | Blocked in `ask` or `plan` mode |
+| Secrets blocked | Never modifies `.env`, credentials, `node_modules` |
+| Memory | `~/.config/arka/self-improve-memory.json` tracks past attempts |
+
+## Related
+
+- [Goal agent](/guides/goal-agent) — multi-step autonomous tasks
+- [Testing](/guides/testing) — pytest and CI

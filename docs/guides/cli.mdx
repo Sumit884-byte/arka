@@ -134,6 +134,26 @@ See [Google Gemini CLI integration](/guides/gemini-cli).
 | `arka skills install <url>` | Install from git URL |
 | `arka skills refresh` | Reload plugin registry |
 
+## Council and deliberation
+
+Full guide: [Arka Council](/guides/council)
+
+| Skill | Example |
+| --- | --- |
+| `council` | `arka council "should I learn Rust?"` |
+| `council` | `ask the council about switching careers` |
+| `council list` | `arka council list` |
+
+## Learning
+
+Full guide: [Quiz practice](/guides/quiz-practice)
+
+| Skill | Example |
+| --- | --- |
+| `quiz_practice` | `arka quiz python` |
+| `quiz_practice` | `practice quiz biology mitosis` |
+| `quiz_practice list` | `arka quiz_practice list` |
+
 ## Goal agent
 
 Run autonomous multi-step tasks with a step budget:
@@ -144,6 +164,37 @@ arka goal -y -n 30 debug why nginx fails
 ```
 
 Default step budget: `GOAL_MAX_STEPS=25`.
+
+## Self-improve
+
+Analyze and improve the Arka codebase:
+
+```bash
+arka self improve
+arka self improve routing --apply
+arka self memory
+```
+
+See [Self-improve loop](/guides/self-improve).
+
+## Operation modes
+
+```bash
+arka mode debug    # show routing and LLM traces
+arka mode agent    # default clean output
+arka mode list
+```
+
+See [Operation modes](/guides/operation-modes).
+
+## Provider selection
+
+```bash
+arka provider list
+arka provider show
+arka provider set gemini
+arka provider set openrouter --refresh
+```
 
 ## Fish shell helpers
 
