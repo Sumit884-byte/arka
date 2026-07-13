@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import zipfile
 from pathlib import Path
@@ -343,6 +344,53 @@ def test_symbolic_route_compose_slides():
     hit = route_compose_slides("make slides about kubernetes networking")
     assert hit == "compose_slides compose --topic 'kubernetes networking'"
     assert route_compose_slides("make youtube video about ai") is None
+
+
+def test_symbolic_route_compose_slides_pitch_deck():
+    from arka.routing.symbolic import route_compose_slides
+
+    hit = route_compose_slides("pitch deck on AI infrastructure")
+    assert hit == "compose_slides compose --topic 'AI infrastructure' --style pitch"
+
+
+def test_normalize_compose_argv_inserts_compose_subcommand():
+    from arka.media.compose_slides import _normalize_compose_argv
+
+    assert _normalize_compose_argv(["--topic", "AI infrastructure", "--style", "pitch"]) == [
+        "compose",
+        "--topic",
+        "AI infrastructure",
+        "--style",
+        "pitch",
+    ]
+    assert _normalize_compose_argv(["compose", "--topic", "Rust"]) == [
+        "compose",
+        "--topic",
+        "Rust",
+    ]
+    assert _normalize_compose_argv(["pitch deck on AI infrastructure"]) == [
+        "compose",
+        "--topic",
+        "AI infrastructure",
+        "--style",
+        "pitch",
+    ]
+
+
+def test_main_accepts_compose_flags_without_subcommand(monkeypatch: pytest.MonkeyPatch):
+    from arka.media import compose_slides as mod
+
+    captured: list[argparse.Namespace] = []
+
+    def _fake_compose(args: argparse.Namespace) -> int:
+        captured.append(args)
+        return 0
+
+    monkeypatch.setattr(mod, "cmd_compose", _fake_compose)
+    assert mod.main(["--topic", "AI infrastructure", "--style", "pitch"]) == 0
+    assert len(captured) == 1
+    assert captured[0].topic == "AI infrastructure"
+    assert captured[0].style == "pitch"
 
 
 def test_pptx_export_valid_ooxml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

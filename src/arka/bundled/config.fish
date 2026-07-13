@@ -6422,6 +6422,14 @@ function compose_video --description "Compose YouTube/info videos — Unsplash i
 end
 
 function compose_slides --description "Compose presentation slide decks — stock photos, charts, LLM scripts"
+    if test (count $argv) -gt 0
+        set -l first $argv[1]
+        if string match -qr '^-' -- "$first"
+            if contains -- $first --topic --script --llm --style --scenes -f --format -o --output
+                set argv compose $argv
+            end
+        end
+    end
     if test (count $argv) -eq 0
         echo "Usage: compose_slides compose --topic 'Python asyncio' [--llm] [-f pptx|pdf|html|md|json|all]"
         echo "       compose_slides compose --script scenes.json [-o out.pptx] [-f format]"
@@ -11902,8 +11910,32 @@ function _agent_build_compose_slides_cmd --description "Build compose_slides arg
     set -l cmd "$argv[1]"
     set -l name (_agent_call_name)
     set cmd (string replace -r -i "^$name\\s+" '' "$cmd" | string trim)
+    # Fast fish-native match (no Python subprocess — reliable under ai_only / venv edge cases)
+    if string match -qr '(?i)(?:^|\b)(?:pitch|executive|academic)\s+(?:slide|slides|presentation|deck)\s+(?:on|about|for|explaining|covering)\s+\S' "$cmd"
+        set -l style pitch
+        if string match -qr '(?i)\bacademic\b' "$cmd"
+            set style academic
+        else if string match -qr '(?i)\bexecutive\b' "$cmd"
+            set style executive
+        end
+        set -l topic (string replace -r -i '.*\b(?:pitch|executive|academic)\s+(?:slide|slides|presentation|deck)\s+(?:on|about|for|explaining|covering)\s+' '' "$cmd" | string trim)
+        test -n "$topic"; and echo "compose_slides compose --topic "(string escape --style=script -- $topic)" --style $style"
+        return
+    end
+    if string match -qr '(?i)(?:^|\b)(?:make|create|compose|build|render|produce|generate|arka)\s+(?:a\s+|an\s+)?(?:slide|slides|presentation|deck)\s+(?:on|about|for|explaining|covering)\s+\S' "$cmd"
+        set -l topic (string replace -r -i '.*\b(?:make|create|compose|build|render|produce|generate|arka)\s+(?:a\s+|an\s+)?(?:slide|slides|presentation|deck)\s+(?:on|about|for|explaining|covering)\s+' '' "$cmd" | string trim)
+        test -n "$topic"; and echo "compose_slides compose --topic "(string escape --style=script -- $topic)
+        return
+    end
+    if string match -qr '(?i)(?:^|\b)(?:slide|slides|presentation|deck)\s+(?:on|about|for|explaining|covering)\s+\S' "$cmd"
+        set -l topic (string replace -r -i '.*\b(?:slide|slides|presentation|deck)\s+(?:on|about|for|explaining|covering)\s+' '' "$cmd" | string trim)
+        test -n "$topic"; and echo "compose_slides compose --topic "(string escape --style=script -- $topic)
+        return
+    end
     set -l py (_arka_python)
-    set -l rest ($py (_arka_py_script arka_compose_slides.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
+    set -l script (_arka_py_script arka_compose_slides.py)
+    test -z "$script"; and return
+    set -l rest ($py "$script" parse (string escape --style=script -- $cmd) 2>/dev/null)
     if test (count $rest) -gt 0
         echo "compose_slides $rest"
     end
@@ -14287,6 +14319,11 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         end
     end
 
+    if _agent_is_compose_slides_request "$cmd"
+        echo "skill|"(_agent_build_compose_slides_cmd "$cmd")"|Presentation slides (pptx, pdf, html, md, json)"
+        return
+    end
+
     set -l route_mode (_arka_route_mode)
     if test "$route_mode" = ai -o "$route_mode" = ai_only
         set -l skills (_agent_available_skills)
@@ -15457,6 +15494,11 @@ function _agent_correct_interpretation --description "Fix bad LLM skill picks us
 
     if _agent_is_quiz_practice_request "$cmd"
         echo (_agent_build_quiz_practice_cmd "$cmd")
+        return
+    end
+
+    if _agent_is_compose_slides_request "$cmd"
+        echo (_agent_build_compose_slides_cmd "$cmd")
         return
     end
 
@@ -17672,7 +17714,7 @@ function agent --description "Run commands safely: executes safe commands automa
         echo "  generate_image <prompt> - Generate images using Gemini API (gemini-2.5-flash-image)"
         echo "  generate_video <prompt> - Real AI video (needs POLLINATIONS_API_KEY or Gemini billing)"
         echo "  compose_video --topic '…' [--llm] - YouTube info video (Unsplash + ffmpeg + TTS)"
-        echo "  compose_slides --topic '…' [-f format] [--llm] - Presentation deck (pptx, pdf, html, md, json)"
+        echo "  compose_slides compose --topic '…' [-f format] [--llm] [--style pitch|academic|executive] - Presentation deck"
         echo "  convert_media <file> --to <fmt> - Convert images, video, or slides (Pillow/ffmpeg)"
         echo "  excuse                 - Get a hilarious offline programmer excuse"
         echo "  bored                  - Suggest a quick developer break task or exercise"
@@ -17889,6 +17931,11 @@ function agent --description "Run commands safely: executes safe commands automa
 
     if test -z "$interpreted"; and _agent_is_quiz_practice_request "$cmd"
         set interpreted (_agent_build_quiz_practice_cmd "$cmd")
+        set route_source offline
+    end
+
+    if test -z "$interpreted"; and _agent_is_compose_slides_request "$cmd"
+        set interpreted (_agent_build_compose_slides_cmd "$cmd")
         set route_source offline
     end
 

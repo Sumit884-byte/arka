@@ -2071,6 +2071,25 @@ def _open_slides(path: Path) -> None:
         subprocess.Popen(["xdg-open", str(path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+_COMPOSE_SUBCMDS = frozenset({"compose", "convert", "parse", "check"})
+_COMPOSE_FLAG_PREFIXES = ("--topic", "--script", "--llm", "--style", "--scenes", "--format", "--output")
+
+
+def _normalize_compose_argv(argv: list[str]) -> list[str]:
+    """Accept legacy ``--topic`` argv (no ``compose`` subcommand) and NL phrases."""
+    if not argv:
+        return argv
+    head = argv[0]
+    if head in _COMPOSE_SUBCMDS or head in {"-h", "--help"}:
+        return argv
+    if head.startswith("-") and any(
+        a == flag or a.startswith(f"{flag}=") for a in argv for flag in _COMPOSE_FLAG_PREFIXES
+    ):
+        return ["compose", *argv]
+    nl = nl_to_argv(" ".join(argv))
+    return nl if nl else argv
+
+
 def main(argv: list[str] | None = None) -> int:
     from arka.env import load_env
 
@@ -2079,13 +2098,10 @@ def main(argv: list[str] | None = None) -> int:
     if not argv:
         build_parser().print_help()
         return 0
-    if argv[0] not in {"compose", "convert", "parse", "check", "-h", "--help"}:
-        nl = nl_to_argv(" ".join(argv))
-        if nl:
-            argv = nl
-        else:
-            build_parser().print_help()
-            return 1
+    argv = _normalize_compose_argv(argv)
+    if argv[0] not in _COMPOSE_SUBCMDS and argv[0] not in {"-h", "--help"}:
+        build_parser().print_help()
+        return 1
     parser = build_parser()
     args = parser.parse_args(argv)
     if not getattr(args, "func", None):
