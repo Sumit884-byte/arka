@@ -1844,6 +1844,18 @@ function _agent_strip_quotes --description "Strip wrapping single/double quotes 
     echo $t
 end
 
+function _agent_looks_like_markdown_shell --description "True if text is LLM markdown, not a runnable skill line (internal)"
+    set -l cmd (string trim -- "$argv[1]")
+    test -z "$cmd"; and return 1
+    if string match -qr '[`*]' -- "$cmd"
+        return 0
+    end
+    if string match -qr '(?m)^\s*[\*\-]\s' -- "$cmd"
+        return 0
+    end
+    return 1
+end
+
 function _agent_dispatch_one --description "Run one skill by name or shell via _agent_exec_shell_cmd"
     set -l cmd_trim (string trim -- "$argv[1]")
     test -z "$cmd_trim"; and return 1
@@ -1921,6 +1933,10 @@ function _agent_dispatch_one --description "Run one skill by name or shell via _
         _arka_run_third_party_skills $first $tokens
         return $status
     end
+    if _agent_looks_like_markdown_shell "$cmd_trim"
+        echo (set_color red)"✗ Routing returned markdown, not a skill — try: arka route \"…\""(set_color normal) >&2
+        return 1
+    end
     if _arka_routing_trace_enabled
         echo (set_color cyan)"▶ Running: $cmd_trim"(set_color normal)
     end
@@ -1965,7 +1981,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         create_desktop_app fix_graphics_driver install_app install_apt install_brew install_flatpak \
         install_snap install_package install_uv install_stt stock_analysis stock macro emotion \
         auto_click auto_copy decrypt_pdf classify_files cleanup_downloads watch_zip monitor_x post_x \
-        generate_image generate_thumbnail generate_video compose_video compose_slides convert_media pdf_tools chart ascii_art flow fact_check quiz_practice council astronomy metallurgy youtube_transcript youtube_download yt_download media_transcript transcribe_media summarize_url daily_brief wifi_info \
+        generate_image generate_thumbnail generate_video compose_video compose_slides convert_media pdf_tools chart ascii_art flow fact_check quiz quiz_practice council astronomy metallurgy youtube_transcript youtube_download yt_download media_transcript transcribe_media summarize_url daily_brief wifi_info \
         folder_summarize playlist_summarize youtube_research yt_research find_videos codebase_ingest \
         agent_remember agent_recall agent_memory agent_trace agent_why agent_last \
         agent_resume agent_research agent_nudge agent_watch agent_routine agent_fanout \
@@ -6194,6 +6210,10 @@ function quiz_practice --description "Infinite quiz practice with per-topic memo
     end
     set -l py (_arka_python)
     $py (_arka_py_script arka_quiz_practice.py) $argv
+end
+
+function quiz --description "Alias for quiz_practice"
+    quiz_practice $argv
 end
 
 function council --description "Multi-persona deliberation chamber with synthesis"
@@ -11723,8 +11743,30 @@ end
 
 function _agent_build_quiz_practice_cmd --description "Build quiz_practice args from NL (internal)"
     set -l cmd "$argv[1]"
+    # Fast fish-native match (no Python subprocess — reliable under ai_only / venv edge cases)
+    if string match -qr '(?i)^quiz_practice\s+list\b' "$cmd"
+        echo "quiz_practice list"
+        return
+    end
+    if string match -qr '(?i)^(?:quiz|quiz_practice|practice\s+quiz)\s+\S' "$cmd"
+        set -l topic (string replace -r -i '^(?:quiz|quiz_practice|practice\s+quiz)\s+' '' "$cmd" | string trim)
+        test -n "$topic"; and echo "quiz_practice $topic"
+        return
+    end
+    if string match -qr '(?i)\bquiz\s+me\s+(?:on\s+)?\S' "$cmd"
+        set -l topic (string replace -r -i '.*\bquiz\s+me\s+(?:on\s+)?' '' "$cmd" | string trim)
+        test -n "$topic"; and echo "quiz_practice $topic"
+        return
+    end
+    if string match -qr '(?i)^(?:please\s+)?arka\s+quiz\s+\S' "$cmd"
+        set -l topic (string replace -r -i '^(?:please\s+)?arka\s+quiz\s+' '' "$cmd" | string trim)
+        test -n "$topic"; and echo "quiz_practice $topic"
+        return
+    end
     set -l py (_arka_python)
-    set -l rest ($py (_arka_py_script arka_quiz_practice.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
+    set -l script (_arka_py_script arka_quiz_practice.py)
+    test -z "$script"; and return
+    set -l rest ($py "$script" parse (string escape --style=script -- $cmd) 2>/dev/null)
     if test (count $rest) -gt 0
         echo "quiz_practice $rest"
     end
@@ -18850,6 +18892,11 @@ function agent --description "Run commands safely: executes safe commands automa
     end
 
     # 5. Handle Interpreted Result
+    if test -n "$interpreted"; and test "$interpreted" != "impossible"
+        if _agent_looks_like_markdown_shell "$interpreted"
+            set interpreted ""
+        end
+    end
     if test -n "$interpreted"; and test "$interpreted" != "impossible"
         if _arka_routing_trace_enabled
             echo (set_color blue)"→ Interpreted: $interpreted"(set_color normal)
