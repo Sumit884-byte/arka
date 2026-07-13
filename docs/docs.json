@@ -117,6 +117,13 @@
               "reference/aliases",
               "reference/troubleshooting"
             ]
+          },
+          {
+            "group": "Changelog",
+            "icon": "newspaper",
+            "pages": [
+              "changelog/2026-07-13"
+            ]
           }
         ]
       },
