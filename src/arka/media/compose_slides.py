@@ -217,7 +217,10 @@ def _llm_slides_script(
     if text.startswith("```"):
         text = re.sub(r"^```(?:json)?\s*", "", text)
         text = re.sub(r"\s*```$", "", text)
-    parsed = _parse_scenes_json(text)
+    try:
+        parsed = _parse_scenes_json(text)
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise SystemExit(f"LLM returned invalid slide JSON: {exc}") from exc
     if len(parsed) < 2:
         raise SystemExit("LLM did not return a usable slide script.")
     if scenes is None and len(parsed) > max_scenes:
@@ -2077,6 +2080,11 @@ _COMPOSE_FLAG_PREFIXES = ("--topic", "--script", "--llm", "--style", "--scenes",
 
 def _normalize_compose_argv(argv: list[str]) -> list[str]:
     """Accept legacy ``--topic`` argv (no ``compose`` subcommand) and NL phrases."""
+    # Some command dispatchers use ``--`` to separate their own arguments from
+    # the command they launch.  It is not part of compose_slides' CLI, so avoid
+    # treating the following valid subcommand as natural-language input.
+    while len(argv) > 1 and argv[0] == "--":
+        argv = argv[1:]
     if not argv:
         return argv
     head = argv[0]

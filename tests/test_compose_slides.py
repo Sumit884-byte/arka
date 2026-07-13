@@ -353,6 +353,60 @@ def test_symbolic_route_compose_slides_pitch_deck():
     assert hit == "compose_slides compose --topic 'AI infrastructure' --style pitch"
 
 
+def test_dispatch_split_skill_line_multi_word_topic():
+    """Dispatch must preserve quoted multi-word --topic values (fish _agent_dispatch_one)."""
+    from arka.dispatch import _split_skill_line
+
+    cases = [
+        ("compose_slides compose --topic 'AI infrastructure' --style pitch", [
+            "compose_slides",
+            "compose",
+            "--topic",
+            "AI infrastructure",
+            "--style",
+            "pitch",
+        ]),
+        ("compose_slides compose --topic 'machine learning' --style pitch", [
+            "compose_slides",
+            "compose",
+            "--topic",
+            "machine learning",
+            "--style",
+            "pitch",
+        ]),
+        ("compose_slides compose --topic 'cloud native'", [
+            "compose_slides",
+            "compose",
+            "--topic",
+            "cloud native",
+        ]),
+        ("compose_slides compose --topic 'kubernetes networking'", [
+            "compose_slides",
+            "compose",
+            "--topic",
+            "kubernetes networking",
+        ]),
+    ]
+    for line, expected in cases:
+        assert _split_skill_line(line) == expected, line
+
+
+def test_nl_to_argv_multi_word_topics():
+    """NL parse must keep spaces inside slide topics."""
+    assert nl_to_argv("pitch deck on machine learning") == [
+        "compose",
+        "--topic",
+        "machine learning",
+        "--style",
+        "pitch",
+    ]
+    assert nl_to_argv("make slides about cloud native") == [
+        "compose",
+        "--topic",
+        "cloud native",
+    ]
+
+
 def test_normalize_compose_argv_inserts_compose_subcommand():
     from arka.media.compose_slides import _normalize_compose_argv
 
@@ -367,6 +421,15 @@ def test_normalize_compose_argv_inserts_compose_subcommand():
         "compose",
         "--topic",
         "Rust",
+    ]
+    assert _normalize_compose_argv(
+        ["--", "compose", "--topic", "AI infrastructure", "--style", "pitch"]
+    ) == [
+        "compose",
+        "--topic",
+        "AI infrastructure",
+        "--style",
+        "pitch",
     ]
     assert _normalize_compose_argv(["pitch deck on AI infrastructure"]) == [
         "compose",
@@ -388,9 +451,10 @@ def test_main_accepts_compose_flags_without_subcommand(monkeypatch: pytest.Monke
 
     monkeypatch.setattr(mod, "cmd_compose", _fake_compose)
     assert mod.main(["--topic", "AI infrastructure", "--style", "pitch"]) == 0
-    assert len(captured) == 1
-    assert captured[0].topic == "AI infrastructure"
-    assert captured[0].style == "pitch"
+    assert mod.main(["--", "compose", "--topic", "AI infrastructure", "--style", "pitch"]) == 0
+    assert [args.topic for args in captured] == ["AI infrastructure", "AI infrastructure"]
+    assert len(captured) == 2
+    assert all(args.style == "pitch" for args in captured)
 
 
 def test_pptx_export_valid_ooxml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

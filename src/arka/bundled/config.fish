@@ -1832,9 +1832,9 @@ function _agent_is_skill --description "True if word is a registered agent skill
     contains -- "$word" (_agent_available_skills)
 end
 
-function _agent_shlex_split --description "Shell-safe argv split for google dispatch (internal)"
+function _agent_shlex_split --description "Shell-safe argv split for skill dispatch (internal)"
     set -l py (_arka_python)
-    $py -c "import shlex,sys; print('\n'.join(shlex.split(sys.argv[1])))" (string escape --style=script -- $argv[1])
+    env ARKA_SHLEX="$argv[1]" $py -c "import os,shlex; print(chr(10).join(shlex.split(os.environ['ARKA_SHLEX'])))"
 end
 
 function _agent_strip_quotes --description "Strip wrapping single/double quotes (internal)"
@@ -1867,12 +1867,7 @@ function _agent_dispatch_one --description "Run one skill by name or shell via _
     if not _arka_confirm_risky_action $argv[2..] "$cmd_trim"
         return 1
     end
-    set -l tokens (string split " " -- "$cmd_trim")
-    set -l cleaned
-    for t in $tokens
-        set -a cleaned (_agent_strip_quotes "$t")
-    end
-    set -l tokens $cleaned
+    set -l tokens (_agent_shlex_split "$cmd_trim")
     set -l first $tokens[1]
     if test "$first" = mode
         if _arka_routing_trace_enabled
