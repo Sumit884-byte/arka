@@ -55,6 +55,11 @@ NL_CASES: tuple[tuple[str, str], ...] = (
     ("improve arka", "self_improve"),
     ("self improve add tests", "self_improve"),
     ("loop self fix failing tests", "self_improve"),
+    ("improve arka llm fallback", "self_improve"),
+    ("self improve routing", "self_improve"),
+    ("make slides about kubernetes networking", "compose_slides"),
+    ("arka slides about Rust memory safety", "compose_slides"),
+    ("pitch deck on AI infrastructure", "compose_slides"),
 )
 
 

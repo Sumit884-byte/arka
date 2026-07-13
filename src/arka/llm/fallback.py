@@ -83,6 +83,7 @@ TASK_MAX_TOKENS: dict[str, int] = {
     "pdf": 4096,
     "predictions": 4096,
     "compose_video": 4096,
+    "compose_slides": 4096,
     "default": 4096,
 }
 
@@ -161,6 +162,7 @@ TASK_ALIASES = {
     "talk": "chat",
     "ask": "chat",
     "compose_video": "compose_video",
+    "compose_slides": "compose_slides",
 }
 
 
@@ -170,6 +172,16 @@ def env(name: str, default: str = "") -> str:
 
 def _truthy(name: str, default: str = "1") -> bool:
     return env(name, default).lower() in {"1", "true", "yes", "on"}
+
+
+def llm_trace_enabled() -> bool:
+    """Verbose LLM routing/fallback stderr (debug mode only)."""
+    try:
+        from arka.core.mode import is_debug_mode
+
+        return is_debug_mode()
+    except ImportError:
+        return False
 
 
 def normalize_task(task: str | None) -> str:
@@ -241,6 +253,7 @@ class ExhaustionStore:
                     "not_found",
                     "not found for",
                     "requires more credits",
+                    "insufficient credits",
                     "can only afford",
                 )
             ):
@@ -295,6 +308,7 @@ def is_retryable_error(msg: str) -> bool:
             "no endpoints found",
             "endpoints found",
             "requires more credits",
+            "insufficient credits",
             "can only afford",
             "fewer max_tokens",
         )
@@ -1133,7 +1147,27 @@ def resolve_max_tokens(
 
 def _is_openrouter_credit_error(msg: str) -> bool:
     low = (msg or "").lower()
-    return "requires more credits" in low or ("can only afford" in low and "max_tokens" in low)
+    return (
+        "requires more credits" in low
+        or "insufficient credits" in low
+        or ("can only afford" in low and "max_tokens" in low)
+    )
+
+
+def _is_openrouter_account_credit_failure(err_text: str, attempt_max_tokens: int) -> bool:
+    """True when lowering max_tokens is unlikely to help (account balance vs request cap)."""
+    if not _is_openrouter_credit_error(err_text):
+        return False
+    low = (err_text or "").lower()
+    if "insufficient credits" in low:
+        return True
+    affordable = _parse_affordable_tokens(err_text)
+    return affordable is not None and affordable >= attempt_max_tokens
+
+
+def _exhaust_all_openrouter_models(store: ExhaustionStore) -> None:
+    for mid in openrouter_model_ids(include_live=False):
+        store.mark("openrouter", mid, RuntimeError("openrouter credit exhausted"))
 
 
 def _parse_affordable_tokens(msg: str) -> int | None:
@@ -1423,7 +1457,8 @@ def build_default_chain(*, task: str = "default", skill: str | None = None) -> l
         add("vllm-cloud", cloud_model)
 
     explicit_vllm = vllm_explicitly_configured()
-    apply_vllm_defaults()
+    if explicit_vllm:
+        apply_vllm_defaults()
     if explicit_vllm or is_reachable("vllm"):
         add("vllm", env("VLLM_MODEL") or "default")
 
@@ -1696,6 +1731,7 @@ def _looks_like_error(text: str) -> bool:
             "no endpoints found",
             "endpoints found",
             "requires more credits",
+            "insufficient credits",
             "can only afford",
             "fewer max_tokens",
         )
@@ -1708,7 +1744,7 @@ def _looks_like_error(text: str) -> bool:
 
 @contextmanager
 def _quiet_llm_logs() -> Iterator[None]:
-    if env("LLM_VERBOSE") in {"1", "true", "yes"}:
+    if llm_trace_enabled():
         yield
         return
     prev_disable = logging.root.manager.disable
@@ -1755,8 +1791,8 @@ class LlmFallbackEngine:
             chain = self.candidates()
 
         last_error = ""
-        verbose = env("LLM_VERBOSE") in {"1", "true", "yes"}
-        notify = _truthy("LLM_FALLBACK_NOTIFY", "0")
+        verbose = llm_trace_enabled()
+        notify = verbose and _truthy("LLM_FALLBACK_NOTIFY", "0")
         attempts = 0
         tried: list[str] = []
 
@@ -1935,23 +1971,37 @@ class LlmFallbackEngine:
                                     if (
                                         provider == "openrouter"
                                         and _is_openrouter_credit_error(err_text)
-                                        and credit_retries_left > 0
                                     ):
-                                        reduced = _reduce_max_tokens_for_credit_error(
-                                            attempt_max_tokens,
-                                            err_text,
-                                        )
-                                        if reduced < attempt_max_tokens:
-                                            attempt_max_tokens = reduced
-                                            credit_retries_left -= 1
-                                            token_retry = True
+                                        if (
+                                            _is_openrouter_account_credit_failure(
+                                                err_text, attempt_max_tokens
+                                            )
+                                            and _has_primary_cloud_keys()
+                                        ):
+                                            _exhaust_all_openrouter_models(self.store)
                                             if verbose:
                                                 print(
-                                                    f"arka_llm: credit limit — retry {label} "
-                                                    f"with max_tokens={attempt_max_tokens}",
+                                                    "arka_llm: openrouter credits exhausted — "
+                                                    "falling back to alternate provider",
                                                     file=sys.stderr,
                                                 )
-                                            continue
+                                            break
+                                        if credit_retries_left > 0:
+                                            reduced = _reduce_max_tokens_for_credit_error(
+                                                attempt_max_tokens,
+                                                err_text,
+                                            )
+                                            if reduced < attempt_max_tokens:
+                                                attempt_max_tokens = reduced
+                                                credit_retries_left -= 1
+                                                token_retry = True
+                                                if verbose:
+                                                    print(
+                                                        f"arka_llm: credit limit — retry {label} "
+                                                        f"with max_tokens={attempt_max_tokens}",
+                                                        file=sys.stderr,
+                                                    )
+                                                continue
                                     self.store.mark(provider, model_id, RuntimeError(err_text))
                                     if verbose:
                                         print(f"arka_llm: fail {label}: {err_text}", file=sys.stderr)
@@ -1979,23 +2029,37 @@ class LlmFallbackEngine:
                                 if (
                                     provider == "openrouter"
                                     and _is_openrouter_credit_error(err_text)
-                                    and credit_retries_left > 0
                                 ):
-                                    reduced = _reduce_max_tokens_for_credit_error(
-                                        attempt_max_tokens,
-                                        err_text,
-                                    )
-                                    if reduced < attempt_max_tokens:
-                                        attempt_max_tokens = reduced
-                                        credit_retries_left -= 1
-                                        token_retry = True
+                                    if (
+                                        _is_openrouter_account_credit_failure(
+                                            err_text, attempt_max_tokens
+                                        )
+                                        and _has_primary_cloud_keys()
+                                    ):
+                                        _exhaust_all_openrouter_models(self.store)
                                         if verbose:
                                             print(
-                                                f"arka_llm: credit limit — retry {label} "
-                                                f"with max_tokens={attempt_max_tokens}",
+                                                "arka_llm: openrouter credits exhausted — "
+                                                "falling back to alternate provider",
                                                 file=sys.stderr,
                                             )
-                                        continue
+                                        break
+                                    if credit_retries_left > 0:
+                                        reduced = _reduce_max_tokens_for_credit_error(
+                                            attempt_max_tokens,
+                                            err_text,
+                                        )
+                                        if reduced < attempt_max_tokens:
+                                            attempt_max_tokens = reduced
+                                            credit_retries_left -= 1
+                                            token_retry = True
+                                            if verbose:
+                                                print(
+                                                    f"arka_llm: credit limit — retry {label} "
+                                                    f"with max_tokens={attempt_max_tokens}",
+                                                    file=sys.stderr,
+                                                )
+                                            continue
                                 self.store.mark(provider, model_id, exc)
                                 if verbose:
                                     print(f"arka_llm: fail {label}: {exc}", file=sys.stderr)

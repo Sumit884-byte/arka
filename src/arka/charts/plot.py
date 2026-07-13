@@ -70,6 +70,7 @@ COMPANY_TICKERS = {
 PIE_COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884d8", "#82ca9d"]
 BAR_COLOR = "#2563eb"
 BAR_EDGE = "#1e3a8a"
+GROUPED_COLORS = ["#2563eb", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6", "#06b6d4"]
 SCATTER_COLOR = "#F97316"
 SCATTER_EDGE = "#ea580c"
 HIST_COLOR = "#7c3aed"
@@ -138,6 +139,8 @@ def open_image(path: Path) -> None:
 
 def parse_range(text: str) -> str:
     t = text.lower()
+    if re.search(r"(?:last|past|over(?:\s+the)?)\s+years?", t):
+        return "1y"
     m = re.search(r"(?:last|past|over)\s+(\d+)\s*(day|days|week|weeks|month|months|year|years)", t)
     if m:
         n = int(m.group(1))
@@ -187,8 +190,51 @@ def extract_tickers(text: str) -> list[str]:
     return found
 
 
+def _has_bar_sales_context(text: str) -> bool:
+    """True when phrasing is about categorical sales/units, not stock tickers."""
+    return bool(
+        re.search(
+            r"(?i)\b(sales|sold|units|phones|mobiles|devices|revenue|magnitudes?)\b",
+            text,
+        )
+    )
+
+
+def wants_stock_line(text: str, tickers: list[str], labels: list[str]) -> bool:
+    """True when NL should route to ``chart line`` (Yahoo Finance), not bar/scatter."""
+    if not tickers or len(labels) >= 2:
+        return False
+    if _has_bar_sales_context(text):
+        return False
+
+    chart_words = r"(?i)\b(chart|graph|plot|visuali[sz]e|diagram)\b"
+    stock_words = r"(?i)\b(stock|stocks|share|shares|price|prices|market|ticker|equity)\b"
+    compare_words = r"(?i)\b(compare|comparison|versus|vs\.?|against)\b"
+    line_chart = r"(?i)\bline\s+(?:chart|graph|plot)\b"
+    temporal_range = (
+        r"(?i)\b(?:last|past|over(?:\s+the)?)\s+(?:\d+\s+)?(?:day|days|week|weeks|month|months|year|years)\b"
+        r"|\b(?:1d|5d|1mo|3mo|6mo|1y|2y|5y|ytd|max)\b"
+    )
+
+    return bool(
+        re.search(line_chart, text)
+        or re.search(stock_words, text)
+        or (re.search(chart_words, text) and tickers)
+        or re.search(r"(?i)\b(show me|draw|make|create)\b.*\b(chart|graph)\b", text)
+        or (len(tickers) >= 2 and re.search(compare_words, text))
+        or (tickers and re.search(temporal_range, text))
+    )
+
+
 def parse_bar_pairs(text: str) -> tuple[list[str], list[float], str]:
     labels: list[str] = []
+    try:
+        from arka.charts.data import is_year_range_pseudo_data
+
+        if is_year_range_pseudo_data(text):
+            return [], [], ""
+    except ImportError:
+        pass
     values: list[float] = []
     if not text.strip():
         return labels, values, ""
@@ -300,6 +346,11 @@ def parse_labeled_pairs(text: str) -> tuple[list[str], list[float]]:
     for m in re.finditer(r"\b([A-Za-z][A-Za-z0-9-]{0,16})\s*:\s*(\d+(?:\.\d+)?)\b", text):
         labels.append(m.group(1).strip().title())
         values.append(float(m.group(2)))
+    if len(labels) >= 2:
+        return labels, values
+    bar_labels, bar_values, _ = parse_bar_pairs(text)
+    if len(bar_labels) >= 2:
+        return bar_labels, bar_values
     return labels, values
 
 
@@ -331,6 +382,136 @@ def unwrap_shell_quotes(text: str) -> str:
     return t
 
 
+def _resolve_field(text_value: str, config_value: object, *, fallback: str = "") -> str:
+    if text_value:
+        return text_value
+    if config_value is not None and str(config_value).strip():
+        return str(config_value).strip()
+    return fallback
+
+
+def build_default_argv(kind: str, text: str = "") -> list[str] | None:
+    """Build chart argv from user-configured defaults when inline data is missing."""
+    try:
+        from arka.charts.defaults import get_kind_defaults
+    except ImportError:
+        return None
+
+    cfg = get_kind_defaults(kind)
+    if not cfg:
+        return None
+
+    if kind == "scatter":
+        data = str(cfg.get("data") or "").strip()
+        if not data:
+            return None
+        _, _, title, xlabel, ylabel = parse_scatter_pairs(text) if text else ([], [], "", "", "")
+        argv = ["scatter", "--data", data]
+        title = _resolve_field(title, cfg.get("title"))
+        xlabel = _resolve_field(xlabel, cfg.get("xlabel"))
+        ylabel = _resolve_field(ylabel, cfg.get("ylabel"))
+        if title:
+            argv.extend(["--title", title])
+        if xlabel:
+            argv.extend(["--xlabel", xlabel])
+        if ylabel:
+            argv.extend(["--ylabel", ylabel])
+        return argv
+
+    if kind == "bar":
+        data = str(cfg.get("data") or "").strip()
+        if not data:
+            return None
+        _, _, bar_title = parse_bar_pairs(text) if text else ([], [], "")
+        argv = ["bar", "--data", data]
+        title = _resolve_field(bar_title, cfg.get("title"))
+        ylabel = _resolve_field("", cfg.get("ylabel"))
+        if title:
+            argv.extend(["--title", title])
+        if ylabel:
+            argv.extend(["--ylabel", ylabel])
+        return argv
+
+    if kind == "pie":
+        data = str(cfg.get("data") or "").strip()
+        if not data:
+            return None
+        _, _, bar_title = parse_bar_pairs(text) if text else ([], [], "")
+        argv = ["pie", "--data", data]
+        title = _resolve_field(bar_title, cfg.get("title"))
+        if title:
+            argv.extend(["--title", title])
+        return argv
+
+    if kind == "histogram":
+        data = str(cfg.get("data") or "").strip()
+        if not data:
+            return None
+        argv = ["histogram", "--data", data]
+        if cfg.get("binned") in (True, "true", "1", 1, "yes"):
+            argv.append("--binned")
+        title = _resolve_field("", cfg.get("title"))
+        xlabel = _resolve_field("", cfg.get("xlabel"))
+        if title:
+            argv.extend(["--title", title])
+        if xlabel:
+            argv.extend(["--xlabel", xlabel])
+        bins = cfg.get("bins")
+        if bins is not None and str(bins).strip():
+            argv.extend(["--bins", str(int(bins))])
+        return argv
+
+    if kind == "pareto":
+        data = str(cfg.get("data") or "").strip()
+        if not data:
+            return None
+        argv = ["pareto", "--data", data]
+        title = _resolve_field("", cfg.get("title"))
+        if title:
+            argv.extend(["--title", title])
+        return argv
+
+    if kind == "grouped_bar":
+        categories = str(cfg.get("categories") or "").strip()
+        series = cfg.get("series") or []
+        if isinstance(series, str):
+            series = [series]
+        series = [str(s).strip() for s in series if str(s).strip()]
+        if not categories or not series:
+            return None
+        argv = ["grouped_bar", "--categories", categories]
+        for item in series:
+            argv.extend(["--series", item])
+        title = _resolve_field("", cfg.get("title"))
+        ylabel = _resolve_field("", cfg.get("ylabel"))
+        source = _resolve_field("", cfg.get("source"))
+        if title:
+            argv.extend(["--title", title])
+        if ylabel:
+            argv.extend(["--ylabel", ylabel])
+        if source:
+            argv.extend(["--source", source])
+        return argv
+
+    if kind == "line":
+        tickers = cfg.get("tickers") or []
+        if isinstance(tickers, str):
+            tickers = [t.strip() for t in tickers.replace(",", " ").split() if t.strip()]
+        tickers = [str(t).upper() for t in tickers if str(t).strip()]
+        if not tickers:
+            return None
+        rng = str(cfg.get("range") or "3mo").strip() or "3mo"
+        argv = ["line", *tickers, "--range", rng]
+        title = _resolve_field("", cfg.get("title"))
+        if title:
+            argv.extend(["--title", title])
+        elif text:
+            argv.extend(["--title", f"{tickers[0]} ({rng})" if len(tickers) == 1 else f"{' vs '.join(tickers)} ({rng})"])
+        return argv
+
+    return None
+
+
 def nl_to_argv(text: str) -> list[str]:
     t = unwrap_shell_quotes(text.strip())
     if not t:
@@ -344,12 +525,33 @@ def nl_to_argv(text: str) -> list[str]:
     except ImportError:
         pass
 
+    try:
+        from arka.charts.data import (
+            detect_chart_intent,
+            detect_requested_chart_type,
+            has_chart_cue,
+            is_year_range_pseudo_data,
+            needs_external_data,
+            needs_scatter_fetch,
+        )
+
+        if needs_scatter_fetch(t):
+            return ["fetch", t, "--type", "scatter"]
+        if needs_external_data(t):
+            ctype = detect_requested_chart_type(t) or "bar"
+            return ["fetch", t, "--type", ctype]
+        if is_year_range_pseudo_data(t) and (has_chart_cue(t) or re.search(r"(?i)\b(chart|graph|plot|visuali[sz]e)\b", t)):
+            ctype = detect_chart_intent(t) or detect_requested_chart_type(t) or "bar"
+            return ["fetch", t, "--type", ctype]
+    except ImportError:
+        pass
+
     chart_words = r"(?i)\b(chart|graph|plot|visuali[sz]e|diagram)\b"
     stock_words = r"(?i)\b(stock|stocks|share|shares|price|prices|market|ticker|equity)\b"
     bar_words = r"(?i)\b(bar|bars|column|sales|sold|units|phones|mobiles|devices)\b"
     pie_words = r"(?i)\b(pie|donut|doughnut|breakdown|proportion|percentage|percent|traffic\s+sources?|market\s+share)\b"
     scatter_words = r"(?i)\b(scatter|correlation|correlate|xy\s+plot|x-y)\b"
-    histogram_words = r"(?i)\b(histogram|frequency|freq|bin|bins)\b"
+    histogram_words = r"(?i)\b(histogram|frequency|freq|bin|bins|distribution)\b"
     pareto_words = r"(?i)\b(pareto|80/20|80-20|eighty.twenty)\b"
     compare_words = r"(?i)\b(compare|comparison|versus|vs\.?|against)\b"
 
@@ -364,8 +566,18 @@ def nl_to_argv(text: str) -> list[str]:
             if title:
                 argv.extend(["--title", title.title()])
             return argv
+        # Bare pareto without inline pairs: stay on chart path (usage/error, not web_answer).
+        return ["pareto"]
 
     if re.search(histogram_words, t):
+        nums = [float(n) for n in re.findall(r"\d+(?:\.\d+)?", t)]
+        if len(nums) >= 5:
+            data = ",".join(f"{n:g}" for n in nums)
+            title = _chart_title(t, drop=(histogram_words, r"\bchart\b", r"\bgraph\b", r"\bplot\b", r"\bof\b", r"\bfor\b"))
+            argv = ["histogram", "--data", data]
+            if title:
+                argv.extend(["--title", title.title()])
+            return argv
         labels, values = parse_labeled_pairs(t)
         if len(labels) >= 2:
             data = ",".join(
@@ -373,14 +585,6 @@ def nl_to_argv(text: str) -> list[str]:
             )
             title = _chart_title(t, drop=(histogram_words, r"\bchart\b", r"\bgraph\b", r"\bplot\b"))
             argv = ["histogram", "--data", data, "--binned"]
-            if title:
-                argv.extend(["--title", title.title()])
-            return argv
-        nums = [float(n) for n in re.findall(r"\d+(?:\.\d+)?", t)]
-        if len(nums) >= 5:
-            data = ",".join(f"{n:g}" for n in nums)
-            title = _chart_title(t, drop=(histogram_words, r"\bchart\b", r"\bgraph\b", r"\bplot\b", r"\bof\b", r"\bfor\b"))
-            argv = ["histogram", "--data", data]
             if title:
                 argv.extend(["--title", title.title()])
             return argv
@@ -399,16 +603,7 @@ def nl_to_argv(text: str) -> list[str]:
             return argv
 
     tickers = extract_tickers(t)
-    wants_stock_line = bool(
-        tickers
-        and (
-            re.search(chart_words, t)
-            or re.search(r"(?i)\b(show me|draw|make|create)\b.*\b(chart|graph)\b", t)
-            or re.search(stock_words, t)
-            or (len(tickers) >= 2 and re.search(compare_words, t))
-        )
-    )
-    if wants_stock_line:
+    if wants_stock_line(t, tickers, labels):
         rng = parse_range(t)
         argv = ["line", *tickers, "--range", rng]
         title = (
@@ -436,9 +631,34 @@ def nl_to_argv(text: str) -> list[str]:
             if ylabel:
                 argv.extend(["--ylabel", ylabel])
             return argv
+        # Explicit scatter/correlation intent without parseable pairs: keep on
+        # the chart path so the CLI can print usage (not agent_ask).
+        if re.search(scatter_words, t):
+            try:
+                from arka.charts.defaults import get_kind_defaults
+
+                cfg = get_kind_defaults("scatter") or {}
+                data = str(cfg.get("data") or "").strip()
+                if data:
+                    argv = ["scatter", "--data", data]
+                    _, _, _title, xlabel, ylabel = parse_scatter_pairs(t)
+                    xlabel = str(cfg.get("xlabel") or xlabel or "").strip()
+                    ylabel = str(cfg.get("ylabel") or ylabel or "").strip()
+                    title = str(cfg.get("title") or _title or "").strip()
+                    if title:
+                        argv.extend(["--title", title])
+                    if xlabel:
+                        argv.extend(["--xlabel", xlabel])
+                    if ylabel:
+                        argv.extend(["--ylabel", ylabel])
+                    return argv
+            except ImportError:
+                pass
+            return ["scatter"]
 
     if len(labels) >= 2 and (
         re.search(bar_words, t)
+        or re.search(compare_words, t)
         or (re.search(r"\d", t) and len(re.findall(r"[A-Za-z][A-Za-z0-9.&-]{1,20}", t)) >= 2)
     ):
         data = ",".join(
@@ -448,6 +668,19 @@ def nl_to_argv(text: str) -> list[str]:
         if bar_title:
             argv.extend(["--title", bar_title])
         return argv
+
+    # Decision-matrix intent without inline data: stay on chart path (not web_answer).
+    try:
+        from arka.charts.data import detect_chart_intent, has_chart_cue, needs_external_data
+
+        intent = detect_chart_intent(t)
+        if intent and (has_chart_cue(t) or re.search(chart_words, t) or re.search(temporal_words, t)):
+            if needs_external_data(t):
+                argv = ["fetch", t, "--type", intent]
+                return argv
+            return [intent]
+    except ImportError:
+        pass
 
     return []
 
@@ -523,6 +756,7 @@ def plot_bar(
     title: str,
     ylabel: str,
     output: Path,
+    source: str = "",
 ) -> Path:
     plt = _require_matplotlib()
 
@@ -540,6 +774,8 @@ def plot_bar(
             va="bottom",
             fontsize=9,
         )
+    if source:
+        fig.text(0.01, 0.01, f"Source: {source}", fontsize=8, color="#64748b")
     fig.tight_layout()
     output.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output, dpi=150)
@@ -553,10 +789,151 @@ def plot_bar(
             "values": values,
             "ylabel": ylabel or "Value",
             "colors": {lbl: BAR_COLOR for lbl in labels},
-            "source": "arka-chart",
+            "source": source or "arka-chart",
         },
     )
     return output
+
+
+def plot_grouped_bar(
+    categories: list[str],
+    series: dict[str, list[float]],
+    *,
+    title: str,
+    ylabel: str,
+    output: Path,
+    source: str = "",
+) -> Path:
+    plt = _require_matplotlib()
+    if not categories or len(series) < 1:
+        raise SystemExit("grouped_bar needs categories and at least one series")
+
+    series_names = list(series.keys())
+    width = min(0.8 / max(len(series_names), 1), 0.35)
+    x = list(range(len(categories)))
+    fig, ax = plt.subplots(figsize=(max(7, len(categories) * 1.4), 5.8))
+    peak = max(max(float(v) for v in series[name]) for name in series_names) if series_names else 1.0
+
+    for idx, name in enumerate(series_names):
+        offset = (idx - (len(series_names) - 1) / 2) * width
+        vals = [float(v) for v in series[name]]
+        if len(vals) != len(categories):
+            raise SystemExit(f"series '{name}' length must match categories")
+        color = GROUPED_COLORS[idx % len(GROUPED_COLORS)]
+        bars = ax.bar([i + offset for i in x], vals, width, label=str(name), color=color)
+        for bar, val in zip(bars, vals):
+            ax.text(
+                bar.get_x() + bar.get_width() / 2,
+                val,
+                _compact_number(val),
+                ha="center",
+                va="bottom",
+                fontsize=8,
+            )
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(categories, rotation=15 if len(categories) > 4 else 0, ha="right" if len(categories) > 4 else "center")
+    ax.set_title(title or "Grouped comparison")
+    ax.set_ylabel(ylabel or "Value")
+    ax.set_ylim(0, peak * 1.18 if peak else 1)
+    ax.legend(loc="best", fontsize=9)
+    ax.grid(axis="y", alpha=0.3)
+    if source:
+        fig.text(0.01, 0.01, f"Source: {source}", fontsize=8, color="#64748b")
+    fig.tight_layout()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output, dpi=150)
+    plt.close(fig)
+    _write_chart_sidecar(
+        output,
+        {
+            "type": "grouped_bar",
+            "title": title or "Grouped comparison",
+            "categories": categories,
+            "series": series,
+            "ylabel": ylabel or "Value",
+            "source": source or "arka-chart",
+        },
+    )
+    return output
+
+
+def plot_indicator_lines(
+    country_series: list[tuple[str, list[int], list[float]]],
+    *,
+    title: str,
+    ylabel: str,
+    output: Path,
+    source: str = "",
+) -> Path:
+    plt = _require_matplotlib()
+    fig, ax = plt.subplots(figsize=(9, 5.5))
+    for idx, (name, years, values) in enumerate(country_series):
+        color = GROUPED_COLORS[idx % len(GROUPED_COLORS)]
+        ax.plot(years, values, marker="o", label=name, color=color, linewidth=2)
+    ax.set_title(title or "Trend")
+    ax.set_ylabel(ylabel or "Value")
+    ax.set_xlabel("Year")
+    ax.grid(True, alpha=0.3)
+    ax.legend(loc="best", fontsize=9)
+    if source:
+        fig.text(0.01, 0.01, f"Source: {source}", fontsize=8, color="#64748b")
+    fig.tight_layout()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output, dpi=150)
+    plt.close(fig)
+    _write_chart_sidecar(
+        output,
+        {
+            "type": "line",
+            "title": title or "Trend",
+            "series": [
+                {"name": n, "years": ys, "values": vs} for n, ys, vs in country_series
+            ],
+            "ylabel": ylabel or "Value",
+            "source": source or "arka-chart",
+        },
+    )
+    return output
+
+
+
+
+def _format_axis_tick(val: float, _pos: object = None) -> str:
+    return _compact_number(val)
+
+
+def _style_value_axis(ax, ylabel: str, peak: float) -> str:
+    from matplotlib.ticker import FuncFormatter, MaxNLocator
+
+    label = ylabel or "Value"
+    if peak >= 1_000_000_000:
+        if "billion" not in label.lower():
+            label = f"{label} (billions)" if label else "Billions"
+    elif peak >= 1_000_000:
+        if "million" not in label.lower():
+            label = f"{label} (millions)" if label else "Millions"
+    ax.set_ylabel(label)
+    ax.yaxis.set_major_formatter(FuncFormatter(_format_axis_tick))
+    ax.yaxis.set_major_locator(MaxNLocator(nbins=6))
+    ax.ticklabel_format(axis="y", style="plain", useOffset=False)
+    return label
+
+
+def _apply_chart_chrome(fig, ax, *, title: str, source: str = "") -> None:
+    ax.set_title(title)
+    if source:
+        fig.text(0.01, 0.01, f"Source: {source}", fontsize=8, color="#64748b")
+
+def _compact_number(val: float) -> str:
+    abs_v = abs(val)
+    if abs_v >= 1_000_000_000:
+        return f"{val / 1_000_000_000:.2f}B"
+    if abs_v >= 1_000_000:
+        return f"{val / 1_000_000:.1f}M"
+    if abs_v >= 1_000:
+        return f"{val / 1_000:.1f}K"
+    return f"{val:g}"
 
 
 def plot_pie(
@@ -565,28 +942,76 @@ def plot_pie(
     *,
     title: str,
     output: Path,
+    source: str = "",
 ) -> Path:
     plt = _require_matplotlib()
 
     colors = [PIE_COLORS[i % len(PIE_COLORS)] for i in range(len(labels))]
-    fig, ax = plt.subplots(figsize=(8, 8))
+    pcts = _pie_slice_percentages(values)
+    use_legend = _pie_use_legend(labels, values)
+
+    if use_legend:
+        display_labels = [""] * len(labels)
+
+        def autopct_fn(pct: float) -> str:
+            return f"{pct:.1f}%" if pct >= PIE_INLINE_PCT_MIN else ""
+
+        fig_w = 10.2
+    else:
+        display_labels = labels
+        autopct_fn = "%1.1f%%"
+        fig_w = 8.2
+
+    fig, ax = plt.subplots(figsize=(fig_w, 6.4))
     wedges, texts, autotexts = ax.pie(
         values,
-        labels=labels,
-        autopct="%1.0f%%",
+        labels=display_labels,
+        autopct=autopct_fn,
         colors=colors,
         startangle=90,
-        pctdistance=0.85,
-        textprops={"fontsize": 10},
+        pctdistance=0.72,
+        labeldistance=1.08,
+        wedgeprops={"width": 0.55, "edgecolor": "white", "linewidth": 1.2},
+        textprops={"fontsize": 10, "color": "#334155"},
     )
     for autotext in autotexts:
-        autotext.set_color("white")
-        autotext.set_fontweight("bold")
-    ax.set_title(title or "Distribution")
+        if autotext.get_text().strip():
+            autotext.set_color("white")
+            autotext.set_fontweight("bold")
+            autotext.set_fontsize(9)
+        else:
+            autotext.set_visible(False)
+    for text in texts:
+        if not text.get_text().strip():
+            text.set_visible(False)
+
+    if use_legend:
+        legend_labels = [f"{lbl} — {p:.1f}%" for lbl, p in zip(labels, pcts)]
+        ax.legend(
+            wedges,
+            legend_labels,
+            loc="center left",
+            bbox_to_anchor=(1.0, 0.5),
+            frameon=False,
+            fontsize=9,
+            handlelength=1.2,
+            handletextpad=0.6,
+        )
+
+    ax.set_title(
+        title or "Distribution",
+        fontsize=13,
+        fontweight="bold",
+        color="#0f172a",
+        pad=12,
+    )
     ax.axis("equal")
+    fig.patch.set_facecolor("white")
+    if source:
+        fig.text(0.01, 0.01, f"Source: {source}", fontsize=8, color="#64748b")
     fig.tight_layout()
     output.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output, dpi=150)
+    fig.savefig(output, dpi=160, bbox_inches="tight")
     plt.close(fig)
     _write_chart_sidecar(
         output,
@@ -597,7 +1022,7 @@ def plot_pie(
             "values": values,
             "percentages": _percentages(labels, values),
             "colors": {lbl: PIE_COLORS[i % len(PIE_COLORS)] for i, lbl in enumerate(labels)},
-            "source": "arka-chart",
+            "source": source or "arka-chart",
         },
     )
     return output
@@ -621,6 +1046,7 @@ def plot_scatter(
     xlabel: str,
     ylabel: str,
     output: Path,
+    source: str = "",
 ) -> Path:
     plt = _require_matplotlib()
 
@@ -630,6 +1056,8 @@ def plot_scatter(
     ax.set_xlabel(xlabel or "X")
     ax.set_ylabel(ylabel or "Y")
     ax.grid(True, alpha=0.3)
+    if source:
+        fig.text(0.01, 0.01, f"Source: {source}", fontsize=8, color="#64748b")
     fig.tight_layout()
     output.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output, dpi=150)
@@ -644,7 +1072,7 @@ def plot_scatter(
             "ylabel": ylabel or "Y",
             "points": points,
             "color": SCATTER_COLOR,
-            "source": "arka-chart",
+            "source": source or "arka-chart",
         },
     )
     return output
@@ -712,12 +1140,42 @@ def plot_histogram(
     return output
 
 
+_COMPOSITION_LABEL_HINT = re.compile(
+    r"(?i)\b("
+    r"mobile|desktop|tablet|android|iphone|ios|ipad|"
+    r"windows|macos|linux|chrome(?:\s*os)?|"
+    r"firefox|safari|edge|browser|"
+    r"google|bing|yahoo|duckduck|search"
+    r")\b"
+)
+
+
+def _values_look_like_share_percentages(values: list[float]) -> bool:
+    if not values:
+        return False
+    total = sum(values)
+    return total <= 100.5 and all(0 <= v <= 100 for v in values)
+
+
+def _labels_suggest_composition_share(labels: list[str]) -> bool:
+    return any(_COMPOSITION_LABEL_HINT.search(lbl) for lbl in labels)
+
+
+def _default_pareto_cumulative_line(labels: list[str], values: list[float]) -> bool:
+    """Classic Pareto line for ranked counts/causes; skip for composition share slices."""
+    if not _values_look_like_share_percentages(values):
+        return True
+    return not _labels_suggest_composition_share(labels)
+
+
 def plot_pareto(
     labels: list[str],
     values: list[float],
     *,
     title: str,
     output: Path,
+    source: str = "",
+    cumulative_line: bool | None = None,
 ) -> Path:
     plt = _require_matplotlib()
 
@@ -731,40 +1189,74 @@ def plot_pareto(
         running += val
         cumulative.append(round(100 * running / total, 1))
 
+    share_pct = _values_look_like_share_percentages(sorted_values)
+    if cumulative_line is None:
+        cumulative_line = _default_pareto_cumulative_line(sorted_labels, sorted_values)
+
     fig, ax1 = plt.subplots(figsize=(max(7, len(sorted_labels) * 1.3), 5.5))
-    ax1.bar(sorted_labels, sorted_values, color=PARETO_BAR, edgecolor=BAR_EDGE)
-    ax1.set_ylabel("Count")
-    ax1.set_title(title or "Pareto chart")
-    ax1.grid(axis="y", alpha=0.3)
-    for bar, val in zip(ax1.patches, sorted_values):
+    peak = max(sorted_values) if sorted_values else 1.0
+    bars = ax1.bar(
+        sorted_labels,
+        sorted_values,
+        color=PARETO_BAR,
+        edgecolor=BAR_EDGE,
+        width=0.62,
+        zorder=3,
+    )
+    ylabel = "Share (%)" if share_pct else "Count"
+    axis_label = _style_value_axis(ax1, ylabel, peak) if not share_pct else ylabel
+    if share_pct:
+        ax1.set_ylabel(axis_label)
+        ax1.set_ylim(0, min(100, peak * 1.16 if peak else 1))
+    else:
+        ax1.set_ylim(0, peak * 1.16 if peak else 1)
+    ax1.grid(axis="y", alpha=0.35, color="#cbd5e1", zorder=0)
+    ax1.set_axisbelow(True)
+    for bar, val in zip(bars, sorted_values):
+        label = f"{val:g}%" if share_pct else f"{val:g}"
         ax1.text(
             bar.get_x() + bar.get_width() / 2,
             bar.get_height(),
-            f"{val:g}",
+            label,
             ha="center",
             va="bottom",
             fontsize=9,
+            color="#334155",
         )
 
-    ax2 = ax1.twinx()
-    ax2.plot(sorted_labels, cumulative, color=PARETO_LINE, marker="o", linewidth=2)
-    ax2.set_ylabel("Cumulative %")
-    ax2.set_ylim(0, 105)
+    if cumulative_line:
+        ax2 = ax1.twinx()
+        ax2.plot(
+            sorted_labels,
+            cumulative,
+            color=PARETO_LINE,
+            marker="o",
+            linewidth=2,
+            zorder=4,
+        )
+        ax2.set_ylabel("Cumulative %")
+        ax2.set_ylim(0, 105)
+        ax2.spines["top"].set_visible(False)
+        ax2.tick_params(colors="#475569", labelsize=10)
+
+    _apply_chart_chrome(fig, ax1, title=title or "Pareto chart", source=source)
     fig.tight_layout()
     output.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output, dpi=150)
+    fig.savefig(output, dpi=160, bbox_inches="tight")
     plt.close(fig)
-    _write_chart_sidecar(
-        output,
-        {
-            "type": "pareto",
-            "title": title or "Pareto chart",
-            "labels": sorted_labels,
-            "values": sorted_values,
-            "cumulative_pct": {lbl: pct for lbl, pct in zip(sorted_labels, cumulative)},
-            "source": "arka-chart",
-        },
-    )
+    sidecar: dict = {
+        "type": "pareto",
+        "title": title or "Pareto chart",
+        "labels": sorted_labels,
+        "values": sorted_values,
+        "cumulative_line": cumulative_line,
+        "source": source or "arka-chart",
+    }
+    if cumulative_line:
+        sidecar["cumulative_pct"] = {
+            lbl: pct for lbl, pct in zip(sorted_labels, cumulative)
+        }
+    _write_chart_sidecar(output, sidecar)
     return output
 
 
@@ -858,9 +1350,45 @@ def parse_histogram_data(raw: str, *, binned: bool) -> tuple[list[float] | None,
     return values, None, None
 
 
+def _field_from_args_or_defaults(args: argparse.Namespace, kind: str, field: str, default: str = "") -> str:
+    val = str(getattr(args, field, "") or "").strip()
+    if val:
+        return val
+    try:
+        from arka.charts.defaults import get_kind_defaults
+
+        cfg = get_kind_defaults(kind) or {}
+        cfg_val = cfg.get(field)
+        if cfg_val is not None and str(cfg_val).strip():
+            return str(cfg_val).strip()
+    except ImportError:
+        pass
+    return default
+
+
+def _data_from_args_or_defaults(args: argparse.Namespace, kind: str) -> str:
+    data = str(getattr(args, "data", "") or "").strip()
+    if data:
+        return data
+    try:
+        from arka.charts.defaults import get_kind_defaults
+
+        cfg = get_kind_defaults(kind) or {}
+        return str(cfg.get("data") or "").strip()
+    except ImportError:
+        return ""
+
+
 def cmd_histogram(args: argparse.Namespace) -> int:
-    raw, bin_labels, counts = parse_histogram_data(args.data, binned=getattr(args, "binned", False))
-    title = args.title or "Histogram"
+    data = _data_from_args_or_defaults(args, "histogram")
+    if not data:
+        print("Histogram needs numeric values or binned label:count pairs.", file=sys.stderr)
+        print('  chart histogram --data "12,15,18,22,25"', file=sys.stderr)
+        print("  chart defaults set histogram --data '12,15,18,22,25'", file=sys.stderr)
+        return 1
+    raw, bin_labels, counts = parse_histogram_data(data, binned=getattr(args, "binned", False))
+    title = _field_from_args_or_defaults(args, "histogram", "title") or "Histogram"
+    xlabel = _field_from_args_or_defaults(args, "histogram", "xlabel")
     slug = re.sub(r"[^a-z0-9]+", "-", title.lower())[:40] or "histogram"
     out = Path(args.output).expanduser() if args.output else default_output(slug)
     saved = plot_histogram(
@@ -868,7 +1396,7 @@ def cmd_histogram(args: argparse.Namespace) -> int:
         bin_labels=bin_labels,
         counts=counts,
         title=title,
-        xlabel=args.xlabel,
+        xlabel=xlabel,
         bins=args.bins,
         output=out,
     )
@@ -878,11 +1406,24 @@ def cmd_histogram(args: argparse.Namespace) -> int:
 
 
 def cmd_pareto(args: argparse.Namespace) -> int:
-    labels, values = parse_data_arg(args.data)
+    data = _data_from_args_or_defaults(args, "pareto")
+    if not data:
+        print("Pareto needs label:value pairs.", file=sys.stderr)
+        print('  chart pareto --data "Scratches:45,Dents:28,Cracks:15"', file=sys.stderr)
+        print("  chart defaults set pareto --data 'Scratches:45,Dents:28'", file=sys.stderr)
+        return 1
+    labels, values = parse_data_arg(data)
     title = args.title or "Pareto chart"
     slug = re.sub(r"[^a-z0-9]+", "-", title.lower())[:40] or "pareto-chart"
     out = Path(args.output).expanduser() if args.output else default_output(slug)
-    saved = plot_pareto(labels, values, title=title, output=out)
+    cumulative_line = getattr(args, "cumulative_line", None)
+    saved = plot_pareto(
+        labels,
+        values,
+        title=title,
+        output=out,
+        cumulative_line=cumulative_line,
+    )
     print(f"Saved chart: {saved}")
     open_image(saved)
     return 0
@@ -924,9 +1465,196 @@ def cmd_bar(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_grouped_bar(args: argparse.Namespace) -> int:
+    categories = [c.strip() for c in args.categories.split(",") if c.strip()]
+    series: dict[str, list[float]] = {}
+    for item in args.series:
+        if ":" not in item:
+            raise SystemExit(f"Bad --series (need Name:v1,v2,…): {item}")
+        name, raw_vals = item.split(":", 1)
+        vals = [parse_numeric_value(v) for v in raw_vals.split(",") if v.strip()]
+        series[name.strip()] = vals
+    title = args.title or "Grouped comparison"
+    slug = re.sub(r"[^a-z0-9]+", "-", title.lower())[:40] or "grouped-bar"
+    out = Path(args.output).expanduser() if args.output else default_output(slug)
+    saved = plot_grouped_bar(
+        categories,
+        series,
+        title=title,
+        ylabel=args.ylabel,
+        output=out,
+        source=args.source or "",
+    )
+    print(f"Saved chart: {saved}")
+    open_image(saved)
+    return 0
+
+
+def cmd_fetch(args: argparse.Namespace) -> int:
+    from arka.charts.data import (
+        build_dataset,
+        build_scatter_dataset,
+        dataset_to_line_points,
+        dataset_to_single_bar,
+        needs_scatter_fetch,
+        recommend_chart_type,
+    )
+
+    text = unwrap_shell_quotes(" ".join(args.text))
+    if not text:
+        print("Usage: chart fetch <natural language request>", file=sys.stderr)
+        return 1
+
+    requested_type = (args.type or "auto").strip().lower()
+    if requested_type == "scatter" or needs_scatter_fetch(text):
+        try:
+            scatter = build_scatter_dataset(text)
+        except RuntimeError as exc:
+            print(f"Could not fetch chart data: {exc}", file=sys.stderr)
+            return 1
+        for note in scatter.notes:
+            print(f"Note: {note}", file=sys.stderr)
+        title = args.title or scatter.title
+        slug = re.sub(r"[^a-z0-9]+", "-", title.lower())[:40] or "scatter-chart"
+        out = Path(args.output).expanduser() if args.output else default_output(slug)
+        saved = plot_scatter(
+            scatter.xs,
+            scatter.ys,
+            title=title,
+            xlabel=getattr(args, "xlabel", "") or scatter.xlabel,
+            ylabel=args.ylabel or scatter.ylabel,
+            output=out,
+            source=scatter.source,
+        )
+        print(f"Source: {scatter.source}")
+        print(f"Chart type: scatter")
+        print(f"Saved chart: {saved}")
+        open_image(saved)
+        return 0
+
+    try:
+        dataset = build_dataset(text)
+    except RuntimeError as exc:
+        print(f"Could not fetch chart data: {exc}", file=sys.stderr)
+        return 1
+
+    for note in dataset.notes:
+        print(f"Note: {note}", file=sys.stderr)
+
+    advice = recommend_chart_type(dataset, args.type)
+    if advice.warning:
+        print(f"Chart advice: {advice.warning}", file=sys.stderr)
+        if advice.requested not in {"", "auto"} and advice.requested != advice.recommended:
+            print(
+                f"Requested '{advice.requested}' → using '{advice.recommended}' "
+                "(pass --force to keep the requested type).",
+                file=sys.stderr,
+            )
+
+    chart_type = advice.recommended
+    if args.force and advice.requested not in {"", "auto"}:
+        chart_type = advice.requested
+        if advice.warning:
+            print(
+                f"Forced chart type '{chart_type}' despite suitability warning.",
+                file=sys.stderr,
+            )
+
+    title = args.title or dataset.title
+    ylabel = args.ylabel or dataset.ylabel
+    slug = re.sub(r"[^a-z0-9]+", "-", title.lower())[:40] or "fetched-chart"
+    out = Path(args.output).expanduser() if args.output else default_output(slug)
+
+    if chart_type == "grouped_bar":
+        series = {s.name: s.values for s in dataset.series}
+        saved = plot_grouped_bar(
+            dataset.categories,
+            series,
+            title=title,
+            ylabel=ylabel,
+            output=out,
+            source=dataset.source,
+        )
+    elif chart_type == "line":
+        lines = dataset_to_line_points(dataset)
+        if not lines:
+            print("Not enough time-series points for a line chart.", file=sys.stderr)
+            return 1
+        saved = plot_indicator_lines(
+            lines,
+            title=title,
+            ylabel=ylabel,
+            output=out,
+            source=dataset.source,
+        )
+    elif chart_type == "pareto":
+        labels, values = dataset_to_single_bar(dataset)
+        if len(labels) < 2:
+            print("Not enough categories for a pareto chart.", file=sys.stderr)
+            return 1
+        cum = _default_pareto_cumulative_line(labels, values)
+        saved = plot_pareto(
+            labels,
+            values,
+            title=title,
+            output=out,
+            source=dataset.source,
+            cumulative_line=cum,
+        )
+    elif chart_type == "pie":
+        labels, values = dataset_to_single_bar(dataset)
+        if len(labels) < 2:
+            print("Not enough categories for a pie chart.", file=sys.stderr)
+            return 1
+        print(
+            f"Pie uses latest available year in the dataset ({dataset.series[-1].name}).",
+            file=sys.stderr,
+        )
+        saved = plot_pie(labels, values, title=title, output=out, source=dataset.source)
+    else:
+        # Default / bar: latest year snapshot across countries.
+        labels, values = dataset_to_single_bar(dataset)
+        if dataset.is_multi_series and not args.force:
+            # Prefer grouped when multiple years exist unless user forced plain bar.
+            series = {s.name: s.values for s in dataset.series}
+            saved = plot_grouped_bar(
+                dataset.categories,
+                series,
+                title=title,
+                ylabel=ylabel,
+                output=out,
+                source=dataset.source,
+            )
+            chart_type = "grouped_bar"
+        else:
+            year_note = dataset.series[-1].name if dataset.series else ""
+            bar_title = f"{title} — {year_note}" if year_note and str(year_note) not in title else title
+            saved = plot_bar(
+                labels,
+                values,
+                title=bar_title,
+                ylabel=ylabel,
+                output=out,
+                source=dataset.source,
+            )
+            chart_type = "bar"
+
+    print(f"Source: {dataset.source}")
+    print(f"Chart type: {chart_type}")
+    print(f"Saved chart: {saved}")
+    open_image(saved)
+    return 0
+
+
 def cmd_pie(args: argparse.Namespace) -> int:
-    labels, values = parse_data_arg(args.data)
-    title = args.title or "Distribution"
+    data = _data_from_args_or_defaults(args, "pie")
+    if not data:
+        print("Pie chart needs label:value pairs.", file=sys.stderr)
+        print('  chart pie --data "Organic:400,Direct:300"', file=sys.stderr)
+        print("  chart defaults set pie --data 'Organic:400,Direct:300'", file=sys.stderr)
+        return 1
+    labels, values = parse_data_arg(data)
+    title = _field_from_args_or_defaults(args, "pie", "title") or "Distribution"
     slug = re.sub(r"[^a-z0-9]+", "-", title.lower())[:40] or "pie-chart"
     out = Path(args.output).expanduser() if args.output else default_output(slug)
     saved = plot_pie(labels, values, title=title, output=out)
@@ -936,16 +1664,38 @@ def cmd_pie(args: argparse.Namespace) -> int:
 
 
 def cmd_scatter(args: argparse.Namespace) -> int:
-    xs, ys = parse_xy_data(args.data)
-    title = args.title or "Scatter plot"
+    data = _data_from_args_or_defaults(args, "scatter")
+    if not data:
+        print(
+            "Scatter needs numeric x:y pairs. Example:",
+            file=sys.stderr,
+        )
+        print(
+            '  chart scatter --data "100:200,120:190,170:280" '
+            '--xlabel "Ad Spend" --ylabel "Revenue"',
+            file=sys.stderr,
+        )
+        print(
+            "  arka scatter ad spend vs revenue 100 200 120 190 170 280",
+            file=sys.stderr,
+        )
+        print(
+            "  chart defaults set scatter --data '100:200,120:190,170:280'",
+            file=sys.stderr,
+        )
+        return 1
+    xs, ys = parse_xy_data(data)
+    title = _field_from_args_or_defaults(args, "scatter", "title") or "Scatter plot"
+    xlabel = _field_from_args_or_defaults(args, "scatter", "xlabel")
+    ylabel = _field_from_args_or_defaults(args, "scatter", "ylabel")
     slug = re.sub(r"[^a-z0-9]+", "-", title.lower())[:40] or "scatter-chart"
     out = Path(args.output).expanduser() if args.output else default_output(slug)
     saved = plot_scatter(
         xs,
         ys,
         title=title,
-        xlabel=args.xlabel,
-        ylabel=args.ylabel,
+        xlabel=xlabel,
+        ylabel=ylabel,
         output=out,
     )
     print(f"Saved chart: {saved}")
@@ -953,11 +1703,97 @@ def cmd_scatter(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_defaults(args: argparse.Namespace) -> int:
+    try:
+        from arka.charts import defaults as chart_defaults
+    except ImportError:
+        print("Chart defaults module unavailable.", file=sys.stderr)
+        return 1
+
+    action = args.defaults_action or "list"
+    if action == "list":
+        entries = chart_defaults.list_defaults()
+        path = chart_defaults.charts_config_path()
+        print(f"Config: {path}")
+        if not entries:
+            print("No chart defaults configured.")
+            print(chart_defaults.config_help_snippet())
+            return 0
+        for kind in chart_defaults.CHART_KINDS:
+            if kind not in entries:
+                continue
+            entry = entries[kind]
+            print(f"\n{kind}:")
+            for key, val in entry.items():
+                if isinstance(val, list):
+                    val = ", ".join(str(v) for v in val)
+                print(f"  {key}: {val}")
+        return 0
+
+    if action == "show":
+        kind = (args.kind or "").strip().lower()
+        entry = chart_defaults.get_kind_defaults(kind)
+        if not entry:
+            print(f"No defaults for {kind!r}.", file=sys.stderr)
+            return 1
+        print(f"{kind}:")
+        for key, val in entry.items():
+            if isinstance(val, list):
+                val = ", ".join(str(v) for v in val)
+            print(f"  {key}: {val}")
+        return 0
+
+    if action == "set":
+        kind = (args.kind or "").strip().lower()
+        fields = {
+            "data": args.data,
+            "title": args.title,
+            "xlabel": args.xlabel,
+            "ylabel": args.ylabel,
+            "categories": args.categories,
+            "source": args.source,
+            "range": args.range,
+            "binned": args.binned,
+            "bins": args.bins,
+        }
+        if args.series:
+            fields["series"] = list(args.series)
+        if args.tickers:
+            fields["tickers"] = list(args.tickers)
+        try:
+            path = chart_defaults.set_kind_defaults(kind, fields)
+        except ValueError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+        print(f"Saved {kind} defaults → {path}")
+        return 0
+
+    if action == "unset":
+        kind = (args.kind or "").strip().lower()
+        try:
+            path = chart_defaults.clear_kind_defaults(kind)
+        except ValueError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+        if path is None:
+            print(f"No defaults for {kind!r}.")
+            return 0
+        print(f"Cleared {kind} defaults → {path}")
+        return 0
+
+    print("Usage: chart defaults list|show KIND|set KIND …|unset KIND", file=sys.stderr)
+    return 1
+
+
 def cmd_parse(args: argparse.Namespace) -> int:
     argv = nl_to_argv(" ".join(args.text))
     if not argv:
         return 1
-    print(" ".join(shlex.quote(a) for a in argv))
+    # Fish command substitution splits on newlines only. One arg per line keeps
+    # multi-word NL phrases intact without shlex/fish double-quoting
+    # (''"'"'…'"'"''). The agent dispatcher later space-splits for argv.
+    for a in argv:
+        print(a.replace("\n", " ").replace("\r", " "))
     return 0
 
 
@@ -975,8 +1811,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_bar = sub.add_parser("bar", help="Bar chart from label:value pairs")
     p_bar.add_argument(
         "--data",
-        required=True,
-        help='Comma-separated pairs, e.g. "Apple:230,Samsung:210,Xiaomi:140"',
+        default="",
+        help='Comma-separated pairs, e.g. "Apple:230,Samsung:210,Xiaomi:140" (or chart defaults)',
     )
     p_bar.add_argument("-o", "--output", help="Output PNG path")
     p_bar.add_argument("--title", default="", help="Chart title")
@@ -986,8 +1822,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_pie = sub.add_parser("pie", help="Pie chart from label:value pairs")
     p_pie.add_argument(
         "--data",
-        required=True,
-        help='Comma-separated pairs, e.g. "Organic:400,Direct:300,Referral:300,Social:200"',
+        default="",
+        help='Comma-separated pairs, e.g. "Organic:400,Direct:300,Referral:300,Social:200" (or chart defaults)',
     )
     p_pie.add_argument("-o", "--output", help="Output PNG path")
     p_pie.add_argument("--title", default="", help="Chart title")
@@ -996,7 +1832,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_scatter = sub.add_parser("scatter", help="Scatter plot from x:y numeric pairs")
     p_scatter.add_argument(
         "--data",
-        required=True,
+        default="",
         help='Comma-separated x:y pairs, e.g. "100:200,120:190,170:280"',
     )
     p_scatter.add_argument("-o", "--output", help="Output PNG path")
@@ -1008,8 +1844,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_hist = sub.add_parser("histogram", help="Histogram from numeric values or binned label:count pairs")
     p_hist.add_argument(
         "--data",
-        required=True,
-        help='Raw values "12,15,18,..." or binned "0-10:5,10-20:12"',
+        default="",
+        help='Raw values "12,15,18,..." or binned "0-10:5,10-20:12" (or chart defaults)',
     )
     p_hist.add_argument("--binned", action="store_true", help="Treat --data as label:count pairs")
     p_hist.add_argument("--bins", type=int, default=None, help="Number of bins for raw values")
@@ -1021,16 +1857,105 @@ def build_parser() -> argparse.ArgumentParser:
     p_pareto = sub.add_parser("pareto", help="Pareto chart from label:value pairs")
     p_pareto.add_argument(
         "--data",
-        required=True,
-        help='Comma-separated pairs, e.g. "Scratches:45,Dents:28,Cracks:15"',
+        default="",
+        help='Comma-separated pairs, e.g. "Scratches:45,Dents:28,Cracks:15" (or chart defaults)',
     )
     p_pareto.add_argument("-o", "--output", help="Output PNG path")
     p_pareto.add_argument("--title", default="", help="Chart title")
+    p_pareto.add_argument(
+        "--cumulative-line",
+        dest="cumulative_line",
+        action="store_true",
+        default=None,
+        help="Draw classic Pareto cumulative %% line on a second axis",
+    )
+    p_pareto.add_argument(
+        "--no-cumulative-line",
+        dest="cumulative_line",
+        action="store_false",
+        help="Sorted bar chart only (no cumulative line overlay)",
+    )
     p_pareto.set_defaults(func=cmd_pareto)
+
+
+    p_fetch = sub.add_parser("fetch", help="Fetch external data and render a chart")
+    p_fetch.add_argument("text", nargs="+", help="Natural language chart request")
+    p_fetch.add_argument(
+        "--type",
+        default="auto",
+        help="Preferred chart type: auto|bar|grouped_bar|line|pie|scatter|pareto",
+    )
+    p_fetch.add_argument("--force", action="store_true", help="Keep requested chart type despite suitability warnings")
+    p_fetch.add_argument("-o", "--output", help="Output PNG path")
+    p_fetch.add_argument("--title", default="", help="Chart title")
+    p_fetch.add_argument("--ylabel", default="", help="Y-axis label")
+    p_fetch.add_argument("--xlabel", default="", help="X-axis label (scatter)")
+    p_fetch.set_defaults(func=cmd_fetch)
+
+    p_grouped = sub.add_parser("grouped_bar", help="Grouped bar chart from categories and series")
+    p_grouped.add_argument("--categories", required=True, help="Comma-separated category labels")
+    p_grouped.add_argument("--series", action="append", required=True, help="Series as Name:v1,v2,…")
+    p_grouped.add_argument("-o", "--output", help="Output PNG path")
+    p_grouped.add_argument("--title", default="", help="Chart title")
+    p_grouped.add_argument("--ylabel", default="", help="Y-axis label")
+    p_grouped.add_argument("--source", default="", help="Source footnote")
+    p_grouped.set_defaults(func=cmd_grouped_bar)
 
     p_parse = sub.add_parser("parse", help="Parse natural language → chart args (internal)")
     p_parse.add_argument("text", nargs="+", help="Natural language request")
     p_parse.set_defaults(func=cmd_parse)
+
+    p_defaults = sub.add_parser(
+        "defaults",
+        help="View or edit user chart defaults (~/.config/arka/charts.yaml)",
+    )
+    p_defaults_sub = p_defaults.add_subparsers(dest="defaults_action")
+
+    p_defaults_list = p_defaults_sub.add_parser("list", help="List configured defaults")
+    p_defaults_list.set_defaults(defaults_action="list", func=cmd_defaults)
+
+    p_defaults_show = p_defaults_sub.add_parser("show", help="Show defaults for one chart kind")
+    p_defaults_show.add_argument("kind", choices=list(CHART_KINDS))
+    p_defaults_show.set_defaults(defaults_action="show", func=cmd_defaults)
+
+    p_defaults_set = p_defaults_sub.add_parser("set", help="Set or merge defaults for a chart kind")
+    p_defaults_set.add_argument("kind", choices=list(CHART_KINDS))
+    p_defaults_set.add_argument("--data", default="", help="Default --data string")
+    p_defaults_set.add_argument("--title", default="", help="Default chart title")
+    p_defaults_set.add_argument("--xlabel", default="", help="Default X-axis label (scatter/histogram)")
+    p_defaults_set.add_argument("--ylabel", default="", help="Default Y-axis label")
+    p_defaults_set.add_argument(
+        "--categories",
+        default="",
+        help="Default categories (grouped_bar)",
+    )
+    p_defaults_set.add_argument(
+        "--series",
+        action="append",
+        default=[],
+        help="Default series entry Name:v1,v2,… (grouped_bar; repeatable)",
+    )
+    p_defaults_set.add_argument(
+        "--tickers",
+        nargs="+",
+        default=[],
+        help="Default tickers (line)",
+    )
+    p_defaults_set.add_argument("--range", default="", help="Default Yahoo range (line)")
+    p_defaults_set.add_argument("--source", default="", help="Default source footnote (grouped_bar)")
+    p_defaults_set.add_argument(
+        "--binned",
+        action="store_true",
+        help="Treat histogram --data as label:count pairs",
+    )
+    p_defaults_set.add_argument("--bins", type=int, default=None, help="Default histogram bin count")
+    p_defaults_set.set_defaults(defaults_action="set", func=cmd_defaults)
+
+    p_defaults_unset = p_defaults_sub.add_parser("unset", help="Remove defaults for a chart kind")
+    p_defaults_unset.add_argument("kind", choices=list(CHART_KINDS))
+    p_defaults_unset.set_defaults(defaults_action="unset", func=cmd_defaults)
+
+    p_defaults.set_defaults(func=cmd_defaults, defaults_action="list")
 
     return p
 

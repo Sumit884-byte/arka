@@ -250,8 +250,23 @@ def main(argv: list[str] | None = None) -> int:
     if args[0] in ("fact_check", "fact-check", "factcheck", "factchecker"):
         return run_script("arka_fact_check.py", args[1:])
 
-    if args[0] in ("currency_convert", "convert", "currency"):
+    if args[0] in ("quiz", "quiz_practice", "quiz-practice"):
+        return run_script("arka_quiz_practice.py", args[1:])
+
+    if args[0] == "council":
+        return run_script("arka_council.py", args[1:])
+
+    if args[0] == "convert":
+        return _run_convert(args[1:])
+
+    if args[0] in ("currency_convert", "currency"):
         return run_script("arka_currency.py", ["convert", *args[1:]])
+
+    if args[0] in ("timezone_convert", "tz_convert", "timezone"):
+        return run_script("arka_timezone_convert.py", ["convert", *args[1:]])
+
+    if args[0] in ("open_url", "open", "browse"):
+        return run_script("arka_open_url.py", args)
 
     if args[0] in ("ask", "web"):
         q = " ".join(args[1:]).strip()
@@ -303,6 +318,16 @@ def main(argv: list[str] | None = None) -> int:
             return code
 
     return _run_portable(text)
+
+
+def _run_convert(rest: list[str]) -> int:
+    """Route ambiguous `convert` to timezone or currency based on NL."""
+    from arka.routing.symbolic import is_timezone_convert_request
+
+    text = " ".join(rest).strip()
+    if text and is_timezone_convert_request(text):
+        return run_script("arka_timezone_convert.py", ["convert", *rest])
+    return run_script("arka_currency.py", ["convert", *rest])
 
 
 def _try_code_nl(text: str) -> int | None:
@@ -1024,11 +1049,13 @@ Usage:
   arka chat calc integrate sin(x) # SymPy
   arka ascii "HELLO"              # ASCII banner (figlet / pyfiglet)
   arka ascii --from-image cat.jpg # image → ASCII art
+  arka council "should I learn Rust?"  # multi-persona deliberation chamber
+  arka council list               # past council questions
   arka mode [ask|plan|agent|debug|multitask]  # operation mode (default: agent)
   arka code init <folder>         # initialize scoped coding workspace
   arka code write <goal>          # write code only inside project folder
   arka code status                # show active code project
-  arka self improve [target]      # self-improvement loop on Arka repo
+  arka self improve [target] [--apply]  # analyze + plan; --apply runs goal agent
   arka route <request>            # preview routing (no run)
   arka route learn "phrase" "skill"  # teach NL → CLI mapping
   arka route list                 # show learned routes

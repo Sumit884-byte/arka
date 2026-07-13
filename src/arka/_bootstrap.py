@@ -91,6 +91,7 @@ LEGACY_MODULES: dict[str, str] = {
     "arka_webhook": "arka.integrations.webhook",
     "arka_sports": "arka.integrations.sports",
     "arka_currency": "arka.integrations.currency",
+    "arka_open_url": "arka.integrations.open_url",
     "arka_kalshi": "arka.integrations.kalshi",
     "arka_kaggle": "arka.integrations.kaggle",
     "arka_password_vault": "arka.integrations.password_vault",

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -11,17 +12,83 @@ from arka.media.compose_slides import (
     compose,
     convert_deck,
     detect_format,
+    extract_slide_style,
     extract_slides_topic,
     nl_to_argv,
     normalize_format,
+    normalize_slide_style,
     parse_formats_arg,
+    _slides_scene_bounds,
+    _slides_script_needs_shortening,
+    _template_slides_script,
+    _validate_pptx_file,
 )
-from arka.media.compose_video import Scene, _template_script, load_config
+from arka.media.compose_video import Scene, load_config
 
 
 def test_nl_to_argv_slides_about_topic():
     argv = nl_to_argv("make slides about kubernetes networking")
     assert argv == ["compose", "--topic", "kubernetes networking"]
+
+
+def test_nl_to_argv_arka_slides():
+    argv = nl_to_argv("arka slides about Rust memory safety")
+    assert argv == ["compose", "--topic", "Rust memory safety"]
+
+
+def test_nl_to_argv_presentation_on_topic():
+    argv = nl_to_argv("presentation on climate change")
+    assert argv == ["compose", "--topic", "climate change"]
+
+
+def test_nl_to_argv_pitch_deck_style():
+    argv = nl_to_argv("pitch deck on AI infrastructure")
+    assert argv == ["compose", "--topic", "AI infrastructure", "--style", "pitch"]
+
+
+def test_nl_to_argv_academic_presentation():
+    argv = nl_to_argv("academic presentation on quantum computing as md")
+    assert argv == [
+        "compose",
+        "--topic",
+        "quantum computing",
+        "--format",
+        "md",
+        "--style",
+        "academic",
+    ]
+
+
+def test_normalize_slide_style_defaults_executive():
+    assert normalize_slide_style(None) == "executive"
+    assert normalize_slide_style("unknown") == "executive"
+    assert normalize_slide_style("pitch") == "pitch"
+
+
+def test_extract_slide_style_from_nl():
+    assert extract_slide_style("executive slides about sales") == "executive"
+    assert extract_slide_style("style academic presentation") == "academic"
+
+
+def test_template_slides_script_executive_arc():
+    scenes = _template_slides_script("cloud security", style="executive")
+    assert 6 <= len(scenes) <= _slides_scene_bounds()[1]
+    titles = [scene.title for scene in scenes]
+    assert any("priority" in title.lower() or "strategic" in title.lower() for title in titles)
+    assert all(scene.narration.strip() for scene in scenes)
+    assert all(scene.body.strip() for scene in scenes)
+
+
+def test_template_slides_script_pitch_has_cta():
+    scenes = _template_slides_script("fintech", style="pitch")
+    assert any("ask" in scene.title.lower() for scene in scenes)
+
+
+def test_slides_script_needs_shortening_flags_dense_deck():
+    scenes = [
+        Scene(title="A" * 80, narration="n", captions=["one", "two", "three", "four", "five"]),
+    ]
+    assert _slides_script_needs_shortening(scenes)
 
 
 def test_nl_to_argv_presentation_with_llm():
@@ -75,10 +142,11 @@ def test_compose_builds_pptx_and_sidecar(tmp_path: Path, monkeypatch: pytest.Mon
     _ = pptx  # noqa: F841
 
     monkeypatch.setenv("OPEN_SLIDES", "0")
-    scenes = _template_script("testing")
+    scenes = _template_slides_script("testing", style="executive")
     out = tmp_path / "deck.pptx"
     cfg = load_config()
-    saved = compose(scenes, output=out, topic="testing", cfg=cfg, formats=["pptx"])
+    batch = compose(scenes, output=out, topic="testing", cfg=cfg, formats=["pptx"])
+    saved = batch.saved
     assert saved == [out]
     assert out.is_file()
     assert out.stat().st_size > 5000
@@ -99,7 +167,8 @@ def test_compose_exports_pdf(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     scenes = [Scene(title="Hello", narration="Notes.", body="Body copy")]
     out = tmp_path / "deck.pdf"
-    saved = compose(scenes, output=out, topic="Hello", cfg=load_config(), formats=["pdf"])
+    batch = compose(scenes, output=out, topic="Hello", cfg=load_config(), formats=["pdf"])
+    saved = batch.saved
     assert saved == [out]
     assert out.is_file()
     assert out.stat().st_size > 1000
@@ -110,7 +179,8 @@ def test_compose_exports_html(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     scenes = [Scene(title="Hello", narration="Notes.", body="Body copy")]
     out = tmp_path / "deck.html"
-    saved = compose(scenes, output=out, topic="Hello", cfg=load_config(), formats=["html"])
+    batch = compose(scenes, output=out, topic="Hello", cfg=load_config(), formats=["html"])
+    saved = batch.saved
     assert saved == [out]
     html = out.read_text(encoding="utf-8")
     assert "<!DOCTYPE html>" in html
@@ -123,7 +193,8 @@ def test_compose_exports_markdown(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
 
     scenes = [Scene(title="Hello", narration="Speaker notes.", body="Short headline")]
     out = tmp_path / "deck.md"
-    saved = compose(scenes, output=out, topic="Hello", cfg=load_config(), formats=["md"])
+    batch = compose(scenes, output=out, topic="Hello", cfg=load_config(), formats=["md"])
+    saved = batch.saved
     assert saved == [out]
     md = out.read_text(encoding="utf-8")
     assert "marp: true" in md
@@ -136,7 +207,8 @@ def test_compose_exports_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     scenes = [Scene(title="Hello", narration="Speaker notes.", body="Short headline")]
     out = tmp_path / "deck.json"
-    saved = compose(scenes, output=out, topic="Hello", cfg=load_config(), formats=["json"])
+    batch = compose(scenes, output=out, topic="Hello", cfg=load_config(), formats=["json"])
+    saved = batch.saved
     assert saved == [out]
     meta = json.loads(out.read_text(encoding="utf-8"))
     assert meta["source"] == "arka-compose-slides"
@@ -176,7 +248,8 @@ def test_convert_json_to_pptx(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     compose(scenes, output=json_path, topic="Demo", cfg=load_config(), formats=["json"])
 
     out = tmp_path / "converted.pptx"
-    saved = convert_deck(json_path, output=out, formats=["pptx"], cfg=load_config())
+    batch = convert_deck(json_path, output=out, formats=["pptx"], cfg=load_config())
+    saved = batch.saved
     assert saved == [out]
     assert out.is_file()
     assert out.stat().st_size > 3000
@@ -191,7 +264,8 @@ def test_convert_pptx_to_html(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     compose(scenes, output=pptx_path, topic="Hello", cfg=load_config(), formats=["pptx"])
 
     html_path = tmp_path / "deck.html"
-    saved = convert_deck(pptx_path, output=html_path, formats=["html"], cfg=load_config())
+    batch = convert_deck(pptx_path, output=html_path, formats=["html"], cfg=load_config())
+    saved = batch.saved
     assert saved == [html_path]
     html = html_path.read_text(encoding="utf-8")
     assert "<!DOCTYPE html>" in html
@@ -222,7 +296,8 @@ More content
     )
 
     html_path = tmp_path / "deck.html"
-    saved = convert_deck(md_path, output=html_path, formats=["html"], cfg=load_config())
+    batch = convert_deck(md_path, output=html_path, formats=["html"], cfg=load_config())
+    saved = batch.saved
     assert saved == [html_path]
     html = html_path.read_text(encoding="utf-8")
     assert "Slide One" in html
@@ -237,7 +312,8 @@ def test_convert_html_to_markdown(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     compose(scenes, output=html_path, topic="Hello", cfg=load_config(), formats=["html"])
 
     md_path = tmp_path / "deck.md"
-    saved = convert_deck(html_path, output=md_path, formats=["md"], cfg=load_config())
+    batch = convert_deck(html_path, output=md_path, formats=["md"], cfg=load_config())
+    saved = batch.saved
     assert saved == [md_path]
     md = md_path.read_text(encoding="utf-8")
     assert "# Hello" in md
@@ -255,6 +331,63 @@ def test_compose_title_only_slide_without_stock_keys(tmp_path: Path, monkeypatch
         Scene(title="Hello", narration="Speaker notes here.", body="Short headline"),
     ]
     out = tmp_path / "title-only.pptx"
-    saved = compose(scenes, output=out, topic="Hello", cfg=load_config(), formats=["pptx"])
+    batch = compose(scenes, output=out, topic="Hello", cfg=load_config(), formats=["pptx"])
+    saved = batch.saved
     assert saved[0].is_file()
     assert saved[0].stat().st_size > 3000
+
+
+def test_symbolic_route_compose_slides():
+    from arka.routing.symbolic import route_compose_slides
+
+    hit = route_compose_slides("make slides about kubernetes networking")
+    assert hit == "compose_slides compose --topic 'kubernetes networking'"
+    assert route_compose_slides("make youtube video about ai") is None
+
+
+def test_pptx_export_valid_ooxml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    pytest.importorskip("pptx")
+    monkeypatch.setenv("OPEN_SLIDES", "0")
+    monkeypatch.delenv("UNSPLASH_ACCESS_KEY", raising=False)
+    monkeypatch.delenv("PEXELS_API_KEY", raising=False)
+    monkeypatch.delenv("PIXABAY_API_KEY", raising=False)
+
+    scenes = _template_slides_script("valid export", style="executive")[:2]
+    out = tmp_path / "deck.pptx"
+    batch = compose(scenes, output=out, topic="valid export", cfg=load_config(), formats=["pptx"])
+    assert batch.saved == [out]
+    assert not batch.failed
+
+    _validate_pptx_file(out)
+    with zipfile.ZipFile(out) as zf:
+        names = zf.namelist()
+        assert "[Content_Types].xml" in names
+        assert any(name.endswith("presentation.xml") for name in names)
+        assert zf.testzip() is None
+
+
+def test_invalid_generation_does_not_write_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    pytest.importorskip("pptx")
+    monkeypatch.setenv("OPEN_SLIDES", "0")
+    monkeypatch.delenv("UNSPLASH_ACCESS_KEY", raising=False)
+    monkeypatch.delenv("PEXELS_API_KEY", raising=False)
+    monkeypatch.delenv("PIXABAY_API_KEY", raising=False)
+
+    def _reject_pptx(path: Path) -> None:
+        raise ValueError("simulated invalid pptx")
+
+    monkeypatch.setattr("arka.media.compose_slides._validate_pptx_file", _reject_pptx)
+
+    scenes = [Scene(title="Broken export", narration="Notes.", body="Headline")]
+    out = tmp_path / "broken.pptx"
+    batch = compose(scenes, output=out, topic="Broken export", cfg=load_config(), formats=["pptx"])
+
+    assert not out.exists()
+    assert not out.with_suffix(".pptx.partial").exists()
+    assert batch.failed.get("pptx")
+    assert batch.fallback_md is not None
+    assert batch.fallback_md.is_file()
+    assert batch.fallback_md.suffix == ".md"
+    assert "# Broken export" in batch.fallback_md.read_text(encoding="utf-8")

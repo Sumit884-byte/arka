@@ -24,6 +24,16 @@ DEFAULT_VLLM_VISION_MODEL = "Qwen/Qwen2-VL-2B-Instruct"
 DEFAULT_VLLM_METAL_MODEL = "mlx-community/Qwen2-VL-2B-Instruct-4bit"
 
 
+def _trace_stderr(msg: str) -> None:
+    try:
+        from arka.core.mode import is_debug_mode
+
+        if is_debug_mode():
+            print(msg, file=sys.stderr)
+    except ImportError:
+        pass
+
+
 def _env(name: str, default: str = "") -> str:
     return (os.environ.get(name) or default).strip()
 
@@ -66,14 +76,22 @@ def host_os() -> str:
     return sysname.lower()
 
 
+_DEFAULT_VLLM_HOST = "127.0.0.1:8000"
+
+
 def vllm_explicitly_configured() -> bool:
     """True when env indicates the user wants local vLLM in the fallback chain."""
-    return bool(
+    if (
         _env("VLLM_API_URL")
         or _env("VLLM_START_CMD")
         or _env("DESCRIBE_IMAGE_VLLM_START_CMD")
-        or _env("VLLM_HOST")
-    )
+    ):
+        return True
+    pref = (_env("AI_PREFERRED_PROVIDER") or _env("LLM_PROVIDER")).lower()
+    if pref == "vllm":
+        return True
+    host = _env("VLLM_HOST")
+    return bool(host and host != _DEFAULT_VLLM_HOST)
 
 
 def _vllm_port() -> str:
@@ -100,8 +118,10 @@ def _default_vllm_start_cmd(*, vision: bool = False) -> str:
 
 def apply_vllm_defaults(*, vision: bool = False) -> None:
     """Default host/start cmd so local vLLM can auto-start when configured."""
+    if not vision and not vllm_explicitly_configured():
+        return
     if not _env("VLLM_HOST") and not _env("VLLM_API_URL"):
-        os.environ.setdefault("VLLM_HOST", "127.0.0.1:8000")
+        os.environ.setdefault("VLLM_HOST", _DEFAULT_VLLM_HOST)
     if _env("DESCRIBE_IMAGE_VLLM_START_CMD") and not _env("VLLM_START_CMD"):
         os.environ.setdefault("VLLM_START_CMD", _env("DESCRIBE_IMAGE_VLLM_START_CMD"))
     if not _env("VLLM_START_CMD"):
@@ -290,7 +310,7 @@ def _wait_until(provider: str, timeout: float) -> bool:
 def _stop_process(proc: subprocess.Popen[bytes], name: str) -> None:
     if proc.poll() is not None:
         return
-    print(f"Stopped {name} server", file=sys.stderr)
+    _trace_stderr(f"Stopped {name} server")
     try:
         proc.terminate()
         proc.wait(timeout=5)
@@ -326,6 +346,10 @@ class LocalServerManager:
         if provider not in LOCAL_PROVIDERS:
             return True
 
+        if provider == "vllm" and not is_reachable(provider):
+            if not vllm_explicitly_configured() or not _env("VLLM_START_CMD"):
+                return False
+
         with self._lock:
             state = self._state(provider)
             if is_reachable(provider):
@@ -350,7 +374,7 @@ class LocalServerManager:
         if _wait_until(provider, start_timeout()):
             with self._lock:
                 state.refcount += 1
-            print(f"{state.name} server ready", file=sys.stderr)
+            _trace_stderr(f"{state.name} server ready")
             return True
 
         with self._lock:
@@ -358,7 +382,7 @@ class LocalServerManager:
                 _stop_process(state.process, state.name)
             state.process = None
             state.started_by_us = False
-        print(f"Failed to start {_display_name(provider)} server (timeout)", file=sys.stderr)
+        _trace_stderr(f"Failed to start {_display_name(provider)} server (timeout)")
         return False
 
     def release(self, provider: str) -> None:
@@ -438,7 +462,7 @@ def _start_provider(provider: str) -> subprocess.Popen[bytes] | None:
     starter = starters.get(provider.lower())
     if not starter:
         return None
-    print(f"Starting {_display_name(provider)} server…", file=sys.stderr)
+    _trace_stderr(f"Starting {_display_name(provider)} server…")
     proc = starter()
     return proc
 
@@ -446,7 +470,7 @@ def _start_provider(provider: str) -> subprocess.Popen[bytes] | None:
 def _start_ollama() -> subprocess.Popen[bytes] | None:
     ollama = shutil.which("ollama")
     if not ollama:
-        print("Ollama binary not found — install from https://ollama.com", file=sys.stderr)
+        _trace_stderr("Ollama binary not found — install from https://ollama.com")
         return None
     env = os.environ.copy()
     try:
@@ -458,18 +482,18 @@ def _start_ollama() -> subprocess.Popen[bytes] | None:
             env=env,
         )
     except OSError as exc:
-        print(f"Failed to start Ollama: {exc}", file=sys.stderr)
+        _trace_stderr(f"Failed to start Ollama: {exc}")
         return None
 
 
 def _start_vllm() -> subprocess.Popen[bytes] | None:
     raw = _env("VLLM_START_CMD")
     if not raw:
-        print(
-            "vLLM not reachable — set VLLM_START_CMD (e.g. "
-            "'vllm serve Qwen/Qwen2-VL-2B-Instruct --port 8000')",
-            file=sys.stderr,
-        )
+        if vllm_explicitly_configured():
+            _trace_stderr(
+                "vLLM not reachable — set VLLM_START_CMD (e.g. "
+                "'vllm serve Qwen/Qwen2-VL-2B-Instruct --port 8000')"
+            )
         return None
     cmd = shlex.split(raw)
     if not cmd:
@@ -478,29 +502,26 @@ def _start_vllm() -> subprocess.Popen[bytes] | None:
     if not vllm_bin:
         plat = host_os()
         if plat == "macos":
-            print(
+            _trace_stderr(
                 "vLLM not found on macOS — plain `pip install vllm` usually fails.\n"
                 "Options:\n"
                 "  • export DESCRIBE_IMAGE_BACKEND=gemini  (needs GEMINI_API_KEY)\n"
                 "  • ollama pull llava && export DESCRIBE_IMAGE_BACKEND=ollama\n"
-                "  • vLLM-Metal: curl -fsSL https://raw.githubusercontent.com/vllm-project/vllm-metal/main/install.sh | bash",
-                file=sys.stderr,
+                "  • vLLM-Metal: curl -fsSL https://raw.githubusercontent.com/vllm-project/vllm-metal/main/install.sh | bash"
             )
         elif plat == "windows":
-            print(
+            _trace_stderr(
                 "vLLM not found on Windows.\n"
                 "Options:\n"
                 "  • export DESCRIBE_IMAGE_BACKEND=gemini  (needs GEMINI_API_KEY)\n"
                 "  • ollama pull llava && export DESCRIBE_IMAGE_BACKEND=ollama\n"
                 "  • WSL2: pip install vllm, then set VLLM_HOST=127.0.0.1:8000 and VLLM_START_CMD\n"
-                "  • Native Windows: install vLLM if supported, or point VLLM_API_URL at a remote server",
-                file=sys.stderr,
+                "  • Native Windows: install vLLM if supported, or point VLLM_API_URL at a remote server"
             )
         else:
-            print(
+            _trace_stderr(
                 "vLLM not found — install: pip install vllm\n"
-                "Then retry (Arka auto-starts/stops the server when VLLM_START_CMD is set).",
-                file=sys.stderr,
+                "Then retry (Arka auto-starts/stops the server when VLLM_START_CMD is set)."
             )
         return None
     cmd[0] = vllm_bin
@@ -508,12 +529,11 @@ def _start_vllm() -> subprocess.Popen[bytes] | None:
     try:
         log_fh = log_path.open("a", encoding="utf-8")
     except OSError as exc:
-        print(f"Failed to open vLLM log {log_path}: {exc}", file=sys.stderr)
+        _trace_stderr(f"Failed to open vLLM log {log_path}: {exc}")
         return None
-    print(f"Starting vLLM server… log: {log_path}", file=sys.stderr)
-    print(
-        "First run may download model weights (Hugging Face) — can take several minutes.",
-        file=sys.stderr,
+    _trace_stderr(f"Starting vLLM server… log: {log_path}")
+    _trace_stderr(
+        "First run may download model weights (Hugging Face) — can take several minutes."
     )
     try:
         return subprocess.Popen(
@@ -524,7 +544,7 @@ def _start_vllm() -> subprocess.Popen[bytes] | None:
             env=os.environ.copy(),
         )
     except OSError as exc:
-        print(f"Failed to start vLLM: {exc}", file=sys.stderr)
+        _trace_stderr(f"Failed to start vLLM: {exc}")
         try:
             log_fh.close()
         except OSError:
@@ -550,6 +570,8 @@ def provider_available_with_servers(provider: str) -> bool:
             if spec.slug == "vllm":
                 if is_reachable("vllm"):
                     return True
+                if not vllm_explicitly_configured():
+                    return False
                 return auto_start_enabled() and bool(_env("VLLM_START_CMD"))
             if spec.kind == "local_openai":
                 return is_reachable(provider) or provider_has_keys(provider)
@@ -570,6 +592,8 @@ def provider_available_with_servers(provider: str) -> bool:
         if provider == "vllm":
             if is_reachable("vllm"):
                 return True
+            if not vllm_explicitly_configured():
+                return False
             return auto_start_enabled() and bool(_env("VLLM_START_CMD"))
         if provider == "vllm-cloud":
             return bool(_vllm_cloud_base_raw())
@@ -588,6 +612,8 @@ def provider_available_with_servers(provider: str) -> bool:
     if provider == "vllm":
         if is_reachable("vllm"):
             return True
+        if not vllm_explicitly_configured():
+            return False
         return auto_start_enabled() and bool(_env("VLLM_START_CMD"))
     if provider == "vllm-cloud":
         return bool(_vllm_cloud_base_raw())

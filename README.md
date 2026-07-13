@@ -22,7 +22,7 @@ Requires **Python `3.11` or higher**. Optional: [fish shell](https://fishshell.c
 ## Installation
 
 ```bash
-pipx install "arka-agent[chat]"
+pipx install "arka-agent[chat]"  # PyPI package coming soon; use git install below if pip 404s
 arka setup
 ```
 
@@ -48,6 +48,7 @@ Get to a working answer in under a minute:
 arka doctor
 arka ask "what is Rust?"
 arka "convert 100 USD to INR"
+arka council "should I learn Rust?"
 ```
 
 Voice (optional):

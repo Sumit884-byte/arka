@@ -42,6 +42,19 @@ class AutoRefetchTests(unittest.TestCase):
                                 self.assertTrue(ar.maybe_auto_refetch(quiet=True))
                                 refetch.assert_called_once()
 
+    def test_run_refetch_falls_back_when_ff_only_blocked(self) -> None:
+        root = Path("/tmp/arka")
+        ff_fail = mock.Mock(returncode=128, stdout="", stderr="fatal: Not possible to fast-forward, aborting.\n")
+        merge_ok = mock.Mock(returncode=0, stdout="", stderr="")
+
+        with mock.patch("arka.paths.checkout_root", return_value=root):
+            with mock.patch("arka.core.auto_refetch.subprocess.run", side_effect=[ff_fail, merge_ok]) as run:
+                with mock.patch.object(Path, "is_file", autospec=True, return_value=False):
+                    rc = ar._run_refetch(quiet=True)
+        self.assertEqual(rc, 1)
+        self.assertEqual(run.call_count, 2)
+        self.assertEqual(run.call_args_list[1].args[0], ["git", "pull", "--no-rebase"])
+
 
 if __name__ == "__main__":
     unittest.main()

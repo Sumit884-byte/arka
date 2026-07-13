@@ -1818,6 +1818,77 @@ def _end_channel_session(answer: str, *, use_session: bool) -> None:
         pass
 
 
+
+_WORD_LIMIT_PATTERNS: list[tuple[re.Pattern[str], int]] = [
+    (re.compile(r"(?i)\b(?:in|within|under|at most|max(?:imum)?|limit(?:ed)? to)\s+(\d+)\s*[- ]?words?\b"), 1),
+    (re.compile(r"(?i)\b(\d+)\s*[- ]?word\s+(?:overview|summary|answer|response|description)\b"), 1),
+    (re.compile(r"(?i)\bfor\s+(\d+)\s+words?\b"), 1),
+]
+
+
+def detect_word_limit(text: str) -> int | None:
+    """Return requested answer word cap from NL, if any."""
+    t = (text or "").strip()
+    if not t:
+        return None
+    if re.search(r"(?i)\btop\s+\d+\b", t):
+        return None
+    for pat, grp in _WORD_LIMIT_PATTERNS:
+        m = pat.search(t)
+        if m:
+            try:
+                n = int(m.group(grp))
+            except (TypeError, ValueError):
+                continue
+            if 1 <= n <= 5000:
+                return n
+    return None
+
+
+def _answer_provenance_prefix(text: str) -> tuple[str, str]:
+    raw = (text or "").strip()
+    m = re.match(r"^(\[[^\]]+\]\s*)", raw)
+    if m:
+        return m.group(1), raw[m.end() :].lstrip()
+    return "", raw
+
+
+def count_answer_words(text: str) -> int:
+    _, body = _answer_provenance_prefix(text)
+    if not body:
+        return 0
+    return len(re.findall(r"[A-Za-z0-9]+(?:['’][A-Za-z0-9]+)?", body))
+
+
+def truncate_answer_words(text: str, limit: int) -> str:
+    if limit <= 0:
+        return text
+    prefix, body = _answer_provenance_prefix(text)
+    words = re.findall(r"[A-Za-z0-9]+(?:['’][A-Za-z0-9]+)?", body)
+    if len(words) <= limit:
+        return text
+    clipped = " ".join(words[:limit])
+    return f"{prefix}{clipped}".strip()
+
+
+def enforce_word_limit(answer: str, limit: int, question: str) -> str:
+    if limit <= 0 or count_answer_words(answer) <= limit:
+        return answer
+    system = ASSISTANT_SYSTEM
+    user = (
+        f"Rewrite the answer below to use at most {limit} words. "
+        "Keep the same provenance prefix ([FROM MEMORY] or [FROM SEARCH]) if present. "
+        "Do not add commentary.\n\n"
+        f"Question: {question}\n\nAnswer:\n{answer}"
+    )
+    rewritten = llm_complete(system, user, temperature=0.0, task="chat")
+    out = (rewritten or answer).strip()
+    if count_answer_words(out) > limit:
+        out = truncate_answer_words(out, limit)
+    return out
+
+
+
 def answer_question(
     question: str,
     *,
@@ -1827,6 +1898,7 @@ def answer_question(
 ) -> tuple[str, str]:
     """Returns (provenance, answer_text). provenance: search|memory|calc|weather|error"""
     question = normalize_question(" ".join(question.split()))
+    word_limit = detect_word_limit(question)
     channel_ctx = _begin_channel_session(question, use_session=use_session)
     try:
         from arka.core.security import sanitize_web_context, verify_web_query
@@ -2006,7 +2078,7 @@ def answer_question(
         user = f"{context_block}\n\n"
         if snippet:
             user += f"Web snippet:\n{snippet}\n\n"
-        length_hint = (list_extra or "\nAnswer clearly and completely.") + memory_hint
+        length_hint = (list_extra or ("\nAnswer in at most %d words." % word_limit if word_limit else "\nAnswer clearly and completely.")) + memory_hint
         user += f"Question: {question}\n{length_hint}\nStart with [FROM MEMORY] unless snippet was decisive."
         answer = llm_complete(system, user, task="chat")
         prov = "memory"
@@ -2105,8 +2177,11 @@ def answer_question(
         if not (linked_urls and _wants_opinion_analysis(question)):
             answer = cleanup_response(answer, question)
 
+    limit = detect_word_limit(question)
+    if limit and answer:
+        answer = enforce_word_limit(answer, limit, question)
+
     if use_session:
-        session_append("user", question)
         session_append("assistant", answer)
 
     _end_channel_session(answer, use_session=use_session)

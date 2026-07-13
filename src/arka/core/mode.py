@@ -67,6 +67,11 @@ def _normalize_mode(raw: str) -> str | None:
     return None
 
 
+def is_debug_mode() -> bool:
+    """True when verbose routing and LLM traces should be shown."""
+    return get_mode() == "debug"
+
+
 def get_mode() -> str:
     """Current operation mode (env ARKA_MODE overrides persisted file)."""
     env_mode = _normalize_mode(os.environ.get("ARKA_MODE", ""))

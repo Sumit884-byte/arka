@@ -43,11 +43,34 @@ def _run_refetch(*, quiet: bool = True) -> int:
 
     if not quiet:
         print("→ git pull", file=sys.stderr)
-    pull = subprocess.run(["git", "pull", "--ff-only"], cwd=root)
+    pull = subprocess.run(
+        ["git", "pull", "--ff-only"],
+        cwd=root,
+        capture_output=quiet,
+        text=True,
+    )
     if pull.returncode != 0:
-        if not quiet:
+        stderr = (pull.stderr or "").strip()
+        if quiet and "Not possible to fast-forward" in stderr:
+            pull = subprocess.run(
+                ["git", "pull", "--no-rebase"],
+                cwd=root,
+                capture_output=True,
+                text=True,
+            )
+        elif not quiet:
+            if stderr:
+                print(stderr, file=sys.stderr)
             print("git pull failed", file=sys.stderr)
-        return pull.returncode
+            return pull.returncode
+        else:
+            return pull.returncode
+        if pull.returncode != 0:
+            if not quiet:
+                if pull.stderr:
+                    print(pull.stderr.strip(), file=sys.stderr)
+                print("git pull failed", file=sys.stderr)
+            return pull.returncode
 
     sync = root / "scripts" / "sync_bundled.py"
     if sync.is_file():

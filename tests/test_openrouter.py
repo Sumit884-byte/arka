@@ -256,6 +256,9 @@ def test_openrouter_credit_error_helpers(monkeypatch: pytest.MonkeyPatch) -> Non
     assert fb.is_retryable_error(msg)
     assert fb._parse_affordable_tokens(msg) == 12975
     assert fb._reduce_max_tokens_for_credit_error(65536, msg) == 12975
+    assert fb._is_openrouter_credit_error("insufficient credits to complete request")
+    assert fb.is_retryable_error("insufficient credits to complete request")
+    assert fb._is_openrouter_account_credit_failure(msg, 4096)
     assert fb._reduce_max_tokens_for_credit_error(4096, "requires more credits") == 2048
 
 
@@ -308,3 +311,56 @@ def test_openrouter_credit_error_retries_with_lower_max_tokens(monkeypatch: pyte
     assert result.text == "Hello there!"
     assert calls[0] == 4096
     assert calls[1] == 2048
+
+
+def test_openrouter_credit_error_falls_back_to_gemini(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clear_llm_env(monkeypatch)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    monkeypatch.setenv("GEMINI_API_KEY", "gemini-test-key")
+    monkeypatch.setenv("LLM_AUTO_FALLBACK", "1")
+
+    from importlib import reload
+    from types import SimpleNamespace
+    from unittest.mock import patch
+
+    import arka.llm.fallback as fb
+
+    reload(fb)
+    fb.EXHAUSTION.reset()
+
+    credit_msg = (
+        "This request requires more credits, or fewer max_tokens. "
+        "You requested up to 4096 tokens, but can only afford 12975."
+    )
+    calls: list[tuple[str, str]] = []
+
+    class FakeAgent:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def run(self, _user):
+            provider, model_id = calls[-1]
+            if provider == "openrouter":
+                return SimpleNamespace(content=credit_msg)
+            return SimpleNamespace(content="Fallback answer from Gemini.")
+
+    def fake_build_model(provider, model_id, temperature, *, max_tokens=None, session=None):
+        calls.append((provider, model_id))
+        return object()
+
+    engine = fb.LlmFallbackEngine(
+        chain=[
+            ("openrouter", "x-ai/grok-4.20-multi-agent"),
+            ("gemini", "gemini-2.0-flash"),
+        ],
+        store=fb.ExhaustionStore(),
+    )
+
+    with patch.object(fb, "build_model", side_effect=fake_build_model):
+        with patch("agno.agent.Agent", FakeAgent):
+            result = engine.complete("You are helpful.", "Tell me something interesting.")
+
+    assert result.text == "Fallback answer from Gemini."
+    assert calls[0][0] == "openrouter"
+    assert calls[-1][0] == "gemini"
+    assert fb._is_openrouter_account_credit_failure(credit_msg, 4096)

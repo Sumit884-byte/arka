@@ -96,7 +96,7 @@ def test_apply_vllm_defaults_windows_skips_start_without_binary(
         mock.patch.object(servers.shutil, "which", return_value=None),
     ):
         servers.apply_vllm_defaults(vision=False)
-    assert os.environ.get("VLLM_HOST") == "127.0.0.1:8000"
+    assert "VLLM_HOST" not in os.environ
     assert "VLLM_START_CMD" not in os.environ
 
 
@@ -113,3 +113,37 @@ def test_apply_vllm_defaults_macos_vision_uses_metal_model(
         servers.apply_vllm_defaults(vision=True)
     cmd = os.environ.get("VLLM_START_CMD", "")
     assert "mlx-community" in cmd or "Qwen" in cmd
+
+
+def test_build_default_chain_skips_vllm_when_not_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _clear_vllm_env(monkeypatch)
+    monkeypatch.setenv("GEMINI_LIST", "0")
+    monkeypatch.setenv("GROQ_LIST", "0")
+    monkeypatch.setenv("OLLAMA_LIST", "0")
+
+    from importlib import reload
+
+    import arka.llm.fallback as fb
+
+    reload(fb)
+
+    chain = fb.build_default_chain(task="default")
+    assert not any(provider == "vllm" for provider, _ in chain)
+    # Second call must not pollute env and add vllm after apply_vllm_defaults side effects.
+    chain_again = fb.build_default_chain(task="chat")
+    assert not any(provider == "vllm" for provider, _ in chain_again)
+
+
+def test_vllm_prepare_silent_when_not_configured(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _clear_vllm_env(monkeypatch)
+    from arka.llm.servers import MANAGER
+
+    with mock.patch("arka.llm.servers.is_reachable", return_value=False):
+        assert MANAGER.prepare("vllm") is False
+    captured = capsys.readouterr()
+    assert "Starting vLLM" not in captured.err
+    assert "vLLM not reachable" not in captured.err

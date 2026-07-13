@@ -267,3 +267,96 @@ def test_builtin_tail_chain_matches_default():
     assert builtin_tail_chain() == list(DEFAULT_CHAIN)
     assert DEFAULT_CHAIN[0] == ("gemini", "gemini-2.5-flash")
     assert DEFAULT_CHAIN[-1] == ("ollama", "llama3.2:1b")
+
+
+def _fake_llm_engine_chain() -> list[tuple[str, str]]:
+    return [
+        ("gemini", "gemini-2.0-flash"),
+        ("groq", "llama-3.3-70b-versatile"),
+    ]
+
+
+def test_llm_fallback_trace_suppressed_in_normal_mode(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _clear_fallback_env(monkeypatch)
+    monkeypatch.setenv("ARKA_MODE", "agent")
+    monkeypatch.setenv("LLM_FALLBACK_NOTIFY", "1")
+    monkeypatch.delenv("LLM_VERBOSE", raising=False)
+
+    from importlib import reload
+    from types import SimpleNamespace
+    from unittest.mock import patch
+
+    import arka.llm.fallback as fb
+
+    reload(fb)
+    fb.EXHAUSTION.reset()
+
+    calls: list[int] = []
+
+    class FakeAgent:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def run(self, _user):
+            calls.append(1)
+            if len(calls) == 1:
+                raise RuntimeError("gemini unavailable")
+            return SimpleNamespace(content="Groq answer")
+
+    def fake_build_model(provider, model_id, temperature, *, max_tokens=None, session=None):
+        return object()
+
+    engine = fb.LlmFallbackEngine(chain=_fake_llm_engine_chain(), store=fb.ExhaustionStore())
+
+    with patch.object(fb, "build_model", side_effect=fake_build_model):
+        with patch("agno.agent.Agent", FakeAgent):
+            result = engine.complete("You are helpful.", "Hello")
+
+    assert result.text == "Groq answer"
+    captured = capsys.readouterr()
+    assert "arka_llm:" not in captured.err
+
+
+def test_llm_fallback_trace_visible_in_debug_mode(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _clear_fallback_env(monkeypatch)
+    monkeypatch.setenv("ARKA_MODE", "debug")
+    monkeypatch.setenv("LLM_FALLBACK_NOTIFY", "1")
+    monkeypatch.delenv("LLM_VERBOSE", raising=False)
+
+    from importlib import reload
+    from types import SimpleNamespace
+    from unittest.mock import patch
+
+    import arka.llm.fallback as fb
+
+    reload(fb)
+    fb.EXHAUSTION.reset()
+
+    calls: list[int] = []
+
+    class FakeAgent:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def run(self, _user):
+            calls.append(1)
+            if len(calls) == 1:
+                raise RuntimeError("gemini unavailable")
+            return SimpleNamespace(content="Groq answer")
+
+    def fake_build_model(provider, model_id, temperature, *, max_tokens=None, session=None):
+        return object()
+
+    engine = fb.LlmFallbackEngine(chain=_fake_llm_engine_chain(), store=fb.ExhaustionStore())
+
+    with patch.object(fb, "build_model", side_effect=fake_build_model):
+        with patch("agno.agent.Agent", FakeAgent):
+            result = engine.complete("You are helpful.", "Hello")
+
+    assert result.text == "Groq answer"
+    captured = capsys.readouterr()
+    assert "arka_llm: fallback ok" in captured.err

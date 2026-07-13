@@ -1,25 +1,35 @@
 #!/usr/bin/env python3
-"""Self-improvement loop — Arka uses its goal agent to improve its own codebase."""
+"""Self-improvement loop — Arka analyzes, plans, and optionally improves its own codebase."""
 
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
-import shlex
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 DEFAULT_MAX_ROUNDS = int(os.environ.get("SELF_IMPROVE_MAX_ROUNDS", "3"))
 DEFAULT_MAX_STEPS = int(os.environ.get("SELF_IMPROVE_MAX_STEPS", "15"))
 CONTEXT_LIMIT = int(os.environ.get("SELF_IMPROVE_CONTEXT_LIMIT", "10000"))
 DIAG_TIMEOUT = int(os.environ.get("SELF_IMPROVE_DIAG_TIMEOUT", "120"))
+GIT_LOG_LIMIT = int(os.environ.get("SELF_IMPROVE_GIT_LOG_LIMIT", "15"))
+MEMORY_MAX_ATTEMPTS = 100
 
 _BLOCKED_GIT_RE = re.compile(
     r"(?i)\bgit\s+(?:commit|push|reset\s+--hard|clean\s+-[fdx]|checkout\s+--\s+\.|rebase|merge|cherry-pick|stash\s+(?:drop|clear))\b"
 )
+
+_BLOCKED_WRITE_RE = re.compile(
+    r"(?i)(?:^|[\s'\"])(?:\.env(?:\.|$)|(?:^|/)secrets(?:/|$)|node_modules/|web/node_modules/)"
+)
+
+_PLAN_JSON_RE = re.compile(r"\{[\s\S]*\}")
 
 _SYSTEM_EXTRA = """SELF-IMPROVEMENT MODE — you are improving the Arka agent codebase.
 - Read llm.txt (status read) before editing unfamiliar areas.
@@ -28,8 +38,24 @@ _SYSTEM_EXTRA = """SELF-IMPROVEMENT MODE — you are improving the Arka agent co
 - After code changes run: pytest -q --tb=short (or targeted test file).
 - After significant edits run: arka repo index
 - NEVER run git commit, git push, git reset --hard, or other destructive git ops.
-- Do not modify web/node_modules or bundled/ directly (use sync_bundled.py for bundled/).
+- NEVER modify .env, secrets/, node_modules/, or web/node_modules/.
+- Do not modify bundled/ directly (use sync_bundled.py for bundled/).
 - Stop with status done when tests pass and the improvement target is met."""
+
+_PLAN_SYSTEM = """You are Arka's self-improvement planner. Given repo context, diagnostics, and a target focus,
+produce ONE concrete, minimal improvement plan scoped to the Arka Python/Fish codebase.
+
+Output ONLY valid JSON (no markdown fences) with keys:
+- focus: short topic string (e.g. "routing", "llm fallback", "quiz memory")
+- analyzed: array of 1-3 strings — what you inspected and found (file names + brief finding)
+- proposal: one sentence describing the concrete fix
+- files: array of relative repo paths to edit (max 6)
+- tests: array of pytest shell commands to verify (1-3)
+
+Rules:
+- Do not propose editing .env, secrets/, node_modules/, or credentials.
+- Prefer existing modules under src/arka/ and tests/.
+- Avoid repeating fixes listed under "Prior attempts"."""
 
 
 @dataclass
@@ -43,25 +69,119 @@ class DiagnosticResult:
         return self.exit_code == 0
 
 
+@dataclass
+class ImprovementPlan:
+    focus: str
+    analyzed: list[str] = field(default_factory=list)
+    proposal: str = ""
+    files: list[str] = field(default_factory=list)
+    tests: list[str] = field(default_factory=list)
+    raw_llm: str = ""
+
+
+def _config_dir() -> Path:
+    try:
+        from arka.paths import config_dir
+
+        return config_dir()
+    except ImportError:
+        return Path.home() / ".config" / "arka"
+
+
+def memory_path() -> Path:
+    return _config_dir() / "self-improve-memory.json"
+
+
+def load_memory() -> dict[str, Any]:
+    path = memory_path()
+    if not path.is_file():
+        return {"attempts": []}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"attempts": []}
+    if not isinstance(data, dict):
+        return {"attempts": []}
+    data.setdefault("attempts", [])
+    return data
+
+
+def save_memory(data: dict[str, Any]) -> None:
+    path = memory_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def _normalize_focus(text: str) -> str:
+    return " ".join((text or "").split()).strip().lower()
+
+
+def record_attempt(
+    plan: ImprovementPlan,
+    *,
+    outcome: str,
+    notes: str = "",
+) -> None:
+    data = load_memory()
+    attempts: list[dict[str, Any]] = list(data.get("attempts") or [])
+    attempts.append(
+        {
+            "focus": plan.focus,
+            "proposal": plan.proposal,
+            "files": plan.files,
+            "outcome": outcome,
+            "notes": notes,
+            "at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+    data["attempts"] = attempts[-MEMORY_MAX_ATTEMPTS:]
+    save_memory(data)
+
+
+def recent_attempts_context(focus: str = "", *, limit: int = 8) -> str:
+    attempts = load_memory().get("attempts") or []
+    if not attempts:
+        return "(none)"
+    norm_focus = _normalize_focus(focus)
+    lines: list[str] = []
+    for entry in reversed(attempts):
+        entry_focus = _normalize_focus(str(entry.get("focus") or ""))
+        if norm_focus and entry_focus and norm_focus not in entry_focus and entry_focus not in norm_focus:
+            continue
+        prop = str(entry.get("proposal") or "").strip()
+        outcome = str(entry.get("outcome") or "").strip()
+        if prop:
+            lines.append(f"- [{outcome}] {prop}")
+        if len(lines) >= limit:
+            break
+    return "\n".join(lines) if lines else "(none matching this focus)"
+
+
 def arka_repo_root() -> Path | None:
-    """Detect the Arka source checkout (dev install or cwd git root)."""
-    try:
-        from arka.paths import checkout_root
+    """Detect the Arka source checkout from the installed package — never a random git cwd."""
+    candidates: list[Path] = []
 
-        root = checkout_root()
-        if root and _is_arka_repo(root):
-            return root
+    try:
+        from arka.paths import arka_home, checkout_root
+
+        if root := checkout_root():
+            candidates.append(root)
+        home = arka_home()
+        if home.is_dir():
+            candidates.append(home)
+            if home.name == "bundled" and home.parent.is_dir():
+                candidates.append(home.parent)
     except ImportError:
         pass
 
-    try:
-        from arka.agent.repo_context import git_root
-
-        root = git_root()
-        if root and _is_arka_repo(root):
-            return root
-    except ImportError:
-        pass
+    seen: set[Path] = set()
+    for root in candidates:
+        resolved = root.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        if _is_arka_repo(resolved):
+            return resolved
 
     cwd = Path.cwd().resolve()
     if _is_arka_repo(cwd):
@@ -101,7 +221,9 @@ def ensure_arka_project(*, auto_init: bool = True) -> Path:
                 f"Code project not initialized for Arka repo. Run: arka code init {root}"
             )
         init_project(root)
-        print(f"→ Initialized code project: {root}", file=sys.stderr)
+        from arka.core.output import user_msg
+
+        user_msg(f"→ Initialized code project: {root}")
 
     apply_env()
     return root.resolve()
@@ -122,7 +244,6 @@ def _read_repo_context(root: Path, *, limit: int = CONTEXT_LIMIT) -> str:
     if len(text) <= limit:
         return text
 
-    # Prefer agent rules + recent changes + architecture headers.
     parts: list[str] = []
     for marker in ("AGENT RULES", "RECENT FILE CHANGES", "ARCHITECTURE", "PROJECT SUMMARY"):
         idx = text.find(marker)
@@ -134,6 +255,276 @@ def _read_repo_context(root: Path, *, limit: int = CONTEXT_LIMIT) -> str:
         return merged[:limit] + ("\n...(truncated)" if len(merged) > limit else "")
 
     return text[:limit] + f"\n...(truncated, {len(text)} chars total)"
+
+
+def get_git_log(root: Path, *, limit: int = GIT_LOG_LIMIT) -> str:
+    try:
+        proc = subprocess.run(
+            ["git", "log", f"-{limit}", "--oneline", "--no-decorate"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        out = (proc.stdout or "").strip()
+        return out if out else "(no git history)"
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return f"(git log unavailable: {exc})"
+
+
+def _routing_analysis(root: Path, focus: str) -> list[str]:
+    """Heuristic routing-gap notes when focus mentions routing or NL dispatch."""
+    notes: list[str] = []
+    focus_l = focus.lower()
+    if "routing" not in focus_l and "route" not in focus_l and "symbolic" not in focus_l:
+        return notes
+
+    sym = root / "src" / "arka" / "routing" / "symbolic.py"
+    fish = root / "src" / "arka" / "fish" / "config.fish"
+    if sym.is_file():
+        text = sym.read_text(encoding="utf-8", errors="replace")
+        route_fns = len(re.findall(r"^def route_", text, re.MULTILINE))
+        notes.append(f"symbolic.py ({route_fns} route_* handlers)")
+    if fish.is_file():
+        text = fish.read_text(encoding="utf-8", errors="replace")
+        agent_ifs = len(re.findall(r"_agent_is_\w+_request", text))
+        notes.append(f"config.fish ({agent_ifs} _agent_is_* NL detectors)")
+    if sym.is_file() and fish.is_file():
+        notes.append("Check fish vs Python symbolic.py parity when adding NL patterns")
+    return notes
+
+
+def _guess_files(root: Path, focus: str) -> list[str]:
+    """Keyword → likely source files (fallback when LLM unavailable)."""
+    focus_l = focus.lower()
+    candidates: list[str] = []
+    mapping = (
+        ("routing", ["src/arka/routing/symbolic.py", "src/arka/fish/config.fish", "tests/test_nl_routing_coverage.py"]),
+        ("route", ["src/arka/routing/symbolic.py", "src/arka/fish/config.fish"]),
+        ("llm", ["src/arka/llm/fallback.py", "src/arka/llm/skill_profiles.py", "tests/test_llm_fallback.py"]),
+        ("fallback", ["src/arka/llm/fallback.py"]),
+        ("quiz", ["src/arka/agent/quiz.py", "tests/test_quiz.py"]),
+        ("memory", ["src/arka/agent/core.py", "src/arka/agent/self_improve.py"]),
+        ("data_ask", ["src/arka/agent/data_ask.py", "tests/test_data_ask.py"]),
+        ("timezone", ["src/arka/agent/data_ask.py", "tests/test_data_ask.py"]),
+        ("dispatch", ["src/arka/dispatch.py", "src/arka/cli.py"]),
+        ("cli", ["src/arka/cli.py"]),
+    )
+    for keyword, paths in mapping:
+        if keyword in focus_l:
+            for rel in paths:
+                if (root / rel).is_file() and rel not in candidates:
+                    candidates.append(rel)
+    if not candidates:
+        candidates = ["src/arka/agent/self_improve.py", "tests/test_self_improve.py"]
+    return candidates[:6]
+
+
+def _heuristic_plan(
+    target: str,
+    *,
+    context: str,
+    diag: DiagnosticResult | None,
+    routing_notes: list[str],
+    root: Path,
+) -> ImprovementPlan:
+    focus = _normalize_target(target) or "general"
+    analyzed: list[str] = []
+    if routing_notes:
+        analyzed.append(", ".join(routing_notes))
+    if diag is not None:
+        status = "passing" if diag.passed else "failing"
+        analyzed.append(f"diagnostics ({status}: {diag.command})")
+    if "RECENT FILE CHANGES" in context:
+        analyzed.append("llm.txt recent changes section")
+    elif context and not context.startswith("("):
+        analyzed.append("llm.txt context")
+
+    if not diag or diag.passed:
+        if focus != "general":
+            proposal = f"Improve {focus} — add tests, fix edge cases, or sync fish/Python routing."
+        else:
+            proposal = "Repo healthy — pick a focus (routing, llm fallback, quiz memory) for targeted work."
+    else:
+        proposal = "Fix failing pytest diagnostics with minimal, focused changes."
+
+    files = _guess_files(root, focus)
+    tests = [f"pytest -q {' '.join(files[-1:])}" if files else "pytest -q --tb=short -x"]
+    if focus != "general" and f"tests/test_{focus.split()[0]}.py" not in " ".join(tests):
+        guess_test = root / "tests" / f"test_{focus.split()[0]}.py"
+        if guess_test.is_file():
+            tests = [f"pytest -q {guess_test.relative_to(root)}"]
+
+    return ImprovementPlan(
+        focus=focus,
+        analyzed=analyzed or ["llm.txt", "git log"],
+        proposal=proposal,
+        files=files,
+        tests=tests,
+    )
+
+
+def _parse_plan_json(raw: str) -> ImprovementPlan | None:
+    if not raw:
+        return None
+    match = _PLAN_JSON_RE.search(raw)
+    if not match:
+        return None
+    try:
+        data = json.loads(match.group(0))
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, dict):
+        return None
+
+    def _str_list(key: str) -> list[str]:
+        val = data.get(key)
+        if isinstance(val, list):
+            return [str(x).strip() for x in val if str(x).strip()]
+        if isinstance(val, str) and val.strip():
+            return [val.strip()]
+        return []
+
+    focus = str(data.get("focus") or "").strip() or "general"
+    proposal = str(data.get("proposal") or "").strip()
+    files = [f for f in _str_list("files") if not _BLOCKED_WRITE_RE.search(f)]
+    tests = _str_list("tests") or ["pytest -q --tb=short -x"]
+    analyzed = _str_list("analyzed")
+    if not proposal:
+        return None
+    return ImprovementPlan(
+        focus=focus,
+        analyzed=analyzed,
+        proposal=proposal,
+        files=files,
+        tests=tests,
+        raw_llm=raw,
+    )
+
+
+def generate_plan(
+    target: str,
+    *,
+    context: str,
+    diag: DiagnosticResult | None,
+    routing_notes: list[str],
+    root: Path,
+) -> ImprovementPlan:
+    """LLM plan with heuristic fallback."""
+    focus = _normalize_target(target) or "general"
+    fallback = _heuristic_plan(
+        target,
+        context=context,
+        diag=diag,
+        routing_notes=routing_notes,
+        root=root,
+    )
+
+    git_log = get_git_log(root)
+    diag_text = "(not run)"
+    if diag is not None:
+        status = "PASS" if diag.passed else "FAIL"
+        diag_text = f"{status} {diag.command}\n{(diag.output or '')[:4000]}"
+
+    user = "\n".join(
+        [
+            f"Target focus: {focus or 'general improvement'}",
+            "",
+            "=== git log ===",
+            git_log,
+            "",
+            "=== diagnostics ===",
+            diag_text,
+            "",
+            "=== llm.txt excerpt ===",
+            context[:6000],
+            "",
+            "=== routing analysis ===",
+            "\n".join(routing_notes) if routing_notes else "(n/a)",
+            "",
+            "=== prior attempts (do not repeat) ===",
+            recent_attempts_context(focus),
+        ]
+    )
+
+    try:
+        from arka.llm.fallback import llm_complete
+
+        raw = llm_complete(_PLAN_SYSTEM, user, 0.1, skill="self_improve", task="agent")
+        parsed = _parse_plan_json(raw)
+        if parsed:
+            if not parsed.files:
+                parsed.files = fallback.files
+            if not parsed.tests:
+                parsed.tests = fallback.tests
+            if not parsed.analyzed:
+                parsed.analyzed = fallback.analyzed
+            parsed.raw_llm = raw
+            return parsed
+    except Exception as exc:
+        from arka.core.output import user_msg
+
+        user_msg(f"⚠ LLM plan unavailable ({exc}) — using heuristic plan.")
+
+    return fallback
+
+
+def format_plan_output(
+    plan: ImprovementPlan,
+    *,
+    apply: bool,
+    diag: DiagnosticResult | None = None,
+    routing_notes: list[str] | None = None,
+    target: str = "",
+) -> str:
+    """Clean, scannable status for normal mode (no llm.txt bodies or raw traces)."""
+    from arka.core.output import summarize_pytest
+
+    lines = ["━━━ Arka Self-Improve ━━━"]
+    focus = plan.focus if plan.focus != "general" else (target or "general")
+    if focus and focus != "general":
+        lines.append(f"Focus: {focus}")
+
+    checks = ["tests"]
+    focus_l = f"{target} {plan.focus}".lower()
+    if routing_notes or any(k in focus_l for k in ("routing", "route", "symbolic")):
+        checks.append("routing")
+    checks.append("docs")
+    lines.append(f"Checking: {', '.join(checks)}")
+    lines.append("")
+
+    if diag is not None:
+        if diag.passed:
+            lines.append("✓ Tests: OK")
+        else:
+            lines.append(f"✗ Tests: {summarize_pytest(diag.output, passed=False)}")
+    else:
+        lines.append("○ Tests: not run")
+
+    if routing_notes:
+        lines.append(f"✓ Routing: {routing_notes[0]}")
+    elif any(k in focus_l for k in ("routing", "route", "symbolic")):
+        lines.append("○ Routing: no extra notes")
+    else:
+        lines.append("✓ Routing: OK")
+
+    if plan.proposal:
+        lines.append(f"○ Plan: {plan.proposal}")
+    elif plan.files:
+        lines.append(f"○ Plan: edit {', '.join(plan.files[:3])}")
+
+    lines.append("")
+    if apply:
+        lines.append("Next: applying changes via goal agent")
+    else:
+        focus_arg = plan.focus if plan.focus != "general" else (target or "")
+        focus_arg, _ = _split_improve_flags_from_text(focus_arg)
+        cmd = "arka self improve"
+        if focus_arg and focus_arg != "general":
+            cmd += f" {focus_arg}"
+        cmd += " --apply"
+        lines.append(f"Next: {cmd}")
+    return "\n".join(lines)
 
 
 def run_diagnostics(root: Path) -> DiagnosticResult:
@@ -174,12 +565,20 @@ def build_goal(
     context: str,
     diag: DiagnosticResult | None,
     root: Path,
+    plan: ImprovementPlan | None = None,
 ) -> str:
     lines = [
         "Improve the Arka codebase (self-improvement loop).",
         f"Repository: {root}",
     ]
-    if target:
+    if plan is not None:
+        lines.append(f"Focus: {plan.focus}")
+        lines.append(f"Proposal: {plan.proposal}")
+        if plan.files:
+            lines.append(f"Target files: {', '.join(plan.files)}")
+        if plan.tests:
+            lines.append(f"Verify with: {' | '.join(plan.tests)}")
+    elif target:
         lines.append(f"Target: {target}")
     else:
         lines.append(
@@ -195,6 +594,12 @@ def build_goal(
         status = "PASS" if diag.passed else "FAIL"
         lines.append(f"=== Diagnostics ({status}: {diag.command}) ===")
         lines.append(diag.output or "(no output)")
+        lines.append("")
+
+    prior = recent_attempts_context(plan.focus if plan else target)
+    if prior and prior != "(none)":
+        lines.append("=== Prior attempts (avoid repeating) ===")
+        lines.append(prior)
         lines.append("")
 
     lines.append(
@@ -217,13 +622,13 @@ def _sync_changelog(root: Path) -> None:
         print(f"⚠ repo index skipped: {exc}", file=sys.stderr)
 
 
-def _check_mode() -> tuple[bool, str]:
+def _check_mode(*, apply: bool) -> tuple[bool, str]:
     try:
         from arka.core.mode import get_mode
 
         mode = get_mode()
-        if mode != "agent":
-            return False, f"self improve requires agent mode (current: {mode}). Run: arka mode agent"
+        if apply and mode != "agent":
+            return False, f"self improve --apply requires agent mode (current: {mode}). Run: arka mode agent"
     except ImportError:
         pass
     return True, ""
@@ -232,7 +637,87 @@ def _check_mode() -> tuple[bool, str]:
 def _git_blocklist_hook(cmd: str) -> tuple[int, str] | None:
     if _BLOCKED_GIT_RE.search(cmd):
         return 2, "[blocked: destructive git operations not allowed in self-improve]"
+    if _BLOCKED_WRITE_RE.search(cmd):
+        return 2, "[blocked: cannot modify .env, secrets, or node_modules in self-improve]"
     return None
+
+
+def _normalize_target(target: str) -> str:
+    t = " ".join((target or "").split()).strip()
+    if re.match(r"(?i)^arka\s+", t):
+        t = re.sub(r"(?i)^arka\s+", "", t).strip()
+    if re.match(r"(?i)^improve\s+", t):
+        t = re.sub(r"(?i)^improve\s+", "", t).strip()
+    return t
+
+
+def _split_improve_flags_from_text(text: str) -> tuple[str, bool]:
+    """Strip --apply (and leading improve) from a focus string."""
+    apply = False
+    kept: list[str] = []
+    for tok in (text or "").split():
+        if tok == "--apply":
+            apply = True
+        else:
+            kept.append(tok)
+    return _normalize_target(" ".join(kept)), apply
+
+
+def parse_improve_argv(argv: list[str]) -> tuple[str, bool, dict[str, Any]]:
+    """Split target text from --apply / passthrough flags."""
+    apply = False
+    extras: dict[str, Any] = {}
+    tokens: list[str] = []
+    flat: list[str] = []
+    for raw in argv:
+        flat.extend(raw.split())
+
+    it = iter(flat)
+    for tok in it:
+        if tok == "--apply":
+            apply = True
+        elif tok in ("-y", "--yes"):
+            extras["yes"] = True
+        elif tok in ("-n", "--max-rounds") and (nxt := next(it, None)) is not None:
+            extras["max_rounds"] = int(nxt)
+        elif tok in ("-s", "--max-steps") and (nxt := next(it, None)) is not None:
+            extras["max_steps"] = int(nxt)
+        elif tok == "--no-auto-init":
+            extras["auto_init"] = False
+        elif tok == "improve":
+            continue
+        else:
+            tokens.append(tok)
+    target, embedded_apply = _split_improve_flags_from_text(" ".join(tokens))
+    return target, apply or embedded_apply, extras
+
+
+def resolve_improve_args(
+    argv: list[str],
+    *,
+    apply: bool = False,
+    yes: bool = False,
+    max_rounds: int = DEFAULT_MAX_ROUNDS,
+    max_steps: int = DEFAULT_MAX_STEPS,
+    auto_init: bool = True,
+) -> tuple[str, bool, int, int, bool, bool]:
+    """Unified argv + explicit flags → (target, apply, max_rounds, max_steps, yes, auto_init)."""
+    raw = list(argv)
+    if apply:
+        raw.append("--apply")
+    if yes:
+        raw.append("-y")
+    if not auto_init:
+        raw.append("--no-auto-init")
+    target, parsed_apply, extras = parse_improve_argv(raw)
+    return (
+        target,
+        parsed_apply,
+        max(1, extras.get("max_rounds", max_rounds)),
+        max(1, extras.get("max_steps", max_steps)),
+        extras.get("yes", yes),
+        extras.get("auto_init", auto_init),
+    )
 
 
 def run_self_improve(
@@ -242,39 +727,68 @@ def run_self_improve(
     max_steps: int = DEFAULT_MAX_STEPS,
     auto_init: bool = True,
     yes: bool = False,
+    apply: bool = False,
 ) -> int:
-    """Run the self-improvement loop: diagnose → goal agent → re-check."""
-    ok, reason = _check_mode()
+    """Analyze → plan → (optional --apply) goal agent execute loop."""
+    from arka.core.output import debug_msg, summarize_pytest, user_msg
+
+    ok, reason = _check_mode(apply=apply)
     if not ok:
-        print(reason, file=sys.stderr)
+        user_msg(reason)
         return 1
 
     try:
         root = ensure_arka_project(auto_init=auto_init)
     except Exception as exc:
-        print(str(exc), file=sys.stderr)
+        user_msg(str(exc))
         return 1
 
     os.chdir(root)
-    target = " ".join(target.split()).strip()
-    print(f"Arka self-improve — {root}", file=sys.stderr)
+    target, embedded_apply = _split_improve_flags_from_text(_normalize_target(target))
+    apply = apply or embedded_apply
+    debug_msg(f"Arka self-improve — {root}")
     if target:
-        print(f"  target: {target}", file=sys.stderr)
-    print(f"  max rounds: {max_rounds} | steps/round: {max_steps}", file=sys.stderr)
+        debug_msg(f"  target: {target}")
+    debug_msg(f"  mode: {'apply' if apply else 'plan-only'}")
 
+    context = _read_repo_context(root)
+    diag = run_diagnostics(root)
+    routing_notes = _routing_analysis(root, target)
+    plan = generate_plan(
+        target,
+        context=context,
+        diag=diag,
+        routing_notes=routing_notes,
+        root=root,
+    )
+
+    print(
+        format_plan_output(
+            plan,
+            apply=apply,
+            diag=diag,
+            routing_notes=routing_notes,
+            target=target,
+        )
+    )
+
+    if not apply:
+        record_attempt(plan, outcome="planned")
+        if diag.passed and not target:
+            debug_msg("✓ Diagnostics passed — plan only (use --apply to implement).")
+        return 0
+
+    user_msg("Applying plan…")
+    debug_msg(f"  max rounds: {max_rounds} | steps/round: {max_steps}")
     from arka.agent.goal import run_goal
 
     last_rc = 1
     for round_num in range(1, max_rounds + 1):
-        print(f"\n── Self-improve round {round_num}/{max_rounds} ──", file=sys.stderr)
+        debug_msg(f"\n── Self-improve round {round_num}/{max_rounds} ──")
+        user_msg(f"Round {round_num}/{max_rounds}…")
         context = _read_repo_context(root)
         diag = run_diagnostics(root)
-
-        if diag.passed and not target and round_num == 1:
-            print("✓ Diagnostics passed — nothing to fix.", file=sys.stderr)
-            return 0
-
-        goal = build_goal(target, context=context, diag=diag, root=root)
+        goal = build_goal(target, context=context, diag=diag, root=root, plan=plan)
         last_rc = run_goal(
             goal,
             max_steps=max_steps,
@@ -287,13 +801,17 @@ def run_self_improve(
 
         diag_after = run_diagnostics(root)
         if diag_after.passed:
-            print("✓ Tests/diagnostics passed after round.", file=sys.stderr)
+            user_msg("✓ Tests passed after round.")
+            record_attempt(plan, outcome="passed")
             return 0 if last_rc == 0 else last_rc
 
         if last_rc != 0:
-            print(f"⚠ Goal agent exited {last_rc} — continuing if rounds remain.", file=sys.stderr)
+            user_msg(f"⚠ Goal agent exited {last_rc} — continuing if rounds remain.")
+        elif not diag_after.passed:
+            user_msg(f"✗ Tests still failing: {summarize_pytest(diag_after.output, passed=False)}")
 
-    print("Max rounds reached — issues may remain.", file=sys.stderr)
+    record_attempt(plan, outcome="failed", notes=f"exit {last_rc}")
+    user_msg("Max rounds reached — issues may remain.")
     return last_rc if last_rc != 0 else 1
 
 
@@ -305,14 +823,21 @@ def route_command(text: str) -> str:
 
     if not re.search(
         r"(?i)\b(?:self\s+improve|improve\s+(?:arka|yourself|itself)|arka\s+improve(?:\s+itself)?|"
-        r"loop\s+to\s+fix\s+arka|fix\s+arka(?:\s+(?:tests|codebase))?|improve\s+the\s+arka\s+codebase|loop\s+self)\b",
+        r"loop\s+to\s+fix\s+arka|fix\s+arka(?:\s+(?:tests|codebase))?|improve\s+the\s+arka\s+codebase|"
+        r"loop\s+self|improve\s+arka\s+\w+)\b",
         raw,
     ):
         return ""
 
     if re.search(r"(?i)\bloop\s+self\b", raw):
         rest = re.sub(r"(?i)^(?:arka\s+)?loop\s+self\s*", "", raw).strip()
-        return f"self_improve {rest}".strip() if rest else "self_improve"
+        target, apply = _split_improve_flags_from_text(_normalize_target(rest))
+        line = "self_improve"
+        if target:
+            line += f" {target}"
+        if apply:
+            line += " --apply"
+        return line
 
     target = raw
     for pattern in (
@@ -330,7 +855,13 @@ def route_command(text: str) -> str:
             target = stripped
             break
 
-    return f"self_improve {target}".strip() if target else "self_improve"
+    target, apply = _split_improve_flags_from_text(_normalize_target(target))
+    line = "self_improve"
+    if target:
+        line += f" {target}"
+    if apply:
+        line += " --apply"
+    return line
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -339,12 +870,13 @@ def main(argv: list[str] | None = None) -> int:
     load_env_file()
 
     parser = argparse.ArgumentParser(
-        description="Arka self-improvement loop — goal agent scoped to the Arka repo",
+        description="Arka self-improvement — analyze, plan, optionally apply fixes",
     )
     sub = parser.add_subparsers(dest="cmd")
 
-    p_imp = sub.add_parser("improve", help="Run self-improvement loop")
-    p_imp.add_argument("target", nargs="*", help="Optional improvement target")
+    p_imp = sub.add_parser("improve", help="Analyze and plan improvements (--apply to execute)")
+    p_imp.add_argument("target", nargs="*", help="Optional improvement focus")
+    p_imp.add_argument("--apply", action="store_true", help="Run goal agent to implement the plan")
     p_imp.add_argument("-n", "--max-rounds", type=int, default=DEFAULT_MAX_ROUNDS)
     p_imp.add_argument("-s", "--max-steps", type=int, default=DEFAULT_MAX_STEPS)
     p_imp.add_argument("-y", "--yes", action="store_true", help="Auto-approve risky actions")
@@ -358,17 +890,27 @@ def main(argv: list[str] | None = None) -> int:
     p_route.add_argument("text", nargs="+")
 
     p_status = sub.add_parser("status", help="Show Arka repo + code project status")
+    p_mem = sub.add_parser("memory", help="Show recent self-improve attempts")
+    p_mem.add_argument("--json", action="store_true")
 
     args = parser.parse_args(argv)
 
     if args.cmd == "improve":
-        target = " ".join(args.target).strip()
+        target, apply, max_rounds, max_steps, yes, auto_init = resolve_improve_args(
+            list(args.target),
+            apply=args.apply,
+            yes=args.yes,
+            max_rounds=args.max_rounds,
+            max_steps=args.max_steps,
+            auto_init=not args.no_auto_init,
+        )
         return run_self_improve(
             target,
-            max_rounds=max(1, args.max_rounds),
-            max_steps=max(1, args.max_steps),
-            auto_init=not args.no_auto_init,
-            yes=args.yes,
+            max_rounds=max_rounds,
+            max_steps=max_steps,
+            auto_init=auto_init,
+            yes=yes,
+            apply=apply,
         )
 
     if args.cmd == "route":
@@ -392,16 +934,41 @@ def main(argv: list[str] | None = None) -> int:
         print(f"code project: {'yes' if scoped else 'no'}")
         if active:
             print(f"  root: {active}")
+        print(f"memory: {memory_path()}")
         return 0
 
-    # Default: improve with no subcommand (arka self [target])
+    if args.cmd == "memory":
+        data = load_memory()
+        if args.json:
+            print(json.dumps(data, indent=2))
+            return 0
+        attempts = list(reversed(data.get("attempts") or []))[:20]
+        if not attempts:
+            print("No self-improve attempts recorded yet.")
+            return 0
+        print("Recent self-improve attempts:\n")
+        for entry in attempts:
+            focus = entry.get("focus", "?")
+            outcome = entry.get("outcome", "?")
+            prop = entry.get("proposal", "")
+            at = entry.get("at", "")
+            print(f"  [{outcome}] {focus}: {prop}")
+            if at:
+                print(f"           {at}")
+        return 0
+
     if argv and argv[0] not in ("-h", "--help") and args.cmd is None:
-        target = " ".join(argv).strip()
-        if target in ("improve", "self"):
-            return run_self_improve()
-        if target.startswith("improve "):
-            return run_self_improve(target.removeprefix("improve ").strip())
-        return run_self_improve(target)
+        target, apply, max_rounds, max_steps, yes, auto_init = resolve_improve_args(argv)
+        if target in ("self", ""):
+            target = ""
+        return run_self_improve(
+            target,
+            max_rounds=max_rounds,
+            max_steps=max_steps,
+            auto_init=auto_init,
+            yes=yes,
+            apply=apply,
+        )
 
     parser.print_help()
     return 1

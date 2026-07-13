@@ -490,11 +490,20 @@ def _route_offline(cmd: str) -> Route | None:
         )
 
     try:
-        from arka.routing.symbolic import route_currency_convert, route_daily_brief, route_kaggle, route_kalshi
+        from arka.routing.symbolic import (
+            route_currency_convert,
+            route_daily_brief,
+            route_kaggle,
+            route_kalshi,
+            route_timezone_convert,
+        )
 
         currency_route = route_currency_convert(cmd)
         if currency_route:
             return Route(currency_route, source="offline")
+        timezone_route = route_timezone_convert(cmd)
+        if timezone_route:
+            return Route(timezone_route, source="offline")
         kalshi_route = route_kalshi(cmd)
         if kalshi_route:
             return Route(kalshi_route, source="offline")
@@ -506,6 +515,25 @@ def _route_offline(cmd: str) -> Route | None:
             return Route(brief_route, source="offline")
     except ImportError:
         pass
+
+    if _is_council_request(clean):
+        try:
+            import shlex
+
+            from arka.agent.council import nl_to_argv
+
+            argv = nl_to_argv(clean)
+            if argv:
+                return Route(
+                    "council " + " ".join(shlex.quote(a) for a in argv),
+                    source="offline",
+                )
+        except ImportError:
+            pass
+        return Route(f"council {cmd}", source="offline")
+
+    if _is_interesting_fact_request(clean):
+        return Route(f"interesting_fact {cmd}", source="offline")
 
     if _is_platform_howto_question(clean):
         return Route(f"platform_howto {cmd}", source="offline")
@@ -596,6 +624,24 @@ _SHOW_ME_IMAGE_HINT = re.compile(
     r"(?i)\b(?:image|photo|picture|pic|screenshot|snapshot|"
     r"\.png|\.jpe?g|\.webp|\.gif|\.bmp|\.svg|\.heic|\.tiff?)\b",
 )
+
+
+def _is_council_request(clean: str) -> bool:
+    try:
+        from arka.routing.council import is_council_request
+
+        return is_council_request(clean)
+    except ImportError:
+        return False
+
+
+def _is_interesting_fact_request(clean: str) -> bool:
+    try:
+        from arka.routing.interesting_fact import is_interesting_fact_request
+
+        return is_interesting_fact_request(clean)
+    except ImportError:
+        return False
 
 
 def _is_platform_howto_question(clean: str) -> bool:

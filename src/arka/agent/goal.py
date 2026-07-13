@@ -388,8 +388,11 @@ Rules:
         system += f"\n- CODE PROJECT: all file edits must stay inside {project_root}."
 
     history = ""
-    print(f"Goal agent: {goal}", file=sys.stderr)
-    print(f"  cwd: {cwd} | max steps: {max_steps}", file=sys.stderr)
+    from arka.core.output import debug_hint, debug_msg, summarize_goal, user_msg
+
+    user_msg(f"Goal agent: {summarize_goal(goal)}")
+    debug_msg(f"Goal agent (full): {goal}")
+    debug_msg(f"  cwd: {cwd} | max steps: {max_steps}")
 
     try:
         from arka.telemetry import mark_error, mark_ok, span
@@ -436,7 +439,8 @@ AGENT_HISTORY:
 
 Step {step}/{max_steps} — return the NEXT action as JSON."""
 
-                print(f"━━━ Goal step {step}/{max_steps} ━━━", file=sys.stderr)
+                debug_msg(f"━━━ Goal step {step}/{max_steps} ━━━")
+                user_msg(f"Step {step}/{max_steps}…")
                 raw = _llm(system, user)
                 if not raw:
                     print("LLM unavailable.", file=sys.stderr)
@@ -537,10 +541,18 @@ Step {step}/{max_steps} — return the NEXT action as JSON."""
                     except ImportError:
                         pass
                 if out:
-                    for line in out.splitlines()[:30]:
-                        print(f"    {line}", file=sys.stderr)
-                    if out.count("\n") > 30:
-                        print("    ...(more lines)", file=sys.stderr)
+                    from arka.core.mode import is_debug_mode
+
+                    lines = out.splitlines()
+                    if is_debug_mode():
+                        for line in lines[:30]:
+                            debug_msg(f"    {line}")
+                        if len(lines) > 30:
+                            debug_msg(f"    ...({len(lines) - 30} more lines)")
+                    elif code != 0 and lines:
+                        user_msg(f"  {lines[0][:120]}")
+                        if len(lines) > 1:
+                            user_msg(f"  ({debug_hint()})")
 
                 history += f"\n--- step {step} ---\ncmd: {cmd}\nexit: {code}\nwhy: {why}\noutput:\n{out}\n"
 

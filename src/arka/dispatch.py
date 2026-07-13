@@ -108,6 +108,16 @@ def run_skill(skill_line: str) -> int:
             else:
                 print("Could not get an answer (check LLM API keys)", file=sys.stderr)
                 code = 1
+        elif head in ("interesting_fact", "trivia", "fun_fact"):
+            from arka.agent.interesting_fact import answer_interesting_fact
+
+            answer = answer_interesting_fact(" ".join(rest))
+            if answer:
+                print(answer)
+                code = 0
+            else:
+                print("Could not get a fact (check LLM API keys)", file=sys.stderr)
+                code = 1
         elif head == "web_answer":
             code = run_chat_ask(" ".join(rest))
         elif head == "deep_web_answer":
@@ -125,8 +135,24 @@ def run_skill(skill_line: str) -> int:
             from arka.agent.fact_check import fact_check
 
             code = fact_check(" ".join(rest))
-        elif head in ("currency_convert", "convert", "currency"):
+        elif head in ("quiz_practice", "quiz-practice", "quiz"):
+            code = run_script("arka_quiz_practice.py", rest)
+        elif head == "council":
+            code = run_script("arka_council.py", rest)
+        elif head == "convert":
+            from arka.routing.symbolic import is_timezone_convert_request
+
+            text = " ".join(rest).strip()
+            if text and is_timezone_convert_request(text):
+                code = run_script("arka_timezone_convert.py", ["convert", *rest])
+            else:
+                code = run_script("arka_currency.py", ["convert", *rest])
+        elif head in ("currency_convert", "currency"):
             code = run_script("arka_currency.py", ["convert", *rest])
+        elif head in ("timezone_convert", "tz_convert", "timezone"):
+            code = run_script("arka_timezone_convert.py", ["convert", *rest])
+        elif head in ("open_url", "open", "browse"):
+            code = run_script("arka_open_url.py", rest)
         elif head in ("select_model", "model_select", "best_model", "model_advisor"):
             from arka.llm.model_advisor import main as model_advisor_main
 
@@ -158,9 +184,20 @@ def run_skill(skill_line: str) -> int:
 
             code = code_agent(" ".join(rest))
         elif head in ("self_improve", "self"):
-            from arka.agent.self_improve import run_self_improve
+            from arka.agent.self_improve import resolve_improve_args, run_self_improve
 
-            code = run_self_improve(" ".join(rest))
+            argv = list(rest)
+            if head == "self" and argv and argv[0] == "improve":
+                argv = argv[1:]
+            target, apply, max_rounds, max_steps, yes, auto_init = resolve_improve_args(argv)
+            code = run_self_improve(
+                target,
+                max_rounds=max_rounds,
+                max_steps=max_steps,
+                auto_init=auto_init,
+                yes=yes,
+                apply=apply,
+            )
         elif head.endswith(".py") and script_path(head).is_file():
             code = run_script(head, rest)
         else:

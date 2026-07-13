@@ -112,6 +112,15 @@ def route_timer(cmd: str) -> str | None:
     return f"timer {rest}" if rest else "timer"
 
 
+def route_open_url(cmd: str) -> str | None:
+    try:
+        from arka.integrations.open_url import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd.strip())
+    return route or None
+
+
 def route_search_web(cmd: str) -> str | None:
     clean = cmd.lower()
     m = re.search(
@@ -208,10 +217,42 @@ def route_currency_convert(cmd: str) -> str | None:
         from arka.integrations.currency import nl_to_argv
     except ImportError:
         return None
-    argv = nl_to_argv(cmd.strip())
+    try:
+        argv = nl_to_argv(cmd.strip())
+    except ValueError:
+        return None
     if not argv:
         return None
     return "currency_convert " + " ".join(shlex.quote(a) for a in argv)
+
+
+def is_timezone_convert_request(text: str) -> bool:
+    """True when NL looks like datetime/timezone conversion, not currency."""
+    clean = (text or "").strip()
+    if not clean:
+        return False
+    try:
+        from arka.integrations.timezone_convert import wants_timezone_convert
+    except ImportError:
+        return False
+    return wants_timezone_convert(clean)
+
+
+def route_convert(cmd: str) -> str | None:
+    """Disambiguate convert NL: timezone wins when args look like timezones."""
+    hit = route_timezone_convert(cmd)
+    if hit:
+        return hit
+    return route_currency_convert(cmd)
+
+
+def route_timezone_convert(cmd: str) -> str | None:
+    try:
+        from arka.integrations.timezone_convert import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd.strip())
+    return route or None
 
 
 def route_kalshi(cmd: str) -> str | None:
@@ -241,6 +282,17 @@ def route_convert_media(cmd: str) -> str | None:
     if not argv:
         return None
     return "convert_media " + " ".join(shlex.quote(a) for a in argv)
+
+
+def route_compose_slides(cmd: str) -> str | None:
+    try:
+        from arka.media.compose_slides import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "compose_slides " + " ".join(shlex.quote(a) for a in argv)
 
 
 def route_compose_video(cmd: str) -> str | None:
@@ -307,6 +359,28 @@ def route_fact_check(cmd: str) -> str | None:
     if not argv:
         return None
     return "fact_check " + " ".join(shlex.quote(a) for a in argv)
+
+
+def route_quiz_practice(cmd: str) -> str | None:
+    try:
+        from arka.agent.quiz_practice import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "quiz_practice " + " ".join(shlex.quote(a) for a in argv)
+
+
+def route_council(cmd: str) -> str | None:
+    try:
+        from arka.agent.council import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "council " + " ".join(shlex.quote(a) for a in argv)
 
 
 def route_generate_image(cmd: str) -> str | None:
@@ -569,6 +643,16 @@ def route_platform_howto(cmd: str) -> str | None:
     return None
 
 
+def route_interesting_fact(cmd: str) -> str | None:
+    try:
+        from arka.routing.interesting_fact import is_interesting_fact_request
+    except ImportError:
+        return None
+    if is_interesting_fact_request(cmd):
+        return f"interesting_fact {cmd.strip()}"
+    return None
+
+
 def route_fugu(cmd: str) -> str | None:
     try:
         from arka.integrations.fugu import route_command
@@ -676,7 +760,7 @@ def route_offline_extras(cmd: str) -> str | None:
         route_describe_screen,
         route_describe_video,
         route_describe_image,
-        route_currency_convert,
+        route_convert,
         route_data_ask,
         route_docker_status,
         route_daily_brief,
@@ -685,6 +769,7 @@ def route_offline_extras(cmd: str) -> str | None:
         route_provider_select,
         route_personalize,
         route_life_sciences,
+        route_interesting_fact,
         route_platform_howto,
         route_fugu,
         route_gemini_cli,
@@ -698,6 +783,8 @@ def route_offline_extras(cmd: str) -> str | None:
         route_remind,
         route_routines,
         route_fact_check,
+        route_quiz_practice,
+        route_council,
         route_chart,
         route_drawing,
         route_generate_thumbnail,
@@ -708,8 +795,10 @@ def route_offline_extras(cmd: str) -> str | None:
         route_generate_image,
         route_download,
         route_convert_media,
+        route_compose_slides,
         route_compose_video,
         route_timer,
+        route_open_url,
         route_search_web,
         route_price_check,
         route_product_reviewer,

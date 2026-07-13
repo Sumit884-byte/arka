@@ -292,7 +292,10 @@ def parse_convert(text: str) -> tuple[Decimal, str, str] | None:
             return Decimal("1"), from_ccy, to_ccy
 
     # Positional: "100 USD INR" (also after "currency_convert 100 USD INR")
-    parts = shlex.split(t, posix=True)
+    try:
+        parts = shlex.split(t, posix=True)
+    except ValueError:
+        return None
     while parts and parts[0].lower() in _KNOWN_CMDS | {"currency_convert", "currency"}:
         parts = parts[1:]
     if len(parts) >= 3:

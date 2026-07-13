@@ -13,6 +13,7 @@ import shlex
 import subprocess
 import sys
 import tempfile
+import zipfile
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -24,15 +25,9 @@ from arka.media.compose_video import (
     _enrich_scenes,
     _fetch_scene_photo,
     _llm_available,
-    _llm_enrich_image_keywords,
-    _llm_script,
-    _llm_summarize_script,
     _parse_scenes_json,
     _render_photo_slide,
     _scene_search_query,
-    _script_mode,
-    _script_needs_shortening,
-    _template_script,
     _which,
     load_config,
     normalize_topic,
@@ -40,6 +35,7 @@ from arka.media.compose_video import (
 )
 from arka.media.stock_photos import any_source_available, setup_hint as stock_setup_hint
 
+SLIDE_STYLES = ("executive", "academic", "pitch")
 SLIDE_FORMATS = ("pptx", "pdf", "html", "md", "json")
 FORMAT_EXTENSIONS = {
     "pptx": ".pptx",
@@ -64,6 +60,417 @@ FORMAT_ALIASES = {
 
 def _env(name: str, default: str = "") -> str:
     return os.environ.get(name, default).strip()
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = _env(name)
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
+def normalize_slide_style(name: str | None) -> str:
+    raw = (name or _env("SLIDES_DEFAULT_STYLE", "executive")).strip().lower()
+    return raw if raw in SLIDE_STYLES else "executive"
+
+
+def _style_guidance(style: str) -> str:
+    guides = {
+        "executive": (
+            "Executive deck: confident, concise, decision-oriented. "
+            "Action titles state the insight (not section labels like 'Background'). "
+            "Arc: hook → context → key insight → implications → recommendation → next steps. "
+            "Tone: boardroom-ready, one idea per slide."
+        ),
+        "academic": (
+            "Academic presentation: formal, precise, evidence-led. "
+            "Titles name the claim or section clearly. "
+            "Arc: intro → context/literature → core concepts → evidence/examples → implications → conclusion. "
+            "Tone: seminar or conference talk; slightly more detail allowed."
+        ),
+        "pitch": (
+            "Investor pitch deck: bold, urgent, outcome-focused. "
+            "Action titles sell momentum (problem size, solution edge, traction). "
+            "Arc: hook → problem → solution → market → traction → business model → team → ask/CTA. "
+            "Tone: startup pitch; every slide earns the next."
+        ),
+    }
+    return guides.get(normalize_slide_style(style), guides["executive"])
+
+
+def extract_slide_style(text: str) -> str:
+    t = text.strip().lower()
+    if not t:
+        return normalize_slide_style(None)
+    for style in SLIDE_STYLES:
+        if re.search(rf"\b{style}\b(?:\s+(?:style|deck|slides|presentation|tone))?", t):
+            return style
+        if re.search(rf"\b(?:style|tone)\s+{style}\b", t):
+            return style
+    return normalize_slide_style(None)
+
+
+def _strip_style_from_text(text: str) -> str:
+    t = text.strip()
+    for style in SLIDE_STYLES:
+        t = re.sub(rf"(?i)\b{style}\s+(?:style\s+)?", "", t)
+        t = re.sub(rf"(?i)\b(?:style|tone)\s+{style}\b", "", t)
+    return re.sub(r"\s{2,}", " ", t).strip(" ,;")
+
+
+def _slides_scene_bounds() -> tuple[int, int]:
+    min_s = max(3, _env_int("SLIDES_MIN_SCENES", 6))
+    max_s = max(min_s, _env_int("SLIDES_MAX_SCENES", 12))
+    return min_s, max_s
+
+
+def _slides_script_mode(args: argparse.Namespace) -> str:
+    if getattr(args, "llm", False):
+        return "llm"
+    mode = _env("SLIDES_COMPOSE_SCRIPT", "auto").lower()
+    if mode in {"llm", "template"}:
+        return mode
+    return "llm" if _llm_available() else "template"
+
+
+def _enrich_slide_scenes(scenes: list[Scene]) -> list[Scene]:
+    from arka.media.compose_video import _caption_from_narration, _normalize_scene_text
+
+    out: list[Scene] = []
+    for scene in scenes:
+        scene.narration = _normalize_scene_text(scene.narration)
+        scene.body = _normalize_scene_text(scene.body)
+        if scene.captions:
+            scene.captions = [str(caption).strip() for caption in scene.captions if str(caption).strip()]
+        caps = scene.captions[:4]
+        if caps:
+            scene.body = "\n".join(f"• {caption}" for caption in caps[:3])
+        elif scene.body.strip():
+            pass
+        elif scene.narration.strip():
+            scene.body = _caption_from_narration(scene.narration)
+        out.append(scene)
+    return out
+
+
+def _slides_script_needs_shortening(scenes: list[Scene]) -> bool:
+    _, max_scenes = _slides_scene_bounds()
+    if len(scenes) > max_scenes:
+        return True
+    for scene in scenes:
+        caps = scene.captions or []
+        if len(caps) > 4:
+            return True
+        if any(len(str(caption).split()) > 12 for caption in caps):
+            return True
+        if len(scene.title.split()) > 14:
+            return True
+    return False
+
+
+def _llm_slides_script(
+    topic: str,
+    *,
+    scenes: int | None = None,
+    style: str = "executive",
+) -> list[Scene]:
+    try:
+        from arka.llm.fallback import llm_complete
+    except ImportError as exc:
+        raise SystemExit("LLM script generation requires arka chat deps (pip install 'arka-agent[chat]')") from exc
+
+    min_scenes, max_scenes = _slides_scene_bounds()
+    style = normalize_slide_style(style)
+    system = (
+        "You write high-quality presentation slide decks for live audiences. "
+        "Return ONLY a JSON array (no markdown). Each item: "
+        '{"title":"action title — insight, not a section label", '
+        '"narration":"speaker notes (2-4 sentences, optional detail for presenter)", '
+        '"body":"optional one-line subtitle on slide (max 10 words) OR empty string", '
+        '"captions":["bullet 1","bullet 2"] (0-3 bullets, max 10 words each; omit on title-only slides), '
+        '"image_keywords":["conference room","team whiteboard"] (3-5 short visual phrases, 2-3 words each), '
+        '"image_query":"optional 2-4 word stock photo fallback", '
+        '"chart":{"type":"bar|barh|pie|line|grouped_bar", "title":"...", '
+        '"data":"Label:10,Other:20", "ylabel":"...", "source":"..."}} '
+        "Rules: one idea per slide; no walls of text; titles are conclusions or claims; "
+        "use charts only when numbers strengthen the story."
+    )
+    if scenes is not None:
+        scene_hint = f"Slides: exactly {scenes}"
+    else:
+        scene_hint = (
+            f"Choose an appropriate slide count ({min_scenes}-{max_scenes}) "
+            "for a focused deck — not a document."
+        )
+    user = (
+        f"Topic: {topic_label(topic)}\n"
+        f"Style: {style}\n"
+        f"{_style_guidance(style)}\n"
+        f"{scene_hint}\n"
+        "Keep on-screen text minimal; put depth in narration (speaker notes)."
+    )
+    text = llm_complete(system, user, temperature=0.35, task="compose_slides")
+    text = text.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+    parsed = _parse_scenes_json(text)
+    if len(parsed) < 2:
+        raise SystemExit("LLM did not return a usable slide script.")
+    if scenes is None and len(parsed) > max_scenes:
+        parsed = parsed[:max_scenes]
+    return _enrich_slide_scenes(parsed)
+
+
+def _llm_slides_summarize_script(
+    topic: str,
+    scenes: list[Scene],
+    *,
+    style: str = "executive",
+) -> list[Scene]:
+    try:
+        from arka.llm.fallback import llm_complete
+    except ImportError as exc:
+        raise SystemExit("LLM script generation requires arka chat deps (pip install 'arka-agent[chat]')") from exc
+
+    payload = [
+        {
+            "title": scene.title,
+            "narration": scene.narration,
+            "body": scene.body,
+            "captions": scene.captions,
+            "image_query": scene.image_query,
+            "image_keywords": scene.image_keywords,
+            "chart": scene.chart,
+        }
+        for scene in scenes
+    ]
+    system = (
+        "Tighten a presentation slide deck for on-screen readability. "
+        "Return ONLY a JSON array with: title, narration, body, captions, image_query, chart. "
+        "Keep action titles; shorten narration by 20-40%; max 3 captions per slide (max 10 words each); "
+        "drop filler slides if the deck is too long."
+    )
+    user = (
+        f"Topic: {topic_label(topic)}\n"
+        f"Style: {normalize_slide_style(style)}\n"
+        f"{_style_guidance(style)}\n\n"
+        f"{json.dumps(payload, indent=2)}"
+    )
+    text = llm_complete(system, user, temperature=0.25, task="compose_slides")
+    text = text.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+    parsed = _parse_scenes_json(text)
+    if len(parsed) < 1:
+        return scenes
+    for idx, scene in enumerate(parsed):
+        if idx < len(scenes):
+            scene.chart_path = scenes[idx].chart_path
+            scene.slide_image = scenes[idx].slide_image
+            if scene.duration <= 0:
+                scene.duration = scenes[idx].duration
+    return _enrich_slide_scenes(parsed)
+
+
+def _template_slides_script(topic: str, *, style: str = "executive") -> list[Scene]:
+    label = topic_label(topic)
+    style = normalize_slide_style(style)
+    if style == "pitch":
+        scenes = [
+            Scene(
+                title=f"{label} will reshape its market",
+                narration=f"Open with the big opportunity around {label} and why now is the moment to act.",
+                body="",
+                captions=["Urgent market shift", "Window is open now"],
+                image_query="startup pitch audience",
+            ),
+            Scene(
+                title="Customers face a costly, painful problem",
+                narration="Name the pain clearly — time lost, money wasted, or risk accepted today.",
+                body="",
+                captions=["Pain is widespread", "Status quo is expensive"],
+                image_query="frustrated business team",
+            ),
+            Scene(
+                title=f"Our approach to {label} is 10x better",
+                narration="Explain the solution in one crisp sentence and what makes it defensible.",
+                body="",
+                captions=["Clear product wedge", "Hard to copy advantage"],
+                image_query="product demo laptop",
+            ),
+            Scene(
+                title="A large market is ready to buy",
+                narration="Size the opportunity with a credible market framing and target segment.",
+                body="",
+                captions=["Growing demand", "Clear buyer persona"],
+                image_query="market growth chart",
+            ),
+            Scene(
+                title="Early traction proves the model",
+                narration="Share proof points: pilots, revenue, engagement, or design partners.",
+                body="",
+                captions=["Validated with users", "Metrics trending up"],
+                image_query="team celebration office",
+            ),
+            Scene(
+                title="The ask: partner with us to scale",
+                narration="Close with a specific call to action — funding, pilot, or next meeting.",
+                body="",
+                captions=["Join the next phase", "Let's talk this week"],
+                image_query="handshake business deal",
+            ),
+        ]
+    elif style == "academic":
+        scenes = [
+            Scene(
+                title=f"Why {label} matters today",
+                narration=f"Introduce {label}, its relevance, and the question this talk answers.",
+                body="",
+                captions=["Research context", "Talk objective"],
+                image_query="university lecture hall",
+            ),
+            Scene(
+                title="Background and prior work",
+                narration="Summarize established knowledge and the gap your narrative addresses.",
+                body="",
+                captions=["Key prior findings", "Open research gap"],
+                image_query="library research books",
+            ),
+            Scene(
+                title=f"Core concepts in {label}",
+                narration="Define the essential ideas the audience needs for the rest of the deck.",
+                body="",
+                captions=["Definitions", "Framework"],
+                image_query="whiteboard equations",
+            ),
+            Scene(
+                title="Evidence and examples",
+                narration="Present supporting data, cases, or results that substantiate the argument.",
+                body="",
+                captions=["Data-backed claims", "Illustrative cases"],
+                image_query="scientific data chart",
+            ),
+            Scene(
+                title="Implications and limitations",
+                narration="Discuss what the findings mean, caveats, and open questions.",
+                body="",
+                captions=["Practical implications", "Known limits"],
+                image_query="panel discussion academics",
+            ),
+            Scene(
+                title="Conclusion and future work",
+                narration="Restate the main takeaway and suggest next research or application steps.",
+                body="",
+                captions=["Main takeaway", "Future directions"],
+                image_query="graduation academic audience",
+            ),
+        ]
+    else:
+        scenes = [
+            Scene(
+                title=f"{label} is a strategic priority now",
+                narration=f"Hook the room: why {label} deserves executive attention this quarter.",
+                body="",
+                captions=["High stakes decision", "Momentum is building"],
+                image_query="executive boardroom",
+            ),
+            Scene(
+                title="The core challenge we must solve",
+                narration="Frame the problem in business terms — cost, risk, speed, or customer impact.",
+                body="",
+                captions=["Problem is measurable", "Delay increases risk"],
+                image_query="business strategy meeting",
+            ),
+            Scene(
+                title=f"Key insight: what changes with {label}",
+                narration="Deliver the central insight or finding that reframes the conversation.",
+                body="",
+                captions=["Clear point of view", "Supported by evidence"],
+                image_query="data dashboard office",
+            ),
+            Scene(
+                title="What this means for our organization",
+                narration="Translate the insight into operating impact, tradeoffs, and stakeholders affected.",
+                body="",
+                captions=["Operational impact", "Stakeholders affected"],
+                image_query="team planning session",
+            ),
+            Scene(
+                title="Recommended path forward",
+                narration="Propose a focused plan with priorities, owners, and a realistic timeline.",
+                body="",
+                captions=["3 priorities", "90-day horizon"],
+                image_query="project roadmap wall",
+            ),
+            Scene(
+                title="Decision and next step",
+                narration="End with a explicit ask — approve, fund, pilot, or schedule a follow-up.",
+                body="",
+                captions=["Decision needed", "Next meeting scheduled"],
+                image_query="handshake executives",
+            ),
+        ]
+    return _enrich_slide_scenes(scenes)
+
+
+def _llm_slides_enrich_image_keywords(topic: str, scenes: list[Scene]) -> list[Scene]:
+    missing = [scene for scene in scenes if not scene.image_keywords]
+    if not missing:
+        return scenes
+    try:
+        from arka.llm.fallback import llm_complete
+    except ImportError:
+        return scenes
+
+    from arka.media.compose_video import compact_photo_query
+
+    payload = [
+        {
+            "title": scene.title,
+            "narration": scene.narration[:300],
+            "image_query": scene.image_query,
+        }
+        for scene in missing
+    ]
+    system = (
+        "You pick stock-photo search keywords for presentation slides. "
+        "Return ONLY JSON array: "
+        '[{"title":"same as input", "image_keywords":["conference room", "team whiteboard"]}]. '
+        "Provide 3-5 image_keywords per slide. Each keyword must be 2-3 visual nouns (no sentences)."
+    )
+    user = f"Topic: {topic_label(topic)}\n\n{json.dumps(payload, indent=2)}"
+    text = llm_complete(system, user, temperature=0.2, task="compose_slides")
+    text = text.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+    try:
+        rows = json.loads(text)
+    except json.JSONDecodeError:
+        return scenes
+    by_title = {str(row.get("title") or "").strip(): row for row in rows if isinstance(row, dict)}
+    for scene in scenes:
+        row = by_title.get(scene.title.strip())
+        if not row:
+            continue
+        raw = row.get("image_keywords") or row.get("keywords") or row.get("images")
+        if isinstance(raw, list):
+            scene.image_keywords = [
+                compact_photo_query(str(item).strip())
+                for item in raw
+                if str(item).strip()
+            ]
+            scene.image_keywords = [kw for kw in scene.image_keywords if kw]
+        if not scene.image_query.strip():
+            query = row.get("image_query") or row.get("image_search")
+            if isinstance(query, str) and query.strip():
+                scene.image_query = compact_photo_query(query.strip())
+    return scenes
 
 
 def _default_format() -> str:
@@ -162,12 +569,150 @@ def _require_pptx():
     return Presentation, Emu
 
 
+class SlideExportError(Exception):
+    """Raised when a slide export file fails validation."""
+
+    def __init__(self, fmt: str, path: Path, reason: str) -> None:
+        self.fmt = fmt
+        self.path = path
+        self.reason = reason
+        super().__init__(f"{fmt} export invalid ({path.name}): {reason}")
+
+
+@dataclass
+class ExportBatch:
+    saved: list[Path]
+    outputs: dict[str, str]
+    failed: dict[str, str] = field(default_factory=dict)
+    fallback_md: Path | None = None
+
+
+def _sanitize_ooxml_text(text: str) -> str:
+    """Strip characters illegal in XML 1.0 text (can corrupt OOXML inside pptx)."""
+    return "".join(
+        ch
+        for ch in text
+        if ch in "\t\n\r"
+        or (0x20 <= ord(ch) <= 0xD7FF)
+        or (0xE000 <= ord(ch) <= 0xFFFD)
+    )
+
+
+def _validate_slide_image(path: Path) -> None:
+    if not path.is_file():
+        raise ValueError(f"slide image missing: {path}")
+    size = path.stat().st_size
+    if size < 64:
+        raise ValueError(f"slide image too small ({size} bytes): {path}")
+    from arka.media.compose_video import _require_pillow
+
+    Image, *_ = _require_pillow()
+    with Image.open(path) as img:
+        img.verify()
+    with Image.open(path) as img:
+        if img.width < 8 or img.height < 8:
+            raise ValueError(f"slide image dimensions invalid: {img.width}x{img.height}")
+
+
+def _validate_pptx_file(path: Path) -> None:
+    data = path.read_bytes()
+    if len(data) < 512:
+        raise ValueError("file too small to be a pptx")
+    if not data.startswith(b"PK\x03\x04"):
+        raise ValueError("not a ZIP archive (expected OOXML pptx container)")
+    with zipfile.ZipFile(path) as zf:
+        names = zf.namelist()
+        if "[Content_Types].xml" not in names:
+            raise ValueError("missing [Content_Types].xml")
+        if not any(n.endswith("presentation.xml") for n in names):
+            raise ValueError("missing ppt/presentation.xml")
+        bad = zf.testzip()
+        if bad:
+            raise ValueError(f"corrupt zip entry: {bad}")
+    Presentation, _ = _require_pptx()
+    prs = Presentation(str(path))
+    if len(prs.slides) < 1:
+        raise ValueError("pptx contains no slides")
+
+
+def _validate_pdf_file(path: Path) -> None:
+    if not path.read_bytes()[:5].startswith(b"%PDF-"):
+        raise ValueError("invalid PDF header")
+
+
+def _validate_html_file(path: Path) -> None:
+    head = path.read_text(encoding="utf-8", errors="replace")[:4096].lower()
+    if "<html" not in head and "<!doctype html" not in head:
+        raise ValueError("missing HTML document structure")
+
+
+def _validate_markdown_file(path: Path) -> None:
+    text = path.read_text(encoding="utf-8")
+    if not text.strip():
+        raise ValueError("empty markdown export")
+    if "# " not in text and not text.lstrip().startswith("---"):
+        raise ValueError("markdown export has no slide headings")
+
+
+def _validate_json_file(path: Path) -> None:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError("JSON export must be an object")
+    if not data.get("scenes"):
+        raise ValueError("JSON export missing scenes")
+
+
+def _export_validator(fmt: str):
+    return {
+        "pptx": _validate_pptx_file,
+        "pdf": _validate_pdf_file,
+        "html": _validate_html_file,
+        "md": _validate_markdown_file,
+        "json": _validate_json_file,
+    }.get(fmt)
+
+
+def _remove_invalid_export(path: Path) -> None:
+    try:
+        if path.is_file():
+            path.unlink()
+    except OSError:
+        pass
+
+
+def _commit_export(path: Path, fmt: str) -> Path:
+    validator = _export_validator(fmt)
+    if validator:
+        try:
+            validator(path)
+        except Exception as exc:
+            _remove_invalid_export(path)
+            raise SlideExportError(fmt, path, str(exc)) from exc
+    return path
+
+
+def _atomic_export(build_fn, path: Path, fmt: str) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    partial = path.with_name(f"{path.name}.partial")
+    _remove_invalid_export(partial)
+    try:
+        build_fn(partial)
+        _commit_export(partial, fmt)
+        partial.replace(path)
+        return path
+    except Exception:
+        _remove_invalid_export(partial)
+        _remove_invalid_export(path)
+        raise
+
+
 def extract_slides_topic(text: str) -> str:
     """Pull the subject out of NL like 'make slides about kubernetes'."""
     t = text.strip().strip("'\"")
     if not t:
         return ""
     t, _ = _strip_format_from_text(t)
+    t = _strip_style_from_text(t)
     patterns = [
         r"(?i)(?:^|\b)(?:make|create|compose|build|render|produce|generate|arka)\s+"
         r"(?:a\s+|an\s+)?(?:\d+\s+)?(?:slide|slides|presentation|deck|powerpoint|pptx?|pdf|html|markdown|marp)\s+"
@@ -177,6 +722,8 @@ def extract_slides_topic(text: str) -> str:
         r"(?:on|about|for|explaining|covering)\s+(.+)$",
         r"(?i)(?:^|\b)(?:pdf|html|markdown|marp)\s+(?:slide|slides|presentation|deck)\s+"
         r"(?:on|about|for|explaining|covering)\s+(.+)$",
+        r"(?i)(?:^|\b)(?:executive|academic|pitch)\s+"
+        r"(?:slide|slides|presentation|deck)\s+(?:on|about|for|explaining|covering)\s+(.+)$",
     ]
     for pat in patterns:
         m = re.search(pat, t)
@@ -184,10 +731,11 @@ def extract_slides_topic(text: str) -> str:
             topic = m.group(1).strip().strip("'\"")
             topic = re.sub(r"(?i)\s+(?:with\s+llm|please)$", "", topic).strip()
             topic, _ = _strip_format_from_text(topic)
+            topic = _strip_style_from_text(topic)
             if topic:
                 return topic
     cleaned, _ = _strip_format_from_text(t)
-    return normalize_topic(cleaned)
+    return normalize_topic(_strip_style_from_text(cleaned))
 
 
 def nl_to_argv_convert(text: str) -> list[str]:
@@ -278,6 +826,10 @@ def nl_to_argv(text: str) -> list[str]:
         r"(?i)(?:^|\b)(?:pdf|html|markdown|marp)\s+(?:slide|slides|presentation|deck)\s+"
         r"(?:on|about|for|explaining|covering)\s+\S",
         t,
+    ) or re.search(
+        r"(?i)(?:^|\b)(?:executive|academic|pitch)\s+"
+        r"(?:slide|slides|presentation|deck)\s+(?:on|about|for|explaining|covering)\s+\S",
+        t,
     )
     if not slide_intent:
         return []
@@ -289,6 +841,9 @@ def nl_to_argv(text: str) -> list[str]:
     fmt = _extract_format_from_nl(t)
     if fmt:
         argv.extend(["--format", fmt])
+    style = extract_slide_style(t)
+    if re.search(r"(?i)\b(?:executive|academic|pitch)\b", t):
+        argv.extend(["--style", style])
     if re.search(r"(?i)\b(llm|write script)\b", t):
         argv.append("--llm")
     return argv
@@ -353,27 +908,31 @@ def _build_pptx(
     cfg: VideoConfig,
 ) -> Path:
     Presentation, Emu = _require_pptx()
-    prs = Presentation()
-    prs.slide_width = Emu(cfg.width * 9525)
-    prs.slide_height = Emu(cfg.height * 9525)
-    blank_layout = prs.slide_layouts[6]
+    for png_path, _ in slide_images:
+        _validate_slide_image(png_path)
 
-    for png_path, scene in slide_images:
-        slide = prs.slides.add_slide(blank_layout)
-        slide.shapes.add_picture(
-            str(png_path),
-            left=0,
-            top=0,
-            width=prs.slide_width,
-            height=prs.slide_height,
-        )
-        notes = (scene.narration or scene.body or "").strip()
-        if notes:
-            slide.notes_slide.notes_text_frame.text = notes
+    def _write(dest: Path) -> None:
+        prs = Presentation()
+        prs.slide_width = Emu(cfg.width * 9525)
+        prs.slide_height = Emu(cfg.height * 9525)
+        blank_layout = prs.slide_layouts[6]
 
-    output.parent.mkdir(parents=True, exist_ok=True)
-    prs.save(str(output))
-    return output
+        for png_path, scene in slide_images:
+            slide = prs.slides.add_slide(blank_layout)
+            slide.shapes.add_picture(
+                str(png_path),
+                left=0,
+                top=0,
+                width=prs.slide_width,
+                height=prs.slide_height,
+            )
+            notes = _sanitize_ooxml_text((scene.narration or scene.body or "").strip())
+            if notes:
+                slide.notes_slide.notes_text_frame.text = notes
+
+        prs.save(str(dest))
+
+    return _atomic_export(_write, output, "pptx")
 
 
 def _build_pdf(
@@ -386,21 +945,24 @@ def _build_pdf(
     Image, *_ = _require_pillow()
     images = []
     for png_path, _ in slide_images:
+        _validate_slide_image(png_path)
         img = Image.open(png_path)
         if img.mode != "RGB":
             img = img.convert("RGB")
         images.append(img)
     if not images:
         raise SystemExit("No slide images to export as PDF.")
-    output.parent.mkdir(parents=True, exist_ok=True)
-    images[0].save(
-        str(output),
-        "PDF",
-        save_all=True,
-        append_images=images[1:],
-        resolution=100.0,
-    )
-    return output
+
+    def _write(dest: Path) -> None:
+        images[0].save(
+            str(dest),
+            "PDF",
+            save_all=True,
+            append_images=images[1:],
+            resolution=100.0,
+        )
+
+    return _atomic_export(_write, output, "pdf")
 
 
 def _png_data_uri(path: Path) -> str:
@@ -469,7 +1031,16 @@ def _build_html(
 </html>
 """
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(html, encoding="utf-8")
+    partial = output.with_name(f"{output.name}.partial")
+    _remove_invalid_export(partial)
+    try:
+        partial.write_text(html, encoding="utf-8")
+        _commit_export(partial, "html")
+        partial.replace(output)
+    except Exception:
+        _remove_invalid_export(partial)
+        _remove_invalid_export(output)
+        raise
     return output
 
 
@@ -513,7 +1084,16 @@ def _build_markdown(
         if notes:
             lines.extend(["", f"<!-- speaker notes: {notes} -->"])
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    partial = output.with_name(f"{output.name}.partial")
+    _remove_invalid_export(partial)
+    try:
+        partial.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        _commit_export(partial, "md")
+        partial.replace(output)
+    except Exception:
+        _remove_invalid_export(partial)
+        _remove_invalid_export(output)
+        raise
     return output
 
 
@@ -565,7 +1145,16 @@ def _build_json_export(
         outputs=outputs or {output.suffix.lstrip("."): str(output)},
     )
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    partial = output.with_name(f"{output.name}.partial")
+    _remove_invalid_export(partial)
+    try:
+        partial.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        _commit_export(partial, "json")
+        partial.replace(output)
+    except Exception:
+        _remove_invalid_export(partial)
+        _remove_invalid_export(output)
+        raise
     return output
 
 
@@ -586,36 +1175,79 @@ def _export_formats(
     scenes: list[Scene],
     cfg: VideoConfig,
     credits: list[dict],
-) -> tuple[list[Path], dict[str, str]]:
+) -> ExportBatch:
     saved: list[Path] = []
     errors: list[str] = []
     outputs_map: dict[str, str] = {}
+    failed: dict[str, str] = {}
+    fallback_md: Path | None = None
+
+    def _run_export(fmt: str, path: Path) -> Path:
+        exporter = _EXPORTERS[fmt]
+        if fmt in {"pptx", "pdf", "html"}:
+            return exporter(slide_images, path, topic=topic, cfg=cfg)
+        return exporter(
+            slide_images,
+            path,
+            topic=topic,
+            scenes=scenes,
+            cfg=cfg,
+        )
+
+    def _try_markdown_fallback(pptx_path: Path) -> Path | None:
+        if "md" in output_paths:
+            return None
+        md_path = pptx_path.with_suffix(".md")
+        try:
+            saved_path = _build_markdown(
+                slide_images,
+                md_path,
+                topic=topic,
+                scenes=scenes,
+                cfg=cfg,
+            )
+            saved.append(saved_path)
+            outputs_map["md"] = str(saved_path)
+            return saved_path
+        except Exception as exc:
+            _remove_invalid_export(md_path)
+            errors.append(f"md fallback: {exc}")
+            return None
 
     for fmt, path in output_paths.items():
         if fmt == "json":
             continue
         try:
-            exporter = _EXPORTERS[fmt]
-            if fmt in {"pptx", "pdf"}:
-                saved_path = exporter(slide_images, path, topic=topic, cfg=cfg)
-            elif fmt == "html":
-                saved_path = exporter(slide_images, path, topic=topic, cfg=cfg)
-            else:
-                saved_path = exporter(
-                    slide_images,
-                    path,
-                    topic=topic,
-                    scenes=scenes,
-                    cfg=cfg,
-                )
+            saved_path = _run_export(fmt, path)
             saved.append(saved_path)
             outputs_map[fmt] = str(saved_path)
         except SystemExit as exc:
             msg = str(exc).strip() or f"{fmt} export unavailable"
-            if len(output_paths) == 1:
+            failed[fmt] = msg
+            _remove_invalid_export(path)
+            if fmt == "pptx":
+                fallback_md = _try_markdown_fallback(path) or fallback_md
+            if len(output_paths) == 1 and not fallback_md:
                 raise
             errors.append(f"{fmt}: {msg}")
             print(f"  Skipping {fmt} export — {msg}", file=sys.stderr)
+        except SlideExportError as exc:
+            failed[fmt] = exc.reason
+            if fmt == "pptx":
+                fallback_md = _try_markdown_fallback(path) or fallback_md
+            if len(output_paths) == 1 and not fallback_md:
+                raise SystemExit(str(exc)) from exc
+            errors.append(f"{fmt}: {exc.reason}")
+            print(f"  Skipping {fmt} export — {exc.reason}", file=sys.stderr)
+        except Exception as exc:
+            failed[fmt] = str(exc)
+            _remove_invalid_export(path)
+            if fmt == "pptx":
+                fallback_md = _try_markdown_fallback(path) or fallback_md
+            if len(output_paths) == 1 and not fallback_md:
+                raise
+            errors.append(f"{fmt}: {exc}")
+            print(f"  Skipping {fmt} export — {exc}", file=sys.stderr)
 
     if not saved and "json" not in output_paths:
         detail = "; ".join(errors) if errors else "no exporters succeeded"
@@ -634,18 +1266,27 @@ def _export_formats(
             )
             saved.append(saved_path)
             outputs_map["json"] = str(saved_path)
-        except SystemExit as exc:
-            if len(output_paths) == 1:
-                raise
+        except (SystemExit, SlideExportError) as exc:
             msg = str(exc).strip() or "json export unavailable"
+            failed["json"] = msg
+            _remove_invalid_export(output_paths["json"])
+            if len(output_paths) == 1 and not saved:
+                raise SystemExit(f"No slide formats exported ({msg}).") from exc
             errors.append(f"json: {msg}")
             print(f"  Skipping json export — {msg}", file=sys.stderr)
+        except Exception as exc:
+            failed["json"] = str(exc)
+            _remove_invalid_export(output_paths["json"])
+            if len(output_paths) == 1 and not saved:
+                raise
+            errors.append(f"json: {exc}")
+            print(f"  Skipping json export — {exc}", file=sys.stderr)
 
     if not saved:
         detail = "; ".join(errors) if errors else "no exporters succeeded"
         raise SystemExit(f"No slide formats exported ({detail}).")
 
-    return saved, outputs_map
+    return ExportBatch(saved=saved, outputs=outputs_map, failed=failed, fallback_md=fallback_md)
 
 
 def compose(
@@ -655,7 +1296,7 @@ def compose(
     topic: str,
     cfg: VideoConfig | None = None,
     formats: list[str] | None = None,
-) -> list[Path]:
+) -> ExportBatch:
     if not scenes:
         raise SystemExit("No scenes to render.")
     cfg = cfg or load_config()
@@ -688,10 +1329,11 @@ def compose(
                 used_photo_ids=used_photo_ids,
                 credits=credits,
             )
+            _validate_slide_image(png)
             slide_images.append((png, scene))
 
         output_paths = _output_paths(output, formats)
-        saved, outputs_map = _export_formats(
+        batch = _export_formats(
             slide_images,
             output_paths,
             topic=topic,
@@ -700,7 +1342,7 @@ def compose(
             credits=credits,
         )
 
-        if "json" not in outputs_map:
+        if "json" not in batch.outputs:
             sidecar = output.with_suffix(".meta.json")
             sidecar.write_text(
                 json.dumps(
@@ -708,14 +1350,14 @@ def compose(
                         topic=topic,
                         scenes=scenes,
                         credits=credits,
-                        outputs=outputs_map,
+                        outputs=batch.outputs,
                     ),
                     indent=2,
                 )
                 + "\n",
                 encoding="utf-8",
             )
-        return saved
+        return batch
     finally:
         import shutil
 
@@ -1090,7 +1732,7 @@ def convert_deck(
     formats: list[str],
     from_fmt: str | None = None,
     cfg: VideoConfig | None = None,
-) -> list[Path]:
+) -> ExportBatch:
     """Convert an existing slide deck between supported formats."""
     input_path = input_path.expanduser()
     if not formats:
@@ -1108,7 +1750,15 @@ def convert_deck(
                 target.parent.mkdir(parents=True, exist_ok=True)
                 direct.replace(target)
                 direct = target
-            return [direct]
+            fmt = formats[0]
+            validator = _export_validator(fmt)
+            if validator:
+                try:
+                    validator(direct)
+                except Exception as exc:
+                    _remove_invalid_export(direct)
+                    raise SystemExit(f"{fmt} conversion produced an invalid file: {exc}") from exc
+            return ExportBatch(saved=[direct], outputs={fmt: str(direct)})
         except SystemExit:
             if formats[0] not in SLIDE_FORMATS:
                 raise
@@ -1134,7 +1784,7 @@ def convert_deck(
         )
 
         output_paths = _output_paths(output, formats)
-        saved, outputs_map = _export_formats(
+        batch = _export_formats(
             slide_images,
             output_paths,
             topic=deck.topic,
@@ -1143,7 +1793,7 @@ def convert_deck(
             credits=deck.credits,
         )
 
-        if "json" not in outputs_map:
+        if "json" not in batch.outputs:
             sidecar = output.with_suffix(".meta.json")
             sidecar.write_text(
                 json.dumps(
@@ -1151,14 +1801,14 @@ def convert_deck(
                         topic=deck.topic,
                         scenes=deck.scenes,
                         credits=deck.credits,
-                        outputs=outputs_map,
+                        outputs=batch.outputs,
                     ),
                     indent=2,
                 )
                 + "\n",
                 encoding="utf-8",
             )
-        return saved
+        return batch
     finally:
         import shutil
 
@@ -1175,6 +1825,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_compose.add_argument("--topic", help="Presentation topic (template or --llm script)")
     p_compose.add_argument("--script", help="JSON script file or inline JSON")
     p_compose.add_argument("--llm", action="store_true", help="Generate script via LLM")
+    p_compose.add_argument(
+        "--style",
+        choices=SLIDE_STYLES,
+        default=None,
+        help="Deck tone: executive (default), academic, or pitch",
+    )
     p_compose.add_argument(
         "--scenes",
         type=int,
@@ -1265,52 +1921,73 @@ def cmd_parse(args: argparse.Namespace) -> int:
     return 0
 
 
+def _report_export_batch(batch: ExportBatch, *, saved_label: str = "Saved slides") -> Path | None:
+    from arka.core.output import user_msg
+
+    open_path: Path | None = None
+    if batch.failed.get("pptx"):
+        user_msg("✗ Could not create a valid PowerPoint file.")
+        if batch.fallback_md:
+            user_msg(f"  Saved outline instead: {batch.fallback_md}")
+            open_path = batch.fallback_md
+    for path in batch.saved:
+        if batch.fallback_md and path == batch.fallback_md and batch.failed.get("pptx"):
+            continue
+        print(f"{saved_label}: {path}")
+        if open_path is None:
+            open_path = path
+    return open_path
+
+
 def cmd_compose(args: argparse.Namespace) -> int:
+    from arka.core.output import debug_msg, user_msg
+
     scenes: list[Scene] = []
     topic = extract_slides_topic((args.topic or "").strip()) or normalize_topic((args.topic or "").strip())
+    style = normalize_slide_style(args.style)
 
     if args.script:
         raw = Path(args.script).expanduser().read_text(encoding="utf-8") if Path(args.script).is_file() else args.script
-        scenes = _enrich_scenes(_parse_scenes_json(raw))
+        scenes = _enrich_slide_scenes(_parse_scenes_json(raw))
         if not topic and scenes:
             topic = scenes[0].title
 
     if not scenes and topic:
-        mode = _script_mode(args)
+        mode = _slides_script_mode(args)
         if mode == "llm":
             if args.scenes is not None:
-                print(f"Writing script with LLM ({args.scenes} slides) …", file=sys.stderr)
+                user_msg(f"Writing {style} slide script ({args.scenes} slides) …")
             else:
-                print("Writing script with LLM (auto slide count) …", file=sys.stderr)
+                user_msg(f"Writing {style} slide script …")
             try:
-                scenes = _llm_script(topic, scenes=args.scenes)
-                if _script_needs_shortening(scenes):
-                    print("Script too dense — summarizing …", file=sys.stderr)
-                    scenes = _llm_summarize_script(topic, scenes)
+                scenes = _llm_slides_script(topic, scenes=args.scenes, style=style)
+                if _slides_script_needs_shortening(scenes):
+                    user_msg("Deck too dense — tightening …")
+                    scenes = _llm_slides_summarize_script(topic, scenes, style=style)
                 if args.scenes is None:
-                    print(f"  LLM chose {len(scenes)} slides", file=sys.stderr)
+                    debug_msg(f"LLM chose {len(scenes)} slides")
             except SystemExit as exc:
-                print(f"  LLM script failed ({exc}); using template.", file=sys.stderr)
-                scenes = _template_script(topic)
+                user_msg(f"LLM script failed ({exc}); using {style} template.")
+                scenes = _template_slides_script(topic, style=style)
         else:
-            scenes = _template_script(topic)
+            scenes = _template_slides_script(topic, style=style)
 
     if not scenes:
-        print("Provide --topic or --script", file=sys.stderr)
+        user_msg("Provide --topic or --script")
         return 1
     if not topic:
         topic = scenes[0].title
 
     if _llm_available() and any(not s.image_keywords for s in scenes):
-        print("Choosing stock photo keywords with LLM …", file=sys.stderr)
-        scenes = _llm_enrich_image_keywords(topic, scenes)
+        debug_msg("Choosing stock photo keywords with LLM …")
+        scenes = _llm_slides_enrich_image_keywords(topic, scenes)
 
     label = topic_label(topic)
-    print(f"Topic: {label}", file=sys.stderr)
+    debug_msg(f"Topic: {label} ({style})")
     try:
         formats = parse_formats_arg(args.format)
     except SystemExit as exc:
-        print(exc, file=sys.stderr)
+        user_msg(str(exc))
         return 1
     primary_fmt = formats[0]
     out = (
@@ -1319,19 +1996,18 @@ def cmd_compose(args: argparse.Namespace) -> int:
         else _default_output(topic, primary_fmt if len(formats) == 1 else "pptx")
     )
     fmt_label = ", ".join(formats)
-    print(f"Composing {len(scenes)} slides ({fmt_label}) → {out}", file=sys.stderr)
-    saved = compose(scenes, output=out, topic=topic, formats=formats)
-    for path in saved:
-        print(f"Saved slides: {path}")
+    user_msg(f"Composing {len(scenes)} slides ({fmt_label}) …")
+    batch = compose(scenes, output=out, topic=topic, formats=formats)
+    open_path = _report_export_batch(batch)
     meta = out.with_suffix(".meta.json")
     if meta.is_file():
-        print(f"Metadata: {meta}")
-    elif "json" in {p.suffix.lstrip(".") for p in saved}:
-        json_out = next(p for p in saved if p.suffix == ".json")
-        print(f"Metadata: {json_out}")
-    if _env("OPEN_SLIDES", "1") not in {"0", "false"}:
-        _open_slides(saved[0])
-    return 0
+        debug_msg(f"Metadata: {meta}")
+    elif "json" in {p.suffix.lstrip(".") for p in batch.saved}:
+        json_out = next(p for p in batch.saved if p.suffix == ".json")
+        debug_msg(f"Metadata: {json_out}")
+    if open_path and _env("OPEN_SLIDES", "1") not in {"0", "false"}:
+        _open_slides(open_path)
+    return 0 if batch.saved else 1
 
 
 def _format_from_output_path(output: Path) -> str | None:
@@ -1366,7 +2042,7 @@ def cmd_convert(args: argparse.Namespace) -> int:
         )
 
     try:
-        saved = convert_deck(
+        batch = convert_deck(
             input_path,
             output=output,
             formats=formats,
@@ -1376,17 +2052,16 @@ def cmd_convert(args: argparse.Namespace) -> int:
         print(exc, file=sys.stderr)
         return 1
 
-    for path in saved:
-        print(f"Saved: {path}")
+    open_path = _report_export_batch(batch, saved_label="Saved")
     meta = output.with_suffix(".meta.json")
     if meta.is_file():
         print(f"Metadata: {meta}")
-    elif "json" in {p.suffix.lstrip(".") for p in saved}:
-        json_out = next(p for p in saved if p.suffix == ".json")
+    elif "json" in {p.suffix.lstrip(".") for p in batch.saved}:
+        json_out = next(p for p in batch.saved if p.suffix == ".json")
         print(f"Metadata: {json_out}")
-    if _env("OPEN_SLIDES", "1") not in {"0", "false"} and saved:
-        _open_slides(saved[0])
-    return 0
+    if open_path and _env("OPEN_SLIDES", "1") not in {"0", "false"}:
+        _open_slides(open_path)
+    return 0 if batch.saved else 1
 
 
 def _open_slides(path: Path) -> None:

@@ -37,6 +37,10 @@ TASK_PROFILES: dict[str, dict[str, str]] = {
         "description": "Info/video script generation for compose_video",
         "default_model": "gemini/gemini-2.5-flash",
     },
+    "compose_slides": {
+        "description": "Presentation deck script generation for compose_slides",
+        "default_model": "gemini/gemini-2.5-flash",
+    },
     "flow": {
         "description": "Structured multi-block step-by-step flow answers",
         "default_model": "gemini/gemini-2.5-flash",
@@ -53,6 +57,7 @@ SKILL_TASK_MAP: dict[str, str] = {
     "route": "route",
     # Chat / Q&A
     "platform_howto": "chat",
+    "interesting_fact": "chat",
     "flow": "flow",
     "elon": "chat",
     "talk_to_elon": "chat",
@@ -70,6 +75,8 @@ SKILL_TASK_MAP: dict[str, str] = {
     "product_reviewer": "chat",
     "price_check": "chat",
     "fact_check": "research",
+    "quiz_practice": "chat",
+    "council": "chat",
     "calc": "chat",
     # Summarize
     "youtube_transcript": "summarize",
@@ -130,6 +137,7 @@ SKILL_TASK_MAP: dict[str, str] = {
     "emotion": "predictions",
     # Video compose
     "compose_video": "compose_video",
+    "compose_slides": "compose_slides",
     # Meta / setup
     "select_model": "chat",
     "model_select": "chat",

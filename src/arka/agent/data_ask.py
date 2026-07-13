@@ -256,6 +256,37 @@ def _extract_path_candidate(text: str) -> str | None:
 
 
 _NON_PATH_WORDS = frozenset({"this", "that", "the", "my", "a", "an", "current"})
+_TZ_PATH_BLOCKLIST = frozenset(
+    {
+        "utc",
+        "gmt",
+        "ist",
+        "pst",
+        "pdt",
+        "est",
+        "edt",
+        "cst",
+        "cdt",
+        "mst",
+        "mdt",
+        "akst",
+        "akdt",
+        "hst",
+        "bst",
+        "cet",
+        "cest",
+        "jst",
+        "kst",
+        "sgt",
+        "hkt",
+        "aest",
+        "aedt",
+        "nzst",
+        "nzdt",
+        "msk",
+        "pkt",
+    }
+)
 
 
 def extract_directory_path(text: str) -> str | None:
@@ -267,7 +298,7 @@ def extract_directory_path(text: str) -> str | None:
             if re.search(rf"\.(?:{_DATA_EXT})$", candidate, re.I):
                 continue
             base = candidate.rstrip("/").split("/")[-1].lower()
-            if base in _NON_PATH_WORDS:
+            if base in _NON_PATH_WORDS or base in _TZ_PATH_BLOCKLIST:
                 continue
             return candidate.rstrip("/")
     return None
@@ -773,6 +804,13 @@ def wants_data_ask(text: str) -> bool:
     clean = (text or "").strip()
     if not clean:
         return False
+    try:
+        from arka.integrations.timezone_convert import wants_timezone_convert
+
+        if wants_timezone_convert(clean):
+            return False
+    except ImportError:
+        pass
     if _EXCLUDE_RE.search(clean):
         return False
     try:

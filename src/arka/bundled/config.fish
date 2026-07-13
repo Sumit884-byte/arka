@@ -665,6 +665,7 @@ if status is-interactive
         echo "system_info     -> System overview"
         echo "search_web <q>  -> Google search"
         echo "open_urls       -> Open one or more URLs"
+        echo "open_url        -> Open a site or URL in your browser"
         echo "open_finance    -> Open top financial sites"
         echo "open_news       -> Open top news sites"
         echo "git_summary     -> Git project overview"
@@ -1862,7 +1863,9 @@ function _agent_dispatch_one --description "Run one skill by name or shell via _
     set -l tokens $cleaned
     set -l first $tokens[1]
     if test "$first" = mode
-        echo (set_color cyan)"▶ mode"(set_color normal)
+        if _arka_routing_trace_enabled
+            echo (set_color cyan)"▶ mode"(set_color normal)
+        end
         set -e tokens[1]
         set -l py (_arka_python)
         if test (count $tokens) -gt 0
@@ -1873,7 +1876,9 @@ function _agent_dispatch_one --description "Run one skill by name or shell via _
         return $status
     end
     if test "$first" = google
-        echo (set_color cyan)"▶ Running skill: $cmd_trim"(set_color normal)
+        if _arka_routing_trace_enabled
+            echo (set_color cyan)"▶ Running skill: $cmd_trim"(set_color normal)
+        end
         set -lx ARKA_SKILL google
         set -l py (_arka_python)
         set -l gargv (_agent_shlex_split "$cmd_trim")
@@ -1885,17 +1890,19 @@ function _agent_dispatch_one --description "Run one skill by name or shell via _
         return $status
     end
     if _arka_is_builtin_skill "$first"
-        if test "$first" = pdf_ask
-            echo (set_color brblack)"▶ "(set_color --bold cyan)"PDF ask"(set_color brblack)" — "(set_color normal)"$cmd_trim"
-        else if test "$first" = describe_image
-            set -l args $tokens[2..-1]
-            if test (count $args) -ge 1; and test "$args[1]" = describe
-                set -e args[1]
+        if _arka_routing_trace_enabled
+            if test "$first" = pdf_ask
+                echo (set_color brblack)"▶ "(set_color --bold cyan)"PDF ask"(set_color brblack)" — "(set_color normal)"$cmd_trim"
+            else if test "$first" = describe_image
+                set -l args $tokens[2..-1]
+                if test (count $args) -ge 1; and test "$args[1]" = describe
+                    set -e args[1]
+                end
+                set -l src (string join " " $args | string replace -r " 'Summarize this chart\.'\$" "" | string trim)
+                echo (set_color cyan)"▶ describe_image "(set_color --bold)"$src"(set_color normal)
+            else
+                echo (set_color cyan)"▶ Running skill: $cmd_trim"(set_color normal)
             end
-            set -l src (string join " " $args | string replace -r " 'Summarize this chart\.'\$" "" | string trim)
-            echo (set_color cyan)"▶ describe_image "(set_color --bold)"$src"(set_color normal)
-        else
-            echo (set_color cyan)"▶ Running skill: $cmd_trim"(set_color normal)
         end
         set -e tokens[1]
         set -lx ARKA_SKILL $first
@@ -1907,12 +1914,16 @@ function _agent_dispatch_one --description "Run one skill by name or shell via _
         return $status
     end
     if _arka_is_third_party_skill "$first"
-        echo (set_color cyan)"▶ Third-party skill: $cmd_trim"(set_color normal)
+        if _arka_routing_trace_enabled
+            echo (set_color cyan)"▶ Third-party skill: $cmd_trim"(set_color normal)
+        end
         set -e tokens[1]
         _arka_run_third_party_skills $first $tokens
         return $status
     end
-    echo (set_color cyan)"▶ Running: $cmd_trim"(set_color normal)
+    if _arka_routing_trace_enabled
+        echo (set_color cyan)"▶ Running: $cmd_trim"(set_color normal)
+    end
     _agent_exec_shell_cmd "$cmd_trim"
     return $status
 end
@@ -1943,18 +1954,18 @@ function _agent_all_skills --description "Canonical registered agent skill names
     printf '%s\n' \
         play_spotify spotify_control play_song stop_music play_youtube play_movie \
         weather hyperlocal_weather timer screenshot set_wallpaper system_info \
-        search_web open_urls open_finance open_news git_summary disk_usage disk_breakdown \
+        search_web open_urls open_url open browse open_finance open_news git_summary disk_usage disk_breakdown \
         pdf_ask pdf_ingest pdf_ingest_dir pdf_list doc_ask doc_ingest doc_list drawing_ask describe_image describe_screen describe_video port_scan speedtest clipboard todo translate survive_lang \
         generate_password ip_info open_project create_folder list_folders show_folder \
         store_password pass \
         open_file list_files search_files find_files_by_size browse_web activate_venv create_venv fix_venv \
         write_script run_script ollama_run lint_python cheat qr_code shorten_url \
-        crypto_price currency_convert convert currency kalshi kaggle pomodoro sports_score live_scores system_monitor excuse bored open_app create_skill \
+        crypto_price currency_convert convert currency timezone_convert tz_convert timezone kalshi kaggle pomodoro sports_score live_scores system_monitor excuse bored open_app create_skill \
         calculate_bmi send_whatsapp whatsapp_listen search_stores download_file extract_and_run \
         create_desktop_app fix_graphics_driver install_app install_apt install_brew install_flatpak \
         install_snap install_package install_uv install_stt stock_analysis stock macro emotion \
         auto_click auto_copy decrypt_pdf classify_files cleanup_downloads watch_zip monitor_x post_x \
-        generate_image generate_thumbnail generate_video compose_video compose_slides convert_media pdf_tools chart ascii_art flow fact_check astronomy metallurgy youtube_transcript youtube_download yt_download media_transcript transcribe_media summarize_url daily_brief wifi_info \
+        generate_image generate_thumbnail generate_video compose_video compose_slides convert_media pdf_tools chart ascii_art flow fact_check quiz_practice council astronomy metallurgy youtube_transcript youtube_download yt_download media_transcript transcribe_media summarize_url daily_brief wifi_info \
         folder_summarize playlist_summarize youtube_research yt_research find_videos codebase_ingest \
         agent_remember agent_recall agent_memory agent_trace agent_why agent_last \
         agent_resume agent_research agent_nudge agent_watch agent_routine agent_fanout \
@@ -1963,7 +1974,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         bookmarks repo_health repo_context repo_map generate_data data_gen data_ask ask_data query_data analyze_data view_data view_csv show_csv docker_status clipboard_history mcp agent_hub gemini_cli harvard_ark persona elon talk_to_elon elon_chat \
         arka_ask semantic_memory supermemory speak_research voice_session handoff_notify remind routines predictions stock \
         rag_setup rag_status voice_agent wake_control \
-        agent_ask web_answer deep_web_answer web_essay platform_howto calc chat_reset set_location files_preference_help google \
+        agent_ask web_answer deep_web_answer web_essay platform_howto interesting_fact calc chat_reset set_location files_preference_help google \
         select_model model_select best_model model_advisor \
         personalize \
         nearby_places map_download error_helper deep_queue app_usage internet_enhance aie \
@@ -2185,6 +2196,10 @@ function _arka_operation_mode --description "Operation mode: ask|plan|agent|debu
             end
             echo agent
     end
+end
+
+function _arka_routing_trace_enabled --description "True when operation mode is debug (internal)"
+    test (_arka_operation_mode) = debug
 end
 
 function _agent_is_mode_request --description "NL request to show/set operation mode (internal)"
@@ -2467,6 +2482,10 @@ function skills --description "Show what commands the agent can auto-run"
                 echo (set_color green)"  sports_score   "(set_color normal)"[ipl|nfl|nba|epl|cricket|…] — live match scores (ESPN)"
             case currency_convert convert currency
                 echo (set_color green)"  currency_convert "(set_color normal)"<amount> <from> <to> — live FX rates (USD, EUR, INR, …)"
+            case timezone_convert tz_convert timezone
+                echo (set_color green)"  timezone_convert "(set_color normal)"<datetime> — convert between timezones (PDT, IST, UTC, …)"
+            case open_url open browse
+                echo (set_color green)"  open_url         "(set_color normal)"<site-or-url> — open in default browser (youtube, github, …)"
             case kalshi
                 echo (set_color green)"  kalshi         "(set_color normal)"search <topic> | market <TICKER> | trending | status — Kalshi prediction odds"
             case kaggle
@@ -2485,6 +2504,10 @@ function skills --description "Show what commands the agent can auto-run"
                 echo (set_color green)"  ascii_art      "(set_color normal)"<text> | --from-image photo.jpg — figlet banner / image ASCII"
             case flow
                 echo (set_color green)"  flow           "(set_color normal)"<topic> — multi-block step-by-step how-to (Arka flow)"
+            case quiz_practice quiz quiz-practice
+                echo (set_color green)"  quiz_practice  "(set_color normal)"<topic> — infinite quiz with memory (unique questions)"
+            case council deliberate
+                echo (set_color green)"  council        "(set_color normal)"<question> — multi-persona deliberation chamber (Socrates, Elon, Feynman)"
             case astronomy
                 echo (set_color green)"  astronomy      "(set_color normal)"what <star> | moon | iss [city] — sky objects, lunar phase, ISS passes"
             case metallurgy
@@ -3872,7 +3895,7 @@ function _play_normalize_media_query --description "Strip play/movie/song filler
         return
     end
 
-    set q (string replace -r -i '^(please\s+)?(can you\s+)?(i want to\s+)?(play|watch|start|open|run|show)\s+(me\s+)?' '' "$q")
+    set q (string replace -r -i '^(please\s+)?(can you\s+)?(i want to\s+)?(play|watch|start|run|show)\s+(me\s+)?' '' "$q")
     set q (string replace -r -i '^(?:the\s+)?(?:a\s+|an\s+)?' '' "$q")
     set q (string replace -r -i '^(?:movie|film|video|videos?|song|songs?|music|track|tracks?|audio)\s+' '' "$q")
     set q (string replace -r -i '\s+(?:movie|film|video|videos?|song|songs?|music|track|tracks?|audio)$' '' "$q")
@@ -3891,6 +3914,7 @@ function _agent_play_media_candidates --description "Play skills offline rules c
     end
     if string match -qr '(?i)(play\s+.*youtube|play\s+(?:a\s+|an\s+)?(?:video|episode|anime)|watch\s+(?:a\s+|an\s+)?|watch\s+.*youtube)' "$clean"
         and not string match -qr '(?i)(summarize|summary|transcript|research|digest|caption|download|transcribe|playlist)' "$clean"
+        and not _agent_is_open_url_request "$cmd"
         set -a cands play_youtube
     end
     if string match -qr '(?i)(play.*song|random.*song|local.*music)' "$clean"
@@ -3938,6 +3962,10 @@ function _agent_route_play_ambiguous --description "Resolve conflicting play rou
     end
     set -l clean (string lower "$cmd")
     set -l q (_play_normalize_media_query "$cmd")
+    if _agent_is_open_url_request "$cmd"
+        echo (_agent_build_open_url_cmd "$cmd")
+        return 0
+    end
     if string match -qr '(?i)spotify' "$clean"
         printf 'play_spotify %s\n' "$q"
         return 0
@@ -5345,6 +5373,15 @@ sys.exit(0 if is_platform_howto_question(sys.argv[1]) else 1)
 " (string escape --style=script -- $argv[1])
 end
 
+function _agent_is_interesting_fact_request --description "True for casual trivia / fun-fact prompts (internal)"
+    set -l py (_arka_python)
+    $py -c "
+from arka.routing.interesting_fact import is_interesting_fact_request
+import sys
+sys.exit(0 if is_interesting_fact_request(sys.argv[1]) else 1)
+" (string escape --style=script -- $argv[1])
+end
+
 function _agent_parse_usage_period --description "Parse today/week from usage question (internal)"
     set -l clean (string lower "$argv[1]")
     if string match -qr '(?i)(yesterday|last\s+night)' "$clean"
@@ -5420,6 +5457,30 @@ function open_urls --description "Open one or more URLs in the browser"
         end
     end
     echo (set_color --bold cyan)"🌐 Opened $opened site(s)"(set_color normal)
+end
+
+function open_url --description "Open a site name or URL in the default browser"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        echo "Usage: open_url <url-or-site>"
+        echo "       open_url youtube"
+        echo "       arka open github.com"
+        echo "       arka 'open google in browser'"
+        return 1
+    end
+    set -l text (string join " " -- $argv)
+    set -l out (_arka_capture_output $py (_arka_py_script arka_open_url.py) open -- "$text")
+    set -l st $status
+    if test $st -ne 0
+        echo $out >&2
+        return $st
+    end
+    _arka_pretty_python_output "$out"
+    return 0
+end
+
+function browse --description "Alias for open_url (open site in browser)"
+    open_url $argv
 end
 
 function _parse_whatsapp_nl --description "Parse natural-language WhatsApp send (target, message) (internal)"
@@ -6116,6 +6177,40 @@ function fact_check --description "Fact-check a claim with web evidence and stru
     end
     echo (set_color red)"Could not fact-check (check network and LLM API keys)"(set_color normal)
     return 1
+end
+
+function quiz_practice --description "Infinite quiz practice with per-topic memory"
+    if test (count $argv) -eq 0
+        echo "Usage: quiz_practice <topic> [--reset] [--count N]"
+        echo "       quiz_practice list"
+        echo "Example: quiz_practice python"
+        echo "Example: quiz_practice biology mitosis --count 1"
+        echo ""
+        echo "NL: arka quiz me on world history"
+        return 1
+    end
+    if not _arka_ensure_venv
+        return 1
+    end
+    set -l py (_arka_python)
+    $py (_arka_py_script arka_quiz_practice.py) $argv
+end
+
+function council --description "Multi-persona deliberation chamber with synthesis"
+    if test (count $argv) -eq 0
+        echo "Usage: council <question>"
+        echo "       council list"
+        echo "Example: council should I learn Rust?"
+        echo "Example: deliberate with arka on whether remote work is better"
+        echo ""
+        echo "NL: ask the council about switching careers"
+        return 1
+    end
+    if not _arka_ensure_venv
+        return 1
+    end
+    set -l py (_arka_python)
+    $py (_arka_py_script arka_council.py) $argv
 end
 
 function astronomy --description "Astronomy — stars, moon phase, ISS passes"
@@ -6934,11 +7029,13 @@ function self --description "Arka self-improvement loop (goal agent on arka repo
         echo "Usage: self improve [target]"
         echo "       self_improve [target]"
         echo ""
-        echo "  self improve                    — diagnose + fix failing tests / issues"
-        echo "  self improve add tests for X    — targeted improvement"
+        echo "  self improve                    — analyze + plan (default: dry-run)"
+        echo "  self improve routing            — focused plan (routing, llm, quiz, …)"
+        echo "  self improve routing --apply    — plan + goal agent implements"
+        echo "  self memory                     — past improvement attempts"
         echo "  loop self fix failing tests     — NL alias"
         echo ""
-        echo "Requires: agent mode + Arka repo (auto: arka code init)"
+        echo "Requires --apply: agent mode + Arka repo (auto: arka code init)"
         echo "NL: improve arka  |  arka improve itself  |  self improve"
         return 0
     end
@@ -7643,7 +7740,9 @@ function _arka_pretty_python_output --description "Format Python ━━━ block
             continue
         end
         if string match -qr '^arka_llm:' "$trimmed"
-            echo "$trimmed" >&2
+            if _arka_routing_trace_enabled
+                echo "$trimmed" >&2
+            end
             set i (math $i + 1)
             continue
         end
@@ -8741,12 +8840,57 @@ function currency_convert --description "Convert amounts between currencies usin
     return 0
 end
 
-function convert --description "Alias for currency_convert"
+function convert --description "Convert currency or datetimes (auto-detect)"
+    set -l py (_arka_python)
+    if test (count $argv) -gt 0
+        set -l text (string join " " -- $argv)
+        set -l tz_argv ($py (_arka_py_script arka_timezone_convert.py) parse $argv 2>/dev/null)
+        if test (count $tz_argv) -eq 0; and test -n "$text"
+            set tz_argv ($py (_arka_py_script arka_timezone_convert.py) parse "$text" 2>/dev/null)
+        end
+        if test (count $tz_argv) -gt 0
+            timezone_convert $argv
+            return $status
+        end
+    end
     currency_convert $argv
 end
 
 function currency --description "Alias for currency_convert"
     currency_convert $argv
+end
+
+function timezone_convert --description "Convert datetimes between timezones"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        echo "Usage: timezone_convert <datetime phrase>"
+        echo "       timezone_convert convert July 13 9:00am PDT to IST"
+        echo "       arka 'what is July 13 at 9:00am PDT in IST'"
+        return 1
+    end
+    set -l text (string join " " -- $argv)
+    if test (count ($py (_arka_py_script arka_timezone_convert.py) parse "$text" 2>/dev/null)) -eq 0
+        set -l out (_arka_capture_output $py (_arka_py_script arka_timezone_convert.py) convert -- "$text")
+        set -l st $status
+        echo $out >&2
+        return $st
+    end
+    set -l out (_arka_capture_output $py (_arka_py_script arka_timezone_convert.py) convert -- "$text")
+    set -l st $status
+    if test $st -ne 0
+        echo $out >&2
+        return $st
+    end
+    _arka_pretty_python_output "$out"
+    return 0
+end
+
+function tz_convert --description "Alias for timezone_convert"
+    timezone_convert $argv
+end
+
+function timezone --description "Alias for timezone_convert"
+    timezone_convert $argv
 end
 
 function kalshi --description "Kalshi prediction market odds (read-only public API)"
@@ -10690,6 +10834,9 @@ function _agent_is_knowledge_question --description "True if user wants a factua
     if _agent_is_currency_request "$argv[1]"
         return 1
     end
+    if _agent_is_timezone_request "$argv[1]"
+        return 1
+    end
     if _agent_is_kalshi_request "$argv[1]"
         return 1
     end
@@ -10872,6 +11019,9 @@ function _agent_is_general_chat --description "True if plain conversational inpu
     if _agent_is_platform_howto_question "$argv[1]"
         return 1
     end
+    if _agent_is_interesting_fact_request "$argv[1]"
+        return 1
+    end
     if _agent_is_system_info_question "$argv[1]"
         return 1
     end
@@ -11002,6 +11152,10 @@ end
 
 function _agent_route_general_chat --description "Pick web_answer vs agent_ask for conversational input (internal)"
     set -l cmd "$argv[1]"
+    if _agent_is_interesting_fact_request "$cmd"
+        echo "interesting_fact $cmd"
+        return
+    end
     if _agent_is_platform_howto_question "$cmd"
         echo "platform_howto $cmd"
         return
@@ -11117,6 +11271,14 @@ function _agent_is_currency_request --description "True if user wants currency c
     test -n "$(_agent_build_currency_cmd "$argv[1]")"
 end
 
+function _agent_is_open_url_request --description "True if user wants to open a URL in the browser (internal)"
+    test -n "$(_agent_build_open_url_cmd "$argv[1]")"
+end
+
+function _agent_is_timezone_request --description "True if user wants timezone conversion (internal)"
+    test -n "$(_agent_build_timezone_cmd "$argv[1]")"
+end
+
 function _agent_is_kalshi_request --description "True if user wants Kalshi prediction market data (internal)"
     set -l clean (string lower (string trim -- "$argv[1]"))
     string match -qr '(?i)\b(kalshi|prediction\s+market|kalshi\s+odds|kalshi\s+predictions?)\b' "$clean"
@@ -11151,9 +11313,27 @@ end
 function _agent_build_currency_cmd --description "Build currency_convert args from NL (internal)"
     set -l cmd "$argv[1]"
     set -l py (_arka_python)
-    set -l rest ($py (_arka_py_script arka_currency.py) parse -- $cmd 2>/dev/null)
+    set -l rest ($py (_arka_py_script arka_currency.py) parse "$cmd" 2>/dev/null)
     if test (count $rest) -gt 0
         echo "currency_convert $rest"
+    end
+end
+
+function _agent_build_open_url_cmd --description "Build open_url args from NL (internal)"
+    set -l cmd "$argv[1]"
+    set -l py (_arka_python)
+    set -l rest ($py (_arka_py_script arka_open_url.py) parse "$cmd" 2>/dev/null)
+    if test (count $rest) -gt 0
+        echo "open_url $rest"
+    end
+end
+
+function _agent_build_timezone_cmd --description "Build timezone_convert args from NL (internal)"
+    set -l cmd "$argv[1]"
+    set -l py (_arka_python)
+    set -l rest ($py (_arka_py_script arka_timezone_convert.py) parse "$cmd" 2>/dev/null)
+    if test (count $rest) -gt 0
+        echo "timezone_convert "(string escape --style=script -- $cmd)
     end
 end
 
@@ -11237,8 +11417,16 @@ function _agent_offline_route_cmd --description "Full symbolic NL to skill comma
         echo (_agent_build_mode_cmd "$cmd")
         return 0
     end
+    if _agent_is_timezone_request "$cmd"
+        echo (_agent_build_timezone_cmd "$cmd")
+        return 0
+    end
     if _agent_is_currency_request "$cmd"
         echo (_agent_build_currency_cmd "$cmd")
+        return 0
+    end
+    if _agent_is_open_url_request "$cmd"
+        echo (_agent_build_open_url_cmd "$cmd")
         return 0
     end
     if _agent_is_remind_request "$cmd"
@@ -11275,6 +11463,14 @@ function _agent_offline_route_cmd --description "Full symbolic NL to skill comma
     end
     if _agent_is_fact_check_request "$cmd"
         echo (_agent_build_fact_check_cmd "$cmd")
+        return 0
+    end
+    if _agent_is_quiz_practice_request "$cmd"
+        echo (_agent_build_quiz_practice_cmd "$cmd")
+        return 0
+    end
+    if _agent_is_council_request "$cmd"
+        echo (_agent_build_council_cmd "$cmd")
         return 0
     end
     if _agent_is_astronomy_request "$cmd"
@@ -11412,6 +11608,10 @@ function _agent_offline_route_cmd --description "Full symbolic NL to skill comma
         echo (_agent_route_stt_install "$cmd")
         return 0
     end
+    if _agent_is_interesting_fact_request "$cmd"
+        echo "interesting_fact $cmd"
+        return 0
+    end
     if _agent_is_platform_howto_question "$cmd"
         echo "platform_howto $cmd"
         return 0
@@ -11514,6 +11714,32 @@ function _agent_build_fact_check_cmd --description "Build fact_check args from N
     set -l rest ($py (_arka_py_script arka_fact_check.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
     if test (count $rest) -gt 0
         echo "fact_check $rest"
+    end
+end
+
+function _agent_is_quiz_practice_request --description "True if user wants quiz practice (internal)"
+    test -n "$(_agent_build_quiz_practice_cmd "$argv[1]")"
+end
+
+function _agent_build_quiz_practice_cmd --description "Build quiz_practice args from NL (internal)"
+    set -l cmd "$argv[1]"
+    set -l py (_arka_python)
+    set -l rest ($py (_arka_py_script arka_quiz_practice.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
+    if test (count $rest) -gt 0
+        echo "quiz_practice $rest"
+    end
+end
+
+function _agent_is_council_request --description "True if user wants Arka Council deliberation (internal)"
+    test -n "$(_agent_build_council_cmd "$argv[1]")"
+end
+
+function _agent_build_council_cmd --description "Build council args from NL (internal)"
+    set -l cmd "$argv[1]"
+    set -l py (_arka_python)
+    set -l rest ($py (_arka_py_script arka_council.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
+    if test (count $rest) -gt 0
+        echo "council $rest"
     end
 end
 
@@ -11997,6 +12223,9 @@ function _agent_looks_like_shell_cmd --description "True if input is likely a sh
     set -l cmd (string trim -- "$argv[1]")
     set -l words (string split " " "$cmd")
     test (count $words) -eq 0; and return 1
+    if _agent_is_interesting_fact_request "$cmd"
+        return 1
+    end
     if _agent_is_general_chat "$cmd"
         return 1
     end
@@ -13490,6 +13719,40 @@ function platform_howto --description "Platform-specific app/window UI how-to (s
     return 1
 end
 
+function interesting_fact --description "Share one surprising interesting fact via LLM (no web search)"
+    if test (count $argv) -eq 0
+        echo "Usage: interesting_fact <request>"
+        echo "Example: interesting_fact tell me something interesting"
+        echo "Example: interesting_fact something cool about space"
+        return 1
+    end
+    if not _arka_ensure_venv
+        return 1
+    end
+    set -l request (_agent_with_voice_context (string join " " $argv))
+    _arka_ui_header "$request" query
+    set -l py (_arka_python)
+    set -l answer ($py -m arka.agent.interesting_fact $argv 2>/dev/null)
+    if test -n "$answer"
+        _arka_print_answer_block "$answer"
+        return 0
+    end
+    set -l system_text "You share one surprising, true, interesting fact. Write 2-4 short sentences suitable for text-to-speech. Pick a varied topic unless the user asks for a specific one. Be accurate and engaging; no disclaimers or preamble."
+    set -l user_text ($py -c "
+from arka.routing.interesting_fact import interesting_fact_user_prompt
+import sys
+print(interesting_fact_user_prompt(sys.argv[1]))
+" (string escape --style=script -- $request) 2>/dev/null)
+    test -z "$user_text"; and set user_text "Share something interesting from any topic."
+    set answer (_arka_capture_output _agent_llm_complete "$system_text" "$user_text")
+    if test -n "$answer"
+        _arka_print_answer_block "$answer"
+        return 0
+    end
+    echo (set_color red)"Could not get a fact (check GEMINI_API_KEY or GROQ_API_KEY)"(set_color normal)
+    return 1
+end
+
 function web_answer --description "Answer factual questions via web lookup + AI (auto deep search when needed)"
     if test (count $argv) -eq 0
         echo "Usage: web_answer [--deep] [--no-session] <question>"
@@ -13709,6 +13972,8 @@ function _agent_skill_matches_request --description "True if skill fits the user
             _agent_is_knowledge_question "$cmd"
         case platform_howto
             _agent_is_platform_howto_question "$cmd"
+        case interesting_fact trivia fun_fact
+            _agent_is_interesting_fact_request "$cmd"
         case web_essay
             _agent_is_essay_request "$cmd"
         case app_usage
@@ -13762,7 +14027,10 @@ function _agent_skill_matches_request --description "True if skill fits the user
         case stop_music
             string match -qr '(?i)^(stop|pause|kill)\s+(?:the\s+|this\s+|playing\s+)?(?:song|songs|music|audio|playback|spotify|it)\b' "$cmd"
         case play_youtube
-            string match -qr '(?i)(youtube|watch\s+video)' "$cmd"
+            string match -qr '(?i)(play\s+.*youtube|play\s+(?:a\s+|an\s+)?(?:video|episode|anime)|watch\s+(?:a\s+|an\s+)?(?:video|episode))' "$cmd"
+            and not _agent_is_open_url_request "$cmd"
+        case open_url open browse
+            _agent_is_open_url_request "$cmd"
         case play_movie
             string match -qr '(?i)(play\s+|movie|film|rplay)' "$cmd"
         case browse_web
@@ -13811,6 +14079,10 @@ function _agent_skill_matches_request --description "True if skill fits the user
             _agent_is_flow_request "$cmd"
         case fact_check fact-check factcheck factchecker
             _agent_is_fact_check_request "$cmd"
+        case quiz_practice quiz quiz-practice
+            _agent_is_quiz_practice_request "$cmd"
+        case council deliberate
+            _agent_is_council_request "$cmd"
         case astronomy
             _agent_is_astronomy_request "$cmd"
         case metallurgy
@@ -14132,6 +14404,20 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
             return
         end
     end
+    if _agent_is_quiz_practice_request "$cmd"
+        set -l parts (_agent_build_quiz_practice_cmd "$cmd")
+        if test -n "$parts"
+            echo "skill|$parts|Infinite quiz practice with memory"
+            return
+        end
+    end
+    if _agent_is_council_request "$cmd"
+        set -l parts (_agent_build_council_cmd "$cmd")
+        if test -n "$parts"
+            echo "skill|$parts|Multi-persona deliberation chamber"
+            return
+        end
+    end
     if _agent_is_astronomy_request "$cmd"
         set -l parts (_agent_build_astronomy_cmd "$cmd")
         if test -n "$parts"
@@ -14390,6 +14676,20 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
             return
         end
     end
+    if _agent_is_quiz_practice_request "$cmd"
+        set -l parts (_agent_build_quiz_practice_cmd "$cmd")
+        if test -n "$parts"
+            echo "skill|$parts|Infinite quiz practice with memory"
+            return
+        end
+    end
+    if _agent_is_council_request "$cmd"
+        set -l parts (_agent_build_council_cmd "$cmd")
+        if test -n "$parts"
+            echo "skill|$parts|Multi-persona deliberation chamber"
+            return
+        end
+    end
     if _agent_is_astronomy_request "$cmd"
         set -l parts (_agent_build_astronomy_cmd "$cmd")
         if test -n "$parts"
@@ -14584,6 +14884,13 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         echo "skill|$sl|Travel survival phrases"
         return
     end
+    if _agent_is_timezone_request "$cmd"
+        set -l tz (_agent_build_timezone_cmd "$cmd")
+        if test -n "$tz"
+            echo "skill|$tz|Timezone conversion"
+            return
+        end
+    end
     if _agent_is_currency_request "$cmd"
         set -l cc (_agent_build_currency_cmd "$cmd")
         if test -n "$cc"
@@ -14595,6 +14902,10 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         set -l pq (string replace -r -i '^price_check\s+' '' "$cmd" | string trim)
         test -z "$pq"; and set pq $cmd
         echo "skill|price_check $pq|Product price lookup"
+        return
+    end
+    if _agent_is_interesting_fact_request "$cmd"
+        echo "skill|interesting_fact $cmd|Surprising trivia fact via LLM"
         return
     end
     if _agent_is_platform_howto_question "$cmd"
@@ -14761,7 +15072,12 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         echo "skill|wifi_info|Current Wi-Fi network"
         return
     end
-    if string match -qr '(?i)(play.*youtube|youtube|watch\s+(?:a\s+|an\s+)?(?:video|episode))' "$clean"
+    if _agent_is_open_url_request "$cmd"
+        echo "skill|open_url|Open URL in browser"
+        return
+    end
+    if string match -qr '(?i)(play.*youtube|play\s+(?:a\s+|an\s+)?(?:video|episode|anime)|watch\s+(?:a\s+|an\s+)?(?:video|episode))' "$clean"
+        and not _agent_is_open_url_request "$cmd"
         echo "skill|play_youtube|YouTube playback"
         return
     end
@@ -14935,6 +15251,10 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         echo "skill|classify_files|Auto-sort files in Downloads by type"
         return
     end
+    if _agent_is_interesting_fact_request "$cmd"
+        echo "skill|interesting_fact $cmd|Surprising trivia fact via LLM"
+        return
+    end
     if _agent_is_platform_howto_question "$cmd"
         echo "skill|platform_howto $cmd|Platform-specific app/UI how-to"
         return
@@ -14980,6 +15300,10 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
             echo "skill|$ec|Simulated Elon-inspired persona chat"
             return
         end
+    end
+    if _agent_is_interesting_fact_request "$cmd"
+        echo "skill|interesting_fact $cmd|Surprising trivia fact via LLM"
+        return
     end
     if _agent_is_general_chat "$cmd"
         set -l route (_agent_route_general_chat "$cmd")
@@ -15071,6 +15395,16 @@ function _agent_correct_interpretation --description "Fix bad LLM skill picks us
         return
     end
 
+    if _agent_is_quiz_practice_request "$cmd"
+        echo (_agent_build_quiz_practice_cmd "$cmd")
+        return
+    end
+
+    if _agent_is_council_request "$cmd"
+        echo (_agent_build_council_cmd "$cmd")
+        return
+    end
+
     if _agent_is_astronomy_request "$cmd"
         echo (_agent_build_astronomy_cmd "$cmd")
         return
@@ -15150,6 +15484,10 @@ function _agent_correct_interpretation --description "Fix bad LLM skill picks us
             echo "files_preference_help $cmd"
             return
         end
+        if _agent_is_interesting_fact_request "$cmd"
+            echo "interesting_fact $cmd"
+            return
+        end
         if _agent_is_platform_howto_question "$cmd"
             echo "platform_howto $cmd"
             return
@@ -15195,6 +15533,10 @@ function _agent_correct_interpretation --description "Fix bad LLM skill picks us
             echo (_agent_route_system_info "$cmd")
             return
         end
+        if _agent_is_interesting_fact_request "$cmd"
+            echo "interesting_fact $cmd"
+            return
+        end
         if _agent_is_platform_howto_question "$cmd"
             echo "platform_howto $cmd"
             return
@@ -15202,6 +15544,10 @@ function _agent_correct_interpretation --description "Fix bad LLM skill picks us
     end
 
     if string match -qr '(?i)^search_web\b' "$interpreted"
+        if _agent_is_interesting_fact_request "$cmd"
+            echo "interesting_fact $cmd"
+            return
+        end
         if _agent_is_platform_howto_question "$cmd"
             echo "platform_howto $cmd"
             return
@@ -15270,6 +15616,11 @@ function _agent_correct_interpretation --description "Fix bad LLM skill picks us
         return
     end
 
+    if _agent_is_interesting_fact_request "$cmd"
+        echo "interesting_fact $cmd"
+        return
+    end
+
     if _agent_is_platform_howto_question "$cmd"
         echo "platform_howto $cmd"
         return
@@ -15316,6 +15667,10 @@ function _agent_correct_interpretation --description "Fix bad LLM skill picks us
         return
     end
 
+    if _agent_is_interesting_fact_request "$cmd"
+        echo "interesting_fact $cmd"
+        return
+    end
     if _agent_is_general_chat "$cmd"
         echo (_agent_route_general_chat "$cmd")
         return
@@ -17203,6 +17558,7 @@ function agent --description "Run commands safely: executes safe commands automa
         echo (set_color --bold yellow)"🌐 Web & Navigation:"(set_color normal)
         echo "  search_web <query>     - Open a google search for <query> in your browser"
         echo "  open_urls <url1> ...   - Open one or more URLs in your default browser"
+        echo "  open_url <site>        - Open youtube, github.com, or any URL in your browser"
         echo "  open_finance           - Open top financial/market tracking websites"
         echo "  open_news              - Open top global and local news websites"
         echo ""
@@ -17240,6 +17596,7 @@ function agent --description "Run commands safely: executes safe commands automa
         echo "  crypto_price [coins]   - Get real-time crypto prices (BTC, ETH, etc.) beautifully"
         echo "  currency_convert <amt> <from> <to> - Live currency conversion (USD, EUR, INR, …)"
         echo "  convert / currency       - Aliases for currency_convert"
+        echo "  timezone_convert         - Convert datetimes between timezones (PDT, IST, UTC, …)"
         echo "  kalshi search <topic>    - Kalshi prediction market search + odds"
         echo "  kalshi market <TICKER>   - One Kalshi market quote"
         echo "  kalshi trending          - Top Kalshi markets by 24h volume"
@@ -17415,8 +17772,18 @@ function agent --description "Run commands safely: executes safe commands automa
         set route_source offline
     end
 
+    if test -z "$interpreted"; and _agent_is_timezone_request "$cmd"
+        set interpreted (_agent_build_timezone_cmd "$cmd")
+        set route_source offline
+    end
+
     if test -z "$interpreted"; and _agent_is_currency_request "$cmd"
         set interpreted (_agent_build_currency_cmd "$cmd")
+        set route_source offline
+    end
+
+    if test -z "$interpreted"; and _agent_is_open_url_request "$cmd"
+        set interpreted (_agent_build_open_url_cmd "$cmd")
         set route_source offline
     end
 
@@ -17457,6 +17824,16 @@ function agent --description "Run commands safely: executes safe commands automa
 
     if test -z "$interpreted"; and _agent_is_fact_check_request "$cmd"
         set interpreted (_agent_build_fact_check_cmd "$cmd")
+        set route_source offline
+    end
+
+    if test -z "$interpreted"; and _agent_is_quiz_practice_request "$cmd"
+        set interpreted (_agent_build_quiz_practice_cmd "$cmd")
+        set route_source offline
+    end
+
+    if test -z "$interpreted"; and _agent_is_council_request "$cmd"
+        set interpreted (_agent_build_council_cmd "$cmd")
         set route_source offline
     end
 
@@ -17583,6 +17960,7 @@ function agent --description "Run commands safely: executes safe commands automa
         set route_source offline
     else if string match -qr '(?i)(play\s+.*youtube|play\s+(?:a\s+|an\s+)?(?:video|episode|anime)|watch\s+(?:a\s+|an\s+)?|watch\s+.*youtube)' "$clean_cmd"
         and not string match -qr '(?i)(summarize|summary|transcript|research|digest|caption|download|transcribe|playlist)' "$clean_cmd"
+        and not _agent_is_open_url_request "$cmd"
         set -l youtube_query (string replace -r -i '^play\s+(?:a\s+|an\s+)?(?:video\s+|episode\s+|anime\s+)?(?:on\s+)?youtube(?:\s+of)?\s*' '' "$cmd")
         set youtube_query (string replace -r -i '^play\s+(?:video\s+|episode\s+|anime\s+)?(?:a\s+|an\s+)?' '' "$youtube_query")
         set youtube_query (string replace -r -i '\s+on\s+youtube$' '' "$youtube_query")
@@ -17733,6 +18111,16 @@ function agent --description "Run commands safely: executes safe commands automa
         if test -n "$interpreted"
             set route_source offline
         end
+    else if _agent_is_quiz_practice_request "$cmd"
+        set interpreted (_agent_build_quiz_practice_cmd "$cmd")
+        if test -n "$interpreted"
+            set route_source offline
+        end
+    else if _agent_is_council_request "$cmd"
+        set interpreted (_agent_build_council_cmd "$cmd")
+        if test -n "$interpreted"
+            set route_source offline
+        end
     else if _agent_is_astronomy_request "$cmd"
         set interpreted (_agent_build_astronomy_cmd "$cmd")
         if test -n "$interpreted"
@@ -17813,6 +18201,12 @@ function agent --description "Run commands safely: executes safe commands automa
         set route_source offline
     else if _agent_is_fact_check_request "$clean_cmd"
         set interpreted (_agent_build_fact_check_cmd "$cmd")
+        set route_source offline
+    else if _agent_is_quiz_practice_request "$clean_cmd"
+        set interpreted (_agent_build_quiz_practice_cmd "$cmd")
+        set route_source offline
+    else if _agent_is_council_request "$clean_cmd"
+        set interpreted (_agent_build_council_cmd "$cmd")
         set route_source offline
     else if _agent_is_astronomy_request "$clean_cmd"
         set interpreted (_agent_build_astronomy_cmd "$cmd")
@@ -18030,6 +18424,9 @@ function agent --description "Run commands safely: executes safe commands automa
     else if _agent_is_survival_lang_request "$cmd"
         set interpreted (_agent_build_survival_lang_cmd "$cmd")
         set route_source offline
+    else if _agent_is_timezone_request "$cmd"
+        set interpreted (_agent_build_timezone_cmd "$cmd")
+        set route_source offline
     else if _agent_is_currency_request "$cmd"
         set interpreted (_agent_build_currency_cmd "$cmd")
         set route_source offline
@@ -18037,6 +18434,9 @@ function agent --description "Run commands safely: executes safe commands automa
         set -l pq (string replace -r -i '^price_check\s+' '' "$cmd" | string trim)
         test -z "$pq"; and set pq $cmd
         set interpreted "price_check $pq"
+        set route_source offline
+    else if _agent_is_interesting_fact_request "$cmd"
+        set interpreted "interesting_fact $cmd"
         set route_source offline
     else if _agent_is_platform_howto_question "$cmd"
         set interpreted "platform_howto $cmd"
@@ -18124,6 +18524,9 @@ function agent --description "Run commands safely: executes safe commands automa
         set interpreted "qr_code $args"
     else if string match -qr '(crypto|bitcoin|ethereum|solana|btc)' "$clean_cmd"
         set interpreted "crypto_price $args"
+    else if _agent_is_timezone_request "$cmd"
+        set interpreted (_agent_build_timezone_cmd "$cmd")
+        set route_source offline
     else if _agent_is_currency_request "$cmd"
         set interpreted (_agent_build_currency_cmd "$cmd")
         set route_source offline
@@ -18391,7 +18794,9 @@ function agent --description "Run commands safely: executes safe commands automa
     else if string match -qr '(open|launch|start)\s+(.+)' "$clean_cmd"
         set -l match_groups (string match -r '(?:open|launch|start)\s+(.+)' "$clean_cmd")
         set -l target_app $match_groups[2]
-        if not string match -qr '(project|news|finance|url)' "$target_app"
+        if _agent_is_open_url_request "$cmd"
+            set interpreted (_agent_build_open_url_cmd "$cmd")
+        else if not string match -qr '(project|news|finance|url)' "$target_app"
             set interpreted "open_app $target_app"
         end
     end
@@ -18446,7 +18851,9 @@ function agent --description "Run commands safely: executes safe commands automa
 
     # 5. Handle Interpreted Result
     if test -n "$interpreted"; and test "$interpreted" != "impossible"
-        echo (set_color blue)"→ Interpreted: $interpreted"(set_color normal)
+        if _arka_routing_trace_enabled
+            echo (set_color blue)"→ Interpreted: $interpreted"(set_color normal)
+        end
         _agent_trace_log "$cmd" "$interpreted" "$route_source"
         _agent_dispatch "$interpreted"
     else if _agent_is_usage_question "$cmd"
@@ -18533,6 +18940,14 @@ function agent --description "Run commands safely: executes safe commands automa
         set -l fc_cmd (_agent_build_fact_check_cmd "$cmd")
         echo (set_color yellow)"💡 [Fact check → $fc_cmd]"(set_color normal)
         _agent_dispatch_one "$fc_cmd"
+    else if _agent_is_quiz_practice_request "$cmd"
+        set -l quiz_cmd (_agent_build_quiz_practice_cmd "$cmd")
+        echo (set_color yellow)"💡 [Quiz → $quiz_cmd]"(set_color normal)
+        _agent_dispatch_one "$quiz_cmd"
+    else if _agent_is_council_request "$cmd"
+        set -l council_cmd (_agent_build_council_cmd "$cmd")
+        echo (set_color yellow)"💡 [Council → $council_cmd]"(set_color normal)
+        _agent_dispatch_one "$council_cmd"
     else if _agent_is_astronomy_request "$cmd"
         set -l astro_cmd (_agent_build_astronomy_cmd "$cmd")
         echo (set_color yellow)"💡 [Astronomy → $astro_cmd]"(set_color normal)
@@ -18566,13 +18981,20 @@ function agent --description "Run commands safely: executes safe commands automa
     else if _agent_is_advisory_question "$cmd"
         echo (set_color yellow)"💡 [Advisory question → AI]"(set_color normal)
         agent_ask $argv
+    else if _agent_is_interesting_fact_request "$cmd"
+        set -l route "interesting_fact $cmd"
+        set -l chat_skill interesting_fact
+        echo (set_color yellow)"💡 [Chat → $chat_skill]"(set_color normal)
+        _agent_dispatch_one "$route"
     else if _agent_is_general_chat "$cmd"
         set -l route (_agent_route_general_chat "$cmd")
         set -l chat_skill (string split -f 1 " " -- "$route")
         echo (set_color yellow)"💡 [Chat → $chat_skill]"(set_color normal)
         _agent_dispatch_one "$route"
     else if _agent_looks_like_shell_cmd "$cmd"
-        echo (set_color cyan)"▶ Running: $cmd"(set_color normal)
+        if _arka_routing_trace_enabled
+            echo (set_color cyan)"▶ Running: $cmd"(set_color normal)
+        end
         _agent_exec_shell_cmd "$cmd"
         return $status
     else
