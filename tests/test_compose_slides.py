@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import zipfile
 from pathlib import Path
@@ -10,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from arka.media.compose_slides import (
+    EMU_PER_INCH,
     compose,
     convert_deck,
     detect_format,
@@ -19,6 +21,9 @@ from arka.media.compose_slides import (
     normalize_format,
     normalize_slide_style,
     parse_formats_arg,
+    _pptx_slide_dimensions,
+    _prepare_pptx_image_stream,
+    _sanitize_ooxml_text,
     _slides_scene_bounds,
     _slides_script_needs_shortening,
     _template_slides_script,
@@ -474,8 +479,70 @@ def test_pptx_export_valid_ooxml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     with zipfile.ZipFile(out) as zf:
         names = zf.namelist()
         assert "[Content_Types].xml" in names
-        assert any(name.endswith("presentation.xml") for name in names)
+        assert "ppt/presentation.xml" in names
+        assert "_rels/.rels" in names
+        assert any(name.startswith("ppt/slides/slide") for name in names)
         assert zf.testzip() is None
+
+
+def test_keynote_compatible_pptx(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """PPTX must use standard slide size and pass stricter OOXML checks Keynote expects."""
+    pptx = pytest.importorskip("pptx")
+    from pptx import Presentation
+
+    _ = pptx  # noqa: F841
+    monkeypatch.setenv("OPEN_SLIDES", "0")
+    monkeypatch.delenv("UNSPLASH_ACCESS_KEY", raising=False)
+    monkeypatch.delenv("PEXELS_API_KEY", raising=False)
+    monkeypatch.delenv("PIXABAY_API_KEY", raising=False)
+
+    scenes = _template_slides_script("AI infrastructure", style="pitch")
+    scenes[0].narration = "Notes with café, résumé, and — em dash."
+    out = tmp_path / "keynote-deck.pptx"
+    cfg = load_config()
+    batch = compose(scenes, output=out, topic="AI infrastructure", cfg=cfg, formats=["pptx"])
+    assert batch.saved == [out]
+    assert not batch.failed
+
+    _validate_pptx_file(out)
+
+    prs = Presentation(str(out))
+    w_in = prs.slide_width / EMU_PER_INCH
+    h_in = prs.slide_height / EMU_PER_INCH
+    assert 12.5 <= w_in <= 13.5
+    assert 7.0 <= h_in <= 8.0
+    assert abs((w_in / h_in) - (16 / 9)) < 0.05
+
+    slide_w, slide_h = _pptx_slide_dimensions(cfg)
+    assert prs.slide_width == slide_w
+    assert prs.slide_height == slide_h
+
+    with zipfile.ZipFile(out) as zf:
+        media = [n for n in zf.namelist() if n.startswith("ppt/media/")]
+        assert len(media) == len(scenes)
+        for name in media:
+            data = zf.read(name)
+            assert data[:8] == b"\x89PNG\r\n\x1a\n"
+            assert b"IEND" in data[-32:]
+
+    assert _sanitize_ooxml_text(scenes[0].narration) == scenes[0].narration
+
+
+def test_prepare_pptx_image_stream_reencodes_rgba(tmp_path: Path):
+    pytest.importorskip("PIL")
+    from PIL import Image
+
+    src = tmp_path / "rgba.png"
+    img = Image.new("RGBA", (32, 32), (10, 20, 30, 128))
+    img.save(src, "PNG")
+
+    stream = _prepare_pptx_image_stream(src)
+    data = stream.read()
+    assert data[:8] == b"\x89PNG\r\n\x1a\n"
+    assert b"IEND" in data[-32:]
+    with Image.open(io.BytesIO(data)) as out:
+        assert out.mode == "RGB"
+        assert out.size == (32, 32)
 
 
 def test_invalid_generation_does_not_write_file(

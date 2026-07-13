@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import base64
 import html as html_module
+import io
 import json
 import os
 import re
@@ -14,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+from xml.etree import ElementTree as ET
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -601,6 +603,41 @@ def _sanitize_ooxml_text(text: str) -> str:
     )
 
 
+EMU_PER_INCH = 914400
+# Keynote imports standard PowerPoint slide sizes; avoid mapping video pixels 1:1 to EMU.
+_PPTX_WIDESCREEN_WIDTH_IN = 13.333
+_PPTX_WIDESCREEN_HEIGHT_IN = 7.5
+_PPTX_MAX_SLIDE_INCHES = 14.0
+
+
+def _pptx_slide_dimensions(_cfg: VideoConfig | None = None) -> tuple[int, int]:
+    """Return (width_emu, height_emu) using standard 16:9 widescreen PowerPoint size."""
+    _require_pptx()
+    from pptx.util import Inches
+
+    return int(Inches(_PPTX_WIDESCREEN_WIDTH_IN)), int(Inches(_PPTX_WIDESCREEN_HEIGHT_IN))
+
+
+def _prepare_pptx_image_stream(path: Path) -> io.BytesIO:
+    """Re-encode a slide PNG as clean RGB for reliable OOXML / Keynote embedding."""
+    from arka.media.compose_video import _require_pillow
+
+    Image, *_ = _require_pillow()
+    with Image.open(path) as img:
+        if img.mode == "RGBA":
+            bg = Image.new("RGB", img.size, (255, 255, 255))
+            bg.paste(img, mask=img.split()[3])
+            rgb = bg
+        elif img.mode != "RGB":
+            rgb = img.convert("RGB")
+        else:
+            rgb = img.copy()
+        buf = io.BytesIO()
+        rgb.save(buf, format="PNG")
+        buf.seek(0)
+        return buf
+
+
 def _validate_slide_image(path: Path) -> None:
     if not path.is_file():
         raise ValueError(f"slide image missing: {path}")
@@ -617,6 +654,20 @@ def _validate_slide_image(path: Path) -> None:
             raise ValueError(f"slide image dimensions invalid: {img.width}x{img.height}")
 
 
+def _validate_pptx_media_bytes(name: str, data: bytes) -> None:
+    if len(data) < 24:
+        raise ValueError(f"media too small: {name}")
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        if b"IEND" not in data[-32:]:
+            raise ValueError(f"truncated PNG: {name}")
+        return
+    if data[:2] == b"\xff\xd8":
+        if b"\xff\xd9" not in data[-4:]:
+            raise ValueError(f"truncated JPEG: {name}")
+        return
+    raise ValueError(f"unsupported media type in {name}")
+
+
 def _validate_pptx_file(path: Path) -> None:
     data = path.read_bytes()
     if len(data) < 512:
@@ -627,15 +678,43 @@ def _validate_pptx_file(path: Path) -> None:
         names = zf.namelist()
         if "[Content_Types].xml" not in names:
             raise ValueError("missing [Content_Types].xml")
-        if not any(n.endswith("presentation.xml") for n in names):
+        if "ppt/presentation.xml" not in names:
             raise ValueError("missing ppt/presentation.xml")
+        if "_rels/.rels" not in names:
+            raise ValueError("missing package _rels/.rels")
+        if not any(n.startswith("ppt/slides/slide") and n.endswith(".xml") for n in names):
+            raise ValueError("missing ppt/slides/slide*.xml")
         bad = zf.testzip()
         if bad:
             raise ValueError(f"corrupt zip entry: {bad}")
+        for name in names:
+            if not name.endswith(".xml"):
+                continue
+            raw = zf.read(name)
+            text = raw.decode("utf-8")
+            illegal = [c for c in text if ord(c) < 0x20 and c not in "\t\n\r"]
+            if illegal:
+                raise ValueError(f"illegal XML characters in {name}")
+            ET.fromstring(raw)
+        for name in names:
+            if name.startswith("ppt/media/"):
+                _validate_pptx_media_bytes(name, zf.read(name))
     Presentation, _ = _require_pptx()
     prs = Presentation(str(path))
     if len(prs.slides) < 1:
         raise ValueError("pptx contains no slides")
+    w_in = prs.slide_width / EMU_PER_INCH
+    h_in = prs.slide_height / EMU_PER_INCH
+    if w_in > _PPTX_MAX_SLIDE_INCHES or h_in > _PPTX_MAX_SLIDE_INCHES:
+        raise ValueError(
+            f"slide size {w_in:.2f}x{h_in:.2f} in exceeds Keynote-safe maximum "
+            f"({_PPTX_MAX_SLIDE_INCHES} in)"
+        )
+    if w_in < 5.0 or h_in < 5.0:
+        raise ValueError(f"slide size {w_in:.2f}x{h_in:.2f} in is too small")
+    aspect = w_in / h_in
+    if not (1.2 <= aspect <= 1.9):
+        raise ValueError(f"non-standard slide aspect ratio {aspect:.2f}")
 
 
 def _validate_pdf_file(path: Path) -> None:
@@ -910,25 +989,34 @@ def _build_pptx(
     topic: str,
     cfg: VideoConfig,
 ) -> Path:
-    Presentation, Emu = _require_pptx()
+    Presentation, _ = _require_pptx()
     for png_path, _ in slide_images:
         _validate_slide_image(png_path)
 
+    slide_w, slide_h = _pptx_slide_dimensions(cfg)
+
     def _write(dest: Path) -> None:
         prs = Presentation()
-        prs.slide_width = Emu(cfg.width * 9525)
-        prs.slide_height = Emu(cfg.height * 9525)
+        prs.slide_width = slide_w
+        prs.slide_height = slide_h
         blank_layout = prs.slide_layouts[6]
 
         for png_path, scene in slide_images:
             slide = prs.slides.add_slide(blank_layout)
-            slide.shapes.add_picture(
-                str(png_path),
-                left=0,
-                top=0,
-                width=prs.slide_width,
-                height=prs.slide_height,
-            )
+            try:
+                stream = _prepare_pptx_image_stream(png_path)
+                slide.shapes.add_picture(
+                    stream,
+                    left=0,
+                    top=0,
+                    width=prs.slide_width,
+                    height=prs.slide_height,
+                )
+            except Exception as exc:
+                print(
+                    f"  Skipping slide image ({png_path.name}): {exc}",
+                    file=sys.stderr,
+                )
             notes = _sanitize_ooxml_text((scene.narration or scene.body or "").strip())
             if notes:
                 slide.notes_slide.notes_text_frame.text = notes
