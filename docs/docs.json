@@ -201,6 +201,14 @@
             ]
           },
           {
+            "group": "学习与工具",
+            "icon": "sparkles",
+            "pages": [
+              "cn/guides/bookmarks",
+              "cn/guides/clipboard-history"
+            ]
+          },
+          {
             "group": "集成",
             "icon": "plug",
             "pages": [
@@ -231,6 +239,7 @@
               "cn/guides/voice",
               "cn/guides/goal-agent",
               "cn/guides/repo-map",
+              "cn/guides/repo-health",
               "cn/guides/openclaw-features",
               "cn/guides/hermes-features",
               "cn/guides/professions"
@@ -241,6 +250,7 @@
             "icon": "wrench",
             "pages": [
               "cn/guides/observability",
+              "cn/guides/docker-status",
               "cn/guides/testing"
             ]
           },
