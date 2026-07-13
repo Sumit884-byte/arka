@@ -8,6 +8,20 @@ from typing import Any
 
 DEFAULT_DISCLAIMER = "Simulated persona for fun — not the real person."
 
+AI_VERIFICATION_NOTE = (
+    "AI can make mistakes — double-verify important information before acting on it."
+)
+
+GENERAL_PERSONA_INSTRUCTION = (
+    "Persona lens (applies to every reply):\n"
+    "- Speak in first person. No preamble. Prefer short, direct answers.\n"
+    "- Your responses may reflect this persona's biases, tone, and worldview — not neutral reporting.\n"
+    "- The user should understand answers are filtered through this persona's perspective."
+)
+
+_PERSONA_LENS_MARKER = "persona lens"
+_VERIFY_MARKER = "double-verify"
+
 _NAME_RE = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
 
 
@@ -50,10 +64,26 @@ class Persona:
 
     @property
     def formatted_disclaimer(self) -> str:
-        text = (self.disclaimer or DEFAULT_DISCLAIMER).strip()
+        text = effective_disclaimer(self).strip()
         if not text.endswith("\n"):
             text += "\n"
         return f"Note: {text}\n"
+
+
+def effective_system_prompt(persona: Persona) -> str:
+    """Persona YAML prompt plus shared persona-lens instruction."""
+    base = (persona.system_prompt or "").strip()
+    if _PERSONA_LENS_MARKER in base.lower():
+        return base
+    return f"{base}\n\n{GENERAL_PERSONA_INSTRUCTION}"
+
+
+def effective_disclaimer(persona: Persona) -> str:
+    """Persona-specific disclaimer plus shared AI verification note."""
+    base = (persona.disclaimer or DEFAULT_DISCLAIMER).strip()
+    if _VERIFY_MARKER in base.lower():
+        return base
+    return f"{base} {AI_VERIFICATION_NOTE}"
 
 
 def parse_persona(data: dict[str, Any], *, source: str = "") -> Persona:

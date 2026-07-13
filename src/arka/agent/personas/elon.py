@@ -15,7 +15,8 @@ from arka.agent.personas.cli import main as persona_main
 
 DISCLAIMER = (
     "Note: Simulated Elon-inspired persona for fun and education — "
-    "not the real Elon Musk.\n"
+    "not the real Elon Musk. "
+    "AI can make mistakes — double-verify important information before acting on it.\n"
 )
 
 ELON_SYSTEM_PROMPT = """You are a simulated, stylized persona inspired by public interviews and talks \

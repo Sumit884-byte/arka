@@ -369,10 +369,16 @@ def cmd_models(args: argparse.Namespace) -> int:
         for model_id in live:
             print(f"ollama\t{model_id}\tlive")
         return 0
+    include_all = bool(getattr(args, "all", False))
     for provider, model_id in ordered_model_candidates(
         task=args.task or None,
         skill=getattr(args, "skill", None) or None,
     ):
+        if not include_all:
+            if not provider_available(provider):
+                continue
+            if _model_exhausted(provider, model_id):
+                continue
         ok = provider_available(provider)
         mark = "ok" if ok else "skip"
         ex = "exhausted" if _model_exhausted(provider, model_id) else "ready"
@@ -381,17 +387,31 @@ def cmd_models(args: argparse.Namespace) -> int:
 
 
 def cmd_providers(args: argparse.Namespace) -> int:
+    from arka.llm.provider_select import detect_provider_models
     from arka.llm.providers import provider_catalog_models, provider_specs
 
     show_models = getattr(args, "models", False)
+    include_all = bool(getattr(args, "all", False))
     if show_models:
-        print("slug\tdisplay_name\tconfigured\tkind\tdefault_model\tmodels")
+        print("slug\tdisplay_name\tconfigured\tkind\tdefault_model\tmodels\tsource")
         for spec in provider_specs():
             ok = "yes" if provider_available(spec.slug) else "no"
-            models = ",".join(provider_catalog_models(spec))
+            if include_all or not provider_available(spec.slug):
+                models = provider_catalog_models(spec)
+                source = "catalog"
+            else:
+                models, source = detect_provider_models(
+                    spec.slug,
+                    include_live=True,
+                    include_all=include_all,
+                )
+                if not models:
+                    models = provider_catalog_models(spec)
+                    source = "catalog"
+            model_text = ",".join(models)
             print(
                 f"{spec.slug}\t{spec.display_name}\t{ok}\t{spec.kind}\t"
-                f"{spec.default_model}\t{models}"
+                f"{spec.default_model}\t{model_text}\t{source}"
             )
         return 0
 
@@ -580,6 +600,11 @@ def main() -> int:
         help="List installed Ollama models from /api/tags",
     )
     p_models.add_argument("--refresh", action="store_true", help="Bypass live model list cache")
+    p_models.add_argument(
+        "--all",
+        action="store_true",
+        help="Include unavailable providers and exhausted models in fallback chain",
+    )
     p_models.set_defaults(func=cmd_models)
 
     p_active = sub.add_parser("active-model", help="Show last-used or preferred LLM model")
@@ -592,7 +617,12 @@ def main() -> int:
     p_providers.add_argument(
         "--models",
         action="store_true",
-        help="Include default model catalog per provider",
+        help="Include detected model list per provider",
+    )
+    p_providers.add_argument(
+        "--all",
+        action="store_true",
+        help="Include static catalog models not in live lists",
     )
     p_providers.set_defaults(func=cmd_providers)
 

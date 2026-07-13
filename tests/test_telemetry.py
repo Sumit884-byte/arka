@@ -71,9 +71,10 @@ def test_collector_available_respects_otel_sdk_disabled(monkeypatch, capsys):
     assert "OTLP collector unreachable" not in capsys.readouterr().err
 
 
-def test_unreachable_endpoint_disables_setup(monkeypatch):
+def test_unreachable_endpoint_disables_setup(monkeypatch, capsys):
     monkeypatch.setenv("OTEL_TRACES_ENABLED", "1")
     monkeypatch.setenv("SIGNOZ_ENDPOINT", "http://localhost:4318")
+    monkeypatch.delenv("ARKA_TELEMETRY_VERBOSE", raising=False)
 
     from importlib import reload
 
@@ -93,6 +94,27 @@ def test_unreachable_endpoint_disables_setup(monkeypatch):
         assert isinstance(current, tracing._NoOpSpan)
 
     assert tracing._tracer is None
+    assert otlp.otel_sdk_disabled() is True
+    assert "OTLP collector unreachable" not in capsys.readouterr().err
+
+
+def test_unreachable_endpoint_warns_when_verbose(monkeypatch, capsys):
+    monkeypatch.setenv("OTEL_TRACES_ENABLED", "1")
+    monkeypatch.setenv("SIGNOZ_ENDPOINT", "http://localhost:4318")
+    monkeypatch.setenv("ARKA_TELEMETRY_VERBOSE", "1")
+
+    from importlib import reload
+
+    import arka.telemetry._otlp as otlp
+
+    reload(otlp)
+    otlp.reset_collector_probe_cache()
+    monkeypatch.setattr(otlp, "endpoint_reachable", lambda *_a, **_k: False)
+
+    assert otlp.collector_available() is False
+    err = capsys.readouterr().err
+    assert "OTLP collector unreachable" in err
+    assert otlp.otel_sdk_disabled() is True
 
 
 def test_spans_enabled_with_signoz_endpoint(monkeypatch):
@@ -101,8 +123,11 @@ def test_spans_enabled_with_signoz_endpoint(monkeypatch):
 
     from importlib import reload
 
+    import arka.telemetry._otlp as otlp
     import arka.telemetry.tracing as tracing
 
+    reload(otlp)
+    otlp.reset_collector_probe_cache()
     reload(tracing)
     from arka.telemetry import spans_enabled
 

@@ -30,6 +30,7 @@ def run_script(script: str, args: list[str] | None = None) -> int:
 
 def run_skill(skill_line: str) -> int:
     """Execute a skill command line like 'generate_password set wifi secret'."""
+    from arka.core.mode import get_mode, mode_allows_execution
     from arka.skills import run_chat_ask, run_chat_calc, run_chat_weather, run_password
 
     apply_env()
@@ -38,6 +39,47 @@ def run_skill(skill_line: str) -> int:
         return 1
     head = parts[0]
     rest = parts[1:]
+
+    if head == "mode":
+        from arka.core.mode import cmd_show, main as mode_main
+
+        if not rest:
+            return cmd_show()
+        return mode_main(["mode", *rest])
+
+    allowed, reason = mode_allows_execution(skill_line)
+    if not allowed:
+        if get_mode() == "plan":
+            from arka.core.mode import print_plan
+            from arka.router import route
+
+            print_plan(skill_line, route(skill_line))
+            return 0
+        print(reason, file=sys.stderr)
+        return 1
+
+    head = parts[0]
+    try:
+        from arka.core.code_project import (
+            CODE_WRITE_SKILLS,
+            apply_env as apply_code_env,
+            gate_code_write,
+            gate_write_script_args,
+        )
+
+        code_ok, code_reason = gate_code_write(skill_line)
+        if not code_ok:
+            print(code_reason, file=sys.stderr)
+            return 1
+        if head == "write_script":
+            ws_ok, ws_reason = gate_write_script_args(rest)
+            if not ws_ok:
+                print(ws_reason, file=sys.stderr)
+                return 1
+        if head in CODE_WRITE_SKILLS:
+            apply_code_env()
+    except ImportError:
+        pass
 
     try:
         from arka.telemetry import mark_error, mark_ok, span
@@ -79,10 +121,20 @@ def run_skill(skill_line: str) -> int:
 
             price_check(" ".join(rest))
             code = 0
+        elif head in ("fact_check", "fact-check", "factcheck", "factchecker"):
+            from arka.agent.fact_check import fact_check
+
+            code = fact_check(" ".join(rest))
+        elif head in ("currency_convert", "convert", "currency"):
+            code = run_script("arka_currency.py", ["convert", *rest])
         elif head in ("select_model", "model_select", "best_model", "model_advisor"):
             from arka.llm.model_advisor import main as model_advisor_main
 
             code = model_advisor_main(rest or None)
+        elif head == "provider":
+            from arka.llm.provider_select import main as provider_main
+
+            code = provider_main(rest or None)
         elif head == "personalize":
             from arka.core.personalize import main as personalize_main
 
@@ -97,6 +149,18 @@ def run_skill(skill_line: str) -> int:
             code = elon_main(rest)
         elif head == "google":
             code = run_script("arka_google.py", rest)
+        elif head == "code":
+            from arka.core.code_project import main as code_main
+
+            code = code_main(["code", *rest])
+        elif head == "agent_code":
+            from arka.agent.core import code_agent
+
+            code = code_agent(" ".join(rest))
+        elif head in ("self_improve", "self"):
+            from arka.agent.self_improve import run_self_improve
+
+            code = run_self_improve(" ".join(rest))
         elif head.endswith(".py") and script_path(head).is_file():
             code = run_script(head, rest)
         else:

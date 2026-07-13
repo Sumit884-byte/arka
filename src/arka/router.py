@@ -312,6 +312,15 @@ def _route_offline(cmd: str) -> Route | None:
     if re.search(r"(?i)\b(list professions|profession list|what professions)\b", clean):
         return Route("profession list")
 
+    try:
+        from arka.agent.stt_install import route_command as stt_install_route
+
+        stt_hit = stt_install_route(cmd)
+        if stt_hit:
+            return Route(stt_hit, source="offline")
+    except ImportError:
+        pass
+
     if re.search(r"(?i)\b(life[- ]sciences?)\s+(list|install|info|doctor)\b", clean):
         m = re.search(r"(?i)\b(life[- ]sciences?)\s+(list|install|info|doctor)(?:\s+(\S+))?", cmd)
         if m:
@@ -666,6 +675,13 @@ def _is_knowledge_question(clean: str) -> bool:
         from arka.integrations.gemini_cli import wants_gemini_cli
 
         if wants_gemini_cli(clean):
+            return False
+    except ImportError:
+        pass
+    try:
+        from arka.integrations.harvard_ark import wants_harvard_ark
+
+        if wants_harvard_ark(clean):
             return False
     except ImportError:
         pass

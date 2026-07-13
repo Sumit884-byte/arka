@@ -380,6 +380,12 @@ def list_tools(server: str) -> list[McpTool]:
 
 
 def call_tool(server: str, tool_name: str, arguments: dict[str, Any] | None = None) -> str:
+    try:
+        from arka.integrations.context7_mcp import notify_context7_tool_call
+
+        notify_context7_tool_call(server, tool_name, arguments)
+    except ImportError:
+        pass
     client = connect_client(server)
     try:
         result = client.call_tool(tool_name, arguments)

@@ -1,0 +1,123 @@
+{
+  "version": "1.0",
+  "protocols": [
+    {
+      "id": "pcr",
+      "title": "PCR (Polymerase Chain Reaction)",
+      "aliases": [
+        "pcr",
+        "polymerase chain reaction",
+        "run pcr",
+        "pcr protocol",
+        "pcr amplification",
+        "run a pcr protocol"
+      ],
+      "source": "Arka protocol index (standard molecular biology methods; NCBI PCR guide)",
+      "references": [
+        "https://www.ncbi.nlm.nih.gov/probe/docs/techpcr/"
+      ],
+      "materials": [
+        "Template DNA",
+        "Forward and reverse primers (10 µM each)",
+        "dNTP mix",
+        "PCR buffer with Mg²⁺",
+        "Taq or high-fidelity DNA polymerase",
+        "Nuclease-free water",
+        "Thin-walled PCR tubes or plate",
+        "Thermal cycler"
+      ],
+      "safety": [
+        "Wear gloves; treat all reagents as potentially biohazardous if using clinical or environmental samples.",
+        "Work in a dedicated pre-PCR area to avoid amplicon contamination.",
+        "Dispose of PCR waste in a biohazard container."
+      ],
+      "steps": [
+        "Prepare the PCR master mix on ice: combine buffer, dNTPs, primers, polymerase, and water; add template DNA last to minimize contamination.",
+        "Program the thermal cycler: initial denaturation 95 °C for 2–3 min, then 25–35 cycles of denaturation 95 °C (15–30 s), annealing at primer Tm minus 3–5 °C (15–30 s), and extension 72 °C (30–60 s per kb).",
+        "Finish with a final extension at 72 °C for 5–10 min and hold at 4–10 °C.",
+        "Mix gently, spin down briefly, and load tubes into the thermal cycler.",
+        "Run the program and record cycle conditions used.",
+        "Verify amplification by agarose gel electrophoresis; expect a single band at the predicted amplicon size.",
+        "Store confirmed products at −20 °C until downstream use."
+      ]
+    },
+    {
+      "id": "western_blot",
+      "title": "Western Blot",
+      "aliases": [
+        "western blot",
+        "western blotting",
+        "immunoblot",
+        "protein blot",
+        "western blot protocol"
+      ],
+      "source": "Arka protocol index (standard immunoblot workflow)",
+      "references": [
+        "https://www.thermofisher.com/us/en/home/references/protocols/protein-methods/western-blot-protocol.html"
+      ],
+      "mirror_file": "Definitive-guide-to-western-blot.json",
+      "materials": [
+        "Protein samples and loading buffer with reducing agent",
+        "SDS-PAGE gel and electrophoresis apparatus",
+        "Transfer buffer and PVDF or nitrocellulose membrane",
+        "Blocking solution (e.g. 5% non-fat milk or BSA in TBST)",
+        "Primary and secondary antibodies",
+        "TBST wash buffer",
+        "Detection reagents (chemiluminescent or colorimetric)"
+      ],
+      "safety": [
+        "Handle acrylamide, methanol, and strong acids with appropriate PPE and chemical fume hood when required.",
+        "Dispose of gel and transfer waste per institutional chemical safety guidelines."
+      ],
+      "steps": [
+        "Quantify protein in each sample and prepare equal loads in SDS sample buffer with reducing agent.",
+        "Heat samples at 95 °C for 5 min to denature proteins, then cool briefly on ice.",
+        "Assemble gel and run SDS-PAGE until the dye front reaches the gel bottom.",
+        "Equilibrate gel and membrane in cold transfer buffer; assemble transfer stack and run transfer (wet or semi-dry per apparatus).",
+        "Block the membrane in blocking solution for 1 h at room temperature with gentle agitation.",
+        "Incubate with primary antibody in blocking buffer (1 h at room temperature or overnight at 4 °C).",
+        "Wash the membrane three times with TBST (5–10 min each).",
+        "Incubate with HRP- or fluorophore-conjugated secondary antibody for 1 h at room temperature.",
+        "Wash again three times with TBST.",
+        "Apply detection reagent, image bands, and record exposure settings for reproducibility."
+      ]
+    },
+    {
+      "id": "dna_extraction",
+      "title": "Genomic DNA Extraction",
+      "aliases": [
+        "dna extraction",
+        "genomic dna extraction",
+        "extract dna",
+        "dna isolation",
+        "dna prep"
+      ],
+      "source": "Arka protocol index (standard column-based genomic DNA isolation)",
+      "references": [
+        "https://www.neb.com/protocols/2014/07/31/general-protocol-for-extracting-genomic-dna-from-bacteria"
+      ],
+      "mirror_file": "15-minute-dna-extraction-from-beetle-legs-for-pcr.json",
+      "materials": [
+        "Biological sample (cells, tissue, or swab)",
+        "Lysis buffer with proteinase K",
+        "Silica spin column kit or phenol-chloroform reagents",
+        "Ethanol (70% and absolute)",
+        "Elution buffer (TE or nuclease-free water)",
+        "Microcentrifuge tubes"
+      ],
+      "safety": [
+        "Treat human or animal samples as biohazardous; use BSL-appropriate practices.",
+        "If using phenol-chloroform, work in a fume hood and avoid skin contact."
+      ],
+      "steps": [
+        "Collect the sample into a labeled tube and add lysis buffer with proteinase K.",
+        "Incubate at 56 °C until the sample is fully lysed (typically 10–60 min depending on tissue).",
+        "Bind DNA to the silica membrane (column kit) or extract with phenol-chloroform and precipitate with isopropanol.",
+        "Wash bound DNA with ethanol-containing wash buffers to remove salts and proteins.",
+        "Dry the membrane briefly and elute DNA in 30–100 µL warm elution buffer.",
+        "Quantify DNA concentration (NanoDrop or fluorometric assay).",
+        "Check purity (A260/A280 near 1.8 for genomic DNA) and store at −20 °C."
+      ]
+    }
+  ]
+}

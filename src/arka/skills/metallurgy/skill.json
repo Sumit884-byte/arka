@@ -1,0 +1,21 @@
+{
+  "name": "metallurgy",
+  "description": "Metallurgy — alloy properties, composition lookup, and heat-treatment procedures",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "metallurgy",
+    "alloy",
+    "steel grade",
+    "stainless steel",
+    "heat treatment",
+    "alloy composition",
+    "properties of steel",
+    "brass composition",
+    "aluminum heat treatment"
+  ],
+  "voice_ack": "Looking up alloy data.",
+  "permissions": ["network"]
+}

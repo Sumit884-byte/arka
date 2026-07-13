@@ -544,13 +544,16 @@ def _local_setup_hint() -> str:
     )
 
 
-def cmd_setup_local(_args: argparse.Namespace) -> int:
+def cmd_setup_local(args: argparse.Namespace) -> int:
+    model = (getattr(args, "model", None) or DEFAULT_LOCAL_MODEL).strip()
     try:
         import arka.paths as ap
 
         venv = ap.config_dir() / "venv-voice-hf"
+        env_path = ap.env_file()
     except ImportError:
         venv = Path.home() / ".config/fish/venv-voice-hf"
+        env_path = Path.home() / ".config/arka/.env"
     venv.parent.mkdir(parents=True, exist_ok=True)
     py = venv / "bin/python3"
     if not py.is_file():
@@ -562,13 +565,37 @@ def cmd_setup_local(_args: argparse.Namespace) -> int:
                     break
     if not py.is_file():
         subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True)
-    print("Installing faster-whisper (CPU) …", file=sys.stderr)
+    print("Installing faster-whisper …", file=sys.stderr)
     subprocess.run([str(py), "-m", "pip", "install", "-U", "pip", "wheel"], check=True)
     subprocess.run([str(py), "-m", "pip", "install", "faster-whisper"], check=True)
     proc = subprocess.run([str(py), "-c", "from faster_whisper import WhisperModel; print('ok')"], check=False)
     if proc.returncode != 0:
         return 1
-    print(f"Ready. Use: ARKA_MEDIA_PYTHON={py} media_transcript <file>")
+
+    device = whisper_device()
+    compute = whisper_compute_type(device)
+    print(f"Downloading Whisper model {model!r} ({device}/{compute}) …", file=sys.stderr)
+    dl_script = (
+        "import sys\n"
+        "from faster_whisper import WhisperModel\n"
+        f"WhisperModel({model!r}, device={device!r}, compute_type={compute!r})\n"
+        "print('model ok')\n"
+    )
+    dl = subprocess.run([str(py), "-c", dl_script], capture_output=True, text=True, check=False)
+    if dl.returncode != 0:
+        err = (dl.stderr or dl.stdout or "").strip()
+        print(f"Model download failed: {err[:400]}", file=sys.stderr)
+        return 1
+
+    os.environ["MEDIA_PYTHON"] = str(py)
+    os.environ["LOCAL_WHISPER_MODEL"] = model
+    print(f"Ready. Local STT venv: {py}")
+    print(f"  LOCAL_WHISPER_MODEL={model}")
+    print(f"  MEDIA_PYTHON={py}")
+    print("  MEDIA_STT=local   # optional: force offline transcription")
+    if env_path.is_file():
+        print(f"  Add those lines to {env_path} to persist.")
+    print(f"Try: media_transcript <audio-or-video-file>")
     return 0
 
 
@@ -1173,6 +1200,11 @@ def main() -> int:
     p_sum.set_defaults(func=cmd_summarize)
 
     p_setup = sub.add_parser("setup-local", help="Install faster-whisper in venv-voice-hf for offline STT")
+    p_setup.add_argument(
+        "--model",
+        default=DEFAULT_LOCAL_MODEL,
+        help="Whisper model to download (default: base; use large-v3 for best quality)",
+    )
     p_setup.set_defaults(func=cmd_setup_local)
 
     args = parser.parse_args()

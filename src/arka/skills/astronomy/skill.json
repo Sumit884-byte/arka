@@ -1,0 +1,23 @@
+{
+  "name": "astronomy",
+  "description": "Astronomy lookups — bright stars, planets, moon phase, ISS pass times",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "astronomy",
+    "what star is",
+    "what is betelgeuse",
+    "moon phase",
+    "moon phase tonight",
+    "iss pass",
+    "iss pass times",
+    "international space station",
+    "planet position",
+    "constellation orion",
+    "look up star"
+  ],
+  "voice_ack": "Checking the sky.",
+  "permissions": ["network"]
+}

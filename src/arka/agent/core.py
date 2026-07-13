@@ -984,7 +984,31 @@ def price_check(query: str) -> None:
 # ── Code agent ────────────────────────────────────────────────────────────────
 
 def code_agent(goal: str, *, repo: str | None = None, ingest: bool = False) -> int:
-    cwd = Path(repo or os.getcwd()).expanduser().resolve()
+    from arka.core.code_project import (
+        CodeProjectError,
+        apply_env,
+        check_shell_scope,
+        require_initialized,
+    )
+
+    try:
+        project_root = require_initialized()
+    except CodeProjectError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
+    if repo:
+        cwd = Path(repo).expanduser().resolve()
+        try:
+            cwd.relative_to(project_root)
+        except ValueError:
+            print(f"Repo {cwd} is outside code project {project_root}", file=sys.stderr)
+            return 1
+    else:
+        cwd = project_root
+
+    apply_env()
+    os.chdir(cwd)
     doc_name = cwd.name
     if ingest:
         from arka.paths import entry_script
@@ -1034,7 +1058,11 @@ def code_agent(goal: str, *, repo: str | None = None, ingest: bool = False) -> i
     for i, step in enumerate(steps, 1):
         print(f"━━━ Code step {i}/{len(steps)} ━━━")
         print(f"→ {step}")
-        proc = subprocess.run(["fish", "-ic", step], timeout=300)
+        scope_ok, scope_reason = check_shell_scope(step, root=cwd)
+        if not scope_ok:
+            print(scope_reason, file=sys.stderr)
+            return 1
+        proc = subprocess.run(["fish", "-ic", step], cwd=cwd, timeout=300)
         if proc.returncode != 0:
             print(f"Step failed (exit {proc.returncode}).")
             return proc.returncode

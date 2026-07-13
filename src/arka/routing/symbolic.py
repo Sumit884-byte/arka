@@ -72,6 +72,17 @@ def route_describe_image(cmd: str) -> str | None:
     return "describe_image " + " ".join(shlex.quote(a) for a in argv)
 
 
+def route_describe_video(cmd: str) -> str | None:
+    try:
+        from arka.vision.video import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "describe_video " + " ".join(shlex.quote(a) for a in argv)
+
+
 def route_download(cmd: str) -> str | None:
     clean = cmd.lower()
     if re.search(r"(?i)download\s+and\s+install", clean):
@@ -254,6 +265,50 @@ def route_ascii_art(cmd: str) -> str | None:
     return "ascii_art " + " ".join(shlex.quote(a) for a in argv)
 
 
+def route_astronomy(cmd: str) -> str | None:
+    try:
+        from arka.agent.astronomy import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "astronomy " + " ".join(shlex.quote(a) for a in argv)
+
+
+def route_metallurgy(cmd: str) -> str | None:
+    try:
+        from arka.agent.metallurgy import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "metallurgy " + " ".join(shlex.quote(a) for a in argv)
+
+
+def route_flow(cmd: str) -> str | None:
+    try:
+        from arka.agent.flow import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "flow " + " ".join(shlex.quote(a) for a in argv)
+
+
+def route_fact_check(cmd: str) -> str | None:
+    try:
+        from arka.agent.fact_check import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "fact_check " + " ".join(shlex.quote(a) for a in argv)
+
+
 def route_generate_image(cmd: str) -> str | None:
     try:
         from arka.generate.image import nl_to_argv
@@ -357,10 +412,22 @@ def route_repo_health(cmd: str) -> str | None:
     return route or None
 
 
+def route_repo_context(cmd: str) -> str | None:
+    try:
+        from arka.agent.repo_context import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
+
+
 def route_repo_map(cmd: str) -> str | None:
     try:
+        from arka.agent.repo_context import wants_repo_context
         from arka.agent.repo_map import route_command
     except ImportError:
+        return None
+    if wants_repo_context(cmd):
         return None
     route = route_command(cmd)
     return route or None
@@ -424,6 +491,20 @@ def route_personalize(cmd: str) -> str | None:
     return "personalize " + " ".join(shlex.quote(a) for a in argv)
 
 
+def route_provider_select(cmd: str) -> str | None:
+    try:
+        from arka.llm.provider_select import is_provider_select_query, nl_to_argv
+    except ImportError:
+        return None
+    clean = cmd.strip()
+    if not is_provider_select_query(clean):
+        return None
+    argv = nl_to_argv(clean)
+    if not argv:
+        return "provider show"
+    return "provider " + " ".join(__import__("shlex").quote(a) for a in argv)
+
+
 def route_model_select(cmd: str) -> str | None:
     try:
         from arka.llm.model_advisor import is_model_select_query, nl_to_argv
@@ -436,6 +517,14 @@ def route_model_select(cmd: str) -> str | None:
     if not argv:
         return "select_model"
     return "select_model " + " ".join(shlex.quote(a) for a in argv)
+
+
+def route_stt_install(cmd: str) -> str | None:
+    try:
+        from arka.agent.stt_install import route_command
+    except ImportError:
+        return None
+    return route_command(cmd)
 
 
 def route_life_sciences(cmd: str) -> str | None:
@@ -498,6 +587,15 @@ def route_gemini_cli(cmd: str) -> str | None:
     return route or None
 
 
+def route_harvard_ark(cmd: str) -> str | None:
+    try:
+        from arka.integrations.harvard_ark import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
+
+
 def route_elon(cmd: str) -> str | None:
     try:
         from arka.agent.personas.base import route_command
@@ -533,9 +631,37 @@ def route_agent_hub(cmd: str) -> str | None:
     return "agent_hub " + " ".join(shlex.quote(a) for a in argv)
 
 
+def route_mode(cmd: str) -> str | None:
+    try:
+        from arka.core.mode import route_mode_nl
+    except ImportError:
+        return None
+    return route_mode_nl(cmd.strip())
+
+
+def route_code_project(cmd: str) -> str | None:
+    try:
+        from arka.core.code_project import route_code_nl
+    except ImportError:
+        return None
+    return route_code_nl(cmd.strip())
+
+
+def route_self_improve(cmd: str) -> str | None:
+    try:
+        from arka.agent.self_improve import route_command
+    except ImportError:
+        return None
+    line = route_command(cmd.strip())
+    return line or None
+
+
 def route_offline_extras(cmd: str) -> str | None:
     """Try supplemental NL routes not always available via fish bridge."""
     for fn in (
+        route_self_improve,
+        route_mode,
+        route_code_project,
         route_agent_hub,
         route_mcp,
         route_clipboard_history,
@@ -543,33 +669,42 @@ def route_offline_extras(cmd: str) -> str | None:
         route_competitions,
         route_bookmarks,
         route_repo_health,
+        route_repo_context,
         route_repo_map,
         route_generate_data,
         route_view_data,
+        route_describe_screen,
+        route_describe_video,
+        route_describe_image,
+        route_currency_convert,
         route_data_ask,
         route_docker_status,
         route_daily_brief,
         route_model_select,
+        route_stt_install,
+        route_provider_select,
         route_personalize,
         route_life_sciences,
         route_platform_howto,
         route_fugu,
         route_gemini_cli,
+        route_harvard_ark,
         route_elon,
         route_gmail_draft,
         route_post_x,
         route_find_files_by_size,
-        route_currency_convert,
         route_kalshi,
         route_kaggle,
         route_remind,
         route_routines,
+        route_fact_check,
         route_chart,
         route_drawing,
-        route_describe_screen,
-        route_describe_image,
         route_generate_thumbnail,
         route_ascii_art,
+        route_astronomy,
+        route_metallurgy,
+        route_flow,
         route_generate_image,
         route_download,
         route_convert_media,

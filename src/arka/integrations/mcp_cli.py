@@ -188,6 +188,17 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     return code
 
 
+def cmd_context7_label(_args: argparse.Namespace) -> int:
+    from arka.integrations.context7_mcp import context7_usage_label, show_context7_enabled
+
+    if not show_context7_enabled():
+        return 0
+    label = context7_usage_label()
+    if label:
+        print(label)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="arka mcp",
@@ -239,6 +250,8 @@ def build_parser() -> argparse.ArgumentParser:
     doctor_p = sub.add_parser("doctor", help="Verify Arka MCP server starts and lists tools")
     doctor_p.add_argument("--timeout", type=float, default=8.0, help="RPC timeout seconds")
 
+    sub.add_parser("context7-label", help="Show Context7 docs footer for current session")
+
     parse_p = sub.add_parser("parse", help=argparse.SUPPRESS)
     parse_p.add_argument("text", help="Natural language request")
     return parser
@@ -269,6 +282,7 @@ def main(argv: list[str] | None = None) -> int:
         "serve": cmd_serve,
         "install": cmd_install,
         "doctor": cmd_doctor,
+        "context7-label": cmd_context7_label,
         "parse": cmd_parse,
     }
     return handlers[args.command](args)

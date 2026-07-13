@@ -8,7 +8,7 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-from arka.agent.personas.schema import Persona, parse_persona
+from arka.agent.personas.schema import Persona, effective_disclaimer, parse_persona
 
 
 def _env_personas_dir() -> Path | None:
@@ -232,7 +232,7 @@ def show_payload(name: str) -> dict[str, object]:
         "name": persona.name,
         "display_name": persona.display_name or persona.name,
         "description": persona.description,
-        "disclaimer": persona.disclaimer,
+        "disclaimer": effective_disclaimer(persona),
         "voice": persona.voice or "",
         "source": persona.source or "",
         "system_prompt": persona.system_prompt,
@@ -261,7 +261,7 @@ def format_persona_show(name: str) -> str:
         f"name\t{persona.name}",
         f"display_name\t{persona.display_name}",
         f"description\t{persona.description}",
-        f"disclaimer\t{persona.disclaimer}",
+        f"disclaimer\t{effective_disclaimer(persona)}",
         f"source\t{persona.source}",
     ]
     if persona.voice:

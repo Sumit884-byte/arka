@@ -395,11 +395,25 @@ def _ollama_rank(model_id: str) -> tuple[int, int, str]:
     return (cloud, tiny, mid)
 
 
+def _openrouter_default_model() -> str:
+    try:
+        from arka.llm.providers import get_provider
+
+        spec = get_provider("openrouter")
+        if spec and spec.default_model:
+            return spec.default_model
+    except ImportError:
+        pass
+    return "anthropic/claude-sonnet-4"
+
+
 def _cloud_route_model() -> str:
     if _provider_available("groq"):
         return "groq/llama-3.1-8b-instant"
     if _provider_available("gemini"):
         return "gemini/gemini-2.0-flash"
+    if _provider_available("openrouter"):
+        return f"openrouter/{_openrouter_default_model()}"
     return "groq/llama-3.1-8b-instant"
 
 
@@ -410,6 +424,8 @@ def _cloud_chat_model(*, fast: bool = False) -> str:
         return "gemini/gemini-2.5-flash" if not fast else "gemini/gemini-2.0-flash"
     if _provider_available("groq"):
         return "groq/llama-3.3-70b-versatile"
+    if _provider_available("openrouter"):
+        return f"openrouter/{_openrouter_default_model()}"
     return "gemini/gemini-2.5-flash"
 
 
@@ -523,8 +539,15 @@ def build_report(hw: HardwareSnapshot | None = None) -> AdvisorReport:
         notes.append(f"Low disk free ({snap.disk_free_gb} GB) — local model pulls may be slow.")
     if not snap.ollama_models and tier in {"balanced", "local_capable", "local_heavy"}:
         notes.append("Ollama not reachable — run `ollama serve` and pull a model for local tiers.")
-    if not _provider_available("gemini") and not _provider_available("groq"):
-        notes.append("No Gemini/Groq keys detected — set GEMINI_API_KEY or GROQ_API_KEY in .env.")
+    has_gemini = _provider_available("gemini")
+    has_groq = _provider_available("groq")
+    has_openrouter = _provider_available("openrouter")
+    if not has_gemini and not has_groq and not has_openrouter:
+        notes.append(
+            "No cloud LLM keys detected — set GEMINI_API_KEY, GROQ_API_KEY, or OPENROUTER_API_KEY in .env."
+        )
+    elif has_openrouter and not has_gemini and not has_groq:
+        notes.append("OpenRouter is the primary cloud provider (no direct Gemini/Groq keys).")
 
     return AdvisorReport(
         tier=tier,

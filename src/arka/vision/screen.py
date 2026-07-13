@@ -18,11 +18,9 @@ try:
 except ImportError:
     cache_dir = lambda: Path.home() / ".cache" / "fish-agent"  # noqa: E731
 
-DEFAULT_COUNTDOWN = 10
-DEFAULT_PROMPT = (
-    "Describe what is visible on this computer screen. "
-    "Mention applications, windows, text, UI elements, and overall activity."
-)
+from arka.vision.describe import SCREEN_PROMPT as DEFAULT_PROMPT
+
+DEFAULT_COUNTDOWN = 5
 
 _KNOWN_CMDS = frozenset({"capture", "parse", "help"})
 _SCREEN_PATTERNS = (

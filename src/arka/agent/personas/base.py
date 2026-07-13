@@ -8,7 +8,7 @@ import sys
 
 from arka.agent.personas.format import format_chat, print_repl_banner, print_repl_reply
 from arka.agent.personas.io import list_personas, resolve_persona
-from arka.agent.personas.schema import Persona, slugify
+from arka.agent.personas.schema import Persona, effective_system_prompt, slugify
 
 # Backward-compat aliases for the bundled Elon persona.
 ELON_ALIASES = frozenset({"elon", "talk_to_elon", "elon_chat", "talk_elon"})
@@ -282,7 +282,7 @@ def chat_once(
             return ""
 
     user = _format_user(question, history)
-    reply = _llm_reply(p.system_prompt, user, skill=f"persona:{p.name}")
+    reply = _llm_reply(effective_system_prompt(p), user, skill=f"persona:{p.name}")
     if show_disclaimer and reply:
         return format_chat(p, reply, show_disclaimer=True)
     return reply

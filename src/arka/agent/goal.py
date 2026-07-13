@@ -256,6 +256,18 @@ def _run_cmd(cmd: str, cwd: Path, *, auto_yes: bool) -> tuple[int, str]:
                 mark_error(current, "security gate")
             return 2, "[skipped: security gate]"
         try:
+            from arka.core.code_project import check_shell_scope, get_active_root
+
+            scope_root = get_active_root()
+            if scope_root is not None:
+                scope_ok, scope_reason = check_shell_scope(cmd, root=scope_root)
+                if not scope_ok:
+                    if span is not None:
+                        mark_error(current, "scope gate")
+                    return 2, scope_reason
+        except ImportError:
+            pass
+        try:
             proc = subprocess.run(
                 ["fish", "-c", cmd],
                 cwd=cwd,
@@ -326,6 +338,8 @@ def run_goal(
     auto_yes: bool = False,
     auto_continue: bool | None = None,
     verify: bool = False,
+    system_extra: str = "",
+    cmd_hook: "callable[[str], tuple[int, str] | None] | None" = None,
 ) -> int:
     goal = " ".join(goal.split()).strip()
     if not goal:
@@ -335,7 +349,19 @@ def run_goal(
     if auto_continue is None:
         auto_continue = _truthy("GOAL_AUTO_CONTINUE", "1")
 
-    cwd = Path.cwd()
+    project_root = None
+    try:
+        from arka.core.code_project import apply_env, get_active_root, is_scoped
+
+        if is_scoped():
+            project_root = get_active_root()
+            apply_env()
+    except ImportError:
+        pass
+
+    cwd = project_root or Path.cwd()
+    if project_root is not None:
+        os.chdir(project_root)
     tree, listing = _dir_context(cwd, TREE_DEPTH)
     shell_hist = _fish_history()
     skills = _skills_list()
@@ -354,6 +380,12 @@ Rules:
 - {plat_hint}
 - Commands run in fish syntax.
 - Decompose complex goals across many small steps."""
+
+    if system_extra:
+        system += f"\n{system_extra.strip()}"
+
+    if project_root is not None:
+        system += f"\n- CODE PROJECT: all file edits must stay inside {project_root}."
 
     history = ""
     print(f"Goal agent: {goal}", file=sys.stderr)
@@ -458,6 +490,16 @@ Step {step}/{max_steps} — return the NEXT action as JSON."""
                     if span is not None:
                         mark_error(goal_span, "empty command")
                     return 1
+
+                if cmd_hook is not None:
+                    blocked = cmd_hook(cmd)
+                    if blocked is not None:
+                        code, out = blocked
+                        print(f"  ⊘ {out}", file=sys.stderr)
+                        history += (
+                            f"\n--- step {step} (blocked) ---\ncmd: {cmd}\nexit: {code}\noutput:\n{out}\n"
+                        )
+                        continue
 
                 print(f"  → {cmd}", file=sys.stderr)
                 if why:

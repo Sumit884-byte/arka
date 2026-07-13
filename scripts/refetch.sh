@@ -17,6 +17,7 @@ fi
 
 if command -v arka >/dev/null 2>&1; then
   arka setup
+  arka repo index --quiet 2>/dev/null || true
 else
   echo "→ copy env template"
   mkdir -p "${ARKA_CONFIG_DIR:-$HOME/.config/arka}"

@@ -11,6 +11,7 @@ from PIL import Image
 
 from arka.vision.describe import (
     _auto_backend_order,
+    _backend_candidates,
     _is_ollama_context_error,
     _max_edge,
     _max_edge_for,
@@ -100,7 +101,7 @@ class BackendOrderTests(unittest.TestCase):
 
     def test_linux_prefers_vllm(self) -> None:
         with mock.patch("arka.llm.servers.host_os", return_value="linux"):
-            self.assertEqual(_auto_backend_order()[0], "vllm")
+            self.assertEqual(_backend_candidates()[0], "vllm")
 
     def test_windows_prefers_gemini_when_key_set(self) -> None:
         with (

@@ -1,0 +1,139 @@
+{
+  "version": "1.0",
+  "source": "Arka metallurgy heat-treatment index (standard industrial practice; ASM Handbook-style procedures)",
+  "treatments": [
+    {
+      "id": "aluminum_6061_t6",
+      "title": "Heat Treatment of 6061 Aluminum (T6 Temper)",
+      "aliases": [
+        "6061 heat treatment",
+        "aluminum 6061 heat treat",
+        "heat treatment aluminum 6061",
+        "heat treatment steps for aluminum",
+        "heat treat 6061",
+        "6061-t6 heat treatment",
+        "aluminum heat treatment"
+      ],
+      "materials": [
+        "6061 aluminum alloy parts (clean, degreased)",
+        "Heat-treat furnace with ±5 °C control",
+        "Quench tank (water or polymer quenchant per spec)",
+        "Aging furnace",
+        "Hardness tester or tensile coupons"
+      ],
+      "safety": [
+        "Wear heat-resistant gloves, face shield, and apron during quench.",
+        "Ensure adequate ventilation; molten quench media can spatter.",
+        "Follow furnace lockout/tagout before loading parts."
+      ],
+      "steps": [
+        "Inspect parts for cracks, contamination, and correct alloy certification (6061).",
+        "Solution heat treat at 529 °C (985 °F) ±5 °C for 1 hour per inch of maximum cross-section (minimum 30 min).",
+        "Quench immediately in water (or specified polymer) to room temperature; agitate for uniform cooling.",
+        "Within 1 hour of quenching, artificial age at 160 °C (320 °F) for 18 hours (T6 temper).",
+        "Cool to room temperature in still air.",
+        "Verify hardness (~95 HB typical) or tensile properties per AMS/ASTM coupon tests.",
+        "Document furnace charts, lot numbers, and quench/age parameters for traceability."
+      ],
+      "references": [
+        "https://www.aluminum.org/",
+        "ASM Handbook Volume 4: Heat Treating"
+      ]
+    },
+    {
+      "id": "steel_4140_quench_temper",
+      "title": "Quench and Temper of 4140 Alloy Steel",
+      "aliases": [
+        "4140 heat treatment",
+        "steel quench and temper",
+        "heat treatment 4140",
+        "heat treatment steps for steel",
+        "quench and temper steel"
+      ],
+      "materials": [
+        "4140 steel parts (normalized or annealed if heavily machined)",
+        "Atmosphere or vacuum furnace",
+        "Oil quench tank (agitated)",
+        "Tempering furnace",
+        "Hardness tester (HRC)"
+      ],
+      "safety": [
+        "Hot oil quench fire risk — keep Class B extinguisher nearby.",
+        "Parts can warp or crack if quench is too severe; use fixtures where needed.",
+        "Allow parts to cool below 66 °C before handling after temper."
+      ],
+      "steps": [
+        "Preheat to 760 °C (1400 °F) to equalize temperature and reduce thermal shock.",
+        "Austenitize at 845-870 °C (1550-1600 °F) for 1 hour per inch of section.",
+        "Oil quench to below 65 °C; check for cracks and measure as-quenched hardness.",
+        "Temper immediately: 205 °C (400 °F) for ~48 HRC or 315 °C (600 °F) for higher toughness (~40 HRC).",
+        "Hold temper for 2 hours minimum; double temper for critical parts.",
+        "Air cool to room temperature after each temper cycle.",
+        "Finish grind or machine lightly; verify final hardness and dimensions."
+      ],
+      "references": [
+        "ASM Handbook Volume 4: Heat Treating",
+        "SAE AMS-H-6875"
+      ]
+    },
+    {
+      "id": "stainless_304_anneal",
+      "title": "Annealing of 304 Austenitic Stainless Steel",
+      "aliases": [
+        "304 annealing",
+        "stainless steel anneal",
+        "304 stainless heat treatment",
+        "anneal stainless steel"
+      ],
+      "materials": [
+        "304/304L stainless parts",
+        "Furnace with protective atmosphere (optional nitrogen/hydrogen)",
+        "Pickling/passivation chemicals if oxide scale present"
+      ],
+      "safety": [
+        "Pickling acids (HF/HNO₃ blends) are extremely hazardous — use fume hood and PPE.",
+        "Avoid carbon contamination from furnace fixtures on stainless."
+      ],
+      "steps": [
+        "Clean parts to remove oils and iron contamination (iron-free abrasives only).",
+        "Anneal at 1040 °C (1900 °F), hold 30 min minimum for thin sheet; longer for heavy sections.",
+        "Rapid water quench or air cool depending on section thickness and distortion limits.",
+        "Remove heat-tint oxide by pickling or mechanical cleaning if corrosion resistance is critical.",
+        "Passivate per ASTM A967 if required for medical/food service.",
+        "Inspect for sensitization risk if slow cooled through 425-870 °C range."
+      ],
+      "references": [
+        "ASTM A240",
+        "ASM Handbook Volume 4"
+      ]
+    },
+    {
+      "id": "brass_stress_relief",
+      "title": "Stress Relief of Brass Components",
+      "aliases": [
+        "brass stress relief",
+        "brass heat treatment",
+        "heat treatment brass"
+      ],
+      "materials": [
+        "Machined or formed brass parts",
+        "Air-circulating oven",
+        "Support fixtures to prevent distortion"
+      ],
+      "safety": [
+        "Zinc fume exposure at high temperatures — ensure ventilation.",
+        "Do not exceed melting range; monitor furnace closely."
+      ],
+      "steps": [
+        "Clean parts of cutting fluids and organic residues.",
+        "Stress relieve at 260-288 °C (500-550 °F) for 1-2 hours.",
+        "Slow cool in still air to room temperature.",
+        "Check dimensions on critical features; re-machine if springback occurred.",
+        "Optional: bright anneal at higher temperature only if full softening is required (product-specific)."
+      ],
+      "references": [
+        "ASM Handbook Volume 2: Nonferrous Alloys"
+      ]
+    }
+  ]
+}

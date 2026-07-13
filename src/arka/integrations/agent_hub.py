@@ -700,6 +700,11 @@ def _save_agents_registry(data: dict[str, Any]) -> Path:
 
 
 def sync_mcp(*, use_symlink: bool = False) -> dict[str, Any]:
+    from arka.integrations.context7_mcp import (
+        CONTEXT7_MCP_SERVER_KEY,
+        context7_mcp_launch_spec,
+        ensure_context7_in_config,
+    )
     from arka.integrations.mcp_manager import load_mcp_config, mcp_config_path
     from arka.integrations.mcp_server import ARKA_MCP_SERVER_KEY, ensure_arka_self_in_config, mcp_server_launch_spec
 
@@ -708,6 +713,8 @@ def sync_mcp(*, use_symlink: bool = False) -> dict[str, Any]:
     dst.parent.mkdir(parents=True, exist_ok=True)
     result: dict[str, Any] = {"source": str(src), "destination": str(dst), "ok": False}
 
+    if ensure_context7_in_config():
+        result["context7_mcp"] = "added_to_source"
     if ensure_arka_self_in_config():
         result["arka_self_mcp"] = "added_to_source"
 
@@ -729,10 +736,17 @@ def sync_mcp(*, use_symlink: bool = False) -> dict[str, Any]:
     shutil.copy2(src, dst)
     hub_data = _load_json_file(dst)
     hub_servers = hub_data.setdefault("mcpServers", {})
+    changed = False
+    if CONTEXT7_MCP_SERVER_KEY not in hub_servers:
+        hub_servers[CONTEXT7_MCP_SERVER_KEY] = context7_mcp_launch_spec()
+        changed = True
+        result["context7_mcp"] = result.get("context7_mcp", "merged_into_hub")
     if ARKA_MCP_SERVER_KEY not in hub_servers:
         hub_servers[ARKA_MCP_SERVER_KEY] = mcp_server_launch_spec()
-        dst.write_text(json.dumps(hub_data, indent=2) + "\n", encoding="utf-8")
+        changed = True
         result["arka_self_mcp"] = result.get("arka_self_mcp", "merged_into_hub")
+    if changed:
+        dst.write_text(json.dumps(hub_data, indent=2) + "\n", encoding="utf-8")
     result["ok"] = True
     result["mode"] = "copy"
     return result

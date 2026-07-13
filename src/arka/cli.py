@@ -29,7 +29,35 @@ from arka.router import route
 
 def main(argv: list[str] | None = None) -> int:
     load_env()
+    from arka.core.mode import load_mode
+
+    load_mode()
     args = argv if argv is not None else sys.argv[1:]
+
+    _SKIP_AUTO_REFETCH = frozenset(
+        {
+            "refetch",
+            "update",
+            "sync",
+            "reload",
+            "refresh",
+            "shell-init",
+            "setup",
+            "-h",
+            "--help",
+            "help",
+            "-V",
+            "--version",
+            "version",
+        }
+    )
+    if args and args[0] not in _SKIP_AUTO_REFETCH:
+        try:
+            from arka.core.auto_refetch import maybe_auto_refetch
+
+            maybe_auto_refetch(quiet=True)
+        except ImportError:
+            pass
 
     if not args:
         return _cmd_help()
@@ -74,6 +102,36 @@ def main(argv: list[str] | None = None) -> int:
 
         return config_main(args[1:])
 
+    if args[0] == "mode":
+        from arka.core.mode import main as mode_main
+
+        return mode_main(["mode", *args[1:]])
+
+    if args[0] == "provider":
+        from arka.llm.provider_select import main as provider_main
+
+        return provider_main(args[1:] or None)
+
+    if args[0] == "code":
+        from arka.core.code_project import main as code_main
+
+        return code_main(["code", *args[1:]])
+
+    if args[0] == "self":
+        from arka.agent.self_improve import main as self_main
+
+        return self_main(args[1:])
+
+    if args[0] == "repo":
+        from arka.agent.repo_context import main as repo_context_main
+
+        return repo_context_main(["repo", *args[1:]])
+
+    if args[0] == "llm":
+        from arka.agent.repo_context import main as repo_context_main
+
+        return repo_context_main(["llm", *args[1:]])
+
     if args[0] in ("refetch", "update", "sync"):
         return _cmd_refetch(args[1:])
 
@@ -88,7 +146,7 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_ai_skill_model(args[1:])
 
     if args[0] == "ai-models":
-        return _cmd_ai_models()
+        return _cmd_ai_models(args[1:])
 
     if args[0] in ("ai-pref", "ai-status") and has_full_fish_agent():
         code = delegate_fish_function(args[0], args[1:])
@@ -147,6 +205,9 @@ def main(argv: list[str] | None = None) -> int:
     if args[0] == "gemini":
         return run_script("arka_gemini.py", args[1:])
 
+    if args[0] in ("harvard-ark", "harvard_ark", "harvardark"):
+        return run_script("arka_harvard_ark.py", args[1:])
+
     if args[0] == "fugu":
         return run_script("arka_fugu.py", args[1:])
 
@@ -183,6 +244,15 @@ def main(argv: list[str] | None = None) -> int:
     if args[0] in ("ascii", "ascii_art"):
         return run_script("arka_ascii_art.py", args[1:])
 
+    if args[0] == "flow":
+        return run_script("arka_flow.py", args[1:])
+
+    if args[0] in ("fact_check", "fact-check", "factcheck", "factchecker"):
+        return run_script("arka_fact_check.py", args[1:])
+
+    if args[0] in ("currency_convert", "convert", "currency"):
+        return run_script("arka_currency.py", ["convert", *args[1:]])
+
     if args[0] in ("ask", "web"):
         q = " ".join(args[1:]).strip()
         if not q:
@@ -218,12 +288,62 @@ def main(argv: list[str] | None = None) -> int:
 
     # Natural language: full agent via bundled config.fish when fish is installed
     text = " ".join(args).strip()
+    mode_hit = _try_mode_nl(text)
+    if mode_hit is not None:
+        return mode_hit
+    provider_hit = _try_provider_nl(text)
+    if provider_hit is not None:
+        return provider_hit
+    code_hit = _try_code_nl(text)
+    if code_hit is not None:
+        return code_hit
     if has_full_fish_agent():
         code = delegate_to_fish(args)
         if code is not None:
             return code
 
     return _run_portable(text)
+
+
+def _try_code_nl(text: str) -> int | None:
+    from arka.core.code_project import main as code_main, route_code_nl
+
+    hit = route_code_nl(text)
+    if not hit:
+        return None
+    parts = hit.split(maxsplit=1)
+    rest = parts[1].split() if len(parts) > 1 else []
+    if parts[0] == "code":
+        return code_main(["code", *rest])
+    return None
+
+
+def _try_provider_nl(text: str) -> int | None:
+    from arka.llm.provider_select import is_provider_select_query, main as provider_main, nl_to_argv
+
+    if not is_provider_select_query(text):
+        return None
+    argv = nl_to_argv(text)
+    if not argv:
+        from arka.llm.provider_select import cmd_show
+        import argparse
+
+        return cmd_show(argparse.Namespace())
+    return provider_main(argv)
+
+
+def _try_mode_nl(text: str) -> int | None:
+    from arka.core.mode import main as mode_main, route_mode_nl
+
+    hit = route_mode_nl(text)
+    if not hit:
+        return None
+    parts = hit.split()
+    if len(parts) == 1:
+        from arka.core.mode import cmd_show
+
+        return cmd_show()
+    return mode_main(["mode", *parts[1:]])
 
 
 def _run_portable(text: str) -> int:
@@ -238,24 +358,7 @@ def _run_portable(text: str) -> int:
         else _cli_null_context()
     )
     with ctx as current:
-        r = route(text)
-        if r:
-            if r.skill == "help":
-                code = _cmd_help()
-            elif r.kind == "shell":
-                from arka.dispatch import run_shell
-
-                print(f"→ {r.skill}")
-                code = run_shell(r.skill)
-            else:
-                print(f"→ {r.skill}")
-                code = run_skill(r.skill)
-        else:
-            from arka.skills import run_chat_ask
-
-            print("→ ask")
-            code = run_chat_ask(text)
-
+        code = _execute_request(text)
         if request_span is not None:
             current.set_attribute("arka.exit_code", code)
             if code == 0:
@@ -263,6 +366,60 @@ def _run_portable(text: str) -> int:
             else:
                 mark_error(current, f"exit {code}")
         return code
+
+
+def _execute_request(text: str) -> int:
+    from arka.core.mode import (
+        ask_mode_skill,
+        get_mode,
+        mode_allows_execution,
+        print_debug_route,
+        print_plan,
+        try_multitask_delegate,
+    )
+    from arka.dispatch import run_shell, run_skill
+
+    r = route(text)
+    if get_mode() == "debug":
+        print_debug_route(text, r)
+
+    multitask_code = try_multitask_delegate(text, r)
+    if multitask_code is not None:
+        return multitask_code
+
+    if get_mode() == "plan":
+        print_plan(text, r)
+        return 0
+
+    if r:
+        if r.skill.split(maxsplit=1)[0] == "mode":
+            return _try_mode_nl(r.skill) or 0
+        if r.skill.split(maxsplit=1)[0] == "code":
+            return _try_code_nl(r.skill) or 0
+        if r.skill == "help":
+            return _cmd_help()
+        skill_line = r.skill
+        if get_mode() == "ask":
+            skill_line = ask_mode_skill(r.skill, text)
+        allowed, reason = mode_allows_execution(skill_line, kind=r.kind)
+        if not allowed:
+            if get_mode() == "ask":
+                from arka.skills import run_chat_ask
+
+                print(f"→ ask ({reason})")
+                return run_chat_ask(text)
+            print(reason, file=sys.stderr)
+            return 1
+        if r.kind == "shell":
+            print(f"→ {r.skill}")
+            return run_shell(r.skill)
+        print(f"→ {skill_line}")
+        return run_skill(skill_line)
+
+    from arka.skills import run_chat_ask
+
+    print("→ ask")
+    return run_chat_ask(text)
 
 
 def _cli_null_context():
@@ -309,6 +466,14 @@ def _cmd_refetch(extra: list[str]) -> int:
             return r.returncode
 
     ensure_layout()
+    try:
+        from arka.agent.repo_context import sync_index
+
+        idx = sync_index(root, quiet=True)
+        if idx.get("ok") and not idx.get("skipped"):
+            print(f"→ llm.txt changelog: {idx.get('changed', 0)} file(s)")
+    except ImportError:
+        pass
     print(f"✓ Refetch complete — bundle: {bundled_dir()}")
     print("  arka doctor")
     return 0
@@ -648,7 +813,11 @@ def _cmd_orchestrate(rest: list[str]) -> int:
 
 
 def _cmd_route_preview(text: str) -> int:
+    from arka.core.mode import get_mode, print_debug_route
+
     r = route(text)
+    if get_mode() == "debug":
+        print_debug_route(text, r)
     if r:
         print(f"skill: {r.skill}")
         print(f"kind: {r.kind}")
@@ -691,8 +860,26 @@ def _cmd_setup(extra: list[str] | None = None) -> int:
         print(f"  ✓ Chat deps installed → {vpy}")
         print("    (agno, ddgs, trafilatura, beautifulsoup4, …)")
 
+    from arka.integrations.context7_mcp import setup_context7
+    from arka.integrations.mcp_server import ensure_arka_self_in_config
+
+    print("\n→ Context7 (library docs MCP)")
+    skip_context7 = "--no-context7" in extra
+    setup_context7(skip_cli=skip_context7)
+    if ensure_arka_self_in_config():
+        print("  ✓ Arka self-MCP added to ~/.config/arka/mcp.json")
+
+    try:
+        from arka.agent.repo_context import sync_index
+
+        idx = sync_index(quiet=True)
+        if idx.get("ok") and not idx.get("skipped"):
+            print(f"\n→ llm.txt changelog: {idx.get('changed', 0)} file(s) indexed")
+    except ImportError:
+        pass
+
     if not env_file().is_file():
-        print("  Edit .env and add GEMINI_API_KEY or GROQ_API_KEY")
+        print("  Edit .env and add GEMINI_API_KEY, GROQ_API_KEY, or OPENROUTER_API_KEY")
     if skill_mode() == "portable":
         print(f"\n  For all 70+ skills, install fish: {fish_install_hint()}")
     print("\n✓ Setup complete — try: arka brief   or   arka ask \"what is Python?\"")
@@ -740,15 +927,25 @@ def _cmd_doctor() -> int:
     else:
         print("  Skills:         portable Python subset (chat, passwords, weather, calc, …)")
         print(f"  Install fish:   {fish_install_hint()}")
+    from arka.integrations.context7_mcp import format_doctor_lines
+    from arka.llm.fallback import llm_doctor_lines
+
+    for line in llm_doctor_lines():
+        print(line)
+    for line in format_doctor_lines():
+        print(line)
     return 0
 
 
-def _cmd_ai_models() -> int:
-    if has_full_fish_agent():
+def _cmd_ai_models(rest: list[str] | None = None) -> int:
+    script_args = ["providers", "--models"]
+    if rest and "--all" in rest:
+        script_args.append("--all")
+    if has_full_fish_agent() and not rest:
         code = delegate_fish_function("ai-models", [])
         if code is not None:
             return code
-    return run_script("arka_llm.py", ["providers", "--models"])
+    return run_script("arka_llm.py", script_args)
 
 
 def _cmd_ai_skill_model(rest: list[str]) -> int:
@@ -787,9 +984,11 @@ def _cmd_help() -> int:
 Install:
   pip install arka-agent          # core
   pip install 'arka-agent[chat]'  # web answers, calc, weather
-  arka setup                      # config dirs + venv-arka + chat deps (ddgs, agno, …)
+  arka setup                      # config dirs + venv-arka + chat deps + Context7 MCP
   arka platform [detect|show]     # cache OS profile on first run (~/.config/arka/platform.json)
   arka refetch [--install]        # git pull + sync bundled (after clone or on another PC)
+  arka repo index                 # append git file deltas to llm.txt changelog
+  arka llm sync                   # alias for arka repo index
   arka reload [--listen] [--dev]  # re-source config in this shell (fish); --listen restarts mic
   arka youtube research <query>   # YouTube search + transcript digest (default 2 videos)
   arka download <id-or-url>       # YouTube playlist ID, video ID, or quoted URL
@@ -812,6 +1011,9 @@ Usage:
   arka google calendar --today    # today's events
   arka gemini <prompt>            # Google Gemini CLI (npm @google/gemini-cli)
   arka gemini status              # check Gemini CLI install
+  arka harvard-ark install        # Harvard ARK KG CLI (PrimeKG — external, not Arka itself)
+  arka harvard-ark chat           # interactive biomedical knowledge graph chat
+  arka harvard-ark list           # list PrimeKG / AfriMedKG / OptimusKG graphs
   arka fugu <prompt>              # Sakana Fugu multi-agent orchestrator
   arka fugu ultra <prompt>        # Fugu Ultra (deeper orchestration)
   arka fugu status                # check Sakana API key + provider
@@ -822,11 +1024,20 @@ Usage:
   arka chat calc integrate sin(x) # SymPy
   arka ascii "HELLO"              # ASCII banner (figlet / pyfiglet)
   arka ascii --from-image cat.jpg # image → ASCII art
+  arka mode [ask|plan|agent|debug|multitask]  # operation mode (default: agent)
+  arka code init <folder>         # initialize scoped coding workspace
+  arka code write <goal>          # write code only inside project folder
+  arka code status                # show active code project
+  arka self improve [target]      # self-improvement loop on Arka repo
   arka route <request>            # preview routing (no run)
   arka route learn "phrase" "skill"  # teach NL → CLI mapping
   arka route list                 # show learned routes
   arka teach route "phrase" "skill"  # alias for route learn
   arka ai-models                  # list LLM providers and models
+  arka provider list              # providers with keys configured
+  arka provider set openrouter    # set preferred provider + autodetect model
+  arka provider models            # list live models for preferred provider
+  arka provider show              # show current preference
   arka ai-skill-model profiles    # per-skill model choices by profile
   arka ai-skill-model web_answer groq/llama-3.3-70b-versatile
   arka doctor                     # install diagnostics

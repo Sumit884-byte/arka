@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 _fast_shutdown = False
 _warned_unreachable: set[str] = set()
 _collector_available: bool | None = None
+_internal_sdk_disabled = False
 
 
 def _truthy(name: str) -> bool:
@@ -22,7 +23,12 @@ def _falsy(name: str) -> bool:
 
 def otel_sdk_disabled() -> bool:
     """Master kill switch — OTEL_SDK_DISABLED=true disables all OTLP export."""
-    return _truthy("OTEL_SDK_DISABLED")
+    return _truthy("OTEL_SDK_DISABLED") or _internal_sdk_disabled
+
+
+def telemetry_verbose() -> bool:
+    """Opt-in stderr diagnostics for OTLP setup (ARKA_TELEMETRY_VERBOSE=1)."""
+    return _truthy("ARKA_TELEMETRY_VERBOSE")
 
 
 def otel_base_url() -> str:
@@ -153,14 +159,21 @@ def collector_available(endpoint_url: str | None = None) -> bool:
     if endpoint_reachable(url):
         _collector_available = True
         return True
-    warn_endpoint_unreachable(url)
-    _collector_available = False
+    _disable_otlp_export(url)
     return False
 
 
+def _disable_otlp_export(endpoint_url: str) -> None:
+    global _collector_available, _internal_sdk_disabled
+    warn_endpoint_unreachable(endpoint_url)
+    _collector_available = False
+    _internal_sdk_disabled = True
+
+
 def reset_collector_probe_cache() -> None:
-    global _collector_available
+    global _collector_available, _internal_sdk_disabled
     _collector_available = None
+    _internal_sdk_disabled = False
 
 
 def endpoint_reachable(endpoint_url: str, *, timeout: float | None = None) -> bool:
@@ -178,7 +191,7 @@ def endpoint_reachable(endpoint_url: str, *, timeout: float | None = None) -> bo
 
 
 def warn_endpoint_unreachable(endpoint_url: str) -> None:
-    if otel_sdk_disabled():
+    if not telemetry_verbose():
         return
     if endpoint_url in _warned_unreachable:
         return
@@ -188,7 +201,7 @@ def warn_endpoint_unreachable(endpoint_url: str) -> None:
     print(
         "arka telemetry: OTLP collector unreachable at "
         f"{endpoint_url} — export disabled for this process "
-        "(set OTEL_SDK_DISABLED=true to silence, or start SigNoz)",
+        "(start SigNoz or set OTEL_SDK_DISABLED=true)",
         file=sys.stderr,
     )
 

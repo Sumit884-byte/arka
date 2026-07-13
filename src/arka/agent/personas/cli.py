@@ -55,7 +55,8 @@ def _generate_persona_draft(subject: str) -> Persona:
         "You draft YAML-ready fields for a simulated entertainment/education persona. "
         "Output ONLY valid JSON with keys: display_name, description, voice, system_prompt, disclaimer. "
         "The persona must never claim to be the real person. "
-        "disclaimer must say it is simulated, not the real person."
+        "disclaimer must say it is simulated, not the real person, "
+        "and warn that AI can make mistakes — users should double-verify important information."
     )
     user = (
         f"Create a simulated persona inspired by public knowledge of {subject!r}. "

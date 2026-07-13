@@ -1,0 +1,126 @@
+{
+  "version": "1.0",
+  "source": "Arka metallurgy index (common alloys; public materials references, AISI/ASTM/EN designations)",
+  "alloys": [
+    {
+      "id": "304",
+      "name": "304 Stainless Steel",
+      "aliases": ["304", "ss304", "aisi 304", "18-8 stainless", "18/8", "type 304", "s30400"],
+      "family": "austenitic stainless steel",
+      "composition": {"Fe": "balance", "Cr": "18-20%", "Ni": "8-10.5%", "C": "≤0.08%", "Mn": "≤2%", "Si": "≤1%", "P": "≤0.045%", "S": "≤0.03%"},
+      "properties": {"density_g_cm3": 8.0, "tensile_strength_mpa": "515-620", "yield_strength_mpa": "205-310", "elongation_percent": "40-60", "hardness_brinell": "123-187", "melting_point_c": "1400-1450"},
+      "applications": ["Food processing", "Kitchen equipment", "Chemical containers", "Architectural trim", "Medical instruments"],
+      "notes": "Most common stainless steel. Good corrosion resistance; not hardened by heat treatment."
+    },
+    {
+      "id": "316",
+      "name": "316 Stainless Steel",
+      "aliases": ["316", "ss316", "aisi 316", "type 316", "marine grade stainless", "s31600"],
+      "family": "austenitic stainless steel",
+      "composition": {"Fe": "balance", "Cr": "16-18%", "Ni": "10-14%", "Mo": "2-3%", "C": "≤0.08%", "Mn": "≤2%", "Si": "≤1%"},
+      "properties": {"density_g_cm3": 8.0, "tensile_strength_mpa": "515-620", "yield_strength_mpa": "205-310", "elongation_percent": "40-50", "melting_point_c": "1375-1400"},
+      "applications": ["Marine hardware", "Pharmaceutical equipment", "Surgical implants", "Coastal architecture"],
+      "notes": "Molybdenum improves pitting resistance vs chlorides; preferred for marine environments."
+    },
+    {
+      "id": "brass",
+      "name": "Brass (C260 / Cartridge Brass)",
+      "aliases": ["brass", "cartridge brass", "c260", "c26000", "yellow brass", "70-30 brass"],
+      "family": "copper-zinc alloy",
+      "composition": {"Cu": "70%", "Zn": "30%", "Pb": "≤0.07%"},
+      "properties": {"density_g_cm3": 8.53, "tensile_strength_mpa": "315-530", "yield_strength_mpa": "70-380", "elongation_percent": "15-55", "melting_point_c": "900-940"},
+      "applications": ["Musical instruments", "Ammunition casings", "Plumbing fittings", "Decorative hardware", "Heat exchangers"],
+      "notes": "Excellent machinability and acoustic properties. Corrosion resistance moderate; dezincification risk in some waters."
+    },
+    {
+      "id": "bronze",
+      "name": "Phosphor Bronze (C510)",
+      "aliases": ["bronze", "phosphor bronze", "c510", "c51000", "tin bronze"],
+      "family": "copper-tin alloy",
+      "composition": {"Cu": "94.8%", "Sn": "5%", "P": "0.2%"},
+      "properties": {"density_g_cm3": 8.86, "tensile_strength_mpa": "450-620", "yield_strength_mpa": "350-550", "elongation_percent": "10-20", "melting_point_c": "950-1050"},
+      "applications": ["Springs", "Bearings", "Electrical connectors", "Marine fasteners", "Musical strings"],
+      "notes": "Higher strength and wear resistance than brass; good fatigue properties."
+    },
+    {
+      "id": "6061-t6",
+      "name": "6061-T6 Aluminum",
+      "aliases": ["6061", "6061-t6", "aa6061", "aluminum 6061", "al 6061", "structural aluminum"],
+      "family": "heat-treatable aluminum alloy",
+      "composition": {"Al": "balance", "Mg": "0.8-1.2%", "Si": "0.4-0.8%", "Cu": "0.15-0.4%", "Cr": "0.04-0.35%", "Fe": "≤0.7%"},
+      "properties": {"density_g_cm3": 2.70, "tensile_strength_mpa": "290-310", "yield_strength_mpa": "240-275", "elongation_percent": "12-17", "hardness_brinell": "95", "melting_point_c": "582-652"},
+      "applications": ["Aircraft structures", "Bicycle frames", "Automotive parts", "Boat hulls", "Welded assemblies"],
+      "notes": "Versatile structural alloy; T6 temper = solution heat treat + artificial aging."
+    },
+    {
+      "id": "7075-t6",
+      "name": "7075-T6 Aluminum",
+      "aliases": ["7075", "7075-t6", "aa7075", "aircraft aluminum", "al 7075"],
+      "family": "heat-treatable aluminum alloy",
+      "composition": {"Al": "balance", "Zn": "5.1-6.1%", "Mg": "2.1-2.9%", "Cu": "1.2-2.0%", "Cr": "0.18-0.28%"},
+      "properties": {"density_g_cm3": 2.81, "tensile_strength_mpa": "510-572", "yield_strength_mpa": "434-503", "elongation_percent": "5-11", "melting_point_c": "477-635"},
+      "applications": ["Aircraft wing spars", "High-stress structural parts", "Rock climbing gear", "Mold tooling"],
+      "notes": "Among strongest aluminum alloys; lower corrosion resistance than 6061; avoid welding."
+    },
+    {
+      "id": "1018",
+      "name": "1018 Low-Carbon Steel",
+      "aliases": ["1018", "aisi 1018", "mild steel", "low carbon steel", "c1018"],
+      "family": "carbon steel",
+      "composition": {"Fe": "balance", "C": "0.14-0.20%", "Mn": "0.60-0.90%", "P": "≤0.04%", "S": "≤0.05%"},
+      "properties": {"density_g_cm3": 7.87, "tensile_strength_mpa": "440", "yield_strength_mpa": "370", "elongation_percent": "15", "hardness_brinell": "126"},
+      "applications": ["Shafts", "Pins", "General machining", "Welded structures", "Case-hardened parts"],
+      "notes": "Easily welded and machined; case hardening can increase surface hardness."
+    },
+    {
+      "id": "4140",
+      "name": "4140 Alloy Steel",
+      "aliases": ["4140", "aisi 4140", "chromoly", "chrome-moly", "scm440"],
+      "family": "low-alloy steel",
+      "composition": {"Fe": "balance", "C": "0.38-0.43%", "Cr": "0.8-1.1%", "Mo": "0.15-0.25%", "Mn": "0.75-1.0%", "Si": "0.15-0.35%"},
+      "properties": {"density_g_cm3": 7.85, "tensile_strength_mpa": "655-1020", "yield_strength_mpa": "415-855", "elongation_percent": "15-25", "hardness_brinell": "197-302"},
+      "applications": ["Axles", "Gears", "Tool holders", "Oil & gas components", "Aircraft landing gear"],
+      "notes": "Responds well to heat treatment (quench + temper) for high strength and toughness."
+    },
+    {
+      "id": "ti-6al-4v",
+      "name": "Ti-6Al-4V (Grade 5 Titanium)",
+      "aliases": ["ti-6al-4v", "grade 5 titanium", "ti64", "titanium grade 5", "ti 6-4"],
+      "family": "alpha-beta titanium alloy",
+      "composition": {"Ti": "balance", "Al": "5.5-6.75%", "V": "3.5-4.5%", "Fe": "≤0.30%", "O": "≤0.20%"},
+      "properties": {"density_g_cm3": 4.43, "tensile_strength_mpa": "900-1100", "yield_strength_mpa": "830-950", "elongation_percent": "10-15", "melting_point_c": "1600-1650"},
+      "applications": ["Aerospace fasteners", "Medical implants", "Racing components", "Offshore equipment"],
+      "notes": "Workhorse titanium alloy; excellent strength-to-weight ratio; biocompatible."
+    },
+    {
+      "id": "inconel-718",
+      "name": "Inconel 718",
+      "aliases": ["inconel 718", "in718", "alloy 718", "nickel 718"],
+      "family": "nickel superalloy",
+      "composition": {"Ni": "50-55%", "Cr": "17-21%", "Fe": "balance", "Nb": "4.75-5.5%", "Mo": "2.8-3.3%", "Ti": "0.65-1.15%", "Al": "0.2-0.8%"},
+      "properties": {"density_g_cm3": 8.19, "tensile_strength_mpa": "1240-1375", "yield_strength_mpa": "1030-1170", "elongation_percent": "12-21", "melting_point_c": "1260-1335"},
+      "applications": ["Jet engine components", "Turbine disks", "Oil & gas downhole", "Cryogenic tanks"],
+      "notes": "Precipitation-hardenable; retains strength at high temperatures; difficult to machine."
+    },
+    {
+      "id": "copper",
+      "name": "Pure Copper (C110 / ETP)",
+      "aliases": ["copper", "c110", "etp copper", "c11000", "pure copper"],
+      "family": "unalloyed copper",
+      "composition": {"Cu": "≥99.9%", "O": "≤0.04%"},
+      "properties": {"density_g_cm3": 8.96, "tensile_strength_mpa": "220-345", "yield_strength_mpa": "70-210", "elongation_percent": "35-45", "melting_point_c": "1085"},
+      "applications": ["Electrical wiring", "Bus bars", "Heat sinks", "Plumbing tube", "RF shielding"],
+      "notes": "Highest electrical and thermal conductivity among common metals."
+    },
+    {
+      "id": "cast-iron",
+      "name": "Gray Cast Iron (Class 30)",
+      "aliases": ["cast iron", "gray iron", "grey iron", "class 30 cast iron"],
+      "family": "cast iron",
+      "composition": {"Fe": "balance", "C": "3.0-3.5%", "Si": "1.8-2.5%", "Mn": "0.5-0.8%", "S": "≤0.15%", "P": "≤0.30%"},
+      "properties": {"density_g_cm3": 7.15, "tensile_strength_mpa": "214", "compressive_strength_mpa": "650-1100", "hardness_brinell": "180-220", "melting_point_c": "1150-1200"},
+      "applications": ["Engine blocks", "Machine bases", "Brake rotors", "Pipe fittings", "Cookware"],
+      "notes": "Excellent castability and vibration damping; brittle in tension."
+    }
+  ]
+}

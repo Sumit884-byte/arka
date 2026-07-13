@@ -111,12 +111,41 @@ def test_sanitize_prompt():
     assert base.sanitize_prompt("persona socrates about wisdom", persona_name="socrates") == "wisdom"
 
 
+def test_effective_system_prompt_includes_persona_lens(personas_tmp):
+    io.seed_persona("elon")
+    persona = io.resolve_persona("elon")
+    prompt = schema.effective_system_prompt(persona)
+    assert "persona lens" in prompt.lower()
+    assert "biases" in prompt.lower()
+    assert "no hedging" in prompt.lower()
+    assert "first person" in prompt.lower()
+    assert "no preamble" in prompt.lower()
+
+
+def test_effective_disclaimer_includes_verification(personas_tmp):
+    io.seed_persona("elon")
+    persona = io.resolve_persona("elon")
+    text = schema.effective_disclaimer(persona)
+    assert "not the real Elon Musk" in text
+    assert "double-verify" in text.lower()
+
+
+def test_chat_once_uses_effective_prompt(personas_tmp):
+    io.seed_persona("elon")
+    persona = io.resolve_persona("elon")
+    with mock.patch.object(base, "_llm_reply", return_value="First principles.") as llm:
+        base.chat_once(persona, "rockets?")
+    system = llm.call_args[0][0]
+    assert "persona lens" in system.lower()
+
+
 def test_chat_once_mock(personas_tmp):
     io.seed_persona("elon")
     persona = io.resolve_persona("elon")
     with mock.patch.object(base, "_llm_reply", return_value="First principles."):
         out = base.chat_once(persona, "rockets?", show_disclaimer=True)
     assert "Note:" in out
+    assert "double-verify" in out.lower()
     assert "── Elon (simulated) ──" in out
     assert "First principles." in out
 
@@ -133,6 +162,7 @@ def test_format_helpers(personas_tmp):
     disclaimer = fmt.format_disclaimer(persona)
     assert "Note:" in disclaimer
     assert "not the real Elon Musk" in disclaimer
+    assert "double-verify" in disclaimer.lower()
 
     body = fmt.format_body("**Manufacturing** at scale needs first-principles thinking.")
     assert "Manufacturing" in body
@@ -156,6 +186,7 @@ def test_cmd_chat_one_shot_format(personas_tmp, capsys):
     out = capsys.readouterr().out
     assert "Note:" in out
     assert "── Elon (simulated) ──" in out
+    assert "double-verify" in out.lower()
     assert "First principles win." in out
 
 

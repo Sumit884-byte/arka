@@ -6,7 +6,7 @@ import re
 import sys
 import textwrap
 
-from arka.agent.personas.schema import DEFAULT_DISCLAIMER, Persona
+from arka.agent.personas.schema import Persona, effective_disclaimer
 
 _WRAP_WIDTH = 88
 _INDENT = "  "
@@ -38,7 +38,7 @@ def repl_prompt(persona: Persona) -> str:
 
 
 def _disclaimer_text(persona: Persona) -> str:
-    return (persona.disclaimer or DEFAULT_DISCLAIMER).strip()
+    return effective_disclaimer(persona).strip()
 
 
 def format_disclaimer(persona: Persona) -> str:

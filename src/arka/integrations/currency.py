@@ -195,9 +195,17 @@ def _format_amount(amount: Decimal, *, ccy: str | None = None) -> str:
     return text
 
 
+def _strip_wrapping_quotes(text: str) -> str:
+    """Remove shell-style wrapping quotes (e.g. fish string escape)."""
+    t = (text or "").strip()
+    while len(t) >= 2 and t[0] == t[-1] and t[0] in ("'", '"'):
+        t = t[1:-1].strip()
+    return t
+
+
 def _normalize_convert_text(text: str) -> str:
     """Fix common typos and arrow connectors before currency parsing."""
-    t = (text or "").strip()
+    t = _strip_wrapping_quotes(text)
     t = t.replace("→", " to ").replace("->", " to ")
     # "ot" is a frequent typo for "to" in convert queries.
     t = re.sub(r"(?i)\bot\b", "to", t)
@@ -243,7 +251,7 @@ def parse_convert(text: str) -> tuple[Decimal, str, str] | None:
 
     # Strip leading command words.
     t = re.sub(
-        r"(?i)^(?:please\s+)?(?:arka\s+)?(?:currency(?:\s+convert)?|convert|exchange|what\s+is|how\s+much\s+is)\s+",
+        r"(?i)^(?:please\s+)?(?:arka\s+)?(?:currency_convert|currency(?:\s+convert)?|convert|currency|exchange|what\s+is|how\s+much\s+is)\s+",
         "",
         t,
     ).strip()
@@ -283,8 +291,10 @@ def parse_convert(text: str) -> tuple[Decimal, str, str] | None:
         if from_ccy and to_ccy:
             return Decimal("1"), from_ccy, to_ccy
 
-    # Positional: "100 USD INR"
+    # Positional: "100 USD INR" (also after "currency_convert 100 USD INR")
     parts = shlex.split(t, posix=True)
+    while parts and parts[0].lower() in _KNOWN_CMDS | {"currency_convert", "currency"}:
+        parts = parts[1:]
     if len(parts) >= 3:
         amount = _parse_amount(parts[0])
         from_ccy = normalize_currency(parts[1])
@@ -450,12 +460,20 @@ def cmd_convert(argv: list[str]) -> int:
         return 1
     parsed = parse_convert(text)
     if not parsed:
+        hint = ""
+        norm = _normalize_convert_text(text)
+        if re.match(r"(?i)^(to|in|into|ot)\s+", norm):
+            hint = (
+                "\nShell may have expanded $10 (use: arka convert 10 USD to INR "
+                "or arka 'convert \\$10 to ₹')."
+            )
         print(
             f"Could not parse currency conversion: {text!r}\n"
             "Examples:\n"
             "  currency_convert 100 USD INR\n"
             "  convert 50 euros to dollars\n"
-            "  what is 1000 rupees to usd",
+            "  what is 1000 rupees to usd"
+            f"{hint}",
             file=sys.stderr,
         )
         return 1

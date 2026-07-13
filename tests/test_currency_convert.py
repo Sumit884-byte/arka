@@ -54,6 +54,30 @@ class CurrencyParseTests(unittest.TestCase):
         self.assertEqual(parsed[1], "USD")
         self.assertEqual(parsed[2], "INR")
 
+    def test_currency_convert_prefix(self) -> None:
+        parsed = parse_convert("currency_convert 100 USD INR")
+        self.assertIsNotNone(parsed)
+        assert parsed is not None
+        self.assertEqual(parsed[0], Decimal("100"))
+        self.assertEqual(parsed[1], "USD")
+        self.assertEqual(parsed[2], "INR")
+
+    def test_quoted_args_from_fish_escape(self) -> None:
+        parsed = parse_convert("'100 USD INR'")
+        self.assertIsNotNone(parsed)
+        assert parsed is not None
+        self.assertEqual(parsed[0], Decimal("100"))
+        self.assertEqual(parsed[1], "USD")
+        self.assertEqual(parsed[2], "INR")
+
+    def test_convert_dollar_ten_to_rupee(self) -> None:
+        parsed = parse_convert("convert $10 to ₹")
+        self.assertIsNotNone(parsed)
+        assert parsed is not None
+        self.assertEqual(parsed[0], Decimal("10"))
+        self.assertEqual(parsed[1], "USD")
+        self.assertEqual(parsed[2], "INR")
+
     def test_nl_to_pattern(self) -> None:
         parsed = parse_convert("convert 100 USD to INR")
         self.assertIsNotNone(parsed)
@@ -283,6 +307,23 @@ class CurrencyRoutingTests(unittest.TestCase):
         self.assertIsNotNone(hit)
         assert hit is not None
         self.assertEqual(hit.split()[0], "currency_convert")
+
+    def test_symbolic_route_currency_convert_cmd(self) -> None:
+        hit = route_currency_convert("currency_convert 100 USD INR")
+        self.assertIsNotNone(hit)
+        assert hit is not None
+        self.assertEqual(hit.split()[0], "currency_convert")
+        self.assertIn("100", hit)
+        self.assertIn("USD", hit)
+        self.assertIn("INR", hit)
+
+    def test_symbolic_route_dollar_ten(self) -> None:
+        hit = route_currency_convert("convert $10 to ₹")
+        self.assertIsNotNone(hit)
+        assert hit is not None
+        self.assertIn("10", hit)
+        self.assertIn("USD", hit)
+        self.assertIn("INR", hit)
 
     def test_symbolic_route_dollars_to_rs_typo(self) -> None:
         hit = route_currency_convert("convert 250 dollars ot rs")

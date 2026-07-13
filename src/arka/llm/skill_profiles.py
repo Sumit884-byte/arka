@@ -37,6 +37,10 @@ TASK_PROFILES: dict[str, dict[str, str]] = {
         "description": "Info/video script generation for compose_video",
         "default_model": "gemini/gemini-2.5-flash",
     },
+    "flow": {
+        "description": "Structured multi-block step-by-step flow answers",
+        "default_model": "gemini/gemini-2.5-flash",
+    },
     "default": {
         "description": "General LLM completions",
         "default_model": "gemini/gemini-2.0-flash",
@@ -49,6 +53,7 @@ SKILL_TASK_MAP: dict[str, str] = {
     "route": "route",
     # Chat / Q&A
     "platform_howto": "chat",
+    "flow": "flow",
     "elon": "chat",
     "talk_to_elon": "chat",
     "elon_chat": "chat",
@@ -64,6 +69,7 @@ SKILL_TASK_MAP: dict[str, str] = {
     "error_helper": "chat",
     "product_reviewer": "chat",
     "price_check": "chat",
+    "fact_check": "research",
     "calc": "chat",
     # Summarize
     "youtube_transcript": "summarize",
@@ -91,6 +97,7 @@ SKILL_TASK_MAP: dict[str, str] = {
     "agent_fanout": "agent",
     "agent_plan": "agent",
     "goal": "agent",
+    "self_improve": "agent",
     "meeting_agent": "agent",
     "study_agent": "agent",
     "inbox_agent": "agent",
@@ -100,10 +107,12 @@ SKILL_TASK_MAP: dict[str, str] = {
     "drawing_ask": "agent",
     "describe_image": "agent",
     "describe_screen": "agent",
+    "describe_video": "agent",
     "codebase_ingest": "agent",
     "semantic_memory": "agent",
     "github_repo": "agent",
     "repo_map": "agent",
+    "repo_context": "agent",
     # PDF / RAG
     "pdf_ask": "pdf",
     "doc_ask": "pdf",

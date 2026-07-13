@@ -21,7 +21,26 @@ IMAGE_EXTENSIONS = frozenset({
     ".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff", ".bmp", ".gif", ".heic", ".svg",
 })
 
-DEFAULT_PROMPT = "Describe this image in detail. Mention objects, people, colors, setting, and any visible text."
+DEFAULT_PROMPT = (
+    "Describe this image in detail. For any visible people, identify who they are if "
+    "recognizable (full name, public role, or reasoned guess from context). "
+    "Mention objects, colors, setting, and any visible text."
+)
+
+SCREEN_PROMPT = (
+    "Describe what is on this computer screen. "
+    "For any visible people (photos, videos, social posts, thumbnails): identify who they are "
+    "if recognizable — full name, public role, or a reasoned guess from visible text, logos, "
+    "or captions (e.g. 'likely [Name] based on [clue]'). "
+    "Also mention applications, windows, visible text, and what the user appears to be doing."
+)
+
+PERSON_PROMPT = (
+    "Identify each visible person. For each: name if recognizable (celebrity, public figure, "
+    "or from visible text/UI), role if apparent, and where they appear. "
+    "If not identifiable, state visual clues and your best guess — avoid generic labels like "
+    "'a woman' or 'a man' without elaboration."
+)
 
 CHART_PROMPT = "Summarize this chart."
 
@@ -35,8 +54,10 @@ GROUNDED_VISION_PROMPT = (
 )
 
 GEMINI_SYSTEM = (
-    "Describe images accurately and concisely. For charts and graphs, summarize the title, "
-    "axes, data series, labels, and main trends or takeaways."
+    "Describe images accurately and concisely. When people are visible, identify who they are "
+    "if recognizable — full name, public role, or a reasoned guess from context (UI text, logos, "
+    "captions). For charts and graphs, summarize the title, axes, data series, labels, and main "
+    "trends or takeaways."
 )
 
 GEMINI_GROUNDED_SYSTEM = (
@@ -294,11 +315,69 @@ def _auto_backend_order() -> list[str]:
     return ["vllm", "ollama", "gemini"]
 
 
-def _backend_candidates() -> list[str]:
+_PERSON_WORDS = re.compile(
+    r"(?i)\b(?:woman|man|person|people|girl|boy|celebrity|individual|figure|face|portrait)\b"
+)
+_PERSON_IDENTIFIED = re.compile(
+    r"(?i)\b(?:named|identified|appears to be|likely|probably|recogniz|"
+    r"is [A-Z][a-z]+(?: [A-Z][a-z]+)?|"
+    r"[A-Z][a-z]+(?: [A-Z][a-z]+)? (?:CEO|president|actor|actress|singer|athlete|founder))\b"
+)
+_NO_PEOPLE = re.compile(r"(?i)\bno (?:people|person|one|individuals?) (?:visible|present|shown)\b")
+
+
+def _wants_person_identification(prompt: str) -> bool:
+    t = (prompt or "").strip()
+    if not t or t in {DEFAULT_PROMPT, SCREEN_PROMPT}:
+        return True
+    return bool(
+        re.search(
+            r"(?i)\b(?:who\s+(?:is|are)|which\s+person|identify\s+(?:the\s+)?(?:people|persons?)|"
+            r"what(?:'|\s+)s\s+on\s+(?:my\s+)?(?:the\s+)?screen|what\s+is\s+on\s+(?:my\s+)?(?:the\s+)?screen|"
+            r"who\s+(?:is\s+)?(?:this|that|shown|visible|in\s+(?:the\s+)?(?:image|photo|picture|post|screen)))\b",
+            t,
+        )
+    )
+
+
+def _is_screen_capture_source(source: str) -> bool:
+    name = Path(source.strip().strip("'\"")).name.lower()
+    return name.startswith("screen_capture") or name.startswith("screen-")
+
+
+def _resolve_vision_prompt(user_prompt: str, *, source: str = "") -> str:
+    user_prompt = (user_prompt or DEFAULT_PROMPT).strip() or DEFAULT_PROMPT
+    if user_prompt in {DEFAULT_PROMPT, SCREEN_PROMPT}:
+        if _is_screen_capture_source(source):
+            return SCREEN_PROMPT
+        return DEFAULT_PROMPT
+    if _wants_person_identification(user_prompt):
+        return f"{PERSON_PROMPT}\n\nUser question: {user_prompt}"
+    return user_prompt
+
+
+def _is_weak_person_response(text: str) -> bool:
+    if not text.strip():
+        return True
+    if _NO_PEOPLE.search(text):
+        return False
+    if not _PERSON_WORDS.search(text):
+        return False
+    if _PERSON_IDENTIFIED.search(text):
+        return False
+    if re.search(r"(?i)\b(?:cannot identify|can't identify|unclear who|unknown person|unnamed)\b", text):
+        return True
+    return True
+
+
+def _backend_candidates(*, person_focused: bool = False) -> list[str]:
     mode = _backend()
     if mode != "auto":
         return [mode]
-    return list(_auto_backend_order())
+    order = list(_auto_backend_order())
+    if person_focused and _backend_ready("gemini") and "gemini" in order and order[0] != "gemini":
+        order = ["gemini"] + [b for b in order if b != "gemini"]
+    return order
 
 
 def _pick_backend() -> str:
@@ -985,11 +1064,12 @@ def _ocr_layer(data: bytes, mime: str, chart_facts: str | None):
 def describe_source(source: str, prompt: str | None = None) -> str:
     _load_arka_env()
     mode = _backend()
-    candidates = _backend_candidates()
+    user_prompt = (prompt or DEFAULT_PROMPT).strip() or DEFAULT_PROMPT
+    user_prompt = _resolve_vision_prompt(user_prompt, source=source)
+    person_focused = _wants_person_identification(user_prompt)
+    candidates = _backend_candidates(person_focused=person_focused)
     if not candidates:
         raise SystemExit(_describe_unavailable_message())
-
-    user_prompt = (prompt or DEFAULT_PROMPT).strip() or DEFAULT_PROMPT
     data, mime, image_label = load_image_bytes(source)
     errors: list[str] = []
 
@@ -1039,6 +1119,18 @@ def describe_source(source: str, prompt: str | None = None) -> str:
                 max_tokens=max_tokens,
                 grounded=grounded,
             )
+            if (
+                person_focused
+                and _is_weak_person_response(vision_text)
+                and mode == "auto"
+                and index < len(candidates) - 1
+            ):
+                errors.append(f"{backend}: generic person description — trying next backend")
+                print(
+                    f"describe_image: {backend} gave generic person description — trying next backend",
+                    file=sys.stderr,
+                )
+                continue
             if mode == "auto" and index > 0:
                 print(f"describe_image: using {backend}", file=sys.stderr)
             if _two_layer_enabled():

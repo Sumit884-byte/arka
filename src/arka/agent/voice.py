@@ -193,11 +193,13 @@ def voice_progress(skill: str) -> str:
         "send_whatsapp": "Sending on WhatsApp.",
         "search_web": "Searching the web.",
         "install_app": "Installing the app.",
+        "install_stt": "Setting up Whisper speech-to-text.",
         "install_brew": "Installing with Homebrew.",
         "install_apt": "Installing with apt.",
         "generate_password": "Generating a password.",
         "crypto_price": "Checking crypto prices.",
         "price_check": "Looking up product prices.",
+        "fact_check": "Fact-checking your claim.",
         "sports_score": "Checking live sports scores.",
         "live_scores": "Checking live sports scores.",
         "predictions": "Analyzing that.",
@@ -228,6 +230,7 @@ def voice_progress(skill: str) -> str:
         "route_learn": "Saving that route.",
         "gemini_cli": "Asking Gemini.",
         "gemini": "Asking Gemini.",
+        "harvard_ark": "Opening Harvard ARK knowledge graph chat.",
     }
     return table.get(key, voice_ack(key.replace("_", " ")))
 

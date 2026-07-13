@@ -63,6 +63,34 @@ DEFAULT_OLLAMA_MODELS = [
     "llama3.2:1b",
 ]
 
+DEFAULT_OPENROUTER_MODELS = [
+    "meta-llama/llama-3.3-70b-instruct",
+    "google/gemini-2.0-flash-exp:free",
+    "openai/gpt-4o-mini",
+    "anthropic/claude-sonnet-4",
+]
+
+DEFAULT_LLM_MAX_TOKENS = 4096
+SIMPLE_QUERY_MAX_TOKENS = 512
+OPENROUTER_DEFAULT_MAX_TOKENS = 4096
+
+TASK_MAX_TOKENS: dict[str, int] = {
+    "route": 256,
+    "chat": 4096,
+    "summarize": 4096,
+    "research": 8192,
+    "agent": 8192,
+    "pdf": 4096,
+    "predictions": 4096,
+    "compose_video": 4096,
+    "default": 4096,
+}
+
+OPENROUTER_MODEL_ALIASES = {
+    "anthropic/claude-3.5-sonnet": "anthropic/claude-sonnet-4",
+    "google/gemini-2.0-flash-001": "google/gemini-2.0-flash",
+}
+
 GEMINI_LIST_SKIP_RE = re.compile(
     r"(tts|image|embedding|aqa|vision|exp-|experimental|preview-tts|nano-banana)",
     re.I,
@@ -100,6 +128,18 @@ _GROQ_LIVE_TTL = 600.0
 _OLLAMA_LIVE_CACHE: tuple[float, list[str]] | None = None
 _OLLAMA_LIVE_LOCK = threading.Lock()
 _OLLAMA_LIVE_TTL = 120.0
+
+_OPENROUTER_LIVE_CACHE: tuple[float, list[str]] | None = None
+_OPENROUTER_META_CACHE: tuple[float, dict[str, dict[str, Any]]] | None = None
+_OPENROUTER_LIVE_LOCK = threading.Lock()
+_OPENROUTER_LIVE_TTL = 600.0
+
+OPENROUTER_LIST_SKIP_RE = re.compile(
+    r"(?i)(embed|embedding|tts|whisper|image|vision|audio|moderation|rerank)",
+)
+OPENROUTER_DEPRIORITIZE_RE = re.compile(
+    r"(?i)(multi-agent|grok-4|grok-3|claude-opus|/o1-|/o3-|deepseek-r1|/r1\b)",
+)
 
 TASK_ALIASES = {
     "default": "default",
@@ -192,6 +232,22 @@ class ExhaustionStore:
                 x in msg for x in ("model_not_found", "not found", "404", "does not exist", "unknown model")
             ):
                 self._exhausted.add(("ollama", model_id))
+            if provider == "openrouter" and any(
+                x in msg
+                for x in (
+                    "no endpoints found",
+                    "endpoints found",
+                    "model_not_found",
+                    "not_found",
+                    "not found for",
+                    "requires more credits",
+                    "can only afford",
+                )
+            ):
+                self._exhausted.add(("openrouter", model_id))
+                aliased = normalize_openrouter_model(model_id)
+                if aliased != model_id:
+                    self._exhausted.add(("openrouter", aliased))
 
     def exhausted(self, provider: str, model_id: str) -> bool:
         with self._lock:
@@ -236,6 +292,11 @@ def is_retryable_error(msg: str) -> bool:
             "model_not_found",
             "model_decommissioned",
             "decommissioned",
+            "no endpoints found",
+            "endpoints found",
+            "requires more credits",
+            "can only afford",
+            "fewer max_tokens",
         )
     )
 
@@ -699,14 +760,18 @@ def fetch_gemini_models_live(*, force: bool = False) -> list[str]:
 
 def gemini_model_ids(*, include_live: bool = True) -> list[str]:
     explicit = [normalize_gemini_model(m.strip()) for m in env("GEMINI_MODELS").split(",") if m.strip()]
-    raw = [
+    preferred = [
         env("CHAT_MODEL"),
         env("AI_PREFERRED_MODEL"),
         env("LLM_MODEL"),
     ]
-    raw.extend(explicit or DEFAULT_GEMINI_MODELS)
-    if include_live and _gemini_list_enabled():
-        raw.extend(fetch_gemini_models_live())
+    live = fetch_gemini_models_live() if include_live and _gemini_list_enabled() else []
+    live_set = set(live) if live else None
+    raw = preferred + (explicit or ([] if live_set is not None else list(DEFAULT_GEMINI_MODELS)))
+    if live_set is not None:
+        raw.extend(live)
+    elif include_live and _gemini_list_enabled():
+        raw.extend(live)
     out: list[str] = []
     for model in raw:
         model = normalize_gemini_model(model)
@@ -714,9 +779,13 @@ def gemini_model_ids(*, include_live: bool = True) -> list[str]:
             continue
         if GEMINI_LIST_SKIP_RE.search(model):
             continue
+        if live_set is not None and model not in live_set:
+            continue
         if model not in out:
             out.append(model)
     if not out:
+        if live:
+            return list(live)
         return list(DEFAULT_GEMINI_MODELS)
     preferred = {normalize_gemini_model(m) for m in raw[:3] if m}
     head = [m for m in out if m in preferred]
@@ -820,22 +889,30 @@ def groq_model_ids(*, include_live: bool = True) -> list[str]:
         for m in env("GROQ_MODELS").split(",")
         if m.strip()
     ]
-    raw = [
+    preferred = [
         normalize_groq_model(env("GROQ_MODEL")),
         env("AI_PREFERRED_MODEL") if pref_provider == "groq" else "",
         env("LLM_MODEL") if pref_provider == "groq" else "",
     ]
-    raw.extend(explicit or DEFAULT_GROQ_MODELS)
-    if include_live and _groq_list_enabled():
-        raw.extend(fetch_groq_models_live())
+    live = fetch_groq_models_live() if include_live and _groq_list_enabled() else []
+    live_set = set(live) if live else None
+    raw = preferred + (explicit or ([] if live_set is not None else list(DEFAULT_GROQ_MODELS)))
+    if live_set is not None:
+        raw.extend(live)
+    elif include_live and _groq_list_enabled():
+        raw.extend(live)
     out: list[str] = []
     for model in raw:
         model = normalize_groq_model(model)
         if not model or model.startswith("gemini-"):
             continue
+        if live_set is not None and model not in live_set:
+            continue
         if model not in out:
             out.append(model)
     if not out:
+        if live:
+            return list(live)
         return list(DEFAULT_GROQ_MODELS)
     preferred = {normalize_groq_model(m) for m in raw[:4] if m}
     head = [m for m in out if m in preferred]
@@ -907,21 +984,29 @@ def ollama_model_ids(*, include_live: bool = True) -> list[str]:
     pref_provider = (env("AI_PREFERRED_PROVIDER") or env("LLM_PROVIDER")).lower()
     pref_model = env("AI_PREFERRED_MODEL") or env("LLM_MODEL")
     explicit = [m.strip() for m in env("OLLAMA_MODELS").split(",") if m.strip()]
-    raw = [
+    preferred = [
         env("OLLAMA_CHAT_MODEL"),
         pref_model if pref_provider == "ollama" else "",
         env("LLM_MODEL") if pref_provider == "ollama" else "",
     ]
-    raw.extend(explicit or DEFAULT_OLLAMA_MODELS)
-    if include_live and _ollama_list_enabled():
-        raw.extend(fetch_ollama_models_live())
+    live = fetch_ollama_models_live() if include_live and _ollama_list_enabled() else []
+    live_set = set(live) if live else None
+    raw = preferred + (explicit or ([] if live_set is not None else list(DEFAULT_OLLAMA_MODELS)))
+    if live_set is not None:
+        raw.extend(live)
+    elif include_live and _ollama_list_enabled():
+        raw.extend(live)
     out: list[str] = []
     for model in raw:
         if not model or model.startswith("gemini-"):
             continue
+        if live_set is not None and model not in live_set:
+            continue
         if model not in out:
             out.append(model)
     if not out:
+        if live:
+            return list(live)
         return list(DEFAULT_OLLAMA_MODELS)
     preferred = {m for m in raw[:4] if m}
     head = [m for m in out if m in preferred]
@@ -939,6 +1024,351 @@ def _has_groq() -> bool:
 
 def _has_gemini() -> bool:
     return bool(_ensure_google_key())
+
+
+_PRIMARY_CLOUD_PROVIDERS = frozenset({"gemini", "groq", "openai", "anthropic"})
+
+
+def _has_primary_cloud_keys() -> bool:
+    return any(provider_has_keys(p) for p in _PRIMARY_CLOUD_PROVIDERS)
+
+
+def _has_openrouter() -> bool:
+    return provider_has_keys("openrouter")
+
+
+def _openrouter_list_enabled() -> bool:
+    if env("OPENROUTER_LIST") in {"0", "false", "no", "off"}:
+        return False
+    return bool(provider_has_keys("openrouter"))
+
+
+def _parse_positive_int(raw: str, default: int) -> int:
+    try:
+        return max(1, int(raw))
+    except (TypeError, ValueError):
+        return default
+
+
+def _is_simple_query(user: str) -> bool:
+    text = re.sub(r"\s+", " ", (user or "").strip())
+    if not text or len(text) > 80:
+        return False
+    if "\n" in text:
+        return False
+    words = text.split()
+    return len(words) <= 8
+
+
+def _openrouter_completion_price(item: dict[str, Any]) -> float:
+    pricing = item.get("pricing") if isinstance(item.get("pricing"), dict) else {}
+    for key in ("completion", "prompt"):
+        raw = pricing.get(key)
+        if raw is None:
+            continue
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            continue
+    return 0.0
+
+
+def _openrouter_meta_from_item(item: dict[str, Any]) -> dict[str, Any]:
+    top = item.get("top_provider") if isinstance(item.get("top_provider"), dict) else {}
+    max_out = top.get("max_completion_tokens")
+    try:
+        max_out_int = int(max_out) if max_out is not None else None
+    except (TypeError, ValueError):
+        max_out_int = None
+    ctx = item.get("context_length") or top.get("context_length")
+    try:
+        ctx_int = int(ctx) if ctx is not None else None
+    except (TypeError, ValueError):
+        ctx_int = None
+    return {
+        "completion_price": _openrouter_completion_price(item),
+        "max_completion_tokens": max_out_int,
+        "context_length": ctx_int,
+    }
+
+
+def openrouter_model_meta(model_id: str) -> dict[str, Any] | None:
+    mid = normalize_openrouter_model(model_id)
+    if not mid:
+        return None
+    with _OPENROUTER_LIVE_LOCK:
+        if _OPENROUTER_META_CACHE:
+            meta = _OPENROUTER_META_CACHE[1].get(mid)
+            if meta:
+                return dict(meta)
+    return None
+
+
+def resolve_max_tokens(
+    provider: str,
+    model_id: str,
+    *,
+    task: str = "default",
+    user: str = "",
+) -> int:
+    """Cap completion tokens per provider, task, and prompt complexity."""
+    profile = normalize_task(task)
+    cap = TASK_MAX_TOKENS.get(profile, DEFAULT_LLM_MAX_TOKENS)
+    if env("LLM_MAX_TOKENS"):
+        cap = min(cap, _parse_positive_int(env("LLM_MAX_TOKENS"), cap))
+
+    provider = provider.lower()
+    if provider == "openrouter":
+        or_cap = env("OPENROUTER_MAX_TOKENS") or str(OPENROUTER_DEFAULT_MAX_TOKENS)
+        cap = min(cap, _parse_positive_int(or_cap, OPENROUTER_DEFAULT_MAX_TOKENS))
+        meta = openrouter_model_meta(model_id)
+        if meta and meta.get("max_completion_tokens"):
+            cap = min(cap, int(meta["max_completion_tokens"]))
+
+    if _is_simple_query(user):
+        cap = min(cap, SIMPLE_QUERY_MAX_TOKENS)
+
+    return max(64, cap)
+
+
+def _is_openrouter_credit_error(msg: str) -> bool:
+    low = (msg or "").lower()
+    return "requires more credits" in low or ("can only afford" in low and "max_tokens" in low)
+
+
+def _parse_affordable_tokens(msg: str) -> int | None:
+    m = re.search(r"can only afford\s+(\d+)", msg, re.I)
+    if not m:
+        return None
+    try:
+        return max(64, int(m.group(1)))
+    except ValueError:
+        return None
+
+
+def _reduce_max_tokens_for_credit_error(current: int, err_text: str) -> int:
+    affordable = _parse_affordable_tokens(err_text)
+    if affordable is not None:
+        return max(64, min(current, affordable))
+    return max(256, current // 2)
+
+
+def normalize_openrouter_model(model_id: str) -> str:
+    mid = (model_id or "").strip()
+    return OPENROUTER_MODEL_ALIASES.get(mid, mid)
+
+
+def _openrouter_model_routable(item: dict) -> bool:
+    if not isinstance(item, dict):
+        return False
+    mid = str(item.get("id") or "").strip()
+    if not mid or OPENROUTER_LIST_SKIP_RE.search(mid):
+        return False
+    arch = item.get("architecture") if isinstance(item.get("architecture"), dict) else {}
+    modality = str(arch.get("modality") or "").lower()
+    if modality and "text" not in modality:
+        return False
+    top = item.get("top_provider")
+    return isinstance(top, dict) and bool(top)
+
+
+def _rank_openrouter_model(model_id: str) -> tuple[int, float, str]:
+    mid = model_id.lower()
+    defaults = list(DEFAULT_OPENROUTER_MODELS)
+    spec = get_provider("openrouter")
+    if spec and spec.default_models:
+        defaults = list(spec.default_models)
+    for idx, candidate in enumerate(defaults):
+        if candidate.lower() == mid:
+            return (0, float(idx), mid)
+    if ":free" in mid:
+        return (1, 0.0, mid)
+    if OPENROUTER_DEPRIORITIZE_RE.search(mid):
+        return (9, 0.0, mid)
+    meta = openrouter_model_meta(model_id)
+    price = float(meta.get("completion_price", 0.0)) if meta else 0.0
+    if price <= 0:
+        tier = 2
+    elif price < 0.000001:
+        tier = 2
+    elif price < 0.00001:
+        tier = 3
+    else:
+        tier = 4
+    return (tier, price, mid)
+
+
+def _filter_openrouter_chat_models(model_ids: list[str]) -> list[str]:
+    out: list[str] = []
+    for mid in model_ids:
+        if mid not in out:
+            out.append(mid)
+    out.sort(key=_rank_openrouter_model)
+    return out
+
+
+def pick_openrouter_default_model(models: list[str]) -> str:
+    spec = get_provider("openrouter")
+    defaults = list(spec.default_models) if spec and spec.default_models else list(DEFAULT_OPENROUTER_MODELS)
+    for candidate in defaults:
+        if candidate in models:
+            return candidate
+    ranked = _filter_openrouter_chat_models(models)
+    if ranked:
+        return ranked[0]
+    return spec.default_model if spec else ""
+
+
+def fetch_openrouter_models_live(*, force: bool = False) -> list[str]:
+    """List OpenRouter chat models from /api/v1/models (cached ~10 min)."""
+    global _OPENROUTER_LIVE_CACHE, _OPENROUTER_META_CACHE
+
+    if not _openrouter_list_enabled():
+        return []
+
+    keys = iter_provider_keys("openrouter")
+    if not keys:
+        return []
+
+    now = time.time()
+    with _OPENROUTER_LIVE_LOCK:
+        if not force and _OPENROUTER_LIVE_CACHE and now - _OPENROUTER_LIVE_CACHE[0] < _OPENROUTER_LIVE_TTL:
+            return list(_OPENROUTER_LIVE_CACHE[1])
+
+    data = None
+    for key in keys:
+        try:
+            req = urllib.request.Request(
+                "https://openrouter.ai/api/v1/models",
+                headers={"Authorization": f"Bearer {key}"},
+                method="GET",
+            )
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                data = json.loads(resp.read().decode())
+            break
+        except urllib.error.HTTPError as exc:
+            if is_key_retryable(str(exc)) and key != keys[-1]:
+                continue
+        except (urllib.error.URLError, OSError, TimeoutError, json.JSONDecodeError):
+            if key != keys[-1]:
+                continue
+
+    if data is None:
+        with _OPENROUTER_LIVE_LOCK:
+            if _OPENROUTER_LIVE_CACHE:
+                return list(_OPENROUTER_LIVE_CACHE[1])
+        return []
+
+    models: list[str] = []
+    meta_map: dict[str, dict[str, Any]] = {}
+    for item in data.get("data") or []:
+        if not isinstance(item, dict):
+            continue
+        if not _openrouter_model_routable(item):
+            continue
+        mid = str(item.get("id") or "").strip()
+        if mid not in models:
+            models.append(mid)
+            meta_map[mid] = _openrouter_meta_from_item(item)
+
+    models = _filter_openrouter_chat_models(models)
+    default = pick_openrouter_default_model(models)
+    if default and default in models:
+        models.remove(default)
+        models.insert(0, default)
+
+    with _OPENROUTER_LIVE_LOCK:
+        _OPENROUTER_LIVE_CACHE = (now, models)
+        _OPENROUTER_META_CACHE = (now, meta_map)
+    return list(models)
+
+
+def openrouter_model_ids(*, include_live: bool = True) -> list[str]:
+    spec = get_provider("openrouter")
+    if not spec:
+        return []
+    pref_provider = (env("AI_PREFERRED_PROVIDER") or env("LLM_PROVIDER")).lower()
+    pref_raw = env("AI_PREFERRED_MODEL") if pref_provider == "openrouter" else ""
+    llm_raw = env("LLM_MODEL") if pref_provider == "openrouter" else ""
+    explicit = [
+        normalize_openrouter_model(m.strip())
+        for m in env("OPENROUTER_MODELS").split(",")
+        if m.strip()
+    ]
+    live = fetch_openrouter_models_live() if include_live and _openrouter_list_enabled() else []
+    live_set = set(live)
+    catalog = explicit or list(spec.default_models) or [spec.default_model]
+
+    out: list[str] = []
+
+    def _add(model: str) -> None:
+        model = normalize_openrouter_model(model)
+        if not model or model in out:
+            return
+        if live_set and model not in live_set:
+            return
+        out.append(model)
+
+    if pref_raw and (not live_set or pref_raw in live_set):
+        _add(pref_raw)
+    if llm_raw and (not live_set or llm_raw in live_set):
+        _add(llm_raw)
+    for model in live or catalog:
+        _add(model)
+    if not out and live:
+        out.extend(live)
+    if out:
+        return out
+    return [normalize_openrouter_model(m) for m in provider_model_ids(spec)]
+
+
+def provider_detected_model_count(provider: str) -> int | None:
+    """Best-effort model count for doctor output (uses live cache when available)."""
+    try:
+        from arka.llm.provider_select import detect_provider_models
+
+        models, _source = detect_provider_models(provider, include_live=True)
+        return len(models) if models else None
+    except ImportError:
+        slug = (provider or "").strip().lower()
+        if slug == "gemini":
+            models = gemini_model_ids(include_live=True)
+        elif slug == "groq":
+            models = groq_model_ids(include_live=True)
+        elif slug == "ollama":
+            models = ollama_model_ids(include_live=True)
+        elif slug == "openrouter":
+            models = openrouter_model_ids(include_live=True)
+        else:
+            spec = get_provider(slug)
+            models = provider_model_ids(spec) if spec else []
+        return len(models) if models else None
+
+
+def llm_doctor_lines() -> list[str]:
+    """Diagnostic lines for ``arka doctor`` — configured LLM providers."""
+    configured = [spec.slug for spec in provider_specs() if provider_available(spec.slug)]
+    pref = (env("AI_PREFERRED_PROVIDER") or env("LLM_PROVIDER")).lower()
+    pref_model = env("AI_PREFERRED_MODEL") or env("LLM_MODEL")
+    lines: list[str] = []
+    if configured:
+        lines.append(f"  LLM providers:  {', '.join(configured)}")
+    else:
+        lines.append(
+            "  LLM providers:  none "
+            "(set OPENROUTER_API_KEY, GEMINI_API_KEY, GROQ_API_KEY, or run ollama serve)"
+        )
+    if pref and pref_model:
+        count = provider_detected_model_count(pref)
+        suffix = f" ({count} models detected)" if count else ""
+        lines.append(f"  LLM preferred:  {pref} → {pref_model}{suffix}")
+    elif _has_openrouter() and not _has_primary_cloud_keys():
+        spec = get_provider("openrouter")
+        default = spec.default_model if spec else "meta-llama/llama-3.3-70b-instruct"
+        count = provider_detected_model_count("openrouter")
+        suffix = f" ({count} models detected)" if count else ""
+        lines.append(f"  LLM preferred:  openrouter → {default} (auto — only cloud key){suffix}")
+    return lines
 
 
 def _expand_provider_models(
@@ -981,6 +1411,10 @@ def build_default_chain(*, task: str = "default", skill: str | None = None) -> l
         elif pref_provider == "ollama":
             if not pref_model.startswith("gemini-"):
                 add(pref_provider, pref_model)
+        elif pref_provider == "openrouter":
+            live = fetch_openrouter_models_live() if _openrouter_list_enabled() else []
+            if not live or pref_model in live:
+                add(pref_provider, normalize_openrouter_model(pref_model))
         else:
             add(pref_provider, pref_model)
 
@@ -993,6 +1427,11 @@ def build_default_chain(*, task: str = "default", skill: str | None = None) -> l
     if explicit_vllm or is_reachable("vllm"):
         add("vllm", env("VLLM_MODEL") or "default")
 
+    openrouter_only = _has_openrouter() and not _has_primary_cloud_keys()
+    if openrouter_only and pref_provider != "openrouter":
+        for model_id in openrouter_model_ids():
+            add("openrouter", model_id)
+
     _expand_provider_models(add, pref_provider, provider="gemini", model_ids=gemini_model_ids())
     if _has_groq():
         for model_id in groq_model_ids():
@@ -1002,6 +1441,8 @@ def build_default_chain(*, task: str = "default", skill: str | None = None) -> l
 
     for spec in provider_specs():
         if spec.slug in {"gemini", "groq", "ollama", "vllm", "vllm-cloud"}:
+            continue
+        if spec.slug == "openrouter" and openrouter_only and pref_provider != "openrouter":
             continue
         if not provider_available(spec.slug):
             continue
@@ -1090,7 +1531,14 @@ def provider_available(provider: str) -> bool:
     return provider_available_with_servers(provider)
 
 
-def build_model(provider: str, model_id: str, temperature: float, *, session: LlmServerSession | None = None) -> Any | None:
+def build_model(
+    provider: str,
+    model_id: str,
+    temperature: float,
+    *,
+    max_tokens: int | None = None,
+    session: LlmServerSession | None = None,
+) -> Any | None:
     provider = provider.lower()
     if provider in LOCAL_PROVIDERS:
         if session is not None:
@@ -1105,13 +1553,19 @@ def build_model(provider: str, model_id: str, temperature: float, *, session: Ll
         from agno.models.google import Gemini
 
         _ensure_google_key()
-        return Gemini(id=normalize_gemini_model(model_id), temperature=temperature)
+        kwargs: dict[str, Any] = {"id": normalize_gemini_model(model_id), "temperature": temperature}
+        if max_tokens is not None:
+            kwargs["max_output_tokens"] = max_tokens
+        return Gemini(**kwargs)
 
     if provider == "groq":
         from agno.models.groq import Groq
 
         apply_provider_key("groq")
-        return Groq(id=normalize_groq_model(model_id), temperature=temperature)
+        kwargs = {"id": normalize_groq_model(model_id), "temperature": temperature}
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
+        return Groq(**kwargs)
 
     if provider == "ollama":
         from agno.models.ollama import Ollama
@@ -1120,34 +1574,46 @@ def build_model(provider: str, model_id: str, temperature: float, *, session: Ll
         if mid.startswith("gemini-"):
             mid = "minimax-m2.5:cloud"
         apply_provider_key("ollama")
+        options: dict[str, int | float] = {"temperature": temperature}
+        if max_tokens is not None:
+            options["num_predict"] = max_tokens
         return Ollama(
             id=mid,
             host=_ollama_host(),
             api_key=env("OLLAMA_API_KEY") or None,
-            options={"temperature": temperature},
+            options=options,
         )
 
     if provider == "openai":
         from agno.models.openai import OpenAIChat
 
         apply_provider_key("openai")
-        return OpenAIChat(id=model_id, temperature=temperature)
+        kwargs = {"id": model_id, "temperature": temperature}
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
+        return OpenAIChat(**kwargs)
 
     if provider == "anthropic":
         from agno.models.anthropic import Claude
 
         apply_provider_key("anthropic")
-        return Claude(id=model_id, temperature=temperature)
+        kwargs = {"id": model_id, "temperature": temperature}
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
+        return Claude(**kwargs)
 
     if provider == "vllm":
         from agno.models.openai import OpenAIChat
 
-        return OpenAIChat(
-            id=model_id or "default",
-            base_url=_vllm_base_url(),
-            api_key=env("VLLM_API_KEY") or "EMPTY",
-            temperature=temperature,
-        )
+        kwargs = {
+            "id": model_id or "default",
+            "base_url": _vllm_base_url(),
+            "api_key": env("VLLM_API_KEY") or "EMPTY",
+            "temperature": temperature,
+        }
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
+        return OpenAIChat(**kwargs)
 
     if provider == "vllm-cloud":
         from agno.models.openai import OpenAIChat
@@ -1159,12 +1625,15 @@ def build_model(provider: str, model_id: str, temperature: float, *, session: Ll
         spec = get_provider("vllm-cloud")
         mid = model_id or env("VLLM_CLOUD_MODEL") or (spec.default_model if spec else "default")
         api_key = (provider_api_key(spec) if spec else "") or env("VLLM_CLOUD_API_KEY") or "EMPTY"
-        return OpenAIChat(
-            id=mid,
-            base_url=base,
-            api_key=api_key,
-            temperature=temperature,
-        )
+        kwargs = {
+            "id": mid,
+            "base_url": base,
+            "api_key": api_key,
+            "temperature": temperature,
+        }
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
+        return OpenAIChat(**kwargs)
 
     spec = get_provider(provider)
     if spec and spec.kind in {"openai_compatible", "local_openai"}:
@@ -1176,12 +1645,15 @@ def build_model(provider: str, model_id: str, temperature: float, *, session: Ll
             return None
         api_key = provider_api_key(spec) or env("OPENAI_API_KEY") or "EMPTY"
         mid = model_id or spec.default_model
-        return OpenAIChat(
-            id=mid,
-            base_url=base,
-            api_key=api_key,
-            temperature=temperature,
-        )
+        kwargs = {
+            "id": mid,
+            "base_url": base,
+            "api_key": api_key,
+            "temperature": temperature,
+        }
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
+        return OpenAIChat(**kwargs)
 
     return None
 
@@ -1221,6 +1693,11 @@ def _looks_like_error(text: str) -> bool:
             "status code: 404",
             "status code: 401",
             "status code: 403",
+            "no endpoints found",
+            "endpoints found",
+            "requires more credits",
+            "can only afford",
+            "fewer max_tokens",
         )
     ):
         return True
@@ -1289,179 +1766,239 @@ class LlmFallbackEngine:
                 for provider, model_id in chain:
                     if self.store.exhausted(provider, model_id):
                         continue
+                    attempt_max_tokens = resolve_max_tokens(
+                        provider,
+                        model_id,
+                        task=self.task,
+                        user=user,
+                    )
+                    credit_retries_left = 2
                     key_retry = True
                     while key_retry:
                         key_retry = False
-                        apply_provider_key(provider)
-                        model = build_model(provider, model_id, temperature, session=session)
-                        if model is None:
-                            break
-                        attempts += 1
-                        label = f"{provider}/{model_id}"
-                        kr = key_rotation_label(provider)
-                        if kr:
-                            label = f"{label} ({kr})"
-                        tried.append(label)
-                        try:
-                            from arka.telemetry import (
-                                llm_http_span_attributes,
-                                mark_error,
-                                mark_ok,
-                                parse_http_status_code,
-                                set_http_span_attributes,
-                                span as trace_span,
+                        token_retry = True
+                        while token_retry:
+                            token_retry = False
+                            apply_provider_key(provider)
+                            model = build_model(
+                                provider,
+                                model_id,
+                                temperature,
+                                max_tokens=attempt_max_tokens,
+                                session=session,
                             )
-                        except ImportError:
-                            trace_span = None  # type: ignore[assignment,misc]
-                            llm_http_span_attributes = None  # type: ignore[assignment,misc]
-                            parse_http_status_code = None  # type: ignore[assignment,misc]
-                            set_http_span_attributes = None  # type: ignore[assignment,misc]
-                        from contextlib import nullcontext
+                            if model is None:
+                                break
+                            attempts += 1
+                            label = f"{provider}/{model_id}"
+                            kr = key_rotation_label(provider)
+                            if kr:
+                                label = f"{label} ({kr})"
+                            if attempt_max_tokens:
+                                label = f"{label} (max_tokens={attempt_max_tokens})"
+                            tried.append(label)
+                            try:
+                                from arka.telemetry import (
+                                    llm_http_span_attributes,
+                                    mark_error,
+                                    mark_ok,
+                                    parse_http_status_code,
+                                    set_http_span_attributes,
+                                    span as trace_span,
+                                )
+                            except ImportError:
+                                trace_span = None  # type: ignore[assignment,misc]
+                                llm_http_span_attributes = None  # type: ignore[assignment,misc]
+                                parse_http_status_code = None  # type: ignore[assignment,misc]
+                                set_http_span_attributes = None  # type: ignore[assignment,misc]
+                            from contextlib import nullcontext
 
-                        attempt_attrs = {
-                            "gen_ai.provider.name": provider,
-                            "gen_ai.request.model": model_id,
-                            "arka.task": normalize_task(self.task),
-                            "arka.llm.attempt_index": attempts,
-                            **(
-                                {"arka.inference.backend": _inference_backend(provider)}
-                                if provider
-                                in {"vllm", "vllm-cloud", "ollama", "lmstudio", "litellm"}
-                                else {}
-                            ),
-                        }
-                        if llm_http_span_attributes is not None:
-                            attempt_attrs.update(llm_http_span_attributes(provider))
+                            attempt_attrs = {
+                                "gen_ai.provider.name": provider,
+                                "gen_ai.request.model": model_id,
+                                "arka.task": normalize_task(self.task),
+                                "arka.llm.attempt_index": attempts,
+                                "arka.llm.max_tokens": attempt_max_tokens,
+                                **(
+                                    {"arka.inference.backend": _inference_backend(provider)}
+                                    if provider
+                                    in {"vllm", "vllm-cloud", "ollama", "lmstudio", "litellm"}
+                                    else {}
+                                ),
+                            }
+                            if llm_http_span_attributes is not None:
+                                attempt_attrs.update(llm_http_span_attributes(provider))
 
-                        attempt_mgr = (
-                            trace_span("arka.llm.attempt", attributes=attempt_attrs)
-                            if trace_span is not None
-                            else nullcontext()
-                        )
-                        try:
-                            with attempt_mgr as attempt_span:
-                                if verbose:
-                                    print(
-                                        f"arka_llm: trying {label} (task={normalize_task(self.task)})",
-                                        file=sys.stderr,
-                                    )
-                                attempt_start = time.perf_counter()
-                                agent = Agent(model=model, instructions=system, markdown=False)
-                                run = agent.run(user)
-                                text = getattr(run, "content", None)
-                                if text is None:
-                                    text = str(run)
-                                text = _strip_fences(str(text).strip())
-                                if text and not _looks_like_error(text):
-                                    _LAST_MODEL = (provider, model_id)
-                                    _LAST_ERROR = ""
-                                    if trace_span is not None:
-                                        try:
-                                            from arka.telemetry.tracing import set_timing_attrs
-
-                                            set_timing_attrs(
-                                                attempt_span,
-                                                start=attempt_start,
-                                                streaming=False,
-                                            )
-                                        except ImportError:
-                                            pass
-                                        attempt_span.set_attribute("arka.llm.completion_chars", len(text))
-                                        try:
-                                            from arka.telemetry.llm_obs import apply_run_telemetry
-
-                                            apply_run_telemetry(
-                                                attempt_span,
-                                                run,
-                                                provider=provider,
-                                                model_id=model_id,
-                                                task=normalize_task(self.task),
-                                                label=label,
-                                            )
-                                        except ImportError:
+                            attempt_mgr = (
+                                trace_span("arka.llm.attempt", attributes=attempt_attrs)
+                                if trace_span is not None
+                                else nullcontext()
+                            )
+                            try:
+                                with attempt_mgr as attempt_span:
+                                    if verbose:
+                                        print(
+                                            f"arka_llm: trying {label} (task={normalize_task(self.task)})",
+                                            file=sys.stderr,
+                                        )
+                                    attempt_start = time.perf_counter()
+                                    agent = Agent(model=model, instructions=system, markdown=False)
+                                    run = agent.run(user)
+                                    text = getattr(run, "content", None)
+                                    if text is None:
+                                        text = str(run)
+                                    text = _strip_fences(str(text).strip())
+                                    if text and not _looks_like_error(text):
+                                        _LAST_MODEL = (provider, model_id)
+                                        _LAST_ERROR = ""
+                                        if trace_span is not None:
                                             try:
-                                                from arka.telemetry.logs import emit_log
-                                                from arka.telemetry.metrics import record_llm_attempt
+                                                from arka.telemetry.tracing import set_timing_attrs
 
-                                                record_llm_attempt(
-                                                    provider=provider,
-                                                    model=model_id,
-                                                    success=True,
-                                                    backend=_inference_backend(provider),
-                                                )
-                                                emit_log(
-                                                    f"llm ok {label}",
-                                                    level="info",
-                                                    attributes={
-                                                        "gen_ai.provider.name": provider,
-                                                        "gen_ai.request.model": model_id,
-                                                    },
+                                                set_timing_attrs(
+                                                    attempt_span,
+                                                    start=attempt_start,
+                                                    streaming=False,
                                                 )
                                             except ImportError:
                                                 pass
-                                        if set_http_span_attributes is not None:
-                                            set_http_span_attributes(attempt_span, status_code=200)
-                                        mark_ok(attempt_span)
-                                    if notify and len(tried) > 1:
-                                        print(
-                                            f"arka_llm: fallback ok → {label} "
-                                            f"(after {len(tried) - 1} failure(s))",
-                                            file=sys.stderr,
+                                            attempt_span.set_attribute("arka.llm.completion_chars", len(text))
+                                            try:
+                                                from arka.telemetry.llm_obs import apply_run_telemetry
+
+                                                apply_run_telemetry(
+                                                    attempt_span,
+                                                    run,
+                                                    provider=provider,
+                                                    model_id=model_id,
+                                                    task=normalize_task(self.task),
+                                                    label=label,
+                                                )
+                                            except ImportError:
+                                                try:
+                                                    from arka.telemetry.logs import emit_log
+                                                    from arka.telemetry.metrics import record_llm_attempt
+
+                                                    record_llm_attempt(
+                                                        provider=provider,
+                                                        model=model_id,
+                                                        success=True,
+                                                        backend=_inference_backend(provider),
+                                                    )
+                                                    emit_log(
+                                                        f"llm ok {label}",
+                                                        level="info",
+                                                        attributes={
+                                                            "gen_ai.provider.name": provider,
+                                                            "gen_ai.request.model": model_id,
+                                                        },
+                                                    )
+                                                except ImportError:
+                                                    pass
+                                            if set_http_span_attributes is not None:
+                                                set_http_span_attributes(attempt_span, status_code=200)
+                                            mark_ok(attempt_span)
+                                        if notify and len(tried) > 1:
+                                            print(
+                                                f"arka_llm: fallback ok → {label} "
+                                                f"(after {len(tried) - 1} failure(s))",
+                                                file=sys.stderr,
+                                            )
+                                        elif verbose:
+                                            print(f"arka_llm: ok {label}", file=sys.stderr)
+                                        return CompletionResult(
+                                            text=text,
+                                            provider=provider,
+                                            model_id=model_id,
+                                            attempts=attempts,
                                         )
-                                    elif verbose:
-                                        print(f"arka_llm: ok {label}", file=sys.stderr)
-                                    return CompletionResult(
-                                        text=text,
-                                        provider=provider,
-                                        model_id=model_id,
-                                        attempts=attempts,
-                                    )
-                                err_text = (text or "empty response")[:300]
-                                last_error = f"{label}: {err_text}"
+                                    err_text = (text or "empty response")[:300]
+                                    last_error = f"{label}: {err_text}"
+                                    if trace_span is not None:
+                                        if set_http_span_attributes is not None:
+                                            code = (
+                                                parse_http_status_code(err_text)
+                                                if parse_http_status_code is not None
+                                                else None
+                                            )
+                                            if code is not None:
+                                                set_http_span_attributes(attempt_span, status_code=code)
+                                        mark_error(attempt_span, err_text)
+                                    if rotate_provider_key(provider, err_text):
+                                        if verbose:
+                                            print(
+                                                f"arka_llm: rotating {provider} API key after error",
+                                                file=sys.stderr,
+                                            )
+                                        key_retry = True
+                                        break
+                                    if (
+                                        provider == "openrouter"
+                                        and _is_openrouter_credit_error(err_text)
+                                        and credit_retries_left > 0
+                                    ):
+                                        reduced = _reduce_max_tokens_for_credit_error(
+                                            attempt_max_tokens,
+                                            err_text,
+                                        )
+                                        if reduced < attempt_max_tokens:
+                                            attempt_max_tokens = reduced
+                                            credit_retries_left -= 1
+                                            token_retry = True
+                                            if verbose:
+                                                print(
+                                                    f"arka_llm: credit limit — retry {label} "
+                                                    f"with max_tokens={attempt_max_tokens}",
+                                                    file=sys.stderr,
+                                                )
+                                            continue
+                                    self.store.mark(provider, model_id, RuntimeError(err_text))
+                                    if verbose:
+                                        print(f"arka_llm: fail {label}: {err_text}", file=sys.stderr)
+                            except Exception as exc:
+                                last_error = f"{label}: {exc}"
+                                err_text = str(exc)
                                 if trace_span is not None:
                                     if set_http_span_attributes is not None:
                                         code = (
-                                            parse_http_status_code(err_text)
+                                            parse_http_status_code(exc)
                                             if parse_http_status_code is not None
                                             else None
                                         )
                                         if code is not None:
                                             set_http_span_attributes(attempt_span, status_code=code)
-                                    mark_error(attempt_span, err_text)
-                                if rotate_provider_key(provider, err_text):
+                                    mark_error(attempt_span, err_text, exc=exc)
+                                if rotate_provider_key(provider, exc):
                                     if verbose:
                                         print(
-                                            f"arka_llm: rotating {provider} API key after error",
+                                            f"arka_llm: rotating {provider} API key after {exc}",
                                             file=sys.stderr,
                                         )
                                     key_retry = True
-                                    continue
-                                self.store.mark(provider, model_id, RuntimeError(err_text))
-                                if verbose:
-                                    print(f"arka_llm: fail {label}: {err_text}", file=sys.stderr)
-                        except Exception as exc:
-                            last_error = f"{label}: {exc}"
-                            if trace_span is not None:
-                                if set_http_span_attributes is not None:
-                                    code = (
-                                        parse_http_status_code(exc)
-                                        if parse_http_status_code is not None
-                                        else None
+                                    break
+                                if (
+                                    provider == "openrouter"
+                                    and _is_openrouter_credit_error(err_text)
+                                    and credit_retries_left > 0
+                                ):
+                                    reduced = _reduce_max_tokens_for_credit_error(
+                                        attempt_max_tokens,
+                                        err_text,
                                     )
-                                    if code is not None:
-                                        set_http_span_attributes(attempt_span, status_code=code)
-                                mark_error(attempt_span, str(exc), exc=exc)
-                            if rotate_provider_key(provider, exc):
+                                    if reduced < attempt_max_tokens:
+                                        attempt_max_tokens = reduced
+                                        credit_retries_left -= 1
+                                        token_retry = True
+                                        if verbose:
+                                            print(
+                                                f"arka_llm: credit limit — retry {label} "
+                                                f"with max_tokens={attempt_max_tokens}",
+                                                file=sys.stderr,
+                                            )
+                                        continue
+                                self.store.mark(provider, model_id, exc)
                                 if verbose:
-                                    print(
-                                        f"arka_llm: rotating {provider} API key after {exc}",
-                                        file=sys.stderr,
-                                    )
-                                key_retry = True
-                                continue
-                            self.store.mark(provider, model_id, exc)
-                            if verbose:
-                                print(f"arka_llm: fail {label}: {exc}", file=sys.stderr)
+                                    print(f"arka_llm: fail {label}: {exc}", file=sys.stderr)
             finally:
                 session.close()
 
@@ -1490,11 +2027,23 @@ class LlmFallbackEngine:
                 for provider, model_id in chain:
                     if self.store.exhausted(provider, model_id):
                         continue
+                    attempt_max_tokens = resolve_max_tokens(
+                        provider,
+                        model_id,
+                        task=self.task,
+                        user=user,
+                    )
                     key_retry = True
                     while key_retry:
                         key_retry = False
                         apply_provider_key(provider)
-                        model = build_model(provider, model_id, temperature, session=session)
+                        model = build_model(
+                            provider,
+                            model_id,
+                            temperature,
+                            max_tokens=attempt_max_tokens,
+                            session=session,
+                        )
                         if model is None:
                             break
                         try:

@@ -20,6 +20,11 @@ from arka.vision.screen import (
 
 
 class ScreenParseTests(unittest.TestCase):
+    def test_default_prompt_is_person_aware(self) -> None:
+        from arka.vision.screen import DEFAULT_PROMPT
+
+        self.assertIn("identify who they are", DEFAULT_PROMPT.lower())
+
     def test_parses_common_phrases(self) -> None:
         for query in (
             "what is on my screen",
@@ -84,8 +89,8 @@ class CountdownTests(unittest.TestCase):
         sleep.assert_not_called()
         self.assertEqual(buf.getvalue(), "")
 
-    def test_default_countdown_is_ten(self) -> None:
-        self.assertEqual(DEFAULT_COUNTDOWN, 10)
+    def test_default_countdown_is_five(self) -> None:
+        self.assertEqual(DEFAULT_COUNTDOWN, 5)
 
 
 class CaptureTests(unittest.TestCase):
