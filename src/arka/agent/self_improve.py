@@ -529,7 +529,7 @@ def format_plan_output(
 
 def run_diagnostics(root: Path) -> DiagnosticResult:
     """Run pytest; fall back to a short arka doctor summary."""
-    pytest_cmd = "pytest -q --tb=short -x --no-header"
+    pytest_cmd = "pytest -q tests/ --tb=short -x --no-header"
     try:
         proc = subprocess.run(
             ["fish", "-c", pytest_cmd],

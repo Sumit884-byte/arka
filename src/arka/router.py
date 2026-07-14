@@ -109,15 +109,27 @@ def route(text: str) -> Route | None:
                 pass
 
         fish_route = _route_via_fish(cmd)
-        if fish_route and not (mode == "symbolic_only" and fish_route.kind == "llm"):
-            if span is not None:
-                _finish_route_span(
-                    current,
-                    fish_route,
-                    decision="fish",
-                    start=route_start,
-                )
-            return fish_route
+        if fish_route:
+            if fish_route.kind == "llm":
+                offline = _route_offline(cmd)
+                if offline:
+                    if span is not None:
+                        _finish_route_span(
+                            current,
+                            offline,
+                            decision="symbolic",
+                            start=route_start,
+                        )
+                    return offline
+            if not (mode == "symbolic_only" and fish_route.kind == "llm"):
+                if span is not None:
+                    _finish_route_span(
+                        current,
+                        fish_route,
+                        decision="fish",
+                        start=route_start,
+                    )
+                return fish_route
 
         if mode == "ai_only":
             integration = _route_ai_only_integrations(cmd)

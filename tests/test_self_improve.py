@@ -101,6 +101,12 @@ class SelfImproveGoalTests(unittest.TestCase):
         blocked = self_improve._git_blocklist_hook("echo x >> .env")
         self.assertIsNotNone(blocked)
 
+    def test_run_diagnostics_scopes_to_tests_dir(self) -> None:
+        import inspect
+
+        src = inspect.getsource(self_improve.run_diagnostics)
+        self.assertIn("pytest -q tests/", src)
+
 
 class SelfImprovePlanTests(unittest.TestCase):
     def test_format_plan_output_dry_run(self) -> None:

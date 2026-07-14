@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 from unittest.mock import patch
 
 from arka.agent.quiz_practice import (
@@ -21,6 +23,7 @@ from arka.agent.quiz_practice import (
     topic_slug,
 )
 from arka.routing.symbolic import route_quiz_practice
+from arka.router import route
 
 
 class TestQuizNlToArgv(unittest.TestCase):
@@ -45,6 +48,14 @@ class TestQuizNlToArgv(unittest.TestCase):
     def test_route_symbolic(self) -> None:
         hit = route_quiz_practice("quiz me on python decorators")
         self.assertEqual(hit, "quiz_practice 'python decorators'")
+
+    def test_route_quiz_python_beats_llm_misroute(self) -> None:
+        with mock.patch.dict(os.environ, {"ROUTE_MODE": "ai_only"}, clear=False):
+            result = route("quiz python")
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.skill, "quiz_practice python")
+        self.assertEqual(result.kind, "skill")
 
 
 class TestQuizMemory(unittest.TestCase):

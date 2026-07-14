@@ -14319,6 +14319,30 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         return
     end
 
+    if _agent_is_quiz_practice_request "$cmd"
+        set -l parts (_agent_build_quiz_practice_cmd "$cmd")
+        if test -n "$parts"
+            echo "skill|$parts|Infinite quiz practice with memory"
+            return
+        end
+    end
+
+    if _agent_is_council_request "$cmd"
+        set -l parts (_agent_build_council_cmd "$cmd")
+        if test -n "$parts"
+            echo "skill|$parts|Multi-persona deliberation chamber"
+            return
+        end
+    end
+
+    if _agent_is_self_improve_request "$cmd"
+        set -l sir (_agent_route_self_improve "$cmd")
+        if test -n "$sir"
+            echo "skill|$sir|Arka self-improvement loop"
+            return
+        end
+    end
+
     set -l route_mode (_arka_route_mode)
     if test "$route_mode" = ai -o "$route_mode" = ai_only
         set -l skills (_agent_available_skills)
