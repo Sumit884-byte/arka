@@ -377,8 +377,14 @@ def _template_slides_script(topic: str, *, style: str = "executive") -> list[Sce
                 narration="Share proof points: pilots, revenue, engagement, or design partners.",
                 body="",
                 slide_kind="content",
-                captions=["Validated with users", "Metrics trending up", "Strong retention"],
+                captions=["10x", "89% retention", "$2M ARR"],
                 image_query="team celebration office",
+                chart={
+                    "type": "bar",
+                    "title": "Monthly active users",
+                    "data": "M1:120,M2:340,M3:890",
+                    "ylabel": "Users",
+                },
             ),
             Scene(
                 title="The ask: partner with us to scale",

@@ -310,6 +310,12 @@ def main(argv: list[str] | None = None) -> int:
     code_hit = _try_code_nl(text)
     if code_hit is not None:
         return code_hit
+    # Plan/ask modes use the Python router so structured plans and read-only
+    # guards apply; fish delegation would skip print_plan output.
+    from arka.core.mode import get_mode
+
+    if get_mode() in ("plan", "ask"):
+        return _run_portable(text)
     if has_full_fish_agent():
         code = delegate_to_fish(args)
         if code is not None:

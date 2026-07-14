@@ -133,6 +133,26 @@ class ModePlanTests(unittest.TestCase):
         self.assertEqual(steps[0].index, 1)
         self.assertIn("web_answer", steps[1].action)
 
+    def test_build_plan_compose_slides_design(self) -> None:
+        from arka.router import Route
+
+        route = Route(
+            "compose_slides compose --topic 'kubernetes' --style pitch --theme dark",
+            source="fish",
+            kind="skill",
+        )
+        steps = build_plan("improve pitch slide design for kubernetes", route)
+        actions = " ".join(s.action for s in steps)
+        self.assertIn("slide_design.py", actions)
+        self.assertIn("metric callout", actions.lower())
+        self.assertGreaterEqual(len(steps), 9)
+
+    def test_build_plan_slide_design_without_route(self) -> None:
+        steps = build_plan("improve compose_slides visual design quality", None)
+        self.assertGreaterEqual(len(steps), 8)
+        actions = " ".join(s.action for s in steps)
+        self.assertIn("WCAG", actions)
+
 
 class ModeCliIntegrationTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -192,6 +212,18 @@ class ModeExecuteTests(unittest.TestCase):
                 code = _execute_request("calc 2+2")
         self.assertEqual(code, 0)
         run_skill.assert_not_called()
+
+    def test_cli_plan_mode_bypasses_fish(self) -> None:
+        from arka.cli import main
+
+        set_mode("plan")
+        with mock.patch("arka.cli.has_full_fish_agent", return_value=True):
+            with mock.patch("arka.cli.delegate_to_fish") as delegate:
+                with mock.patch("arka.cli._execute_request", return_value=0) as execute:
+                    code = main(["compose slides about kubernetes"])
+        self.assertEqual(code, 0)
+        delegate.assert_not_called()
+        execute.assert_called_once()
 
 
 if __name__ == "__main__":

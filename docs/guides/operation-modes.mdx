@@ -31,6 +31,30 @@ Or set in `~/.config/arka/.env`:
 ARKA_MODE=agent
 ```
 
+## Plan mode workflow example
+
+Use plan mode to sketch slide design work before exporting a deck:
+
+```bash
+arka mode plan
+arka "improve pitch slide design for kubernetes networking"
+```
+
+Arka prints a structured plan (audit palettes, spacing, footers, metric callouts) without running `compose_slides`. Switch back to execute:
+
+```bash
+arka mode agent
+compose_slides compose --topic "kubernetes networking" --style pitch --theme dark -f pptx
+```
+
+Or one-shot with the environment override:
+
+```bash
+ARKA_MODE=plan arka "compose slides about kubernetes --style pitch"
+```
+
+See [Compose slides](/guides/compose-slides) for style and theme options.
+
 ## What debug mode shows
 
 Only in `debug` mode:

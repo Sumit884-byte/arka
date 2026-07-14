@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -278,33 +279,89 @@ def _hex_rgb(color: str) -> tuple[int, int, int]:
 
 
 def _slide_font_family(style: str) -> str:
-    if style == "academic":
-        return "serif"
-    return "sans-serif"
+    from arka.media.slide_design import title_font_family
+
+    return title_font_family(style)
 
 
-def _draw_slide_footer(ax, *, palette, slide_index: int, total: int, style: str) -> None:
-    if total <= 1:
-        return
-    ax.text(
-        0.96,
-        0.04,
-        f"{slide_index + 1} / {total}",
-        ha="right",
-        va="bottom",
-        fontsize=10,
-        color=palette.muted,
-        transform=ax.transAxes,
-        fontfamily=_slide_font_family(style),
-    )
+def _slide_body_font(style: str) -> str:
+    from arka.media.slide_design import body_font_family
+
+    return body_font_family(style)
 
 
-def _draw_accent_bar(ax, *, palette, y: float, width: float = 0.12, height: float = 0.006) -> None:
+def _draw_slide_footer(
+    ax,
+    *,
+    palette,
+    slide_index: int,
+    total: int,
+    style: str,
+    slide_title: str = "",
+) -> None:
+    from arka.media.slide_design import spacing_units
     from matplotlib.patches import Rectangle
 
+    footer_h = spacing_units(6)
     ax.add_patch(
         Rectangle(
-            (0.5 - width / 2, y),
+            (0, 0),
+            1,
+            footer_h,
+            transform=ax.transAxes,
+            facecolor=palette.surface,
+            edgecolor="none",
+            clip_on=False,
+            zorder=0,
+        )
+    )
+    y = footer_h * 0.45
+    font = _slide_body_font(style)
+    if slide_title.strip() and total > 1:
+        label = slide_title.strip()
+        if len(label) > 48:
+            label = label[:45] + "…"
+        ax.text(
+            spacing_units(3) / (16 / 9) + 0.04,
+            y,
+            label,
+            ha="left",
+            va="center",
+            fontsize=9,
+            color=palette.muted,
+            transform=ax.transAxes,
+            fontfamily=font,
+        )
+    if total > 1:
+        ax.text(
+            0.96,
+            y,
+            f"{slide_index + 1} / {total}",
+            ha="right",
+            va="center",
+            fontsize=10,
+            color=palette.muted,
+            transform=ax.transAxes,
+            fontfamily=font,
+            fontweight="bold",
+        )
+
+
+def _draw_accent_bar(
+    ax,
+    *,
+    palette,
+    y: float,
+    width: float = 0.12,
+    height: float = 0.006,
+    x: float | None = None,
+) -> None:
+    from matplotlib.patches import Rectangle
+
+    left = (0.5 - width / 2) if x is None else x
+    ax.add_patch(
+        Rectangle(
+            (left, y),
             width,
             height,
             transform=ax.transAxes,
@@ -313,6 +370,112 @@ def _draw_accent_bar(ax, *, palette, y: float, width: float = 0.12, height: floa
             clip_on=False,
         )
     )
+
+
+def _draw_visual_placeholder(ax, *, palette, typo, label: str = "Image / chart") -> None:
+    from arka.media.slide_design import spacing_units
+    from matplotlib.patches import Rectangle
+
+    x = 0.58
+    y = spacing_units(14)
+    w = 0.36
+    h = 0.68
+    ax.add_patch(
+        Rectangle(
+            (x, y),
+            w,
+            h,
+            transform=ax.transAxes,
+            facecolor=palette.surface,
+            edgecolor=palette.muted,
+            linewidth=1.0,
+            linestyle="--",
+            clip_on=False,
+        )
+    )
+    ax.text(
+        x + w / 2,
+        y + h / 2,
+        label,
+        ha="center",
+        va="center",
+        fontsize=typo.body_size * 0.45,
+        color=palette.muted,
+        transform=ax.transAxes,
+        fontfamily=_slide_body_font("executive"),
+    )
+
+
+def _split_metric_caption(caption: str) -> tuple[str, str]:
+    """Split '89% retention' into value + label when possible."""
+    cap = caption.strip()
+    m = re.match(r"^([\$€£]?\d[\d.,]*[%xX]?\+?)\s*(.*)$", cap)
+    if m and m.group(2):
+        return m.group(1), m.group(2)
+    if m:
+        return m.group(1), "Metric"
+    return cap, ""
+
+
+def _draw_metric_callouts(
+    ax,
+    captions: list[str],
+    *,
+    palette,
+    typo,
+    style: str,
+    x: float,
+    y: float,
+) -> None:
+    from arka.media.slide_design import spacing_units
+    from matplotlib.patches import FancyBboxPatch
+
+    n = min(len(captions), 3)
+    if n == 0:
+        return
+    gap = spacing_units(2) / (16 / 9)
+    box_w = min(0.26, (0.52 - gap * (n - 1)) / n)
+    font = _slide_body_font(style)
+    for i, cap in enumerate(captions[:n]):
+        value, label = _split_metric_caption(cap)
+        bx = x + i * (box_w + gap)
+        ax.add_patch(
+            FancyBboxPatch(
+                (bx, y - 0.12),
+                box_w,
+                0.14,
+                boxstyle="round,pad=0.008,rounding_size=0.012",
+                transform=ax.transAxes,
+                facecolor=palette.surface,
+                edgecolor=palette.accent,
+                linewidth=1.2,
+                clip_on=False,
+            )
+        )
+        ax.text(
+            bx + box_w / 2,
+            y - 0.03,
+            value,
+            ha="center",
+            va="center",
+            fontsize=typo.title_size * 0.55,
+            color=palette.accent,
+            fontweight="bold",
+            transform=ax.transAxes,
+            fontfamily=_slide_font_family(style),
+        )
+        if label:
+            ax.text(
+                bx + box_w / 2,
+                y - 0.09,
+                label,
+                ha="center",
+                va="center",
+                fontsize=typo.bullet_size * 0.65,
+                color=palette.muted,
+                transform=ax.transAxes,
+                fontfamily=font,
+            )
 
 
 def render_title_slide(
@@ -329,7 +492,7 @@ def render_title_slide(
 ) -> Path:
     """Render a styled presentation slide (title, section, or content layout)."""
     from arka.media.compose_video import prepare_slide_body, prepare_slide_title
-    from arka.media.slide_design import infer_slide_kind, slide_palette, slide_typography
+    from arka.media.slide_design import infer_slide_kind, is_traction_slide, slide_palette, slide_typography, spacing_units
 
     plt = _require_matplotlib()
     from matplotlib.patches import Rectangle
@@ -337,7 +500,9 @@ def render_title_slide(
     _apply_chart_theme(cfg)
     palette = slide_palette(style, theme or "")
     typo = slide_typography(style)
-    font_family = _slide_font_family(style)
+    title_font = typo.title_font
+    body_font = typo.body_font
+    grid = spacing_units(1)
 
     kind = slide_kind or infer_slide_kind(scene, index=slide_index, total=total_slides)
     fig, ax = plt.subplots(figsize=(cfg.width / DPI, cfg.height / DPI), dpi=DPI)
@@ -365,9 +530,9 @@ def render_title_slide(
             fontweight="bold",
             linespacing=typo.line_spacing,
             transform=ax.transAxes,
-            fontfamily=font_family,
+            fontfamily=title_font,
         )
-        _draw_accent_bar(ax, palette=palette, y=0.54, width=0.14)
+        _draw_accent_bar(ax, palette=palette, y=0.54, width=0.14, x=mx)
         subtitle = "\n".join(body_lines) if body_lines else (topic or "").strip()
         if subtitle and subtitle.lower() != title_text.lower():
             ax.text(
@@ -380,7 +545,7 @@ def render_title_slide(
                 color=palette.muted,
                 linespacing=typo.line_spacing,
                 transform=ax.transAxes,
-                fontfamily=font_family,
+                fontfamily=body_font,
             )
         logo_w, logo_h = 0.10, 0.08
         ax.add_patch(
@@ -405,7 +570,7 @@ def render_title_slide(
             fontsize=8,
             color=palette.muted,
             transform=ax.transAxes,
-            fontfamily=font_family,
+            fontfamily=body_font,
         )
     elif kind == "section":
         ax.add_patch(
@@ -432,7 +597,7 @@ def render_title_slide(
             color=palette.accent,
             fontweight="bold",
             transform=ax.transAxes,
-            fontfamily=font_family,
+            fontfamily=title_font,
         )
         if body_lines:
             ax.text(
@@ -444,9 +609,10 @@ def render_title_slide(
                 fontsize=typo.subtitle_size,
                 color=palette.muted,
                 transform=ax.transAxes,
-                fontfamily=font_family,
+                fontfamily=body_font,
             )
     else:
+        show_placeholder = not scene_has_chart_visual(scene) and not getattr(scene, "image_query", "").strip()
         y = 0.88
         ax.text(
             mx,
@@ -459,10 +625,10 @@ def render_title_slide(
             fontweight="bold",
             linespacing=typo.line_spacing,
             transform=ax.transAxes,
-            fontfamily=font_family,
+            fontfamily=title_font,
         )
-        _draw_accent_bar(ax, palette=palette, y=y - 0.07, width=0.08)
-        y -= 0.12
+        _draw_accent_bar(ax, palette=palette, y=y - grid * 3, width=0.08, x=mx)
+        y -= grid * 5
         if body_lines:
             ax.text(
                 mx,
@@ -474,14 +640,25 @@ def render_title_slide(
                 color=palette.muted,
                 linespacing=typo.line_spacing,
                 transform=ax.transAxes,
-                fontfamily=font_family,
+                fontfamily=body_font,
             )
-            y -= 0.08 * len(body_lines)
-        if captions:
-            bullet_y = max(0.22, y - 0.04)
+            y -= grid * 3 * len(body_lines)
+        traction = is_traction_slide(scene.title, style=style)
+        if captions and traction:
+            _draw_metric_callouts(
+                ax,
+                captions,
+                palette=palette,
+                typo=typo,
+                style=style,
+                x=mx,
+                y=max(0.34, y - grid * 2),
+            )
+        elif captions:
+            bullet_y = max(spacing_units(18), y - grid * 2)
             for cap in captions:
                 ax.text(
-                    mx + 0.02,
+                    mx + grid,
                     bullet_y,
                     f"•  {cap}",
                     ha="left",
@@ -490,11 +667,20 @@ def render_title_slide(
                     color=palette.bullet,
                     linespacing=typo.line_spacing,
                     transform=ax.transAxes,
-                    fontfamily=font_family,
+                    fontfamily=body_font,
                 )
-                bullet_y -= 0.07
+                bullet_y -= grid * 4
+        if show_placeholder:
+            _draw_visual_placeholder(ax, palette=palette, typo=typo)
 
-    _draw_slide_footer(ax, palette=palette, slide_index=slide_index, total=total_slides, style=style)
+    _draw_slide_footer(
+        ax,
+        palette=palette,
+        slide_index=slide_index,
+        total=total_slides,
+        style=style,
+        slide_title=title_text.split("\n", 1)[0] if kind == "content" else "",
+    )
     return _save_figure(fig, output)
 
 

@@ -179,6 +179,33 @@ class PlanStep:
     note: str = ""
 
 
+def _is_slide_design_request(text: str) -> bool:
+    lower = text.strip().lower()
+    design_words = ("improve", "design", "typography", "contrast", "layout", "visual", "polish", "quality")
+    slide_words = ("slide", "deck", "pptx", "presentation", "compose_slides", "pitch")
+    return any(w in lower for w in design_words) and any(w in lower for w in slide_words)
+
+
+def _compose_slides_design_steps(skill_line: str, text: str) -> list[PlanStep]:
+    lower = text.lower()
+    style = "pitch" if "pitch" in lower else "academic" if "academic" in lower else "executive"
+    theme = "light" if "light" in lower and "theme" in lower else "dark"
+    return [
+        PlanStep(3, "Read slide_design.py — palettes, typography, spacing grid"),
+        PlanStep(4, "Read chart_slide.py — title, section, and content layouts"),
+        PlanStep(5, "Audit WCAG contrast for text on background and surface colors"),
+        PlanStep(6, "Apply 8px spacing grid and title/body font pairing"),
+        PlanStep(7, "Add image/chart placeholder region on content slides"),
+        PlanStep(8, "Style footer with slide title and page number"),
+        PlanStep(
+            9,
+            f"Polish pitch traction slide — metric callout boxes ({style}/{theme})",
+        ),
+        PlanStep(10, "Run skill: compose_slides", note=skill_line or "compose_slides compose …"),
+        PlanStep(11, "Validate pptx export and run pytest + ruff"),
+    ]
+
+
 def build_plan(text: str, route: Route | None) -> list[PlanStep]:
     steps: list[PlanStep] = []
     steps.append(PlanStep(1, f"Understand request: {text.strip()}"))
@@ -190,12 +217,18 @@ def build_plan(text: str, route: Route | None) -> list[PlanStep]:
                 note=f"kind={route.kind}",
             )
         )
+        head = _skill_head(route.skill) if route.kind != "shell" else ""
+        if head == "compose_slides" or _is_slide_design_request(text):
+            design = _compose_slides_design_steps(route.skill, text)
+            steps.extend(design)
+            return steps
         if route.kind == "shell":
             steps.append(PlanStep(3, f"Execute shell: {route.skill}", note="requires agent mode"))
         else:
-            head = _skill_head(route.skill)
             steps.append(PlanStep(3, f"Run skill: {head}", note=route.skill))
             steps.append(PlanStep(4, "Verify output and report result"))
+    elif _is_slide_design_request(text):
+        steps.extend(_compose_slides_design_steps("", text))
     else:
         steps.append(PlanStep(2, "No skill match — use web_answer / LLM chat"))
         steps.append(PlanStep(3, "Synthesize answer from search results"))

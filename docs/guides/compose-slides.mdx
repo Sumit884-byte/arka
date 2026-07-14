@@ -49,8 +49,23 @@ Design features per deck:
 - **Title slide** with subtitle and logo placeholder
 - **Section dividers** (pitch decks use Problem/Solution sections)
 - **Left-aligned action titles** with accent bar and slide numbers
+- **Footer bar** with slide title and page number on content slides
+- **Image/chart placeholder** panel on text-only content slides
+- **Metric callout boxes** on pitch traction slides
+- **8px spacing grid** and WCAG-friendly contrast on all themes
 - **Max 4 bullets** per slide (≤8 words each)
 - **Speaker notes** in `narration`; minimal on-screen text
+
+### Plan before you export
+
+Use [plan mode](/guides/operation-modes) to preview the design improvement steps without generating files:
+
+```bash
+arka mode plan
+arka "improve pitch slide design for terminal AI agents"
+arka mode agent
+compose_slides compose --topic "terminal AI agents" --style pitch --theme dark -f pptx
+```
 
 ## Export formats
 

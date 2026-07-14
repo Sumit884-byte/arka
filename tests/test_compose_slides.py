@@ -148,6 +148,9 @@ def test_template_slides_script_pitch_has_section_dividers():
     assert scenes[0].slide_kind == "title"
     assert any(scene.slide_kind == "section" for scene in scenes)
     assert any("ask" in scene.title.lower() for scene in scenes)
+    traction = next(s for s in scenes if "traction" in s.title.lower())
+    assert traction.chart
+    assert any("%" in c or "$" in c or "x" in c.lower() for c in traction.captions)
 
 
 def test_slides_script_needs_shortening_flags_dense_deck():
