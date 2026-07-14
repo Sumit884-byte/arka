@@ -1,0 +1,21 @@
+{
+  "description": "Merge into ~/.cursor/mcp.json (Cursor Settings → MCP) or use project .cursor/mcp.json",
+  "mcpServers": {
+    "arka": {
+      "command": "/Users/sumitmishra/dev/arka/venv-arka/bin/arka",
+      "args": ["mcp", "serve"],
+      "env": {
+        "ARKA_CONFIG_DIR": "/Users/sumitmishra/.config/arka"
+      }
+    }
+  },
+  "install_steps": [
+    "Install Arka: cd /Users/sumitmishra/dev/arka && pip install -e .",
+    "Verify: arka mcp doctor",
+    "Merge mcpServers.arka into ~/.cursor/mcp.json",
+    "Restart Cursor (or reload MCP from Settings → MCP)",
+    "In chat, ask the agent to call arka_recall or arka_ask"
+  ],
+  "hub_mcp": "/Users/sumitmishra/dev/arka/hub/mcp.json",
+  "project_mcp": "/Users/sumitmishra/dev/arka/.cursor/mcp.json"
+}

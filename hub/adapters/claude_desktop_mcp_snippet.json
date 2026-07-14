@@ -1,0 +1,24 @@
+{
+  "description": "Point claude_desktop at Arka hub MCP config",
+  "hub_mcp": "/Users/sumitmishra/dev/arka/hub/mcp.json",
+  "mcpServers": {
+    "context7": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp"
+      ],
+      "env": {
+        "CONTEXT7_API_KEY": "${env:CONTEXT7_API_KEY}"
+      }
+    },
+    "arka": {
+      "command": "/Users/sumitmishra/dev/arka/venv-arka/bin/arka",
+      "args": [
+        "mcp",
+        "serve"
+      ]
+    }
+  },
+  "install_hint": "Merge mcpServers into /Users/sumitmishra/Library/Application Support/Claude/claude_desktop_config.json or symlink to /Users/sumitmishra/dev/arka/hub/mcp.json"
+}

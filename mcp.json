@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "context7": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp"
+      ],
+      "env": {
+        "CONTEXT7_API_KEY": "${env:CONTEXT7_API_KEY}"
+      }
+    },
+    "arka": {
+      "command": "/Users/sumitmishra/dev/arka/venv-arka/bin/arka",
+      "args": ["mcp", "serve"],
+      "env": {
+        "ARKA_CONFIG_DIR": "/Users/sumitmishra/.config/arka"
+      }
+    }
+  }
+}
