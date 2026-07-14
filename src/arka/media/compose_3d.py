@@ -434,6 +434,45 @@ def parse_formats_arg(raw: str | None) -> set[str]:
     return {fmt}
 
 
+def _strip_wrapping_quotes(text: str) -> str:
+    t = (text or "").strip()
+    while len(t) >= 2 and t[0] == t[-1] and t[0] in ("'", '"'):
+        t = t[1:-1].strip()
+    return t
+
+
+def _normalize_nl_text(text: str) -> str:
+    return _strip_wrapping_quotes(text.strip())
+
+
+_HUMAN_FIGURE_RE = re.compile(
+    r"\b(?:boy|girl|man|woman|person|people|human|character|figure|child|kid|boyfriend|girlfriend)\b",
+    re.I,
+)
+
+
+def _is_human_figure_request(prompt: str) -> bool:
+    return bool(_HUMAN_FIGURE_RE.search(prompt))
+
+
+def _any_llm_available() -> bool:
+    try:
+        from arka.llm.fallback import provider_available, provider_specs
+    except ImportError:
+        return False
+    return any(provider_available(spec.slug) for spec in provider_specs())
+
+
+def _mesh_indices_valid(
+    vertices: list[tuple[float, float, float]],
+    faces: list[tuple[int, int, int]],
+) -> bool:
+    if not vertices or not faces:
+        return False
+    limit = len(vertices)
+    return all(1 <= idx <= limit for face in faces for idx in face)
+
+
 def _parse_length_cm(text: str, default_m: float) -> float:
     m = re.search(r"(\d+(?:\.\d+)?)\s*(?:cm|centimeters?)\b", text, re.I)
     if m:
@@ -454,7 +493,7 @@ def _parse_length_cm(text: str, default_m: float) -> float:
 
 
 def _is_compose_3d_request(text: str) -> bool:
-    t = text.strip().lower()
+    t = _normalize_nl_text(text).lower()
     if not t:
         return False
     if re.match(r"^(?:arka\s+)?(?:compose_3d|three_d|3d|3d_model)\b", t):
@@ -462,6 +501,10 @@ def _is_compose_3d_request(text: str) -> bool:
     if re.search(
         r"\b(?:"
         r"3d\s+model|"
+        r"create\s+(?:a|an|the)\s+3d|"
+        r"generate\s+(?:a|an|the)\s+3d|"
+        r"make\s+(?:a|an|the)\s+3d|"
+        r"compose\s+(?:a|an|the)\s+3d|"
         r"create\s+3d|"
         r"generate\s+3d|"
         r"make\s+3d|"
@@ -482,7 +525,7 @@ def _is_compose_3d_request(text: str) -> bool:
 
 
 def nl_to_argv(text: str) -> list[str]:
-    t = text.strip()
+    t = _normalize_nl_text(text)
     if not t or not _is_compose_3d_request(t):
         return []
 
@@ -493,6 +536,7 @@ def nl_to_argv(text: str) -> list[str]:
         t,
         flags=re.I,
     ).strip()
+    clean = re.sub(r"^(?:a|an|the)\s+", "", clean, flags=re.I).strip()
     clean = re.sub(r"(?i)\b(?:as|in|to)\s+(?:stl|obj|glb)\b", "", clean).strip()
 
     fmt_match = re.search(
@@ -576,18 +620,26 @@ def route_command(text: str) -> str | None:
 def generate_llm_model(prompt: str) -> str:
     from arka.llm.cli import llm_complete
 
+    model_prompt = prompt
+    if _is_human_figure_request(prompt):
+        model_prompt = (
+            f"a simple blocky stylized {prompt} built from basic geometric primitives "
+            "(rectangular torso, cylindrical limbs, small cube head), centered at origin"
+        )
+
     system_prompt = (
         "You are a 3D modeling expert. Generate a complete Wavefront OBJ file for:\n"
-        f"'{prompt}'\n\n"
+        f"'{model_prompt}'\n\n"
         "Output vertices ('v x y z') and triangular faces ('f v1 v2 v3'). "
         "Use meters, centered near origin, printable proportions.\n"
         "Rules:\n"
         "1. ONLY raw OBJ text.\n"
         "2. No markdown fences or explanations.\n"
+        "3. Face indices must reference valid vertex numbers.\n"
     )
     obj_content = llm_complete(
         system=system_prompt,
-        user=f"Create a 3D model of: {prompt}",
+        user=f"Create a 3D model of: {model_prompt}",
         temperature=0.2,
         task="create_3d_model",
         skill="compose_3d",
@@ -674,6 +726,30 @@ def _shape_from_args(args: argparse.Namespace) -> tuple[str, str, list[tuple[flo
     raise ValueError(f"unknown shape: {cmd}")
 
 
+def _save_obj_only(obj_content: str, prompt: str, *, reason: str) -> int:
+    fallback_name = slugify(prompt)
+    obj_path = output_dir() / f"{fallback_name}.obj"
+    obj_path.write_text(obj_content, encoding="utf-8")
+    print("━━━ 3D Model Created ━━━")
+    print(f"Shape: {prompt}")
+    print(f"Method: AI-generated OBJ (STL conversion skipped — {reason})")
+    print(f"  OBJ: {obj_path}")
+    return 0
+
+
+def _human_figure_hint(prompt: str) -> None:
+    print(
+        f"Human figures like {prompt!r} need LLM compose_3d or external modeling tools.",
+        file=sys.stderr,
+    )
+    print(
+        "Configure an LLM in ~/.config/arka/.env (see `arka provider list`), "
+        "or try procedural shapes: compose_3d gear, compose_3d cube, compose_3d vase.",
+        file=sys.stderr,
+    )
+    print("For GLB export: pip install -e '.[3d]'", file=sys.stderr)
+
+
 def cmd_compose(args: argparse.Namespace) -> int:
     formats = parse_formats_arg(args.format)
     if args.shape.lower() in SHAPE_COMMANDS:
@@ -682,33 +758,41 @@ def cmd_compose(args: argparse.Namespace) -> int:
         _print_result(name=name, shape=shape, saved=saved)
         return 0
 
-    prompt = args.shape
+    prompt = _normalize_nl_text(args.shape)
+    if _is_human_figure_request(prompt) and not _any_llm_available():
+        _human_figure_hint(prompt)
+        return 1
+
     print(f"Generating custom 3D model: {prompt!r}")
     try:
         obj_content = generate_llm_model(prompt)
     except Exception as exc:
         print(f"Error: LLM generation failed — {exc}", file=sys.stderr)
-        print("Tip: configure an LLM in .env, or request a basic shape (cube, gear, vase).", file=sys.stderr)
+        if _is_human_figure_request(prompt):
+            _human_figure_hint(prompt)
+        else:
+            print(
+                "Tip: configure an LLM in .env, or request a basic shape (cube, gear, vase).",
+                file=sys.stderr,
+            )
         return 1
 
     vertices, faces = parse_obj(obj_content)
-    if not vertices or not faces:
-        fallback_name = slugify(prompt)
-        obj_path = output_dir() / f"{fallback_name}.obj"
-        obj_path.write_text(obj_content, encoding="utf-8")
-        print("━━━ 3D Model Created ━━━")
-        print(f"Shape: {prompt}")
-        print("Method: AI-generated OBJ (STL conversion skipped — could not parse faces)")
-        print(f"  OBJ: {obj_path}")
-        return 0
+    if not _mesh_indices_valid(vertices, faces):
+        reason = "could not parse faces" if not vertices or not faces else "invalid face indices"
+        return _save_obj_only(obj_content, prompt, reason=reason)
 
-    saved = save_mesh(vertices=vertices, faces=faces, name=prompt, formats=formats)
+    try:
+        saved = save_mesh(vertices=vertices, faces=faces, name=prompt, formats=formats)
+    except (IndexError, ValueError):
+        return _save_obj_only(obj_content, prompt, reason="mesh validation failed")
+
     _print_result(name=prompt, shape=prompt, saved=saved, used_llm=True)
     return 0
 
 
 def cmd_parse(args: argparse.Namespace) -> int:
-    argv = nl_to_argv(" ".join(args.text))
+    argv = nl_to_argv(_normalize_nl_text(" ".join(args.text)))
     if not argv:
         return 1
     print(" ".join(shlex.quote(a) for a in argv))

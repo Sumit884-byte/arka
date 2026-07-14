@@ -23,6 +23,22 @@ def test_nl_to_argv_create_3d_gear():
     assert nl_to_argv("create a 3d model of a gear") == ["gear", "--name", "gear"]
 
 
+def test_nl_to_argv_create_an_3d_boy():
+    assert nl_to_argv("create an 3d model of an boy") == ["boy"]
+
+
+def test_nl_to_argv_create_a_3d_model_of_a_boy():
+    assert nl_to_argv("create a 3d model of a boy") == ["boy"]
+
+
+def test_nl_to_argv_fish_escaped_quotes():
+    assert nl_to_argv("'create an 3d model of an boy'") == ["boy"]
+
+
+def test_route_command_boy():
+    assert route_command("create an 3d model of an boy") == "compose_3d boy"
+
+
 def test_nl_to_argv_make_3d_vase_with_height():
     argv = nl_to_argv("make 3d vase 10cm tall")
     assert argv[0] == "vase"

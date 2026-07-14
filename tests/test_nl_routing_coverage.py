@@ -61,6 +61,8 @@ NL_CASES: tuple[tuple[str, str], ...] = (
     ("arka slides about Rust memory safety", "compose_slides"),
     ("pitch deck on AI infrastructure", "compose_slides"),
     ("create a 3d model of a gear", "compose_3d"),
+    ("create an 3d model of an boy", "compose_3d"),
+    ("create a 3d model of a boy", "compose_3d"),
     ("make 3d vase 10cm tall", "compose_3d"),
     ("generate stl for phone stand", "compose_3d"),
 )
