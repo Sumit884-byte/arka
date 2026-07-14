@@ -7,6 +7,8 @@ icon: "route"
 
 Arka routes every request through a layered pipeline. Most requests never touch an LLM — symbolic rules in `config.fish` match 120\+ skill patterns offline.
 
+Important: if you type a plain shell command, the shell runs it normally. Arka only gets a chance to route the request when you invoke it through `arka` or an alias like `agent_route`.
+
 ## Routing pipeline
 
 <Steps>
@@ -89,6 +91,8 @@ arka tell your skills   # voice-friendly summary + active model
 When fish is not installed, Arka uses `src/arka/routing/symbolic.py` for the same offline-first behavior. The portable CLI still supports chat, web answers, passwords, calc, weather, sports, and plugins.
 
 Install [fish shell](https://fishshell.com) to unlock the full 70\+ skill router.
+
+The self-improve workflow is also routed as a dedicated skill, so phrases like `self improve routing` can stay local and deterministic while still opening the repo analysis path.
 
 ## Skill router vs orchestrator
 

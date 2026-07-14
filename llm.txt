@@ -1,0 +1,580 @@
+# Arka — LLM context file
+# Purpose: dense codebase map for AI agents. Read this before exploring the repo.
+# Docs: https://arka-agent.mintlify.site | PyPI: arka-agent | Python 3.11+
+
+================================================================================
+AGENT RULES
+================================================================================
+
+  - Read ONLY llm.txt for repo/architecture questions.
+  - Do NOT glob/grep the entire repo unless llm.txt is insufficient.
+  - For deltas, read RECENT FILE CHANGES then open only those paths.
+  - Use repo_map --depth 3 only when the user explicitly requests a full tree scan.
+  - Refresh changelog after pulls: arka repo index  (or arka llm sync)
+  - Skill: repo_context — returns relevant llm.txt sections (symbolic barrier default)
+  - Skill: repo_map — live tree scan escape hatch for explicit "map this repo" requests
+
+================================================================================
+PROJECT SUMMARY
+================================================================================
+
+Arka is a cross-platform terminal AI agent (macOS, Linux, Windows). Users type
+plain English; Arka routes to 70+ local skills with deterministic offline rules
+first, then LLM fallback. Skills run locally; LLM calls failover across 24+
+providers (Gemini, Groq, Ollama, etc.). Security gates (prompt injection, risky
+action confirmation) are on by default. Package name on PyPI: `arka-agent`.
+
+Entry point: `arka` CLI → `src/arka/cli.py:main`
+Core flow: NL text → router → skill command line → dispatch → bin shim → package module
+
+================================================================================
+ARCHITECTURE
+================================================================================
+
+ROUTING PIPELINE (see docs/concepts/routing.mdx)
+------------------------------------------------
+1. Direct skill name     — first token in _agent_all_skills → zero tokens
+2. Third-party plugins   — ~/.config/arka/skills/*/skill.json triggers
+3. Fugu rules            — integrations/fugu.py (optional fast path)
+4. Fish symbolic rules   — config.fish _agent_offline_route_cmd / _agent_guess_route
+5. Python symbolic extras — routing/symbolic.py route_offline_extras (no fish needed)
+   repo_context skill — llm.txt lookup (default for repo/architecture NL)
+   repo_map skill — full tree scan (explicit map requests only)
+6. LLM route             — compact skill catalog, task=route (skill_profiles)
+7. Correction layer      — fixes weak LLM picks without second LLM call
+8. Dispatch              — dispatch.py runs the chosen skill
+
+Route modes (ROUTE_MODE env, router.py _route_mode):
+  symbolic (default) | ai | symbolic_only | ai_only
+
+Operation modes (ARKA_MODE env or ~/.config/arka/mode, core/mode.py):
+  agent (default) | ask | plan | debug | multitask
+  - ask: read-only skills OK; risky actions blocked → web_answer fallback
+  - plan: structured steps printed, no skill execution
+  - debug: LLM_VERBOSE + route preview details
+  - multitask: spawns background sub-agents (integrations/subagent.py)
+  CLI: arka mode [ask|plan|agent|debug|multitask|list]
+
+Python router: src/arka/router.py
+  - route(text) → Route(skill, source, kind)
+  - Uses fish subprocess when fish + config.fish available
+  - Falls back to routing/symbolic.py when fish absent or symbolic_only
+
+Fish router: src/arka/fish/config.fish (~10k lines)
+  - Canonical skill registry: _agent_all_skills
+  - NL→skill: _agent_offline_route_cmd, _agent_guess_route
+  - Skill execution: _agent_dispatch → _agent_dispatch_one
+  - Synced to bundled/config.fish for pip installs
+
+DISPATCH
+--------
+src/arka/dispatch.py
+  - run_skill(skill_line) — inline handlers for common skills, else run_script/run_fish_skill
+  - run_script("arka_*.py", args) — resolves script via paths.entry_script
+  - apply_env() sets INSTALL_HOME, CONFIG_DIR, CACHE_DIR
+
+BIN SHIMS → PACKAGE MODULES
+---------------------------
+bin/arka_*.py are thin shims → arka._bootstrap.run_legacy_module(qualname)
+Legacy name map: src/arka/_bootstrap.py LEGACY_MODULES (118 entries)
+Shim path helper: bin/_shim_path.py (adds src/ to sys.path for dev)
+
+BUNDLED SYNC (pip wheel runtime)
+--------------------------------
+scripts/sync_bundled.py copies:
+  - fish/config.fish → bundled/config.fish
+  - bin/*.py → bundled/
+  - requirements, env.example, aie/, privategpt/, whatsapp/
+Run after adding/changing bin shims. Test: tests/test_bundled_sync.py
+  asserts every bin/arka_*.py exists in src/arka/bundled/
+
+PATHS
+-----
+src/arka/paths.py
+  - arka_home() — bundled/ when installed; repo root in editable dev if unsynced
+  - config_dir() — ~/.config/arka (or legacy ~/.config/fish)
+  - cache_dir() — platformdirs user cache
+  - entry_script(name) — bin/ in dev, flat in bundled/
+  - fish_config() — bundled/config.fish or user override
+
+LLM LAYER
+---------
+src/arka/llm/fallback.py — LLMFallback.complete(), provider chain, key rotation
+src/arka/llm/providers.py — provider specs, base URLs, model IDs
+src/arka/llm/servers.py — local vLLM/Ollama reachability
+src/arka/llm/skill_profiles.py — TASK_PROFILES + SKILL_TASK_MAP (per-skill model task)
+src/arka/llm/api_keys.py — multi-key rotation per provider
+User overrides: ~/.config/arka/llm-skill-models.json
+
+Default chain: Gemini → Groq → Ollama (see DEFAULT_CHAIN in fallback.py)
+
+VISION STACK
+------------
+src/arka/vision/describe.py — images: local vLLM, Ollama vision, Gemini; OCR grounding
+src/arka/vision/screen.py — countdown + capture + describe_screen
+src/arka/vision/video.py — ffmpeg frame sampling + people/location in video
+Each has nl_to_argv() for symbolic routing; bin shims: arka_describe_image.py,
+arka_describe_video.py (screen uses fish + describe.py)
+
+MCP
+---
+Client: integrations/mcp_client.py, mcp_manager.py, mcp_cli.py — ~/.config/arka/mcp.json
+Server: integrations/mcp_server.py — Arka as stdio MCP (arka_ask, arka_remember, arka_skill, …)
+CLI: arka mcp … | bin/arka_mcp.py, bin/arka_mcp_server.py
+
+THIRD-PARTY SKILLS
+------------------
+src/arka/agent/skills.py — discover/install/run plugins (skill.json)
+Search paths: SKILLS_PATH, ~/.config/arka/skills, package skills/, bundled skills/
+Examples: src/arka/skills/examples/demo_echo/, skills/life_sciences/
+Fish integration: _arka_third_party_skill_names, _arka_run_third_party_skills
+
+================================================================================
+DIRECTORY MAP
+================================================================================
+
+/Users/sumitmishra/dev/arka/
+├── src/arka/              # Main Python package (setuptools where=["src"])
+│   ├── cli.py             # `arka` CLI entry
+│   ├── router.py          # Cross-platform NL router
+│   ├── dispatch.py        # Skill execution
+│   ├── paths.py           # Install/config/cache paths
+│   ├── fish_bridge.py     # Delegate to fish config.fish
+│   ├── _bootstrap.py      # Legacy shim aliases + run_legacy_module
+│   ├── skills.py          # Portable skill helpers (password, chat shortcuts)
+│   ├── agent/             # Agents, chat, flow, personas, route_learn, data tools
+│   ├── routing/           # symbolic.py, learned.py, platform_howto.py
+│   ├── llm/               # fallback, providers, skill_profiles, model_advisor
+│   ├── vision/            # describe, screen, video
+│   ├── integrations/      # MCP, Google, Spotify, password vault, sports, …
+│   ├── core/              # security, memory, personalize, jsonkit, platform
+│   ├── media/             # summarize, compose_video, convert_media, transcripts
+│   ├── pdf/               # RAG, tools
+│   ├── stock/             # market analysis, turboquant
+│   ├── voice/             # edge_speak, sarvam, indic TTS/STT
+│   ├── youtube/           # transcript, research, bulk download
+│   ├── charts/            # matplotlib chart skill
+│   ├── documents/         # drawing_ask
+│   ├── generate/          # image/video generation
+│   ├── teams/             # multi-agent teams v2
+│   ├── fish/              # config.fish source (NOT bundled until sync)
+│   ├── bundled/           # pip runtime copy (generated — do not edit alone)
+│   └── skills/            # bundled example + life_sciences plugins
+├── bin/                   # 118 arka_*.py shims (source of truth for entrypoints)
+├── scripts/
+│   ├── sync_bundled.py    # bin/ + fish → bundled/
+│   └── refetch.sh         # git pull + sync + pip install -e
+├── tests/                 # ~100 pytest files (test_*_payload.py pattern)
+├── docs/                  # Mintlify site (MDX + docs.json)
+├── examples/              # JSON scripts for compose_video etc.
+├── personas/              # User persona YAML (local, untracked)
+├── speech-to-speech/      # Separate subproject — ignore unless working on voice realtime
+└── web/                   # Vite/React (node_modules — ignore unless working on web UI)
+
+================================================================================
+KEY FILES FOR COMMON TASKS
+================================================================================
+
+ADD A NEW SKILL
+  1. Implement module under src/arka/<area>/ with main() or nl_to_argv()
+  2. Add bin/arka_<name>.py shim (copy pattern from bin/arka_flow.py)
+  3. Run: python scripts/sync_bundled.py
+  4. Register in fish/config.fish:
+     - Add to _agent_all_skills
+     - Add _agent_is_* / _agent_route_* or inline rule in _agent_offline_route_cmd
+     - Add case in skill help / dispatch function if needed
+  5. Add route_* in routing/symbolic.py + route_offline_extras tuple
+  6. Map in llm/skill_profiles.py SKILL_TASK_MAP if LLM-backed
+  7. Add LEGACY_MODULES entry in _bootstrap.py if legacy flat import needed
+  8. Test: tests/test_<skill>.py + phrase in tests/test_nl_routing_coverage.py
+
+FIX ROUTING / NL MATCHING
+  - Fish (primary): src/arka/fish/config.fish (_agent_offline_route_cmd, _agent_guess_route)
+  - Python mirror: src/arka/routing/symbolic.py (route_offline_extras order matters)
+  - Router orchestration: src/arka/router.py
+  - Preview: arka route "your phrase" or ROUTE_MODE=symbolic_only pytest
+  - Learned routes: agent/route_learn.py, routing/learned.py
+
+LLM PROVIDER / FAILOVER
+  - src/arka/llm/fallback.py, providers.py, api_keys.py, servers.py
+  - Per-skill models: llm/skill_profiles.py + ~/.config/arka/llm-skill-models.json
+  - CLI: arka ai-skill-model, arka ai-models
+
+VISION (describe_image / describe_screen / describe_video)
+  - src/arka/vision/describe.py (core backends, prompts, resize)
+  - src/arka/vision/screen.py, video.py (NL parse + capture/sampling)
+  - Tests: tests/test_describe_*.py
+
+MCP
+  - Server tools: integrations/mcp_server.py
+  - Client CLI: integrations/mcp_cli.py, mcp_manager.py
+  - Context7 (default): integrations/context7_mcp.py — `arka setup` adds context7 to mcp.json
+    Runtime: `Context7: querying docs for /lib` on stderr; footer `Docs: context7/lib` (SHOW_CONTEXT7=0 to hide)
+  - Docs: docs/guides/mcp.mdx
+
+TESTS
+  - pytest from repo root (see CONTRIBUTING.md)
+  - Payload tests: tests/test_*_payload.py (mock external APIs)
+  - Routing table: tests/test_nl_routing_coverage.py NL_CASES tuple
+  - Bundled sync guard: tests/test_bundled_sync.py
+
+CLI SUBCOMMANDS
+  - src/arka/cli.py — setup, doctor, route, chat, goal, self, code, personalize, persona, refetch, …
+  - arka code init|status|write|clear — scoped coding workspace (src/arka/core/code_project.py)
+    Persists ~/.config/arka/code-project.json; gates agent_code, write_script, self_improve; goal scopes when active
+    agent_code without init hints: arka code init . (cwd shown)
+  - arka self improve [target] [--apply] — self-improvement (src/arka/agent/self_improve.py)
+    Default plan-only: analyze llm.txt + git log + pytest → LLM/heuristic plan; --apply runs goal agent
+    Memory: ~/.config/arka/self-improve-memory.json; blocks .env/secrets/node_modules + destructive git
+    NL: improve arka | self improve routing | improve arka llm fallback | loop self "fix tests"
+    --apply requires agent mode; SELF_IMPROVE_MAX_STEPS / _MAX_ROUNDS env limits
+    Dedicated skill: self-improve-routing (Codex skill for routing-focused self-improvement requests)
+  - arka setup runs arka repo index when llm.txt changelog is stale
+
+================================================================================
+CONVENTIONS & GOTCHAS
+================================================================================
+
+FISH vs PYTHON ROUTING
+  - Full 120+ symbolic rules live in fish/config.fish (~10k lines)
+  - Python symbolic.py mirrors many routes for fish-less / symbolic_only mode
+  - When adding NL patterns: update BOTH unless fish-only (platform-specific shell)
+  - route_offline_extras() order is priority — first match wins
+
+BUNDLED COPIES
+  - Never edit src/arka/bundled/ alone — regenerated by sync_bundled.py
+  - CI test fails if bin/arka_*.py missing from bundled/
+  - fish/config.fish source → bundled/config.fish via sync
+
+BIN SHIM PATTERN
+  bin/arka_foo.py:
+    import _shim_path; _shim_path.ensure()
+    from arka._bootstrap import run_legacy_module
+    run_legacy_module("arka.module.path")
+
+SKILL_PROFILES
+  - LLM task profiles: route, chat, summarize, research, agent, pdf, flow, …
+  - SKILL_TASK_MAP maps skill name → profile for model selection
+
+NL_TO_ARGV PATTERN
+  Skills that accept natural language expose nl_to_argv(text) → list[str]
+  route_* in symbolic.py calls nl_to_argv and builds "skill arg1 arg2"
+
+SECURITY
+  - core/security.py, fish __agent_classify, _arka_confirm_risky_action
+  - Blocks destructive shell patterns; confirms install/delete/send
+
+ENV / CONFIG
+  - User .env: ~/.config/arka/.env (template: .env.example, src/arka/env.example)
+  - ROUTE_MODE, INSTALL_HOME, CONFIG_DIR, CACHE_DIR, SKILLS_PATH
+  - Legacy path: ~/.config/fish/.env still honored
+
+THIRD-PARTY skill.json
+  - name, type (python|fish), entry, triggers[], requires{}, metadata{}
+  - Install dir: ~/.config/arka/skills/<name>/
+
+PACKAGE DATA (pyproject.toml tool.setuptools.package-data)
+  - bundled/*, fish/*, skills/**/*, personas templates, requirements/*.txt
+
+================================================================================
+OPTIONAL DEPENDENCY GROUPS (pyproject.toml)
+================================================================================
+
+  chat        — agno, openai, ddgs, trafilatura, sympy, geopy (core LLM features)
+  voice       — vosk, sounddevice
+  pdf         — requests
+  pdf-tools   — pypdf, Pillow, reportlab, pymupdf
+  charts      — matplotlib
+  ascii       — pyfiglet
+  data        — faker, openpyxl
+  drawings    — Pillow, pymupdf
+  video       — Pillow, edge-tts, python-pptx
+  vision      — Pillow
+  whatsapp    — selenium, pywhatkit
+  dev         — build, ruff, pytest, twine
+  mcp-server  — mcp>=1.0
+  all         — chat,voice,pdf,pdf-tools,whatsapp,charts,drawings,video
+
+Dev install: pip install -e ".[chat,dev]"
+
+================================================================================
+RECENT FEATURES (check these modules first)
+================================================================================
+
+FLOW (structured multi-block how-to answers)
+  - src/arka/agent/flow.py — FLOW_SYSTEM_PROMPT, nl_to_argv, format_flow_terminal
+  - bin/arka_flow.py, routing/symbolic.py route_flow
+  - skill_profiles: task profile "flow"
+  - tests/test_flow.py, NL: "give me a flow for setting up python venv"
+
+FACT_CHECK (verify claims with web evidence)
+  - src/arka/agent/fact_check.py — nl_to_argv, fact_check, format_fact_check_terminal
+  - bin/arka_fact_check.py, routing/symbolic.py route_fact_check
+  - Verdicts: TRUE / FALSE / PARTIALLY TRUE / UNVERIFIABLE; optional Context7 for tech claims
+  - skill_profiles: "fact_check" → research; tests/test_fact_check.py
+  - NL: "fact check …", "verify …", "is it true that …", "factcheck …"
+
+ASTRONOMY (stars, moon phase, ISS passes)
+  - src/arka/skills/astronomy/ — objects.json, lib.py, run.py, skill.json
+  - src/arka/agent/astronomy.py — nl_to_argv, bin/arka_astronomy.py
+  - Open Notify API for ISS; local lunar phase calc; bundled object catalog
+  - routing/symbolic.py route_astronomy; tests/test_astronomy.py
+
+METALLURGY (alloy properties, composition, heat treatment)
+  - src/arka/skills/metallurgy/ — alloys.json, heat_treatments.json, lib.py, metallurgy_sources.py
+  - src/arka/agent/metallurgy.py — nl_to_argv, bin/arka_metallurgy.py
+  - AlloyFYI API fallback; bundled alloy + heat-treatment flows (flow.py integration)
+  - routing/symbolic.py route_metallurgy; tests/test_metallurgy.py
+
+DESCRIBE_VIDEO (people in video frames + positions)
+  - src/arka/vision/video.py — ffmpeg sampling, is_video_people_request, nl_to_argv
+  - Rejects summarize/transcript/plot queries (_REJECT regex)
+  - tests/test_describe_video.py
+
+DESCRIBE_SCREEN / DESCRIBE_IMAGE improvements
+  - screen.py — _SCREEN_PATTERNS, countdown capture, excludes screen-time/screenshot
+  - describe.py — PERSON_PROMPT, GEMINI grounding, OCR, resize, multi-backend auto
+  - tests/test_describe_screen.py, test_describe_image_person.py, test_describe_image_resize.py
+
+VIEW_DATA / DATA_ASK / GENERATE_DATA
+  - agent/view_data.py, data_ask.py, generate_data.py
+  - tests/test_view_data.py, test_data_ask.py, test_generate_data.py
+
+================================================================================
+DEV SETUP & TESTING
+================================================================================
+
+  git clone … && cd arka
+  python3 scripts/sync_bundled.py
+  pip install -e ".[chat,dev]"
+  cp .env.example ~/.config/arka/.env   # add API keys
+  arka doctor
+  pytest                                # all tests, repo root
+  ./scripts/refetch.sh --install        # after git pull
+
+Optional fish for full router:
+  brew install fish  # or apt
+  arka shell-init    # sources config.fish
+
+Inspect routing without running skill:
+  arka route "summarize my unread emails"
+  ROUTE_MODE=symbolic_only pytest tests/test_nl_routing_coverage.py -v
+
+================================================================================
+WHAT NOT TO READ (token waste)
+================================================================================
+
+  - web/node_modules/          — Vite/React deps
+  - src/arka/bundled/          — generated copies of bin/ + fish (read bin/ instead)
+  - speech-to-speech/          — separate realtime voice subproject
+  - .git/, .pytest_cache/
+  - message-sessions/, personalize.json, personas/*.yaml — local user state (untracked)
+  - Entire config.fish at once — grep for _agent_is_* / skill name instead
+  - docs/AGENTS.md             — Mintlify template, not Arka architecture
+
+Prefer reading:
+  - This file (llm.txt) via repo_context skill
+  - README.md, CONTRIBUTING.md
+  - router.py, dispatch.py, routing/symbolic.py (partial)
+  - Relevant bin/arka_*.py shim → jumps to package module
+  - tests/test_* for the area you're changing
+
+================================================================================
+QUICK REFERENCE: TOP-LEVEL MODULES
+================================================================================
+
+  agent/         chat, goal, self_improve, flow, personas, route_learn, web_answer, professions
+                 personas: schema.effective_system_prompt adds shared persona-lens
+                 (first person, no preamble, short answers) + AI double-verify note
+  routing/       symbolic offline NL patterns
+  llm/           provider failover, skill profiles
+  vision/        image, screen, video description
+  integrations/  MCP, Google, Spotify, calendar, sports, currency, docker, …
+  core/          security, memory, personalize, platform, kits (json/time/url/text)
+  media/         summarize, compose_video/slides, convert_media
+  pdf/           RAG ingest/ask, pdf_tools
+  stock/         analysis, predictions, turboquant
+  voice/         TTS/STT backends
+  youtube/       transcript, research, bulk
+  fish/          shell router source
+  skills/        third-party plugin examples
+
+================================================================================
+RECENT FILE CHANGES (CHANGELOG)
+================================================================================
+
+2026-07-13 — Harvard ARK Agent CLI integration (external biomedical KG tool)
+  - src/arka/integrations/harvard_ark.py — install/list/chat wrapper for mims-harvard/ark-agent-cli (PrimeKG)
+  - bin/arka_harvard_ark.py — shim; arka harvard-ark install|list|chat|status
+  - src/arka/routing/symbolic.py, fish/config.fish — NL routes (harvard ark, primekg, biomedical KG)
+  - tests/test_harvard_ark.py, tests/test_nl_routing_coverage.py
+
+2026-07-12 — dogfood session (scoped coding)
+  - src/arka/agent/personas/schema.py — GENERAL_PERSONA_INSTRUCTION: first person, no preamble, short answers
+  - src/arka/core/code_project.py — not_init_message() with cwd hint for agent_code without init
+  - src/arka/cli.py — arka setup auto-runs repo index (sync_index) when changelog stale
+  - tests/test_personas.py, tests/test_code_project.py, tests/test_cli_setup_index.py
+
+  --- sync 2026-07-12 18:06 UTC (initial → 17638a65)
+  - modified scripts/refetch.sh
+  - modified src/arka/_bootstrap.py (python)
+  - modified src/arka/agent/core.py (agent skill)
+  - modified src/arka/agent/goal.py (agent skill)
+  - modified src/arka/agent/personas/base.py (agent skill)
+  - modified src/arka/agent/personas/cli.py (agent skill)
+  - modified src/arka/agent/personas/elon.py (agent skill)
+  - modified src/arka/agent/personas/format.py (agent skill)
+  - modified src/arka/agent/personas/io.py (agent skill)
+  - modified src/arka/agent/personas/schema.py (agent skill)
+  - modified src/arka/agent/voice.py (agent skill)
+  - modified src/arka/bundled/.env.example
+  - modified src/arka/bundled/config.fish (fish router)
+  - modified src/arka/cli.py (python)
+  - modified src/arka/dispatch.py (python)
+  - modified src/arka/env.example
+  - modified src/arka/fish/config.fish (fish router)
+  - modified src/arka/integrations/agent_hub.py (python)
+  - modified src/arka/integrations/mcp_cli.py (python)
+  - modified src/arka/integrations/mcp_manager.py (python)
+  - modified src/arka/llm/skill_profiles.py (python)
+  - modified src/arka/output.py (python)
+  - modified src/arka/routing/symbolic.py (routing)
+  - modified src/arka/telemetry/_otlp.py (python)
+  - modified src/arka/vision/describe.py (python)
+  - modified src/arka/vision/screen.py (python)
+  - modified tests/test_describe_image_resize.py (python)
+  - modified tests/test_describe_screen.py (python)
+  - modified tests/test_elon_persona.py (python)
+  - modified tests/test_nl_routing_coverage.py (python)
+  - modified tests/test_personas.py (python)
+  - modified tests/test_telemetry.py (python)
+  - modified bin/arka_astronomy.py (python)
+  - modified bin/arka_describe_video.py (python)
+  - modified bin/arka_fact_check.py (python)
+  - modified bin/arka_flow.py (python)
+  - modified bin/arka_metallurgy.py (python)
+  - modified bin/arka_repo_context.py (python)
+  - modified llm.txt
+  - modified mcp.json
+  - modified message-sessions/
+  - modified personalize.json
+  - modified personas/steve-jobs.yaml
+  - modified src/arka/agent/astronomy.py (agent skill)
+  - modified src/arka/agent/fact_check.py (agent skill)
+  - modified src/arka/agent/flow.py (agent skill)
+  - modified src/arka/agent/metallurgy.py (agent skill)
+  - modified src/arka/agent/repo_context.py (agent skill)
+  - modified src/arka/bundled/arka_astronomy.py (python)
+  - modified src/arka/bundled/arka_describe_video.py (python)
+  - modified src/arka/bundled/arka_fact_check.py (python)
+  - modified src/arka/bundled/arka_flow.py (python)
+  - modified src/arka/bundled/arka_metallurgy.py (python)
+  - modified src/arka/bundled/arka_repo_context.py (python)
+  - modified src/arka/core/code_project.py (python)
+  - modified src/arka/core/mode.py (python)
+  - modified src/arka/integrations/context7_mcp.py (python)
+  - modified src/arka/skills/astronomy/
+  - modified src/arka/skills/life_sciences/protocol_sources.py (python)
+  - modified src/arka/skills/life_sciences/protocols.json
+  - modified src/arka/skills/metallurgy/
+  - modified src/arka/vision/video.py (python)
+  - modified tests/test_astronomy.py (python)
+  - modified tests/test_cli_setup_index.py (python)
+  - modified tests/test_code_project.py (python)
+  - modified tests/test_context7_mcp.py (python)
+  - modified tests/test_describe_image_person.py (python)
+  - modified tests/test_describe_video.py (python)
+  - modified tests/test_fact_check.py (python)
+  - modified tests/test_flow.py (python)
+  - modified tests/test_flow_protocol_sources.py (python)
+  - modified tests/test_metallurgy.py (python)
+  - modified tests/test_mode.py (python)
+  - modified tests/test_repo_context.py (python)
+  - modified web/
+
+  --- sync 2026-07-13 15:19 UTC (17638a65..15e61a2c)
+  - modified .env.example
+  - added bin/arka_astronomy.py (python)
+  - added bin/arka_describe_video.py (python)
+  - added bin/arka_fact_check.py (python)
+  - added bin/arka_flow.py (python)
+  - added bin/arka_harvard_ark.py (python)
+  - added bin/arka_metallurgy.py (python)
+  - added bin/arka_repo_context.py (python)
+  - added bin/arka_self_improve.py (python)
+  - added bin/arka_stt_install.py (python)
+  - added docs/changelog/2026-07-13.mdx (docs)
+  - modified docs/docs.json
+  - added personas/steve-jobs.yaml
+  - modified scripts/refetch.sh
+  - modified src/arka/_bootstrap.py (python)
+  - added src/arka/agent/astronomy.py (agent skill)
+  - modified src/arka/agent/core.py (agent skill)
+  - added src/arka/agent/fact_check.py (agent skill)
+  - added src/arka/agent/flow.py (agent skill)
+  - modified src/arka/agent/goal.py (agent skill)
+  - added src/arka/agent/metallurgy.py (agent skill)
+  - modified src/arka/agent/personas/base.py (agent skill)
+  - modified src/arka/agent/personas/cli.py (agent skill)
+  - modified src/arka/agent/personas/elon.py (agent skill)
+  - modified src/arka/agent/personas/format.py (agent skill)
+  - modified src/arka/agent/personas/io.py (agent skill)
+  - modified src/arka/agent/personas/schema.py (agent skill)
+  - added src/arka/agent/repo_context.py (agent skill)
+  - added src/arka/agent/self_improve.py (agent skill)
+  - added src/arka/agent/stt_install.py (agent skill)
+  - modified src/arka/agent/voice.py (agent skill)
+  - modified src/arka/bundled/.env.example
+  - added src/arka/bundled/arka_astronomy.py (python)
+  - added src/arka/bundled/arka_describe_video.py (python)
+  - added src/arka/bundled/arka_fact_check.py (python)
+  - added src/arka/bundled/arka_flow.py (python)
+  - added src/arka/bundled/arka_harvard_ark.py (python)
+  - added src/arka/bundled/arka_metallurgy.py (python)
+  - added src/arka/bundled/arka_repo_context.py (python)
+  - added src/arka/bundled/arka_self_improve.py (python)
+  - added src/arka/bundled/arka_stt_install.py (python)
+  - modified src/arka/bundled/config.fish (fish router)
+  - modified src/arka/cli.py (python)
+  - added src/arka/core/auto_refetch.py (python)
+  - added src/arka/core/code_project.py (python)
+  - added src/arka/core/mode.py (python)
+  - modified src/arka/dispatch.py (python)
+  - modified src/arka/env.example
+  - modified src/arka/fish/config.fish (fish router)
+  - modified src/arka/integrations/agent_hub.py (python)
+  - added src/arka/integrations/context7_mcp.py (python)
+  - modified src/arka/integrations/currency.py (python)
+  - added src/arka/integrations/harvard_ark.py (python)
+  - modified src/arka/integrations/mcp_cli.py (python)
+  - modified src/arka/integrations/mcp_manager.py (python)
+  - modified src/arka/llm/cli.py (python)
+  - modified src/arka/llm/fallback.py (python)
+  - modified src/arka/llm/model_advisor.py (python)
+  - added src/arka/llm/provider_select.py (python)
+  - modified src/arka/llm/providers.py (python)
+  - modified src/arka/llm/skill_profiles.py (python)
+  - modified src/arka/media/transcript.py (python)
+  - modified src/arka/output.py (python)
+  - modified src/arka/router.py (python)
+  - modified src/arka/routing/symbolic.py (routing)
+  - added src/arka/skills/astronomy/lib.py (python)
+  - added src/arka/skills/astronomy/objects.json
+  - added src/arka/skills/astronomy/run.py (python)
+  - added src/arka/skills/astronomy/skill.json
+  - added src/arka/skills/life_sciences/protocol_sources.py (python)
+  - added src/arka/skills/life_sciences/protocols.json
+  - added src/arka/skills/metallurgy/alloys.json
+  - added src/arka/skills/metallurgy/heat_treatments.json
+  - added src/arka/skills/metallurgy/lib.py (python)
+  - added src/arka/skills/metallurgy/metallurgy_sources.py (python)
+  - added src/arka/skills/metallurgy/run.py (python)
+  - added src/arka/skills/metallurgy/skill.json
+  - modified src/arka/telemetry/_otlp.py (python)
+  - modified src/arka/vision/describe.py (python)
+  - modified src/arka/vision/screen.py (python)
+  - … and 26 more files
+
+================================================================================
+END — update this file when adding skills, routing rules, or major modules
+================================================================================

@@ -18,6 +18,7 @@ icon: "life-ring"
 | Issue | Fix |
 | --- | --- |
 | `uv pip install am` on random text | Use `arka`, not raw shell, for NL |
+| Plain text command does nothing | Prefix it with `arka` or use `agent_route` so Arka can intercept it |
 | Plugin not routing | `arka skills refresh`; check `skill.json` triggers; `arka route "your trigger phrase"` |
 | Config changes not picked up | `arka reload` or new shell; `arka reload --listen` for wake listener |
 
