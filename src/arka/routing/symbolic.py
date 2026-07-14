@@ -810,6 +810,15 @@ def route_urlkit(cmd: str) -> str | None:
     return None
 
 
+def route_lint_project(cmd: str) -> str | None:
+    try:
+        from arka.agent.lint_project import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd.strip())
+    return route or None
+
+
 def route_self_improve(cmd: str) -> str | None:
     try:
         from arka.agent.self_improve import route_command
@@ -834,6 +843,7 @@ def route_offline_extras(cmd: str) -> str | None:
         route_mode,
         route_design_from_screenshot,
         route_urlkit,
+        route_lint_project,
         route_code_project,
         route_heartbeat,
         route_jsonkit,

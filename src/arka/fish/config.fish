@@ -691,6 +691,7 @@ if status is-interactive
         echo "create_venv     -> Create new virtual environment"
         echo "write_script    -> Create a Python script"
         echo "run_script      -> Run a Python script"
+        echo "lint_project    -> Lint any project with detected language tools"
         echo "create_folder   -> Create directories"
         echo "list_folders    -> List subfolder names"
         echo "show_folder     -> Show folder contents"
@@ -4365,6 +4366,33 @@ function lint_python --description "Lint Python files using flake8/pylint/ruff"
                 echo "Install: pip install ruff"
                 return 1
             end
+    end
+end
+
+function _agent_is_lint_project_request --description "True if user wants language-agnostic linting (internal)"
+    set -l py (_arka_python)
+    set -l route ($py -m arka.agent.lint_project route "$argv[1]" 2>/dev/null | string trim)
+    test -n "$route"
+end
+
+function _agent_build_lint_project_cmd --description "Build lint_project args from NL (internal)"
+    set -l py (_arka_python)
+    set -l route ($py -m arka.agent.lint_project route "$argv[1]" 2>/dev/null | string trim)
+    echo "$route"
+end
+
+function lint_project --description "Lint any project with detected language tools"
+    set -l py (_arka_python)
+    $py -m arka.agent.lint_project run $argv
+end
+
+function lint_project --description "Lint any project using detected language tools"
+    set -l py (_arka_python)
+    set -l rest ($py (_arka_py_script arka_lint_project.py) run (string escape --style=script -- $argv) 2>/dev/null)
+    if test -n "$rest"
+        echo $rest
+    else
+        $py (_arka_py_script arka_lint_project.py) run $argv
     end
 end
 
@@ -14269,7 +14297,7 @@ function _agent_skill_matches_request --description "True if skill fits the user
             string match -qr '(?i)(play\s+|movie|film|rplay)' "$cmd"
         case browse_web
             string match -qr '(?i)(browse|scrape|website|web\s*page|click|login|automate)' "$cmd"
-        case write_script run_script lint_python
+        case write_script run_script lint_python lint_project
             string match -qr '(?i)(script|python|lint|code)' "$cmd"
         case whatsapp_listen
             string match -qr '(?i)(whatsapp\s+inbox|inbox\s+whatsapp|whatsapp\s+listen|listen\s+whatsapp)' "$cmd"

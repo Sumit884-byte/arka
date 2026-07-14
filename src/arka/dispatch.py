@@ -220,6 +220,10 @@ def run_skill(skill_line: str) -> int:
             from arka.core.urlkit import main as urlkit_main
 
             code = urlkit_main(rest)
+        elif head in ("lint_project", "lint-project", "lint_all"):
+            from arka.agent.lint_project import main as lint_main
+
+            code = lint_main([head.replace("-", "_"), *rest])
         elif head.endswith(".py") and script_path(head).is_file():
             code = run_script(head, rest)
         else:

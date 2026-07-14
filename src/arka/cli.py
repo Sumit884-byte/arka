@@ -147,6 +147,11 @@ def main(argv: list[str] | None = None) -> int:
 
         return urlkit_main(args[1:])
 
+    if args[0] in ("lint_project", "lint-project", "lint_all"):
+        from arka.agent.lint_project import main as lint_main
+
+        return lint_main([args[0].replace("-", "_"), *args[1:]])
+
     if args[0] == "llm":
         from arka.agent.repo_context import main as repo_context_main
 

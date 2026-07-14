@@ -67,6 +67,8 @@ NL_CASES: tuple[tuple[str, str], ...] = (
     ("turn this screenshot into a web app", "design_from_screenshot"),
     ("recreate the UI from screenshot", "design_from_screenshot"),
     ("repair broken links in this file", "urlkit"),
+    ("lint this repo", "lint_project"),
+    ("lint this project --full", "lint_project"),
     ("arka ci", "ci"),
     ("arka ci --full", "ci"),
     ("arka ci --fix", "ci"),
