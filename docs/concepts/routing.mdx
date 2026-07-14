@@ -94,6 +94,8 @@ Install [fish shell](https://fishshell.com) to unlock the full 70\+ skill router
 
 The self-improve workflow is also routed as a dedicated skill, so phrases like `self improve routing` can stay local and deterministic while still opening the repo analysis path.
 
+Developer tooling now follows the same offline-first path: `arka ci`, `arka review staged`, `route audit`, and `skill new my_tool --template dev` are handled by symbolic routing before any LLM fallback.
+
 ## Skill router vs orchestrator
 
 The **skill router** decides _which skill runs_. The **LLM orchestrator** (see [LLM orchestration](/concepts/llm)) powers completions _inside_ skills — summarize, chat, research, PDF, predictions — with provider failover. They are separate systems.

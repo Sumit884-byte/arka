@@ -205,6 +205,13 @@ def run_skill(skill_line: str) -> int:
                     yes=yes,
                     apply=apply,
                 )
+        elif head in ("ci", "review", "route_audit", "route-audit", "skill"):
+            from arka.agent.dev_tools import main as dev_tools_main
+
+            sub_argv = [head, *rest]
+            if head == "route-audit":
+                sub_argv[0] = "route-audit"
+            code = dev_tools_main(sub_argv)
         elif head.endswith(".py") and script_path(head).is_file():
             code = run_script(head, rest)
         else:

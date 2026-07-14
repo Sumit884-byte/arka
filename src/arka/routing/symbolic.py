@@ -523,6 +523,15 @@ def route_repo_map(cmd: str) -> str | None:
     return route or None
 
 
+def route_pr_check(cmd: str) -> str | None:
+    try:
+        from arka.agent.pr_check import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
+
+
 def route_generate_data(cmd: str) -> str | None:
     try:
         from arka.agent.generate_data import route_command
@@ -757,6 +766,15 @@ def route_agent_hub(cmd: str) -> str | None:
     return "agent_hub " + " ".join(shlex.quote(a) for a in argv)
 
 
+def route_dev_tools(cmd: str) -> str | None:
+    try:
+        from arka.agent.dev_tools import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd.strip())
+    return route or None
+
+
 def route_mode(cmd: str) -> str | None:
     try:
         from arka.core.mode import route_mode_nl
@@ -804,6 +822,7 @@ def route_offline_extras(cmd: str) -> str | None:
         route_learned,
         route_competitions,
         route_bookmarks,
+        route_pr_check,
         route_repo_health,
         route_repo_context,
         route_repo_map,
@@ -821,6 +840,7 @@ def route_offline_extras(cmd: str) -> str | None:
         route_model_select,
         route_stt_install,
         route_free_credits,
+        route_dev_tools,
         route_provider_select,
         route_personalize,
         route_life_sciences,

@@ -2454,6 +2454,14 @@ function skills --description "Show what commands the agent can auto-run"
                 echo (set_color green)"  survive_lang     "(set_color normal)"<language> [phrase] — travel survival phrases"
             case pr_check pr-check pr
                 echo (set_color green)"  pr_check         "(set_color normal)"diff|summary|ci|explain|babysit — PR until merge-ready"
+            case ci
+                echo (set_color green)"  ci               "(set_color normal)"full|fix — local CI gate mirrored from GitHub Actions"
+            case review
+                echo (set_color green)"  review           "(set_color normal)"[--staged] — local diff review with project rules"
+            case route_audit route-audit
+                echo (set_color green)"  route_audit      "(set_color normal)"— symbolic / fish / test parity audit"
+            case skill
+                echo (set_color green)"  skill new        "(set_color normal)"<name> --template dev — scaffold a plugin skill"
             case self_improve self
                 echo (set_color green)"  self_improve     "(set_color normal)"improve [target] — Arka self-improvement loop"
             case codebase_ingest
@@ -10157,6 +10165,18 @@ function _agent_route_pr_check --description "Build pr_check invocation from NL 
     echo "$route"
 end
 
+function _agent_is_dev_tools_request --description "True if user wants CI / review / route audit / skill scaffolding (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_dev_tools.py) route "$argv[1]" 2>/dev/null | string trim)
+    test -n "$route"
+end
+
+function _agent_route_dev_tools --description "Build dev_tools invocation from NL (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_dev_tools.py) route "$argv[1]" 2>/dev/null | string trim)
+    echo "$route"
+end
+
 function _agent_is_github_repo_request --description "True if user wants GitHub repo activity (commits/files) (internal)"
     set -l py (_arka_python)
     set -l route ($py (_arka_py_script arka_github_repo.py) route "$argv[1]" 2>/dev/null | string trim)
@@ -15053,6 +15073,13 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
             return
         end
     end
+    if _agent_is_dev_tools_request "$cmd"
+        set -l dtr (_agent_route_dev_tools "$cmd")
+        if test -n "$dtr"
+            echo "skill|$dtr|Developer tools: ci, review, route audit, skill scaffolding"
+            return
+        end
+    end
     if _agent_is_self_improve_request "$cmd"
         set -l sir (_agent_route_self_improve "$cmd")
         if test -n "$sir"
@@ -15633,6 +15660,11 @@ function _agent_correct_interpretation --description "Fix bad LLM skill picks us
     if _agent_is_pr_check_request "$cmd"
         set -l prr (_agent_route_pr_check "$cmd")
         test -n "$prr"; and echo "$prr"
+        return
+    end
+    if _agent_is_dev_tools_request "$cmd"
+        set -l dtr (_agent_route_dev_tools "$cmd")
+        test -n "$dtr"; and echo "$dtr"
         return
     end
 
@@ -18715,6 +18747,9 @@ function agent --description "Run commands safely: executes safe commands automa
         set route_source offline
     else if _agent_is_pr_check_request "$cmd"
         set interpreted (_agent_route_pr_check "$cmd")
+        set route_source offline
+    else if _agent_is_dev_tools_request "$cmd"
+        set interpreted (_agent_route_dev_tools "$cmd")
         set route_source offline
     else if _agent_is_self_improve_request "$cmd"
         set interpreted (_agent_route_self_improve "$cmd")

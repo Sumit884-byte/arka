@@ -200,6 +200,24 @@ SKILL_CATALOG: dict[str, dict[str, Any]] = {
         "example": "repo_health",
         "beginner": False,
     },
+    "ci": {
+        "interests": ["dev"],
+        "description": "Mirror the GitHub Actions CI gate locally",
+        "example": "arka ci --full",
+        "beginner": False,
+    },
+    "review": {
+        "interests": ["dev"],
+        "description": "Review staged changes or a diff vs main",
+        "example": "review staged",
+        "beginner": False,
+    },
+    "route_audit": {
+        "interests": ["dev"],
+        "description": "Audit symbolic vs fish vs NL test parity",
+        "example": "route audit",
+        "beginner": False,
+    },
     "docker_status": {
         "interests": ["dev"],
         "description": "List containers and tail logs",
@@ -212,6 +230,12 @@ SKILL_CATALOG: dict[str, dict[str, Any]] = {
         "example": "pr_check https://github.com/org/repo/pull/42",
         "beginner": False,
         "requires_env": ["GITHUB_TOKEN"],
+    },
+    "skill": {
+        "interests": ["dev"],
+        "description": "Scaffold a new plugin skill",
+        "example": "skill new my_tool --template dev",
+        "beginner": False,
     },
     "select_model": {
         "interests": ["dev", "productivity"],

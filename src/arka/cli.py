@@ -125,6 +125,18 @@ def main(argv: list[str] | None = None) -> int:
 
         return repo_context_main(["repo", *args[1:]])
 
+    if args[0] == "ci":
+        from arka.agent.dev_tools import main as dev_tools_main
+
+        return dev_tools_main(["ci", *args[1:]])
+
+    if args[0] in ("review", "route-audit", "route_audit", "skill"):
+        from arka.agent.dev_tools import main as dev_tools_main
+
+        if args[0] == "route-audit" or args[0] == "route_audit":
+            return dev_tools_main(["route-audit", *args[1:]])
+        return dev_tools_main([args[0], *args[1:]])
+
     if args[0] == "llm":
         from arka.agent.repo_context import main as repo_context_main
 

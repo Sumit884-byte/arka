@@ -7,6 +7,8 @@ icon: "heart-pulse"
 
 Scan the current repo for common test and lint tools, then run a fast health check.
 
+For the Arka repo itself, the newer `arka ci` command mirrors the GitHub Actions gate more closely. Use `arka review` for local diff review, and `arka route audit` when you want to check fish/Python/test parity.
+
 ## Natural language
 
 ```bash
@@ -23,6 +25,17 @@ arka scan what checks are available
 | `repo_health run [path]` | Run all detected checks |
 | `repo_health run --test` | Run test checks only |
 | `repo_health run --lint` | Run lint checks only |
+
+## Related Arka developer tools
+
+| Command | Description |
+| --- | --- |
+| `arka ci` | Run the repo-specific CI mirror (`ruff` + targeted `pytest`) |
+| `arka ci --full` | Add the full pytest suite after the fast CI mirror |
+| `arka ci --fix` | Hand the first failed gate to the goal agent |
+| `arka review --staged` | Review staged changes against project rules |
+| `arka route audit` | Report symbolic / fish / test parity gaps |
+| `arka skill new <name> --template dev` | Scaffold a new plugin skill |
 
 ## Detected tools
 

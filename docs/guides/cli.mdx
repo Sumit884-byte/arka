@@ -22,6 +22,31 @@ The `arka` command is the main entry point. `agent` is an alias for the same rou
 | `arka refetch --install` | Git pull \+ sync \+ reinstall |
 | `arka help` | Skill overview |
 
+## Developer tools
+
+| Command | Description |
+| --- | --- |
+| `arka ci` | Run the local CI gate mirrored from GitHub Actions |
+| `arka ci --full` | Run the fast gate plus the full pytest suite |
+| `arka ci --fix` | Run CI, then hand the first failure to the goal agent |
+| `arka review --staged` | Review staged changes with project-rule and test-gap hints |
+| `arka review` | Review the current diff vs the default base branch |
+| `arka route audit` | Compare symbolic routes, fish hooks, and NL coverage tests |
+| `arka skill new my_tool --template dev` | Scaffold a new plugin skill with manifest, runner, and docs stub |
+
+Natural language examples:
+
+```bash
+arka ci
+arka ci --full
+babysit this pr
+check repo health
+review staged
+review vs main
+route audit
+skill new my_tool --template dev
+```
+
 ## YouTube commands
 
 See the full [YouTube guide](/guides/youtube).
