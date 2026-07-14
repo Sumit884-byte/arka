@@ -67,6 +67,8 @@ def test_nl_to_argv_routes():
     assert nl_to_argv("list configured mcp servers") == ["list"]
     assert nl_to_argv("list mcp tools from signoz") == ["tools", "signoz"]
     assert nl_to_argv("mcp tools github") == ["tools", "github"]
+    assert nl_to_argv("list arka mcp tools") == ["self-tools"]
+    assert nl_to_argv("show arka self mcp tools") == ["self-tools"]
     assert nl_to_argv("hello world") is None
 
 
@@ -188,6 +190,16 @@ def test_mcp_cli_list(capsys, mcp_config):
     out = capsys.readouterr().out
     assert "demo" in out
     assert "stdio" in out
+
+
+def test_mcp_cli_self_tools(capsys):
+    from arka.integrations.mcp_cli import main
+
+    assert main(["self-tools"]) == 0
+    out = capsys.readouterr().out
+    assert "server\tarka" in out
+    assert "tool\tarka_ask" in out
+    assert "tool_count\t37" in out
 
 
 def test_mcp_cli_parse(capsys):

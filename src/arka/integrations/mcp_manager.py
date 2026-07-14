@@ -449,7 +449,15 @@ def nl_to_argv(cmd: str) -> list[str] | None:
         m = re.search(r"(?i)\b(?:from|on|for)\s+([a-zA-Z0-9._-]+)", clean)
         if m:
             return ["tools", m.group(1)]
+        if re.search(r"(?i)\b(?:arka|self)\b", clean):
+            return ["self-tools"]
         return ["list"]
+    if re.search(r"(?i)\b(?:list|show)\b.*\b(?:arka\s+)?(?:self\s+)?mcp\s+tools?\b", clean):
+        return ["self-tools"]
+    if re.search(r"(?i)\b(?:list|show)\b.*\bmcp\s+self[- ]tools?\b", clean):
+        return ["self-tools"]
+    if re.search(r"(?i)\barka\s+mcp\s+tools?\b", clean):
+        return ["self-tools"]
     m = re.search(r"(?i)^mcp\s+tools?\s+([a-zA-Z0-9._-]+)$", clean)
     if m:
         return ["tools", m.group(1)]

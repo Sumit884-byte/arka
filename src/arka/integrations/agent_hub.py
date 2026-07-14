@@ -1321,6 +1321,8 @@ def nl_to_argv(cmd: str) -> list[str] | None:
     if re.search(r"(?i)\b(?:agent\s+hub|hub)\b.*\b(?:doctor|health|check)\b", clean):
         return ["doctor"]
     if re.search(r"(?i)\b(?:list|show)\b.*\b(?:ollama\s+)?(?:launch\s+)?agents?\b", clean):
+        if re.search(r"(?i)\bheartbeat\b", clean):
+            return None
         return ["list"]
     if re.search(r"(?i)\b(?:shared|common)\s+mcp\b.*\b(?:agents?|hub)\b", clean):
         return ["status"]

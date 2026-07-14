@@ -1982,7 +1982,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         agent_resume agent_research agent_nudge agent_watch agent_routine agent_fanout \
         agent_code agent_handoff agent_browser transcript_ask media_ask \
         meeting_agent study_agent inbox_agent compare_agent product_reviewer price_check profession pr_check self_improve github_repo competitions route_learn \
-        bookmarks repo_health repo_context repo_map generate_data data_gen data_ask ask_data query_data analyze_data view_data view_csv show_csv docker_status clipboard_history mcp agent_hub gemini_cli harvard_ark persona elon talk_to_elon elon_chat \
+        bookmarks repo_health repo_context repo_map generate_data data_gen data_ask ask_data query_data analyze_data view_data view_csv show_csv docker_status clipboard_history jsonkit heartbeat mcp agent_hub gemini_cli harvard_ark persona elon talk_to_elon elon_chat \
         arka_ask semantic_memory supermemory speak_research voice_session handoff_notify remind routines predictions stock \
         rag_setup rag_status voice_agent wake_control \
         agent_ask web_answer deep_web_answer web_essay platform_howto interesting_fact calc chat_reset set_location files_preference_help google \
@@ -10187,6 +10187,30 @@ function _agent_route_bookmarks --description "Build bookmarks invocation from N
     echo "$route"
 end
 
+function _agent_is_heartbeat_request --description "True if user wants agent heartbeat status (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_heartbeat.py) route "$argv[1]" 2>/dev/null | string trim)
+    test -n "$route"
+end
+
+function _agent_route_heartbeat --description "Build heartbeat invocation from NL (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_heartbeat.py) route "$argv[1]" 2>/dev/null | string trim)
+    echo "$route"
+end
+
+function _agent_is_jsonkit_request --description "True if user wants JSON validate/format (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_jsonkit.py) route "$argv[1]" 2>/dev/null | string trim)
+    test -n "$route"
+end
+
+function _agent_route_jsonkit --description "Build jsonkit invocation from NL (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_jsonkit.py) route "$argv[1]" 2>/dev/null | string trim)
+    echo "$route"
+end
+
 function _agent_is_repo_health_request --description "True if user wants repo health checks (internal)"
     set -l py (_arka_python)
     set -l route ($py (_arka_py_script arka_repo_health.py) route "$argv[1]" 2>/dev/null | string trim)
@@ -10848,6 +10872,12 @@ function _agent_is_knowledge_question --description "True if user wants a factua
     if _agent_is_repo_health_request "$argv[1]"
         return 1
     end
+    if _agent_is_heartbeat_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_jsonkit_request "$argv[1]"
+        return 1
+    end
     if _agent_is_repo_context_request "$argv[1]"
         return 1
     end
@@ -11160,6 +11190,12 @@ function _agent_is_general_chat --description "True if plain conversational inpu
     if _agent_is_repo_health_request "$argv[1]"
         return 1
     end
+    if _agent_is_heartbeat_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_jsonkit_request "$argv[1]"
+        return 1
+    end
     if _agent_is_repo_context_request "$argv[1]"
         return 1
     end
@@ -11178,7 +11214,7 @@ function _agent_is_general_chat --description "True if plain conversational inpu
     if _agent_is_mcp_request "$argv[1]"
         return 1
     end
-    if string match -qr '(?i)^(select|best_model|model_select|gemini|gemini_cli|harvard_ark|elon|talk_to_elon|elon_chat|life|bookmarks|mcp|docker|clipboard|competitions|route|teach|generate_data|view_data|view_csv|show_csv|data_ask|ask_data|query_data|analyze_data|repo_health|repo_context|repo_map|post_x|daily_brief)\b' "$clean"
+    if string match -qr '(?i)^(select|best_model|model_select|gemini|gemini_cli|harvard_ark|elon|talk_to_elon|elon_chat|life|bookmarks|mcp|docker|clipboard|competitions|route|teach|generate_data|view_data|view_csv|show_csv|data_ask|ask_data|query_data|analyze_data|repo_health|repo_context|repo_map|jsonkit|heartbeat|post_x|daily_brief)\b' "$clean"
         return 1
     end
     if string match -qr '(?i)^(install|play|open|run|create|download|search|list|show|fix|set|take|timer|remind|weather|pdf|ingest|screenshot|spotify|whatsapp|send|loop|agent_|generate_image|generate_video|generate_password|chart|ascii|ascii_art|figlet|flow|graph|plot|predictions|stock|translate|survive_lang|pr_check|cheat|excuse|bored)\b' "$clean"
@@ -11650,6 +11686,14 @@ function _agent_offline_route_cmd --description "Full symbolic NL to skill comma
     end
     if _agent_is_repo_health_request "$cmd"
         echo (_agent_route_repo_health "$cmd")
+        return 0
+    end
+    if _agent_is_heartbeat_request "$cmd"
+        echo (_agent_route_heartbeat "$cmd")
+        return 0
+    end
+    if _agent_is_jsonkit_request "$cmd"
+        echo (_agent_route_jsonkit "$cmd")
         return 0
     end
     if _agent_is_repo_context_request "$cmd"
@@ -13397,6 +13441,16 @@ function session_memory --description "OpenClaw-style markdown session memory (M
     end
 end
 
+function jsonkit --description "JSON validate, pretty-print, minify, and path get"
+    set -l py (_arka_python)
+    set -l script (_arka_py_script arka_jsonkit.py)
+    if test (count $argv) -eq 0
+        echo "Usage: jsonkit validate|pretty|minify|get ..."
+        return 1
+    end
+    $py $script $argv
+end
+
 function heartbeat --description "Agent health — last activity, routines, memory stats"
     set -l py (_arka_python)
     if test (count $argv) -eq 0
@@ -14795,6 +14849,20 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
             return
         end
     end
+    if _agent_is_heartbeat_request "$cmd"
+        set -l hb (_agent_route_heartbeat "$cmd")
+        if test -n "$hb"
+            echo "skill|$hb|Agent heartbeat — activity, routines, memory"
+            return
+        end
+    end
+    if _agent_is_jsonkit_request "$cmd"
+        set -l jk (_agent_route_jsonkit "$cmd")
+        if test -n "$jk"
+            echo "skill|$jk|JSON validate, pretty-print, minify, get"
+            return
+        end
+    end
     if _agent_is_repo_context_request "$cmd"
         set -l rcx (_agent_route_repo_context "$cmd")
         if test -n "$rcx"
@@ -14825,6 +14893,7 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
     end
     if string match -qr '(?i)^(analyze|check)\s+(?:stock\s+)?([A-Z][A-Z0-9.-]{1,12})\b' "$clean"
         and not _agent_is_repo_health_request "$cmd"
+        and not _agent_is_jsonkit_request "$cmd"
         and not _agent_is_view_data_request "$cmd"
         and not _agent_is_data_ask_request "$cmd"
         set -l ticker (string upper (string match -r '(?i)([A-Z][A-Z0-9.-]{1,12})\s*$' "$cmd")[2])
@@ -15016,6 +15085,20 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         set -l rh (_agent_route_repo_health "$cmd")
         if test -n "$rh"
             echo "skill|$rh|Repo health scan and checks"
+            return
+        end
+    end
+    if _agent_is_heartbeat_request "$cmd"
+        set -l hb (_agent_route_heartbeat "$cmd")
+        if test -n "$hb"
+            echo "skill|$hb|Agent heartbeat — activity, routines, memory"
+            return
+        end
+    end
+    if _agent_is_jsonkit_request "$cmd"
+        set -l jk (_agent_route_jsonkit "$cmd")
+        if test -n "$jk"
+            echo "skill|$jk|JSON validate, pretty-print, minify, get"
             return
         end
     end
@@ -17092,6 +17175,22 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                                 return $status
                             end
                         end
+                        if _agent_is_heartbeat_request "$raw"
+                            set -l hb (_agent_route_heartbeat "$raw")
+                            if test -n "$hb"
+                                echo (set_color yellow)"💡 [Agent heartbeat]"(set_color normal)
+                                _agent_dispatch_one "$hb"
+                                return $status
+                            end
+                        end
+                        if _agent_is_jsonkit_request "$raw"
+                            set -l jk (_agent_route_jsonkit "$raw")
+                            if test -n "$jk"
+                                echo (set_color yellow)"💡 [JSON tools]"(set_color normal)
+                                _agent_dispatch_one "$jk"
+                                return $status
+                            end
+                        end
                         if _agent_is_repo_context_request "$raw"
                             set -l rcx (_agent_route_repo_context "$raw")
                             if test -n "$rcx"
@@ -18384,6 +18483,12 @@ function agent --description "Run commands safely: executes safe commands automa
     else if _agent_is_repo_health_request "$cmd"
         set interpreted (_agent_route_repo_health "$cmd")
         set route_source offline
+    else if _agent_is_heartbeat_request "$cmd"
+        set interpreted (_agent_route_heartbeat "$cmd")
+        set route_source offline
+    else if _agent_is_jsonkit_request "$cmd"
+        set interpreted (_agent_route_jsonkit "$cmd")
+        set route_source offline
     else if _agent_is_repo_context_request "$cmd"
         set interpreted (_agent_route_repo_context "$cmd")
         set route_source offline
@@ -18401,6 +18506,7 @@ function agent --description "Run commands safely: executes safe commands automa
         set route_source offline
     else if string match -qr '(?i)^(analyze|check)\s+(?:stock\s+)?[A-Z][A-Z0-9.-]{1,12}\b' "$clean_cmd"
         and not _agent_is_repo_health_request "$cmd"
+        and not _agent_is_jsonkit_request "$cmd"
         set -l stock_ticker (string upper (string match -r '(?i)([A-Z][A-Z0-9.-]{1,12})\s*$' "$cmd")[2])
         set interpreted "stock analyze $stock_ticker"
     else if string match -qr '(?i)(predict|prediction|forecast|opportunit).*(antique|stock|market|strategy|invest|collectible|portfolio)|^(predict|forecast)\s+' "$clean_cmd"
@@ -18624,6 +18730,12 @@ function agent --description "Run commands safely: executes safe commands automa
         set route_source offline
     else if _agent_is_repo_health_request "$cmd"
         set interpreted (_agent_route_repo_health "$cmd")
+        set route_source offline
+    else if _agent_is_heartbeat_request "$cmd"
+        set interpreted (_agent_route_heartbeat "$cmd")
+        set route_source offline
+    else if _agent_is_jsonkit_request "$cmd"
+        set interpreted (_agent_route_jsonkit "$cmd")
         set route_source offline
     else if _agent_is_repo_context_request "$cmd"
         set interpreted (_agent_route_repo_context "$cmd")

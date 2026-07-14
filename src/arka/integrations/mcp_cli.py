@@ -161,6 +161,18 @@ def cmd_parse(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_self_tools(_args: argparse.Namespace) -> int:
+    from arka.integrations.mcp_server import list_tool_definitions
+
+    tools = list_tool_definitions()
+    print("server\tarka")
+    print(f"tool_count\t{len(tools)}")
+    for tool in tools:
+        desc = str(tool.get("description") or "").replace("\n", " ").strip()[:120]
+        print(f"tool\t{tool['name']}\t{desc}")
+    return 0
+
+
 def cmd_serve(_args: argparse.Namespace) -> int:
     from arka.integrations.mcp_server import serve_stdio
 
@@ -232,6 +244,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("status", help="Connection health for all servers")
 
+    sub.add_parser("self-tools", help="List Arka's native MCP tools (when serving as MCP server)")
+
     sub.add_parser("serve", help="Start Arka as a stdio MCP server")
 
     install_p = sub.add_parser("install", help="Print MCP config snippet for Cursor/Claude")
@@ -278,6 +292,7 @@ def main(argv: list[str] | None = None) -> int:
         "tools": cmd_tools,
         "call": cmd_call,
         "status": cmd_status,
+        "self-tools": cmd_self_tools,
         "serve": cmd_serve,
         "install": cmd_install,
         "doctor": cmd_doctor,
@@ -300,6 +315,7 @@ Usage:
   arka mcp tools <server>                    List tools from a server
   arka mcp call <server> <tool> [--args '{}']
   arka mcp status                            Connection health
+  arka mcp self-tools                        List Arka's 37 native MCP tools
   arka mcp serve                             Start Arka as stdio MCP server
   arka mcp install [--agent cursor|claude]   Print client mcp.json snippet
   arka mcp doctor                            Verify local MCP server
@@ -317,6 +333,7 @@ Fish / NL:
   mcp list
   mcp status
   agent "list mcp tools from signoz"
+  agent "list arka mcp tools"
   agent "call mcp tool search on github"
 
 Optional SDK:

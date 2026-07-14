@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import time
 from pathlib import Path
 
@@ -210,10 +211,46 @@ def status(*, json_out: bool = False) -> int:
     return 0
 
 
+_TRIGGER_RE = re.compile(
+    r"(?i)\b("
+    r"agent\s+heartbeat|heartbeat\s+status|"
+    r"(?:show|check|get)\s+(?:agent\s+)?heartbeat|"
+    r"(?:recent|activity)\s+history|heartbeat\s+history|"
+    r"last\s+activity|agent\s+health\s+check|"
+    r"memory\s+stats|routines\s+enabled"
+    r")\b"
+)
+_HISTORY_RE = re.compile(r"(?i)\b(?:history|recent\s+activit(?:y|ies))\b")
+_PING_RE = re.compile(r"(?i)\bping\b")
+
+
+def wants_heartbeat(text: str) -> bool:
+    if re.search(r"(?i)\bheartbeat\s+ping\b", text or ""):
+        return True
+    return bool(_TRIGGER_RE.search(text or ""))
+
+
+def route_command(text: str) -> str:
+    if not wants_heartbeat(text):
+        return ""
+    clean = (text or "").strip()
+    if _HISTORY_RE.search(clean):
+        return "heartbeat history"
+    if _PING_RE.search(clean):
+        m = re.search(r"(?i)\bping\s+(.+)$", clean)
+        if m:
+            return f"heartbeat ping {m.group(1).strip()}"
+        return "heartbeat ping"
+    return "heartbeat status"
+
+
 def main() -> int:
     load_env_file()
     parser = argparse.ArgumentParser(description="Arka agent heartbeat")
-    sub = parser.add_subparsers(dest="cmd", required=True)
+    sub = parser.add_subparsers(dest="cmd")
+
+    p_route = sub.add_parser("route", help="Map NL to heartbeat command")
+    p_route.add_argument("text", nargs="+")
 
     p = sub.add_parser("ping")
     p.add_argument("activity", nargs="?", default="manual.ping")
@@ -226,6 +263,12 @@ def main() -> int:
     p.add_argument("--json", action="store_true")
 
     args = parser.parse_args()
+    if args.cmd == "route":
+        route = route_command(" ".join(args.text))
+        if route:
+            print(route)
+            return 0
+        return 1
     if args.cmd == "ping":
         ping(args.activity, source="cli")
         print(f"Heartbeat: {args.activity}")
@@ -243,6 +286,7 @@ def main() -> int:
         for row in rows:
             print(f"{row.get('when', '?')}  {row.get('activity', '?')}  ({row.get('source', '?')})")
         return 0
+    parser.print_help()
     return 1
 
 

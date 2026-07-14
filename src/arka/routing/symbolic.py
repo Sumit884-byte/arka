@@ -559,6 +559,24 @@ def route_docker_status(cmd: str) -> str | None:
     return route or None
 
 
+def route_heartbeat(cmd: str) -> str | None:
+    try:
+        from arka.integrations.heartbeat import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
+
+
+def route_jsonkit(cmd: str) -> str | None:
+    try:
+        from arka.core.jsonkit import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
+
+
 def route_clipboard_history(cmd: str) -> str | None:
     try:
         from arka.integrations.clipboard_history import route_command
@@ -778,6 +796,8 @@ def route_offline_extras(cmd: str) -> str | None:
         route_self_improve,
         route_mode,
         route_code_project,
+        route_heartbeat,
+        route_jsonkit,
         route_agent_hub,
         route_mcp,
         route_clipboard_history,

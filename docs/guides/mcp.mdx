@@ -109,6 +109,7 @@ arka mcp tools signoz
 | `arka mcp tools <server>` | List tools from a server |
 | `arka mcp call <server> <tool> [--args '{}']` | Call a tool |
 | `arka mcp status` | Connection health for all servers |
+| `arka mcp self-tools` | List Arka's 37 native MCP tools |
 | `arka mcp serve` | Start Arka as a local stdio MCP server |
 | `arka mcp install` | Print Cursor/Claude-compatible `mcp.json` snippet |
 | `arka mcp doctor` | Verify the local Arka MCP server starts |
@@ -120,6 +121,80 @@ arka mcp tools signoz
 ## Arka as MCP server
 
 Other agents (Cursor, Claude Desktop, OpenClaw, Codex, etc.) can call Arka skills and memory over MCP — the same stdio transport Arka uses as an MCP **client**.
+
+### Cursor setup
+
+Use Arka as an MCP server inside Cursor so the editor agent can call `arka_ask`, `arka_recall`, `arka_skill`, and 34 other tools.
+
+<Steps>
+  <Step title="Install Arka">
+    From the repo (editable install) or your venv:
+
+    ```bash
+    cd /path/to/arka
+    python -m venv venv-arka
+    source venv-arka/bin/activate
+    pip install -e .
+    arka mcp doctor
+    ```
+
+    `arka mcp doctor` should end with `summary ok` and list 37 tools.
+  </Step>
+
+  <Step title="Add MCP config">
+    **Option A — project-level** (recommended when working in the Arka repo): copy or symlink `.cursor/mcp.json` from the repo root. Cursor loads it automatically for this workspace.
+
+    **Option B — global**: open **Cursor Settings → MCP** and merge the `arka` entry into `~/.cursor/mcp.json`:
+
+    ```bash
+    arka mcp install
+    ```
+
+    Example snippet (paths vary by machine — use `arka mcp install` for yours):
+
+    ```json
+    {
+      "mcpServers": {
+        "arka": {
+          "command": "/Users/you/dev/arka/venv-arka/bin/arka",
+          "args": ["mcp", "serve"],
+          "env": {
+            "ARKA_CONFIG_DIR": "/Users/you/.config/arka"
+          }
+        }
+      }
+    }
+    ```
+
+    Repo helpers:
+
+    | File | Purpose |
+    | --- | --- |
+    | `.cursor/mcp.json` | Project-level Cursor MCP (Arka only) |
+    | `hub/adapters/cursor_mcp_snippet.json` | Copy-paste snippet + install steps |
+    | `mcp.json` | Hub-ready config (Arka + optional context7) |
+  </Step>
+
+  <Step title="Restart Cursor">
+    Fully quit and reopen Cursor, or use **Settings → MCP → Reload**. The `arka` server should show as connected with 37 tools.
+  </Step>
+
+  <Step title="Example tool calls">
+    In Cursor chat, ask the agent to use Arka MCP tools:
+
+    - **Recall memory**: call `arka_recall` with `{"goal": "project conventions"}`
+    - **Ask Arka**: call `arka_ask` with `{"prompt": "summarize this repo"}`
+    - **Run a skill**: call `arka_skill` with `{"skill": "repo_map"}`
+    - **Repo layout**: call `arka_repo_map` with `{"depth": 2}`
+
+    From the terminal (same tools, no Cursor):
+
+    ```bash
+    arka mcp call arka arka_recall --args '{"goal":"theme"}'
+    arka mcp call arka arka_ask --args '{"prompt":"what is arka?"}'
+    ```
+  </Step>
+</Steps>
 
 ### Quick start
 
@@ -135,19 +210,6 @@ arka mcp install --write-config
 
 # Verify initialize + tools/list
 arka mcp doctor
-```
-
-Example **Cursor** `~/.cursor/mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "arka": {
-      "command": "arka",
-      "args": ["mcp", "serve"]
-    }
-  }
-}
 ```
 
 Editable installs without `arka` on PATH:
@@ -217,3 +279,35 @@ arka agent_hub adapters    # see which agent configs would gain hub servers
 ```
 
 Hub env vars (`ARKA_MCP_CONFIG`, `ARKA_HUB_DIR`) are documented in [Agent Hub](/guides/agent-hub).
+
+## Using Arka MCP to extend Arka
+
+Dogfood the MCP workflow when adding skills: use Arka's own MCP tools to discover gaps, then wire new capabilities back into CLI routing.
+
+### Example workflow
+
+```bash
+# Verify the local MCP server
+arka mcp doctor
+
+# Inspect repo layout and health (same tools Cursor agents call)
+arka mcp call arka arka_repo_map --args '{"depth":2,"path":"/path/to/arka"}'
+arka mcp call arka arka_repo_health --args '{"path":"/path/to/arka"}'
+
+# List Arka's native MCP surface
+arka mcp self-tools
+
+# From fish / NL
+agent "list arka mcp tools"
+agent "show agent heartbeat"
+agent "validate json package.json"
+```
+
+When a tool exists on the MCP server but lacks natural-language routing (for example `arka_heartbeat` or `arka_jsonkit`), add:
+
+1. `route_command()` in the Python module
+2. `route_*()` in `src/arka/routing/symbolic.py`
+3. Fish helpers `_agent_is_*_request` / `_agent_route_*` in `config.fish`
+4. Tests in `tests/test_*_routing.py` and `tests/test_nl_routing_coverage.py`
+
+This keeps Cursor MCP, terminal NL, and `ROUTE_MODE=symbolic_only` in sync.
