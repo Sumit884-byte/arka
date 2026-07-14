@@ -212,6 +212,10 @@ def run_skill(skill_line: str) -> int:
             if head == "route-audit":
                 sub_argv[0] = "route-audit"
             code = dev_tools_main(sub_argv)
+        elif head in ("design_from_screenshot", "design-screenshot", "designshot"):
+            from arka.agent.design_from_screenshot import main as design_main
+
+            code = design_main([head.replace("-", "_"), *rest])
         elif head.endswith(".py") and script_path(head).is_file():
             code = run_script(head, rest)
         else:

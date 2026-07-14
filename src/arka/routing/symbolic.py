@@ -72,6 +72,15 @@ def route_describe_image(cmd: str) -> str | None:
     return "describe_image " + " ".join(shlex.quote(a) for a in argv)
 
 
+def route_design_from_screenshot(cmd: str) -> str | None:
+    try:
+        from arka.agent.design_from_screenshot import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd.strip())
+    return route or None
+
+
 def route_describe_video(cmd: str) -> str | None:
     try:
         from arka.vision.video import nl_to_argv
@@ -813,6 +822,7 @@ def route_offline_extras(cmd: str) -> str | None:
         route_help,
         route_self_improve,
         route_mode,
+        route_design_from_screenshot,
         route_code_project,
         route_heartbeat,
         route_jsonkit,

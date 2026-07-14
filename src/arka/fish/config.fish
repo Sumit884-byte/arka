@@ -682,6 +682,7 @@ if status is-interactive
         echo "translate       -> Translate text via AI"
         echo "survive_lang    -> Travel survival phrases (native → target language)"
         echo "pr_check        -> PR diff, CI status, explain failures, babysit until green"
+        echo "design_from_screenshot -> Turn screenshot into a build brief"
         echo "self_improve    -> Self-improvement loop on the Arka codebase (goal agent)"
         echo "generate_password -> Secure password"
         echo "ip_info         -> Public IP & location"
@@ -10165,6 +10166,18 @@ function _agent_route_pr_check --description "Build pr_check invocation from NL 
     echo "$route"
 end
 
+function _agent_is_design_from_screenshot_request --description "True if user wants screenshot-to-design brief conversion (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_design_from_screenshot.py) route "$argv[1]" 2>/dev/null | string trim)
+    test -n "$route"
+end
+
+function _agent_route_design_from_screenshot --description "Build design_from_screenshot invocation from NL (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_design_from_screenshot.py) route "$argv[1]" 2>/dev/null | string trim)
+    echo "$route"
+end
+
 function _agent_is_dev_tools_request --description "True if user wants CI / review / route audit / skill scaffolding (internal)"
     set -l py (_arka_python)
     set -l route ($py (_arka_py_script arka_dev_tools.py) route "$argv[1]" 2>/dev/null | string trim)
@@ -15073,6 +15086,13 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
             return
         end
     end
+    if _agent_is_design_from_screenshot_request "$cmd"
+        set -l dsr (_agent_route_design_from_screenshot "$cmd")
+        if test -n "$dsr"
+            echo "skill|$dsr|Screenshot to design brief"
+            return
+        end
+    end
     if _agent_is_dev_tools_request "$cmd"
         set -l dtr (_agent_route_dev_tools "$cmd")
         if test -n "$dtr"
@@ -15660,6 +15680,11 @@ function _agent_correct_interpretation --description "Fix bad LLM skill picks us
     if _agent_is_pr_check_request "$cmd"
         set -l prr (_agent_route_pr_check "$cmd")
         test -n "$prr"; and echo "$prr"
+        return
+    end
+    if _agent_is_design_from_screenshot_request "$cmd"
+        set -l dsr (_agent_route_design_from_screenshot "$cmd")
+        test -n "$dsr"; and echo "$dsr"
         return
     end
     if _agent_is_dev_tools_request "$cmd"
@@ -18747,6 +18772,9 @@ function agent --description "Run commands safely: executes safe commands automa
         set route_source offline
     else if _agent_is_pr_check_request "$cmd"
         set interpreted (_agent_route_pr_check "$cmd")
+        set route_source offline
+    else if _agent_is_design_from_screenshot_request "$cmd"
+        set interpreted (_agent_route_design_from_screenshot "$cmd")
         set route_source offline
     else if _agent_is_dev_tools_request "$cmd"
         set interpreted (_agent_route_dev_tools "$cmd")

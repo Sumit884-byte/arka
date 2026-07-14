@@ -237,6 +237,12 @@ SKILL_CATALOG: dict[str, dict[str, Any]] = {
         "example": "skill new my_tool --template dev",
         "beginner": False,
     },
+    "design_from_screenshot": {
+        "interests": ["dev", "design"],
+        "description": "Turn a screenshot into a build brief",
+        "example": "build this project from screenshot.png",
+        "beginner": False,
+    },
     "select_model": {
         "interests": ["dev", "productivity"],
         "description": "Recommend LLM models for your hardware",

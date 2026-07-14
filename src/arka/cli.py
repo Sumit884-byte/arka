@@ -137,6 +137,11 @@ def main(argv: list[str] | None = None) -> int:
             return dev_tools_main(["route-audit", *args[1:]])
         return dev_tools_main([args[0], *args[1:]])
 
+    if args[0] in ("design_from_screenshot", "design-screenshot", "designshot"):
+        from arka.agent.design_from_screenshot import main as design_main
+
+        return design_main([args[0].replace("-", "_"), *args[1:]])
+
     if args[0] == "llm":
         from arka.agent.repo_context import main as repo_context_main
 
