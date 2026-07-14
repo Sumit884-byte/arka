@@ -32,6 +32,15 @@ Common names map to URLs automatically:
 
 Full `https://` URLs and `domain.tld` patterns work as-is.
 
+Arka keeps the path and query you provide. So `open https://example.com/docs?a=1` opens that exact URL instead of inventing a new one.
+
+Natural language examples:
+
+```bash
+arka open this exact url https://example.com/docs?a=1
+arka repair broken links in this file
+```
+
 ## vs play_youtube
 
 | Phrase | Skill |

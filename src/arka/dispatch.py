@@ -216,6 +216,10 @@ def run_skill(skill_line: str) -> int:
             from arka.agent.design_from_screenshot import main as design_main
 
             code = design_main([head.replace("-", "_"), *rest])
+        elif head in ("urlkit", "url-kit"):
+            from arka.core.urlkit import main as urlkit_main
+
+            code = urlkit_main(rest)
         elif head.endswith(".py") and script_path(head).is_file():
             code = run_script(head, rest)
         else:

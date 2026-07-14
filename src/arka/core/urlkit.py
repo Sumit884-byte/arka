@@ -88,6 +88,45 @@ def slugify_payload(text: str, *, max_length: int = 80) -> dict[str, Any]:
     return {"ok": True, "input": text, "slug": slug, "length": len(slug)}
 
 
+_MD_LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
+
+
+def is_valid_url(url: str) -> bool:
+    raw = (url or "").strip()
+    if not raw:
+        return False
+    if not raw.startswith(("http://", "https://")):
+        return False
+    parsed = urlparse(raw)
+    return bool(parsed.scheme in {"http", "https"} and parsed.netloc)
+
+
+def repair_links(text: str) -> dict[str, Any]:
+    """Remove obviously broken markdown links and keep valid URLs symbolic."""
+    raw = text or ""
+    kept: list[str] = []
+    removed: list[str] = []
+
+    def _replace(match: re.Match[str]) -> str:
+        label = match.group(1).strip()
+        url = match.group(2).strip().rstrip(".,;:!?)\"'")
+        if is_valid_url(url):
+            kept.append(url)
+            return f"[{label}]({url})"
+        removed.append(url or match.group(0))
+        return label
+
+    cleaned = _MD_LINK_RE.sub(_replace, raw)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return {
+        "ok": True,
+        "input": raw,
+        "text": cleaned,
+        "kept": kept,
+        "removed": removed,
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Arka URL utilities")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -103,13 +142,18 @@ def main(argv: list[str] | None = None) -> int:
     p_slug.add_argument("text", nargs="+")
     p_slug.add_argument("--max-length", type=int, default=80)
 
+    p_repair = sub.add_parser("repair-links", help="Remove or normalize broken markdown links")
+    p_repair.add_argument("text", nargs="+")
+
     args = parser.parse_args(argv)
     if args.cmd == "parse":
         payload = parse_payload(args.url)
     elif args.cmd == "normalize":
         payload = normalize_payload(args.url, drop_fragment=not args.keep_fragment)
-    else:
+    elif args.cmd == "slugify":
         payload = slugify_payload(" ".join(args.text), max_length=args.max_length)
+    else:
+        payload = repair_links(" ".join(args.text))
     print(json.dumps(payload, indent=2))
     return 0
 

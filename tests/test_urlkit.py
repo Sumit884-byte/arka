@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from arka.core.urlkit import normalize_payload, parse_payload, slugify_payload
+from arka.core.urlkit import normalize_payload, parse_payload, repair_links, slugify_payload
 
 
 def test_parse_payload_basic():
@@ -29,3 +29,10 @@ def test_slugify_payload():
 def test_slugify_requires_text():
     with pytest.raises(ValueError):
         slugify_payload("  ")
+
+
+def test_repair_links_removes_broken_markdown_links():
+    payload = repair_links("See [good](https://example.com/a) and [bad](htp://oops) now.")
+    assert payload["kept"] == ["https://example.com/a"]
+    assert "bad" in payload["text"]
+    assert "htp://oops" in payload["removed"][0]

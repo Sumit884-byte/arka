@@ -32,6 +32,8 @@ class OpenUrlBuildTests(unittest.TestCase):
             build_url("https://news.ycombinator.com"),
             "https://news.ycombinator.com",
         )
+        self.assertEqual(build_url("https://example.com/docs?a=1"), "https://example.com/docs?a=1")
+        self.assertEqual(build_url("www.example.com/path"), "https://www.example.com/path")
 
 
 class OpenUrlParseTests(unittest.TestCase):
@@ -68,6 +70,7 @@ class OpenUrlParseTests(unittest.TestCase):
         self.assertTrue(wants_open_url("open https://news.ycombinator.com"))
         hit = route_command("open https://news.ycombinator.com")
         self.assertIn("news.ycombinator.com", hit)
+        self.assertIn("https://news.ycombinator.com", hit)
 
     def test_nl_to_argv(self) -> None:
         self.assertEqual(nl_to_argv("open youtube"), ["https://youtube.com"])
@@ -91,6 +94,12 @@ class OpenUrlRoutingTests(unittest.TestCase):
         assert hit is not None
         self.assertTrue(hit.startswith("open_url "))
         self.assertIn("youtube.com", hit)
+
+    def test_route_keeps_user_url_path(self) -> None:
+        hit = route_open_url("open https://example.com/docs?a=1")
+        self.assertIsNotNone(hit)
+        assert hit is not None
+        self.assertIn("https://example.com/docs?a=1", hit)
 
     def test_symbolic_beats_play_youtube(self) -> None:
         phrase = "open YouTube"

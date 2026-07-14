@@ -70,6 +70,15 @@ def _normalize_token(token: str) -> str:
     return re.sub(r"[^a-z0-9.-]", "", (token or "").strip().lower())
 
 
+def _looks_like_urlish_target(raw: str) -> bool:
+    t = (raw or "").strip()
+    return bool(
+        re.match(r"(?i)^https?://", t)
+        or re.match(r"(?i)^www\.[^\s/]+(?:/.*)?$", t)
+        or re.match(r"(?i)^[^\s/]+\.[a-z]{2,}(?:/.*)?$", t)
+    )
+
+
 def build_url(target: str) -> str | None:
     """Turn a site name, domain, or full URL into a normalized https URL."""
     raw = _strip_wrapping_quotes(target)
@@ -77,23 +86,19 @@ def build_url(target: str) -> str | None:
         return None
 
     if re.match(r"(?i)^https?://", raw):
-        return raw
+        return raw.rstrip(".,)")
+
+    if _looks_like_urlish_target(raw):
+        if raw.lower().startswith("www."):
+            return f"https://{raw.rstrip('.,)')}"
+        return f"https://{raw.rstrip('.,)')}"
 
     token = _normalize_token(raw)
-    if not token:
-        return None
-
-    if token in _RESERVED_OPEN_TARGETS:
+    if not token or token in _RESERVED_OPEN_TARGETS:
         return None
 
     if token in SITE_ALIASES:
         return f"https://{SITE_ALIASES[token]}"
-
-    if "." in token:
-        host = token
-        if token.startswith("www."):
-            host = token
-        return f"https://{host}"
 
     return f"https://{token}.com"
 
@@ -112,6 +117,9 @@ def _extract_open_target(text: str) -> str | None:
     url_m = re.search(r"https?://[^\s\"']+", t)
     if url_m:
         return url_m.group(0).rstrip(".,)")
+
+    if _looks_like_urlish_target(t):
+        return t.rstrip(".,)")
 
     # "open youtube.com" / "open YouTube"
     return t.strip()
@@ -198,7 +206,10 @@ def parse_open(text: str) -> str | None:
     while parts and parts[0].lower() in _KNOWN_CMDS | {"open_url", "open_urls", "browse"}:
         parts = parts[1:]
     if len(parts) == 1:
-        return build_url(parts[0])
+        target = parts[0]
+        if _looks_like_urlish_target(target):
+            return build_url(target)
+        return build_url(target)
 
     return None
 

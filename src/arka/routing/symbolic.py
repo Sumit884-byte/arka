@@ -800,6 +800,16 @@ def route_code_project(cmd: str) -> str | None:
     return route_code_nl(cmd.strip())
 
 
+def route_urlkit(cmd: str) -> str | None:
+    clean = cmd.strip()
+    if not clean:
+        return None
+    low = clean.lower()
+    if re.search(r"(?i)\b(?:repair|remove|prune|clean|fix)\s+(?:broken\s+)?(?:links?|urls?)\b", low):
+        return f"urlkit repair-links {shlex.quote(clean)}"
+    return None
+
+
 def route_self_improve(cmd: str) -> str | None:
     try:
         from arka.agent.self_improve import route_command
@@ -823,6 +833,7 @@ def route_offline_extras(cmd: str) -> str | None:
         route_self_improve,
         route_mode,
         route_design_from_screenshot,
+        route_urlkit,
         route_code_project,
         route_heartbeat,
         route_jsonkit,
