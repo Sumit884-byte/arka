@@ -1084,11 +1084,14 @@ def _print_result(
     shape: str,
     saved: dict[str, Path],
     used_llm: bool = False,
+    method: str = "",
 ) -> None:
     print("━━━ 3D Model Created ━━━")
     print(f"Shape: {shape}")
-    if used_llm:
-        print("Method: AI-generated geometry")
+    if method:
+        print(f"Method: {method}")
+    elif used_llm:
+        print("Method: AI-generated geometry (LLM OBJ)")
     else:
         print("Method: procedural mesh")
     print("")
@@ -1215,9 +1218,55 @@ def _save_humanoid_fallback(args: argparse.Namespace, prompt: str, formats: set[
     return 0
 
 
+def _backend_slug(args: argparse.Namespace) -> str:
+    return (getattr(args, "backend", None) or _env("MODEL_3D_BACKEND", "auto") or "auto").strip().lower()
+
+
+def _ai_prompt_from_args(args: argparse.Namespace) -> str:
+    shape = args.shape.lower()
+    if shape in SHAPE_COMMANDS:
+        return f"a detailed 3D model of a {shape.replace('_', ' ')}"
+    return _normalize_nl_text(args.shape)
+
+
+def _try_external_backend(args: argparse.Namespace, prompt: str, formats: set[str]) -> int | None:
+    backend = _backend_slug(args)
+    if backend == "procedural":
+        return None
+    from arka.media.compose_3d_backends import generate_with_backend
+
+    prefer_procedural = args.shape.lower() in SHAPE_COMMANDS and backend == "auto"
+    if prefer_procedural:
+        return None
+    if backend == "llm":
+        return None
+    try:
+        mesh = generate_with_backend(
+            prompt,
+            backend,
+            output_dir(),
+            prefer_procedural=prefer_procedural,
+        )
+    except RuntimeError as exc:
+        if backend != "auto":
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        return None
+    processed = post_process_mesh(mesh.vertices, mesh.faces)
+    if processed:
+        mesh.vertices, mesh.faces = processed
+    name = args.name or slugify(prompt)
+    saved = save_mesh(vertices=mesh.vertices, faces=mesh.faces, name=name, formats=formats)
+    _print_result(name=name, shape=prompt, saved=saved, method=mesh.method)
+    return 0
+
+
 def cmd_compose(args: argparse.Namespace) -> int:
     formats = parse_formats_arg(args.format)
-    if args.shape.lower() in SHAPE_COMMANDS:
+    backend = _backend_slug(args)
+    is_template = args.shape.lower() in SHAPE_COMMANDS
+
+    if is_template and backend in {"auto", "procedural"}:
         shape, name, vertices, faces = _shape_from_args(args)
         processed = post_process_mesh(vertices, faces)
         if processed:
@@ -1226,8 +1275,22 @@ def cmd_compose(args: argparse.Namespace) -> int:
         _print_result(name=name, shape=shape, saved=saved)
         return 0
 
+    prompt = _ai_prompt_from_args(args)
+    ai_hit = _try_external_backend(args, prompt, formats)
+    if ai_hit is not None:
+        return ai_hit
+
+    if is_template:
+        shape, name, vertices, faces = _shape_from_args(args)
+        processed = post_process_mesh(vertices, faces)
+        if processed:
+            vertices, faces = processed
+        saved = save_mesh(vertices=vertices, faces=faces, name=name, formats=formats)
+        _print_result(name=name, shape=shape, saved=saved, method="procedural mesh (AI backends unavailable)")
+        return 0
+
     prompt = _normalize_nl_text(args.shape)
-    if _is_human_figure_request(prompt):
+    if _is_human_figure_request(prompt) and backend in {"auto", "procedural"}:
         return _save_humanoid_fallback(args, prompt, formats)
 
     print(f"Generating custom 3D model: {prompt!r}")
@@ -1295,7 +1358,18 @@ def cmd_check(_args: argparse.Namespace) -> int:
         print("✓ LLM fallback available for custom shapes")
     except ImportError:
         print("○ LLM module unavailable — custom AI shapes disabled")
-    print(f"Output directory: {output_dir()}")
+    print("\n3D generation backends (--backend auto|tripo|hf-shap-e|…):")
+    try:
+        from arka.media.compose_3d_backends import backend_catalog
+
+        for info in backend_catalog():
+            icon = "✓" if info.available else "○"
+            print(f"  {icon} {info.label:<28} {info.detail}")
+            if not info.available and info.env_vars:
+                print(f"      env: {', '.join(info.env_vars)}")
+    except ImportError as exc:
+        print(f"  ○ backend module unavailable ({exc})")
+    print(f"\nOutput directory: {output_dir()}")
     return 0
 
 
@@ -1323,6 +1397,21 @@ def build_parser() -> argparse.ArgumentParser:
         default="medium",
         choices=tuple(QUALITY_SETTINGS),
         help="Mesh resolution preset (low, medium, high)",
+    )
+    p_compose.add_argument(
+        "--backend",
+        default="auto",
+        choices=(
+            "auto",
+            "procedural",
+            "shap-e",
+            "hf-shap-e",
+            "tripo",
+            "meshy",
+            "openscad",
+            "llm",
+        ),
+        help="Generation backend (auto tries free APIs/local models, then LLM OBJ)",
     )
     p_compose.add_argument("-f", "--format", default="all", choices=SUPPORTED_FORMATS)
     p_compose.set_defaults(func=cmd_compose)

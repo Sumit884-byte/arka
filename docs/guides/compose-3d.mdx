@@ -51,6 +51,48 @@ compose_3d boy --quality high
 
 Human figures (`boy`, `girl`, `person`) use procedural capsule-based templates — not raw LLM vertex output — for consistent, printable meshes.
 
+## Free AI backends (better than procedural soup)
+
+For organic shapes (`dragon`, `vase with floral pattern`, etc.), use external generators before the LLM OBJ fallback:
+
+```bash
+compose_3d dragon --backend auto          # try best available free backend
+compose_3d dragon --backend tripo         # Tripo AI (300 free credits on signup)
+compose_3d dragon --backend hf-shap-e     # HuggingFace Shap-E Space (free GPU quota)
+compose_3d gear --backend procedural      # force built-in template
+compose_3d check                          # show which backends are configured
+```
+
+### Backend priority (`--backend auto`)
+
+1. **Local Shap-E** — if `torch` + `diffusers` installed (`SHAP_E_DEVICE=cuda` optional)
+2. **Tripo AI** — `TRIPO_API_KEY` ([platform.tripo3d.ai](https://platform.tripo3d.ai) — 300 free credits)
+3. **HF Shap-E Space** — `HF_TOKEN` and/or `pip install -e '.[3d-ai]'` (Gradio client)
+4. **Meshy API** — `MESHY_API_KEY` (API requires Pro+; web UI has 100 free credits/mo)
+5. **Procedural templates** — for known shapes (`gear`, `boy`, `vase`, …)
+6. **LLM OBJ** — last resort vertex output from your chat LLM
+
+Known shape commands (`gear`, `cube`, …) stay procedural under `--backend auto` to save API credits. Pass `--backend tripo` (etc.) to force AI on a template.
+
+### Environment variables
+
+| Variable | Purpose |
+| --- | --- |
+| `TRIPO_API_KEY` | Tripo text-to-3D API (best free tier for quality) |
+| `HF_TOKEN` | HuggingFace auth — better GPU quota on Shap-E Space |
+| `MESHY_API_KEY` | Meshy preview+refine pipeline (paid API tier) |
+| `HF_SHAP_E_SPACE` | Override Gradio space (default `hysts/Shap-E`) |
+| `MODEL_3D_BACKEND` | Default backend when `--backend` omitted |
+| `MODEL_3D_OUTPUT_DIR` | Save directory (default `~/Models/arka-generated/`) |
+
+Install optional extras:
+
+```bash
+pip install -e '.[3d]'       # trimesh — GLB export + load API meshes
+pip install -e '.[3d-ai]'    # gradio_client — reliable HF Space calls
+# Local Shap-E (heavy): pip install torch diffusers
+```
+
 ## Export formats
 
 | Flag | Output |
@@ -62,15 +104,16 @@ Human figures (`boy`, `girl`, `person`) use procedural capsule-based templates �
 
 Models save to `~/Models/arka-generated/` by default. Override with `MODEL_3D_OUTPUT_DIR`.
 
-## Custom shapes (LLM)
+## Custom shapes (LLM fallback)
 
-For objects like "dragon figurine" or "desk organizer", Arka asks your configured LLM to generate OBJ vertex data, then exports STL when faces parse cleanly.
+For objects when no free backend is configured, Arka asks your configured LLM to generate OBJ vertex data, then exports STL when faces parse cleanly.
 
 ```bash
 compose_3d "desk organizer with phone slot"
+compose_3d "desk organizer" --backend llm   # force LLM OBJ path
 ```
 
-Requires an LLM in `.env` (same stack as chat/compose_slides).
+Requires an LLM in `.env` (same stack as chat/compose_slides). Quality is lower than Tripo/HF — use `--backend auto` when possible.
 
 ## Open your model
 

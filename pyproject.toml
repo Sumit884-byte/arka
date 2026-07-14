@@ -76,6 +76,9 @@ video = [
     "numpy>=1.26",
     "trimesh>=4.0",
 ]
+3d-ai = [
+    "gradio_client>=1.0",
+]
 vision = [
     "Pillow>=10.0",
 ]
@@ -93,7 +96,7 @@ mcp-server = [
     "mcp>=1.0",
 ]
 all = [
-    "arka-agent[chat,voice,pdf,pdf-tools,whatsapp,charts,drawings,video,3d]",
+    "arka-agent[chat,voice,pdf,pdf-tools,whatsapp,charts,drawings,video,3d,3d-ai]",
 ]
 
 [project.scripts]

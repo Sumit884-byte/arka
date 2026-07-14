@@ -200,6 +200,7 @@ def run_guide(*, stream=None) -> int:
     print("\nTips", file=out)
     print("  • Failover order: Gemini Flash → Groq Llama → Ollama (see docs/concepts/llm).", file=out)
     print("  • OpenRouter free models include google/gemini-2.0-flash-exp:free.", file=out)
+    print("  • 3D models: TRIPO_API_KEY (300 free credits) or HF_TOKEN for Shap-E Space — compose_3d check", file=out)
     print("  • Context7 (CONTEXT7_API_KEY) is optional MCP docs lookup — not your chat LLM.", file=out)
     print("  • Reset exhausted models: python3 arka_llm.py reset-exhaustion", file=out)
     print("", file=out)
