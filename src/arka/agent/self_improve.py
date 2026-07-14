@@ -10,7 +10,7 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +30,8 @@ _BLOCKED_WRITE_RE = re.compile(
 )
 
 _PLAN_JSON_RE = re.compile(r"\{[\s\S]*\}")
+_TEST_FIX_RE = re.compile(r"(?i)\bfix(?:ing)?\s+(?:failing\s+)?tests?\b")
+_DEDUPE_HOURS = 24
 
 _SYSTEM_EXTRA = """SELF-IMPROVEMENT MODE — you are improving the Arka agent codebase.
 - Read llm.txt (status read) before editing unfamiliar areas.
@@ -55,7 +57,10 @@ Output ONLY valid JSON (no markdown fences) with keys:
 Rules:
 - Do not propose editing .env, secrets/, node_modules/, or credentials.
 - Prefer existing modules under src/arka/ and tests/.
-- Avoid repeating fixes listed under "Prior attempts"."""
+- Avoid repeating fixes listed under "Prior attempts".
+- When diagnostics show PASS, do not propose fixing failing tests. Propose a concrete
+  enhancement for the target focus (routing sync, edge-case tests, docs) instead.
+- Every files[] entry must exist in the repo (no invented paths like router.py)."""
 
 
 @dataclass
@@ -127,6 +132,7 @@ def _diagnostic_pytest_cmd() -> str:
         "tests/test_llm_fallback.py",
         "tests/test_context7_mcp.py",
         "tests/test_self_improve.py",
+        "tests/test_free_credits.py",
         "tests/test_install_app_platform.py",
         "tests/test_router_gift_advice.py",
         "tests/test_convert_media.py::test_route_convert_media",
@@ -138,14 +144,122 @@ def _normalize_focus(text: str) -> str:
     return " ".join((text or "").split()).strip().lower()
 
 
+def _validate_plan_files(files: list[str], root: Path) -> list[str]:
+    """Drop proposed paths that do not exist in the repo."""
+    valid: list[str] = []
+    for rel in files:
+        rel = rel.strip()
+        if not rel or _BLOCKED_WRITE_RE.search(rel):
+            continue
+        if (root / rel).is_file():
+            valid.append(rel)
+    return valid[:6]
+
+
+def _plan_signature(plan: ImprovementPlan) -> str:
+    norm_prop = re.sub(r"\s+", " ", plan.proposal.strip().lower())
+    return f"{_normalize_focus(plan.focus)}|{norm_prop}|{','.join(sorted(plan.files))}"
+
+
+def _duplicate_proposal_hint(plan: ImprovementPlan, *, hours: int = _DEDUPE_HOURS) -> str:
+    sig = _plan_signature(plan)
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+    count = 0
+    for entry in reversed(load_memory().get("attempts") or []):
+        entry_sig = "|".join(
+            [
+                _normalize_focus(str(entry.get("focus") or "")),
+                re.sub(r"\s+", " ", str(entry.get("proposal") or "").strip().lower()),
+                ",".join(sorted(str(f) for f in (entry.get("files") or []))),
+            ]
+        )
+        if entry_sig != sig:
+            continue
+        at_raw = str(entry.get("at") or "")
+        try:
+            at = datetime.fromisoformat(at_raw.replace("Z", "+00:00"))
+        except ValueError:
+            at = cutoff
+        if at.tzinfo is None:
+            at = at.replace(tzinfo=timezone.utc)
+        if at >= cutoff:
+            count += 1
+    if count >= 2:
+        return f"similar plan recorded {count}× in the last {hours}h — try --apply or a new focus"
+    return ""
+
+
+def _extract_failing_test_path(output: str) -> str | None:
+    match = re.search(r"FAILED\s+(\S+)", output or "")
+    if not match:
+        return None
+    return match.group(1).split("::")[0]
+
+
+def _is_environment_only_failure(output: str) -> bool:
+    from arka.core.output import summarize_pytest
+
+    return summarize_pytest(output, passed=False) == "environment restriction (not a code bug)"
+
+
+def _docs_check(root: Path) -> tuple[bool, str]:
+    """Read-only llm.txt / index freshness check for plan output."""
+    llm_path = root / "llm.txt"
+    if not llm_path.is_file():
+        return False, "llm.txt missing — run: arka repo index"
+    try:
+        from arka.agent.repo_context import get_index_state, git_changed_since
+
+        state = get_index_state(root)
+        last = state.get("last_commit")
+        rows = git_changed_since(root, last if isinstance(last, str) else None)
+        if rows:
+            return False, f"llm.txt stale ({len(rows)} unindexed file change(s))"
+        if isinstance(last, str):
+            return True, "llm.txt up to date"
+        return True, "llm.txt present (run: arka repo index)"
+    except ImportError:
+        return True, "llm.txt present"
+    except Exception as exc:
+        return True, f"llm.txt present (index check skipped: {exc})"
+
+
+def _plan_proposes_test_fix_when_green(proposal: str, diag: DiagnosticResult | None) -> bool:
+    return diag is not None and diag.passed and bool(_TEST_FIX_RE.search(proposal or ""))
+
+
 def record_attempt(
     plan: ImprovementPlan,
     *,
     outcome: str,
     notes: str = "",
+    root: Path | None = None,
 ) -> None:
+    if root is not None:
+        plan.files = _validate_plan_files(plan.files, root)
     data = load_memory()
     attempts: list[dict[str, Any]] = list(data.get("attempts") or [])
+    sig = _plan_signature(plan)
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=_DEDUPE_HOURS)
+    for entry in reversed(attempts):
+        entry_sig = "|".join(
+            [
+                _normalize_focus(str(entry.get("focus") or "")),
+                re.sub(r"\s+", " ", str(entry.get("proposal") or "").strip().lower()),
+                ",".join(sorted(str(f) for f in (entry.get("files") or []))),
+            ]
+        )
+        if entry_sig != sig:
+            continue
+        at_raw = str(entry.get("at") or "")
+        try:
+            at = datetime.fromisoformat(at_raw.replace("Z", "+00:00"))
+        except ValueError:
+            at = cutoff
+        if at.tzinfo is None:
+            at = at.replace(tzinfo=timezone.utc)
+        if at >= cutoff and str(entry.get("outcome") or "") == outcome:
+            return
     attempts.append(
         {
             "focus": plan.focus,
@@ -368,11 +482,29 @@ def _heuristic_plan(
         else:
             proposal = "Repo healthy — pick a focus (routing, llm fallback, quiz memory) for targeted work."
     else:
-        proposal = "Fix failing pytest diagnostics with minimal, focused changes."
+        from arka.core.output import summarize_pytest
+
+        summary = summarize_pytest(diag.output, passed=False)
+        fail_test = _extract_failing_test_path(diag.output or "")
+        if focus != "general":
+            proposal = f"Address {focus} — {summary}"
+        else:
+            proposal = f"Fix failing diagnostics — {summary}"
+        if fail_test:
+            proposal = f"{proposal} ({fail_test})"
 
     files = _guess_files(root, focus)
+    if diag is not None and not diag.passed:
+        fail_test = _extract_failing_test_path(diag.output or "")
+        if fail_test and (root / fail_test).is_file() and fail_test not in files:
+            files = [fail_test, *files]
+    files = _validate_plan_files(files, root)
     tests = [f"pytest -q {' '.join(files[-1:])}" if files else "pytest -q --tb=short -x"]
-    if focus != "general" and f"tests/test_{focus.split()[0]}.py" not in " ".join(tests):
+    if diag is not None and not diag.passed:
+        fail_test = _extract_failing_test_path(diag.output or "")
+        if fail_test:
+            tests = [f"pytest -q {fail_test}"]
+    elif focus != "general" and f"tests/test_{focus.split()[0]}.py" not in " ".join(tests):
         guess_test = root / "tests" / f"test_{focus.split()[0]}.py"
         if guess_test.is_file():
             tests = [f"pytest -q {guess_test.relative_to(root)}"]
@@ -422,6 +554,19 @@ def _parse_plan_json(raw: str) -> ImprovementPlan | None:
         tests=tests,
         raw_llm=raw,
     )
+
+
+def _finalize_plan(plan: ImprovementPlan, *, root: Path, diag: DiagnosticResult | None) -> ImprovementPlan:
+    plan.files = _validate_plan_files(plan.files, root)
+    if _plan_proposes_test_fix_when_green(plan.proposal, diag):
+        plan.proposal = (
+            f"Enhance {plan.focus} — add routing/tests coverage (diagnostics already pass)."
+            if plan.focus != "general"
+            else "Repo healthy — pick a concrete enhancement (routing, llm fallback, quiz memory)."
+        )
+        if not plan.files:
+            plan.files = _validate_plan_files(_guess_files(root, plan.focus), root)
+    return plan
 
 
 def generate_plan(
@@ -482,13 +627,13 @@ def generate_plan(
             if not parsed.analyzed:
                 parsed.analyzed = fallback.analyzed
             parsed.raw_llm = raw
-            return parsed
+            return _finalize_plan(parsed, root=root, diag=diag)
     except Exception as exc:
         from arka.core.output import user_msg
 
         user_msg(f"⚠ LLM plan unavailable ({exc}) — using heuristic plan.")
 
-    return fallback
+    return _finalize_plan(fallback, root=root, diag=diag)
 
 
 def format_plan_output(
@@ -498,6 +643,7 @@ def format_plan_output(
     diag: DiagnosticResult | None = None,
     routing_notes: list[str] | None = None,
     target: str = "",
+    docs: tuple[bool, str] | None = None,
 ) -> str:
     """Clean, scannable status for normal mode (no llm.txt bodies or raw traces)."""
     from arka.core.output import summarize_pytest
@@ -518,10 +664,17 @@ def format_plan_output(
     if diag is not None:
         if diag.passed:
             lines.append("✓ Tests: OK")
+        elif _is_environment_only_failure(diag.output):
+            lines.append(f"○ Tests: {summarize_pytest(diag.output, passed=False)}")
         else:
             lines.append(f"✗ Tests: {summarize_pytest(diag.output, passed=False)}")
     else:
         lines.append("○ Tests: not run")
+
+    if docs is not None:
+        docs_ok, docs_note = docs
+        mark = "✓" if docs_ok else "○"
+        lines.append(f"{mark} Docs: {docs_note}")
 
     if routing_notes:
         lines.append(f"✓ Routing: {routing_notes[0]}")
@@ -534,6 +687,10 @@ def format_plan_output(
         lines.append(f"○ Plan: {plan.proposal}")
     elif plan.files:
         lines.append(f"○ Plan: edit {', '.join(plan.files[:3])}")
+
+    dup_hint = _duplicate_proposal_hint(plan)
+    if dup_hint:
+        lines.append(f"○ Memory: {dup_hint}")
 
     lines.append("")
     if apply:
@@ -776,6 +933,7 @@ def run_self_improve(
     context = _read_repo_context(root)
     diag = run_diagnostics(root)
     routing_notes = _routing_analysis(root, target)
+    docs = _docs_check(root)
     plan = generate_plan(
         target,
         context=context,
@@ -791,11 +949,12 @@ def run_self_improve(
             diag=diag,
             routing_notes=routing_notes,
             target=target,
+            docs=docs,
         )
     )
 
     if not apply:
-        record_attempt(plan, outcome="planned")
+        record_attempt(plan, outcome="planned", root=root)
         if diag.passed and not target:
             debug_msg("✓ Diagnostics passed — plan only (use --apply to implement).")
         return 0
@@ -824,7 +983,7 @@ def run_self_improve(
         diag_after = run_diagnostics(root)
         if diag_after.passed:
             user_msg("✓ Tests passed after round.")
-            record_attempt(plan, outcome="passed")
+            record_attempt(plan, outcome="passed", root=root)
             return 0 if last_rc == 0 else last_rc
 
         if last_rc != 0:
@@ -832,7 +991,7 @@ def run_self_improve(
         elif not diag_after.passed:
             user_msg(f"✗ Tests still failing: {summarize_pytest(diag_after.output, passed=False)}")
 
-    record_attempt(plan, outcome="failed", notes=f"exit {last_rc}")
+    record_attempt(plan, outcome="failed", notes=f"exit {last_rc}", root=root)
     user_msg("Max rounds reached — issues may remain.")
     return last_rc if last_rc != 0 else 1
 

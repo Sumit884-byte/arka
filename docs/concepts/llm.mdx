@@ -59,6 +59,18 @@ arka ai-models
 
 Or edit `~/.config/arka/llm-skill-models.json`.
 
+## Benchmark orchestration
+
+If you want model selection to follow live benchmark winners, run a benchmark suite first and then enable orchestration:
+
+```bash
+arka benchmark run
+arka benchmark show
+ARKA_BENCHMARK_ORCHESTRATE=1 arka orchestrate --benchmark "how to get free ai credits"
+```
+
+The benchmark profile follows the routed task, so a request that routes to `web_answer` uses the `chat` benchmark results, while agent-style requests use `agent`.
+
 ## Shared exhaustion cache
 
 One session cache — exhausted models are skipped across skills until reset:

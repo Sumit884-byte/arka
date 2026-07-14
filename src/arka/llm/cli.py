@@ -228,6 +228,7 @@ def llm_route(cmd: str, available_skills: str, aliases_list: str) -> str:
             "'install APP with apt' -> install_apt APP. "
             "Local machine specs (specs of my pc/mac, tell me about my mac, tell me my gpu/cpu/ram) -> system_info or system_info gpu|cpu|ram|disk. "
             "Opinion/advice questions (is my cpu good enough, should I upgrade) -> agent_ask <full question>. "
+            "Free AI credits / free tier setup / zero-cost LLM setup -> free_credits. "
             "Factual general-knowledge questions -> web_answer <full question> (NOT search_web). "
             "Live CPU/RAM usage meters -> system_monitor (NOT for specs dumps). "
             "'play <title>' -> play_movie. "

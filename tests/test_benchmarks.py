@@ -111,3 +111,20 @@ def test_benchmark_cli_apply_dry_run(benchmark_env: Path, capsys):
     assert code == 1 or code == 0
     out = capsys.readouterr().out
     assert "Would apply" in out or "chat" in out
+
+
+def test_orchestrate_benchmark_uses_routed_profile(benchmark_env: Path, monkeypatch: pytest.MonkeyPatch, capsys):
+    from arka.cli import _cmd_orchestrate
+    from arka.llm.benchmarks import load_suite, run_suite, store_suite_run
+
+    suite = load_suite("default")
+    store_suite_run("default", run_suite(suite, dry_run=True))
+    monkeypatch.setenv("ARKA_BENCHMARK_ORCHESTRATE", "1")
+    monkeypatch.setattr("arka.router.route", lambda text: type("R", (), {"skill": "web_answer"})())
+    monkeypatch.setattr("arka.cli.delegate_to_fish", lambda *args, **kwargs: None)
+    monkeypatch.setattr("arka.cli._run_portable", lambda *args, **kwargs: 0)
+
+    code = _cmd_orchestrate(["--benchmark", "how to get free ai credits"])
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "benchmark route (chat):" in out

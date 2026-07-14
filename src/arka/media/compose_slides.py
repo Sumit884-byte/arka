@@ -603,6 +603,11 @@ def _sanitize_ooxml_text(text: str) -> str:
     )
 
 
+def _pptx_include_notes() -> bool:
+    raw = (_env("SLIDES_PPTX_NOTES") or "").lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
 EMU_PER_INCH = 914400
 # Keynote imports standard PowerPoint slide sizes; avoid mapping video pixels 1:1 to EMU.
 _PPTX_WIDESCREEN_WIDTH_IN = 13.333
@@ -990,6 +995,7 @@ def _build_pptx(
     cfg: VideoConfig,
 ) -> Path:
     Presentation, _ = _require_pptx()
+    include_notes = _pptx_include_notes()
     for png_path, _ in slide_images:
         _validate_slide_image(png_path)
 
@@ -1017,9 +1023,10 @@ def _build_pptx(
                     f"  Skipping slide image ({png_path.name}): {exc}",
                     file=sys.stderr,
                 )
-            notes = _sanitize_ooxml_text((scene.narration or scene.body or "").strip())
-            if notes:
-                slide.notes_slide.notes_text_frame.text = notes
+            if include_notes:
+                notes = _sanitize_ooxml_text((scene.narration or scene.body or "").strip())
+                if notes:
+                    slide.notes_slide.notes_text_frame.text = notes
 
         prs.save(str(dest))
 

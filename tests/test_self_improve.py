@@ -145,6 +145,84 @@ class SelfImprovePlanTests(unittest.TestCase):
         self.assertTrue(plan.files)
         self.assertIn("symbolic.py", plan.analyzed[0])
 
+    def test_heuristic_plan_respects_focus_when_tests_fail(self) -> None:
+        real_root = Path(__file__).resolve().parents[1]
+        diag = self_improve.DiagnosticResult(
+            "pytest -q",
+            1,
+            "FAILED tests/test_data_ask.py::test_timezone - AssertionError",
+        )
+        plan = self_improve._heuristic_plan(
+            "routing",
+            context="AGENT RULES\n",
+            diag=diag,
+            routing_notes=["symbolic.py (40 route_* handlers)"],
+            root=real_root,
+        )
+        self.assertIn("routing", plan.proposal.lower())
+        self.assertIn("tests/test_data_ask.py", plan.files[0])
+
+    def test_finalize_plan_rejects_test_fix_when_green(self) -> None:
+        real_root = Path(__file__).resolve().parents[1]
+        plan = self_improve.ImprovementPlan(
+            focus="tests",
+            proposal="Fix failing tests in router",
+            files=["src/arka/totally_missing_module.py"],
+            tests=["pytest -q"],
+        )
+        diag = self_improve.DiagnosticResult("pytest -q", 0, "passed")
+        finalized = self_improve._finalize_plan(plan, root=real_root, diag=diag)
+        self.assertNotIn("Fix failing tests", finalized.proposal)
+        self.assertTrue(all((real_root / f).is_file() for f in finalized.files))
+
+    def test_validate_plan_files_drops_missing_paths(self) -> None:
+        real_root = Path(__file__).resolve().parents[1]
+        kept = self_improve._validate_plan_files(
+            ["src/arka/routing/symbolic.py", "src/arka/totally_missing_module.py"],
+            real_root,
+        )
+        self.assertEqual(kept, ["src/arka/routing/symbolic.py"])
+
+    def test_record_attempt_dedupes_identical_proposals(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            mem = Path(tmp) / "self-improve-memory.json"
+            with mock.patch("arka.agent.self_improve.memory_path", return_value=mem):
+                plan = self_improve.ImprovementPlan(
+                    focus="routing",
+                    proposal="sync fish routing",
+                    files=["src/arka/routing/symbolic.py"],
+                )
+                self_improve.record_attempt(plan, outcome="planned", root=Path(tmp))
+                self_improve.record_attempt(plan, outcome="planned", root=Path(tmp))
+                data = self_improve.load_memory()
+                self.assertEqual(len(data["attempts"]), 1)
+
+    def test_docs_check_reports_missing_llm_txt(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ok, note = self_improve._docs_check(root)
+            self.assertFalse(ok)
+            self.assertIn("llm.txt missing", note)
+
+    def test_format_plan_output_includes_docs_line(self) -> None:
+        plan = self_improve.ImprovementPlan(
+            focus="routing",
+            analyzed=["symbolic.py (12 handlers)"],
+            proposal="add guard in data_ask",
+            files=["src/arka/agent/data_ask.py"],
+            tests=["pytest -q tests/test_data_ask.py"],
+        )
+        diag = self_improve.DiagnosticResult("pytest -q", 0, "passed")
+        out = self_improve.format_plan_output(
+            plan,
+            apply=False,
+            diag=diag,
+            routing_notes=["symbolic.py (40 route_* handlers)"],
+            target="routing",
+            docs=(True, "llm.txt up to date"),
+        )
+        self.assertIn("Docs: llm.txt up to date", out)
+
     def test_parse_plan_json(self) -> None:
         raw = '{"focus":"llm","analyzed":["fallback.py"],"proposal":"fix retry","files":["src/arka/llm/fallback.py"],"tests":["pytest -q"]}'
         plan = self_improve._parse_plan_json(raw)

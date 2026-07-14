@@ -524,8 +524,25 @@ def test_keynote_compatible_pptx(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
             data = zf.read(name)
             assert data[:8] == b"\x89PNG\r\n\x1a\n"
             assert b"IEND" in data[-32:]
+        assert not any(name.startswith("ppt/notesSlides/") for name in zf.namelist())
 
     assert _sanitize_ooxml_text(scenes[0].narration) == scenes[0].narration
+
+
+def test_keynote_pptx_notes_can_be_opted_in(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    pytest.importorskip("pptx")
+    monkeypatch.setenv("OPEN_SLIDES", "0")
+    monkeypatch.setenv("SLIDES_PPTX_NOTES", "1")
+    monkeypatch.delenv("UNSPLASH_ACCESS_KEY", raising=False)
+    monkeypatch.delenv("PEXELS_API_KEY", raising=False)
+    monkeypatch.delenv("PIXABAY_API_KEY", raising=False)
+
+    scenes = _template_slides_script("AI infrastructure", style="pitch")[:1]
+    out = tmp_path / "keynote-notes.pptx"
+    batch = compose(scenes, output=out, topic="AI infrastructure", cfg=load_config(), formats=["pptx"])
+    assert batch.saved == [out]
+    with zipfile.ZipFile(out) as zf:
+        assert any(name.startswith("ppt/notesSlides/") for name in zf.namelist())
 
 
 def test_prepare_pptx_image_stream_reencodes_rgba(tmp_path: Path):

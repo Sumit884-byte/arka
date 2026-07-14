@@ -816,6 +816,13 @@ def _cmd_orchestrate(rest: list[str]) -> int:
         return 1
     if benchmark:
         from arka.llm.benchmarks import benchmark_chain_entries, load_results
+        from arka.llm.skill_profiles import skill_task_profile
+        from arka.router import route
+
+        routed = route(text)
+        task = skill_task_profile(routed.skill.split(maxsplit=1)[0] if routed else "")
+        if task == "default":
+            task = "chat"
 
         if not (load_results().get("suites") or {}):
             print(
@@ -823,7 +830,6 @@ def _cmd_orchestrate(rest: list[str]) -> int:
                 file=sys.stderr,
             )
             return 1
-        task = "default"
         winners = benchmark_chain_entries(task)
         if winners:
             label = ", ".join(f"{p}/{m}" for p, m in winners[:3])

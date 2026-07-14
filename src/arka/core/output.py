@@ -40,6 +40,11 @@ def summarize_pytest(output: str, *, passed: bool | None = None) -> str:
         if "error" not in text.lower()[:200]:
             return "OK"
 
+    if re.search(r"PermissionError.*Operation not permitted", text, re.I) and re.search(
+        r"\.cursor|/tmp/|/var/folders/", text
+    ):
+        return "environment restriction (not a code bug)"
+
     fail_match = re.search(r"(\d+)\s+failed", text, re.I)
     count = int(fail_match.group(1)) if fail_match else 1
     base = "1 failure" if count == 1 else f"{count} failures"
