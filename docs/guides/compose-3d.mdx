@@ -1,0 +1,69 @@
+---
+title: "Compose 3D"
+description: "Generate printable 3D models from natural language — gears, vases, basic shapes, or AI-planned geometry."
+keywords: ["3d", "stl", "obj", "mesh", "model", "cad"]
+icon: "cube"
+---
+
+Create downloadable 3D models locally. Arka builds procedural meshes for common shapes and uses your configured LLM for custom objects.
+
+## Quick start
+
+```bash
+arka create a 3d model of a gear
+arka make 3d vase 10cm tall
+compose 3d model of a coffee mug
+generate stl for phone stand
+compose_3d gear --teeth 16 --format stl
+```
+
+## Procedural shapes (no LLM required)
+
+| Shape | Example |
+| --- | --- |
+| `cube` | `compose_3d cube --width 2 --height 1 --depth 0.5` |
+| `sphere` | `compose_3d sphere --radius 1.5` |
+| `cylinder` | `compose_3d cylinder --radius 0.04 --height 0.1` |
+| `cone` | `compose_3d cone --radius 1 --height 2` |
+| `gear` | `compose_3d gear --teeth 12 --radius 1` |
+| `vase` | `compose_3d vase --height 0.2` |
+| `torus` | `compose_3d torus --major-radius 1 --minor-radius 0.3` |
+
+## Export formats
+
+| Flag | Output |
+| --- | --- |
+| `-f obj` | Wavefront OBJ (view in Preview, Blender, online viewers) |
+| `-f stl` | ASCII STL (3D printing slicers) |
+| `-f glb` | Binary GLB (requires `pip install -e '.[3d]'`) |
+| `-f all` | OBJ + STL (default) |
+
+Models save to `~/Models/arka-generated/` by default. Override with `MODEL_3D_OUTPUT_DIR`.
+
+## Custom shapes (LLM)
+
+For objects like "dragon figurine" or "desk organizer", Arka asks your configured LLM to generate OBJ vertex data, then exports STL when faces parse cleanly.
+
+```bash
+compose_3d "desk organizer with phone slot"
+```
+
+Requires an LLM in `.env` (same stack as chat/compose_slides).
+
+## Open your model
+
+After generation, Arka prints file paths and tips:
+
+- **macOS:** open the OBJ/STL in Preview, or `blender <file>`
+- **Online:** drag the file to [3dviewer.net](https://3dviewer.net)
+- **3D printing:** import the STL into Cura, PrusaSlicer, or Bambu Studio
+
+## Check setup
+
+```bash
+compose_3d check
+```
+
+## Related
+
+- [Skills catalog](/guides/skills) — `compose_3d` in the Media section

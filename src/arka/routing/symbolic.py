@@ -328,6 +328,22 @@ def route_astronomy(cmd: str) -> str | None:
     return "astronomy " + " ".join(shlex.quote(a) for a in argv)
 
 
+def route_compose_3d(cmd: str) -> str | None:
+    try:
+        from arka.media.compose_3d import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "compose_3d " + " ".join(shlex.quote(a) for a in argv)
+
+
+def route_three_d(cmd: str) -> str | None:
+    """Backward-compatible alias for compose_3d."""
+    return route_compose_3d(cmd)
+
+
 def route_metallurgy(cmd: str) -> str | None:
     try:
         from arka.agent.metallurgy import nl_to_argv
@@ -805,6 +821,8 @@ def route_offline_extras(cmd: str) -> str | None:
         route_fact_check,
         route_quiz_practice,
         route_council,
+        route_compose_3d,
+        route_three_d,
         route_chart,
         route_drawing,
         route_generate_thumbnail,

@@ -64,6 +64,7 @@
             "pages": [
               "guides/pdf-rag",
               "guides/compose-slides",
+              "guides/compose-3d",
               "guides/charts",
               "guides/vision",
               "guides/youtube"
@@ -197,6 +198,7 @@
             "icon": "file-text",
             "pages": [
               "cn/guides/pdf-rag",
+              "cn/guides/compose-3d",
               "cn/guides/charts",
               "cn/guides/vision",
               "cn/guides/youtube"

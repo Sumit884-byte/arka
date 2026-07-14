@@ -226,6 +226,8 @@ def voice_progress(skill: str) -> str:
         "best_model": "Finding the best model for your hardware.",
         "free_credits": "Opening the free AI credits guide.",
         "ascii_art": "Making ASCII art.",
+        "compose_3d": "Generating your 3D model.",
+        "three_d": "Generating your 3D model.",
         "life_sciences": "Looking up life sciences tools.",
         "post_x": "Posting to X.",
         "competitions": "Searching competitions.",

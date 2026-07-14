@@ -1,0 +1,25 @@
+{
+  "name": "compose_3d",
+  "description": "Generate 3D models (OBJ/STL/GLB) from natural language prompts or procedural shapes",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "3d model",
+    "create 3d",
+    "generate 3d",
+    "make 3d",
+    "compose 3d",
+    "3d cube",
+    "3d sphere",
+    "3d gear",
+    "3d vase",
+    "create 3d model",
+    "generate 3d model",
+    "generate stl",
+    "generate obj"
+  ],
+  "voice_ack": "Generating your 3D model.",
+  "permissions": ["network", "write"]
+}

@@ -41,6 +41,10 @@ TASK_PROFILES: dict[str, dict[str, str]] = {
         "description": "Presentation deck script generation for compose_slides",
         "default_model": "gemini/gemini-2.5-flash",
     },
+    "compose_3d": {
+        "description": "Custom 3D model OBJ generation for compose_3d",
+        "default_model": "gemini/gemini-2.5-flash",
+    },
     "flow": {
         "description": "Structured multi-block step-by-step flow answers",
         "default_model": "gemini/gemini-2.5-flash",
@@ -138,6 +142,8 @@ SKILL_TASK_MAP: dict[str, str] = {
     # Video compose
     "compose_video": "compose_video",
     "compose_slides": "compose_slides",
+    "compose_3d": "compose_3d",
+    "three_d": "compose_3d",
     # Meta / setup
     "select_model": "chat",
     "model_select": "chat",

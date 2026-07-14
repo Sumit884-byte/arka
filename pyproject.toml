@@ -72,6 +72,10 @@ video = [
     "edge-tts>=6.1",
     "python-pptx>=1.0",
 ]
+3d = [
+    "numpy>=1.26",
+    "trimesh>=4.0",
+]
 vision = [
     "Pillow>=10.0",
 ]
@@ -89,7 +93,7 @@ mcp-server = [
     "mcp>=1.0",
 ]
 all = [
-    "arka-agent[chat,voice,pdf,pdf-tools,whatsapp,charts,drawings,video]",
+    "arka-agent[chat,voice,pdf,pdf-tools,whatsapp,charts,drawings,video,3d]",
 ]
 
 [project.scripts]

@@ -1976,7 +1976,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         create_desktop_app fix_graphics_driver install_app install_apt install_brew install_flatpak \
         install_snap install_package install_uv install_stt stock_analysis stock macro emotion \
         auto_click auto_copy decrypt_pdf classify_files cleanup_downloads watch_zip monitor_x post_x \
-        generate_image generate_thumbnail generate_video compose_video compose_slides convert_media pdf_tools chart ascii_art flow fact_check quiz quiz_practice council astronomy metallurgy youtube_transcript youtube_download yt_download media_transcript transcribe_media summarize_url daily_brief wifi_info \
+        generate_image generate_thumbnail generate_video compose_video compose_slides compose_3d convert_media pdf_tools chart ascii_art flow fact_check quiz quiz_practice council astronomy metallurgy youtube_transcript youtube_download yt_download media_transcript transcribe_media summarize_url daily_brief wifi_info \
         folder_summarize playlist_summarize youtube_research yt_research find_videos codebase_ingest \
         agent_remember agent_recall agent_memory agent_trace agent_why agent_last \
         agent_resume agent_research agent_nudge agent_watch agent_routine agent_fanout \
@@ -2547,6 +2547,8 @@ function skills --description "Show what commands the agent can auto-run"
                 echo (set_color green)"  compose_video   "(set_color normal)"--topic '…' [--llm] — YouTube info video (Unsplash + ffmpeg + TTS)"
             case compose_slides
                 echo (set_color green)"  compose_slides  "(set_color normal)"compose|convert — deck build/export (pptx|pdf|html|md|json|all)"
+            case compose_3d
+                echo (set_color green)"  compose_3d     "(set_color normal)"gear|vase|cube|sphere|… — local OBJ/STL 3D models"
             case convert_media
                 echo (set_color green)"  convert_media   "(set_color normal)"<file> --to <format> | --format all — image/video/slide conversion"
             case pdf_tools
@@ -6415,6 +6417,26 @@ function compose_video --description "Compose YouTube/info videos — Unsplash i
     end
     set -l py (_arka_python)
     $py (_arka_py_script arka_compose_video.py) $argv
+end
+
+function compose_3d --description "Compose 3D models — procedural meshes and AI shapes (OBJ/STL/GLB)"
+    if test (count $argv) -eq 0
+        echo "Usage: compose_3d gear [--teeth 12] [--format stl]"
+        echo "       compose_3d vase --height 0.2"
+        echo "       compose_3d cube|sphere|cylinder|cone|torus [dims…]"
+        echo "       compose_3d 'desk organizer with phone slot'"
+        echo "       compose_3d check"
+        echo ""
+        echo "NL: arka create a 3d model of a gear"
+        echo "    arka make 3d vase 10cm tall"
+        echo "    generate stl for phone stand"
+        echo ""
+        echo "Formats: obj, stl (default both), glb (requires pip install -e '.[3d]')"
+        echo "Output: ~/Models/arka-generated/ (MODEL_3D_OUTPUT_DIR)"
+        return 1
+    end
+    set -l py (_arka_python)
+    $py (_arka_py_script arka_compose_3d.py) $argv
 end
 
 function compose_slides --description "Compose presentation slide decks — stock photos, charts, LLM scripts"
@@ -11563,6 +11585,10 @@ function _agent_offline_route_cmd --description "Full symbolic NL to skill comma
         echo (_agent_build_generate_image_cmd "$cmd")
         return 0
     end
+    if _agent_is_compose_3d_request "$cmd"
+        echo (_agent_build_compose_3d_cmd "$cmd")
+        return 0
+    end
     if _agent_is_compose_slides_request "$cmd"
         echo (_agent_build_compose_slides_cmd "$cmd")
         return 0
@@ -11920,6 +11946,19 @@ end
 
 function _agent_is_generate_thumbnail_request --description "True if user wants YouTube thumbnail (internal)"
     test -n "$(_agent_build_generate_thumbnail_cmd "$argv[1]")"
+end
+
+function _agent_build_compose_3d_cmd --description "Build compose_3d args from NL (internal)"
+    set -l cmd $argv[1]
+    set -l py (_arka_python)
+    set -l rest ($py (_arka_py_script arka_compose_3d.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
+    if test -n "$rest"
+        echo "compose_3d $rest"
+    end
+end
+
+function _agent_is_compose_3d_request --description "True if user wants 3D model generation (internal)"
+    test -n "$(_agent_build_compose_3d_cmd "$argv[1]")"
 end
 
 function _agent_build_compose_slides_cmd --description "Build compose_slides args from NL (internal)"
@@ -14203,6 +14242,8 @@ function _agent_skill_matches_request --description "True if skill fits the user
             _agent_is_describe_video_request "$cmd"
         case describe_image
             _agent_is_describe_image_request "$cmd"
+        case compose_3d
+            _agent_is_compose_3d_request "$cmd"
         case compose_slides
             _agent_is_compose_slides_request "$cmd"
         case convert_media
@@ -14343,6 +14384,10 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         end
     end
 
+    if _agent_is_compose_3d_request "$cmd"
+        echo "skill|"(_agent_build_compose_3d_cmd "$cmd")"|3D models — OBJ/STL local generation"
+        return
+    end
     if _agent_is_compose_slides_request "$cmd"
         echo "skill|"(_agent_build_compose_slides_cmd "$cmd")"|Presentation slides (pptx, pdf, html, md, json)"
         return
@@ -14702,6 +14747,10 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         test -n "$loc"; and echo "skill|set_location $loc|Save location for weather/nearby"
         test -n "$loc"; and return
         echo "skill|set_location|Save location"
+        return
+    end
+    if _agent_is_compose_3d_request "$cmd"
+        echo "skill|"(_agent_build_compose_3d_cmd "$cmd")"|3D models — OBJ/STL local generation"
         return
     end
     if _agent_is_compose_slides_request "$cmd"
@@ -15555,6 +15604,10 @@ function _agent_correct_interpretation --description "Fix bad LLM skill picks us
         return
     end
 
+    if _agent_is_compose_3d_request "$cmd"
+        echo (_agent_build_compose_3d_cmd "$cmd")
+        return 0
+    end
     if _agent_is_compose_slides_request "$cmd"
         echo (_agent_build_compose_slides_cmd "$cmd")
         return
@@ -17778,6 +17831,7 @@ function agent --description "Run commands safely: executes safe commands automa
         echo "  generate_image <prompt> - Generate images using Gemini API (gemini-2.5-flash-image)"
         echo "  generate_video <prompt> - Real AI video (needs POLLINATIONS_API_KEY or Gemini billing)"
         echo "  compose_video --topic '…' [--llm] - YouTube info video (Unsplash + ffmpeg + TTS)"
+        echo "  compose_3d gear|vase|cube|… [-f stl|obj|glb] - Local 3D model generation"
         echo "  compose_slides compose --topic '…' [-f format] [--llm] [--style pitch|academic|executive] - Presentation deck"
         echo "  convert_media <file> --to <fmt> - Convert images, video, or slides (Pillow/ffmpeg)"
         echo "  excuse                 - Get a hilarious offline programmer excuse"
@@ -17995,6 +18049,11 @@ function agent --description "Run commands safely: executes safe commands automa
 
     if test -z "$interpreted"; and _agent_is_quiz_practice_request "$cmd"
         set interpreted (_agent_build_quiz_practice_cmd "$cmd")
+        set route_source offline
+    end
+
+    if test -z "$interpreted"; and _agent_is_compose_3d_request "$cmd"
+        set interpreted (_agent_build_compose_3d_cmd "$cmd")
         set route_source offline
     end
 
@@ -18387,6 +18446,9 @@ function agent --description "Run commands safely: executes safe commands automa
         set route_source offline
     else if _agent_is_generate_image_request "$clean_cmd"
         set interpreted (_agent_build_generate_image_cmd "$cmd")
+        set route_source offline
+    else if _agent_is_compose_3d_request "$clean_cmd"
+        set interpreted (_agent_build_compose_3d_cmd "$cmd")
         set route_source offline
     else if _agent_is_compose_slides_request "$clean_cmd"
         set interpreted (_agent_build_compose_slides_cmd "$cmd")
