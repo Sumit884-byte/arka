@@ -152,6 +152,16 @@ def route(text: str) -> Route | None:
             pass
 
         if fish_available and mode == "ai_only":
+            offline = _route_offline(cmd)
+            if offline:
+                if span is not None:
+                    _finish_route_span(
+                        current,
+                        offline,
+                        decision="symbolic",
+                        start=route_start,
+                    )
+                return offline
             return None
 
         if mode in ("ai", "ai_only"):

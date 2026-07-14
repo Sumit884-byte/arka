@@ -14343,6 +14343,11 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         end
     end
 
+    if _agent_is_advisory_question "$cmd"
+        echo "skill|agent_ask $cmd|AI gathers context via shell, then answers"
+        return
+    end
+
     # Install routing must stay symbolic — do not delegate to LLM in ai/ai_only mode
     if string match -qr '(?i)(install|get|setup).*(with|via|using)\s+apt|\bapt\s+install' "$clean"
         echo "skill|install_apt $(_agent_parse_install_app_name "$cmd")|APT package install"
@@ -15292,10 +15297,6 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
     if _agent_is_describe_video_request "$cmd"
         set -l parts (_agent_build_describe_video_cmd "$cmd")
         test -n "$parts"; and echo "skill|$parts|Find people in a video and where they appear (vision)"
-        return
-    end
-    if _agent_is_advisory_question "$cmd"
-        echo "skill|agent_ask $cmd|AI gathers context via shell, then answers"
         return
     end
     if _agent_is_files_preference_question "$cmd"

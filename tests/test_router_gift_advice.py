@@ -29,7 +29,14 @@ class RouterGiftAdviceTests(unittest.TestCase):
             result = route("is my cpu too outdated for gaming")
         self.assertIsNotNone(result)
         assert result is not None
-        self.assertNotEqual(result.skill.split()[0], "web_answer")
+        self.assertEqual(result.skill.split()[0], "agent_ask")
+
+    def test_keeps_system_advice_in_ai_only_mode(self) -> None:
+        with mock.patch.dict(os.environ, {"ROUTE_MODE": "ai_only"}, clear=False):
+            result = route("is my cpu too outdated for gaming")
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.skill.split()[0], "agent_ask")
 
 
 if __name__ == "__main__":
