@@ -759,8 +759,28 @@ def _default_output(topic: str) -> Path:
     slug = re.sub(r"[^a-z0-9]+", "-", topic_label(topic).lower())[:40].strip("-") or "info-video"
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
     env_dir = _env("VIDEO_OUTPUT_DIR") or _env("IMAGE_OUTPUT_DIR")
-    out_dir = Path(env_dir).expanduser() if env_dir else Path.home() / "Videos" / "arka-generated"
-    out_dir.mkdir(parents=True, exist_ok=True)
+    candidates = []
+    if env_dir:
+        candidates.append(Path(env_dir).expanduser())
+    else:
+        candidates.extend(
+            [
+                Path.home() / "Videos" / "arka-generated",
+                Path.cwd() / "arka-generated-videos",
+                Path(tempfile.gettempdir()) / "arka-generated-videos",
+            ]
+        )
+    out_dir: Path | None = None
+    for candidate in candidates:
+        try:
+            candidate.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            continue
+        out_dir = candidate
+        break
+    if out_dir is None:
+        out_dir = Path(tempfile.gettempdir()) / "arka-generated-videos"
+        out_dir.mkdir(parents=True, exist_ok=True)
     return out_dir / f"{slug}-{ts}.mp4"
 
 
@@ -1796,7 +1816,10 @@ def _llm_script(
     if text.startswith("```"):
         text = re.sub(r"^```(?:json)?\s*", "", text)
         text = re.sub(r"\s*```$", "", text)
-    parsed = _parse_scenes_json(text)
+    try:
+        parsed = _parse_scenes_json(text)
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise SystemExit(f"LLM returned invalid scene JSON: {exc}") from exc
     if len(parsed) < 2:
         raise SystemExit("LLM did not return a usable scene script.")
     if scenes is None and len(parsed) > max_scenes:
@@ -1842,7 +1865,10 @@ def _llm_summarize_script(
     if text.startswith("```"):
         text = re.sub(r"^```(?:json)?\s*", "", text)
         text = re.sub(r"\s*```$", "", text)
-    parsed = _parse_scenes_json(text)
+    try:
+        parsed = _parse_scenes_json(text)
+    except (json.JSONDecodeError, ValueError):
+        return scenes
     if len(parsed) < 1:
         return scenes
     for idx, scene in enumerate(parsed):
@@ -1934,15 +1960,16 @@ def nl_to_argv(text: str) -> list[str]:
         return []
 
     duration_gap = r"(?:(?:\d+(?:\.\d+)?\s*(?:hours?|hrs?|h|minutes?|mins?|min|seconds?|secs?|sec)\s+)+)?"
+    intent_prefix = r"(?i)(?:^|\b)(?:arka\s+)?(?:please\s+)?(?:make|create|compose|build|render|produce|generate)\s+"
     compose_intent = re.search(
-        r"(?i)(?:^|\b)(?:make|create|compose|build|render|produce|generate|arka)\s+(?:a\s+|an\s+)?"
-        rf"{duration_gap}(?:(?:youtube|info|tech|explainer)\s+)?video\s+(?:on|about|for|explaining)\s+\S",
+        intent_prefix
+        + rf"(?:a\s+|an\s+)?{duration_gap}(?:(?:youtube|info|tech|explainer)\s+)?video\s+(?:on|about|for|explaining)\s+\S",
         t,
     ) or re.search(
         rf"(?i){duration_gap}(?:youtube|info|tech|explainer)\s+video\b",
         t,
     ) or re.search(
-        rf"(?i)^compose\s+{duration_gap}video\s+(?:on|about|for|explaining)\s+\S",
+        rf"(?i)(?:^|\b)(?:arka\s+)?compose\s+{duration_gap}video\s+(?:on|about|for|explaining)\s+\S",
         t,
     )
     if not compose_intent:

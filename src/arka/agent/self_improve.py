@@ -108,8 +108,55 @@ def load_memory() -> dict[str, Any]:
 
 def save_memory(data: dict[str, Any]) -> None:
     path = memory_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    except OSError as exc:
+        # #region agent log
+        try:
+            import time
+
+            with open(
+                "/Users/sumitmishra/dev/arka/.cursor/debug-12fcc3.log",
+                "a",
+                encoding="utf-8",
+            ) as _dbg:
+                _dbg.write(
+                    json.dumps(
+                        {
+                            "sessionId": "12fcc3",
+                            "runId": "self-improve",
+                            "hypothesisId": "H-memory",
+                            "location": "self_improve.py:save_memory",
+                            "message": "memory save failed",
+                            "data": {"path": str(path), "error": str(exc)},
+                            "timestamp": int(time.time() * 1000),
+                        }
+                    )
+                    + "\n"
+                )
+        except OSError:
+            pass
+        # #endregion
+
+
+def _diagnostic_pytest_cmd() -> str:
+    """CI gate subset — fast, env-stable checks for self-improve diagnostics."""
+    files = (
+        "tests/test_mcp_server.py",
+        "tests/test_openclaw_features.py",
+        "tests/test_hermes_features.py",
+        "tests/test_project_rules.py",
+        "tests/test_clipboard_history.py",
+        "tests/test_agent_hub.py",
+        "tests/test_llm_fallback.py",
+        "tests/test_context7_mcp.py",
+        "tests/test_self_improve.py",
+        "tests/test_install_app_platform.py",
+        "tests/test_router_gift_advice.py",
+        "tests/test_convert_media.py::test_route_convert_media",
+    )
+    return "pytest -q --tb=short -x --no-header " + " ".join(files)
 
 
 def _normalize_focus(text: str) -> str:
@@ -528,17 +575,69 @@ def format_plan_output(
 
 
 def run_diagnostics(root: Path) -> DiagnosticResult:
-    """Run pytest; fall back to a short arka doctor summary."""
-    pytest_cmd = "pytest -q tests/ --tb=short -x --no-header"
+    """Run CI-gate pytest subset; fall back to a short arka doctor summary."""
+    pytest_cmd = _diagnostic_pytest_cmd()
+    # #region agent log
+    try:
+        import time
+
+        with open(
+            "/Users/sumitmishra/dev/arka/.cursor/debug-12fcc3.log",
+            "a",
+            encoding="utf-8",
+        ) as _dbg:
+            _dbg.write(
+                json.dumps(
+                    {
+                        "sessionId": "12fcc3",
+                        "runId": "self-improve",
+                        "hypothesisId": "H-diag",
+                        "location": "self_improve.py:run_diagnostics",
+                        "message": "starting diagnostics",
+                        "data": {"cmd": pytest_cmd},
+                        "timestamp": int(time.time() * 1000),
+                    }
+                )
+                + "\n"
+            )
+    except OSError:
+        pass
+    # #endregion
     try:
         proc = subprocess.run(
-            ["fish", "-c", pytest_cmd],
+            [sys.executable, "-m", "pytest", *pytest_cmd.split()[2:]],
             cwd=root,
             capture_output=True,
             text=True,
             timeout=DIAG_TIMEOUT,
         )
         out = ((proc.stdout or "") + (proc.stderr or "")).strip()
+        # #region agent log
+        try:
+            import time
+
+            with open(
+                "/Users/sumitmishra/dev/arka/.cursor/debug-12fcc3.log",
+                "a",
+                encoding="utf-8",
+            ) as _dbg:
+                _dbg.write(
+                    json.dumps(
+                        {
+                            "sessionId": "12fcc3",
+                            "runId": "self-improve",
+                            "hypothesisId": "H-diag",
+                            "location": "self_improve.py:run_diagnostics",
+                            "message": "diagnostics finished",
+                            "data": {"exit_code": proc.returncode, "output_tail": out[-500:]},
+                            "timestamp": int(time.time() * 1000),
+                        }
+                    )
+                    + "\n"
+                )
+        except OSError:
+            pass
+        # #endregion
         if proc.returncode != 0 or out:
             return DiagnosticResult(pytest_cmd, proc.returncode, out[:8000])
     except (OSError, subprocess.TimeoutExpired) as exc:

@@ -14343,6 +14343,42 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         end
     end
 
+    # Install routing must stay symbolic — do not delegate to LLM in ai/ai_only mode
+    if string match -qr '(?i)(install|get|setup).*(with|via|using)\s+apt|\bapt\s+install' "$clean"
+        echo "skill|install_apt $(_agent_parse_install_app_name "$cmd")|APT package install"
+        return
+    end
+    if string match -qr '(?i)(install|get|setup).*(with|via|using)\s+brew|\bhomebrew\s+install|\bbrew\s+install' "$clean"
+        echo "skill|install_brew $(_agent_parse_install_app_name "$cmd")|Homebrew install"
+        return
+    end
+    if string match -qr '(?i)(install|get|setup).*(flatpak|flathub)' "$clean"
+        echo "skill|install_flatpak $(_agent_parse_install_app_name "$cmd")|Flatpak install"
+        return
+    end
+    if string match -qr '(?i)(install|get|setup).*snap' "$clean"
+        echo "skill|install_snap $(_agent_parse_install_app_name "$cmd")|Snap install"
+        return
+    end
+    if string match -qr '(?i)^(install|get|setup)\s+' "$clean"
+        and not string match -qr '(flatpak|flathub|snap|apt|brew|homebrew)' "$clean"
+        and _agent_is_python_pip_install "$cmd"
+        echo "skill|"(string trim -- (_agent_parse_install_uv "$cmd"))"|Python package via uv pip"
+        return
+    end
+    if string match -qr '(?i)^(install|get|setup)\s+' "$clean"
+        and not string match -qr '(flatpak|flathub|snap|apt|brew|homebrew)' "$clean"
+        set -l app (_agent_parse_install_app_name "$cmd")
+        if test -n "$app"; and not _install_target_is_package_file "$app"
+            if _arka_is_macos
+                echo "skill|install_app $app|Search Homebrew and install"
+            else
+                echo "skill|install_app $app|Search Flatpak, Snap, and apt"
+            end
+            return
+        end
+    end
+
     set -l route_mode (_arka_route_mode)
     if test "$route_mode" = ai -o "$route_mode" = ai_only
         set -l skills (_agent_available_skills)
@@ -14409,40 +14445,6 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
     if string match -qr '(?i)^(generate|create|make)\s+(?:a |an |the |me )?(?:new )?(password|passcode)\b' "$clean"
         echo "skill|generate_password|Generate secure random password"
         return
-    end
-    if string match -qr '(?i)(install|get|setup).*(with|via|using)\s+apt|\bapt\s+install' "$clean"
-        echo "skill|install_apt $(_agent_parse_install_app_name "$cmd")|APT package install"
-        return
-    end
-    if string match -qr '(?i)(install|get|setup).*(with|via|using)\s+brew|\bhomebrew\s+install|\bbrew\s+install' "$clean"
-        echo "skill|install_brew $(_agent_parse_install_app_name "$cmd")|Homebrew install"
-        return
-    end
-    if string match -qr '(?i)(install|get|setup).*(flatpak|flathub)' "$clean"
-        echo "skill|install_flatpak $(_agent_parse_install_app_name "$cmd")|Flatpak install"
-        return
-    end
-    if string match -qr '(?i)(install|get|setup).*snap' "$clean"
-        echo "skill|install_snap $(_agent_parse_install_app_name "$cmd")|Snap install"
-        return
-    end
-    if string match -qr '(?i)^(install|get|setup)\s+' "$clean"
-        and not string match -qr '(flatpak|flathub|snap|apt|brew|homebrew)' "$clean"
-        and _agent_is_python_pip_install "$cmd"
-        echo "skill|"(string trim -- (_agent_parse_install_uv "$cmd"))"|Python package via uv pip"
-        return
-    end
-    if string match -qr '(?i)^(install|get|setup)\s+' "$clean"
-        and not string match -qr '(flatpak|flathub|snap|apt|brew|homebrew)' "$clean"
-        set -l app (_agent_parse_install_app_name "$cmd")
-        if test -n "$app"; and not _install_target_is_package_file "$app"
-            if _arka_is_macos
-                echo "skill|install_app $app|Search Homebrew and install"
-            else
-                echo "skill|install_app $app|Search Flatpak, Snap, and apt"
-            end
-            return
-        end
     end
     if string match -qr '(?i)(create|add|make).*(desktop|launcher|shortcut).*(unreal|unreal\s*engine)|unreal.*(desktop|launcher|shortcut)' "$clean"
         echo "skill|create_desktop_app unreal|Create .desktop launcher for Unreal Editor"

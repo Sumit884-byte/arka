@@ -116,6 +116,8 @@ def test_setup_context7_skip_flag(monkeypatch, context7_paths):
 def test_doctor_checks(context7_paths, monkeypatch):
     from arka.integrations.context7_mcp import doctor_checks, ensure_context7_in_config
 
+    monkeypatch.delenv("CONTEXT7_API_KEY", raising=False)
+    monkeypatch.setattr("arka.paths.load_env_file", lambda: None)
     monkeypatch.setattr("arka.integrations.context7_mcp.npx_available", lambda: True)
     ensure_context7_in_config()
     checks = {c["name"]: c for c in doctor_checks()}

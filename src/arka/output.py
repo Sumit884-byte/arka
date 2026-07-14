@@ -11,12 +11,24 @@ def active_model_label() -> str | None:
     try:
         from arka.llm.fallback import llm_last_model
 
+        if not show_model_enabled():
+            return None
         row = llm_last_model()
         if row:
             return f"{row[0]}/{row[1]}"
     except Exception:
         pass
     return None
+
+
+def show_model_enabled() -> bool:
+    """True unless SHOW_MODEL is explicitly disabled (default on)."""
+    import os
+
+    raw = os.environ.get("SHOW_MODEL", "").strip().lower()
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    return True
 
 
 def active_context7_label() -> str | None:

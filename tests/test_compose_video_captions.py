@@ -6,13 +6,16 @@ from pathlib import Path
 
 from arka.media.compose_video import (
     Scene,
+    _default_output,
     _estimate_caption_beats,
+    _llm_script,
     _max_caption_beats,
     _schedule_caption_beats,
     _schedule_scene_timeline,
     _script_needs_shortening,
     _split_caption_beats,
     caption_beats_for_scene,
+    nl_to_argv,
     load_config,
     prepare_slide_body,
     render_slide,
@@ -86,6 +89,26 @@ def test_render_slide_body_override(tmp_path: Path):
     render_slide(None, scene, out, cfg, body_override="Cloud and AI reshape hiring.")
     assert out.is_file()
     assert out.stat().st_size > 5000
+
+
+def test_default_output_uses_configured_dir(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("VIDEO_OUTPUT_DIR", str(tmp_path))
+    out = _default_output("AI infrastructure")
+    assert out.parent == tmp_path
+    assert out.suffix == ".mp4"
+
+
+def test_llm_script_reports_invalid_json(monkeypatch):
+    monkeypatch.setattr("arka.llm.fallback.llm_complete", lambda *args, **kwargs: "", raising=False)
+    try:
+        _llm_script("AI infrastructure")
+        raise AssertionError("Expected SystemExit")
+    except SystemExit as exc:
+        assert "invalid scene JSON" in str(exc)
+
+
+def test_nl_to_argv_accepts_arka_video_request():
+    assert nl_to_argv("arka make an video on ai") == ["compose", "--topic", "ai"]
 
 
 if __name__ == "__main__":

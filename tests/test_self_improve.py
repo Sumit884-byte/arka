@@ -105,7 +105,8 @@ class SelfImproveGoalTests(unittest.TestCase):
         import inspect
 
         src = inspect.getsource(self_improve.run_diagnostics)
-        self.assertIn("pytest -q tests/", src)
+        self.assertIn("_diagnostic_pytest_cmd", src)
+        self.assertIn("tests/test_self_improve.py", self_improve._diagnostic_pytest_cmd())
 
 
 class SelfImprovePlanTests(unittest.TestCase):

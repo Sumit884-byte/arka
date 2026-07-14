@@ -581,6 +581,9 @@ def _route_offline(cmd: str) -> Route | None:
     if _is_platform_howto_question(clean):
         return Route(f"platform_howto {cmd}", source="offline")
 
+    if _is_system_advice_question(clean):
+        return Route(f"agent_ask {cmd}", source="offline")
+
     if _is_knowledge_question(clean):
         return Route(f"web_answer {cmd}")
 
@@ -694,6 +697,30 @@ def _is_platform_howto_question(clean: str) -> bool:
         return is_platform_howto_question(clean)
     except ImportError:
         return False
+
+
+def _is_system_advice_question(clean: str) -> bool:
+    """Personal machine / upgrade opinion questions → agent_ask, not web_answer."""
+    if re.search(
+        r"(?i)\b(this\s+(pc|computer|system|machine|mac|macbook|laptop)|"
+        r"my\s+(cpu|gpu|ram|disk|pc|computer|system|driver|terminal|shell|mac|macbook|machine|laptop))\b",
+        clean,
+    ):
+        return True
+    if re.search(r"(?i)\b(my|should\s+i|can\s+i|do\s+i|am\s+i)\b", clean) and re.search(
+        r"(?i)\b(outdated|too\s+old|too\s+slow|good\s+enough|worth\s+upgrad|bottleneck|"
+        r"malware|infected|hacked|compromised|specs?\s+for\s+my|upgrade|gaming|cpu|gpu|ram|disk|"
+        r"system|pc|computer|mac|macbook|machine|laptop)\b",
+        clean,
+    ):
+        return True
+    return bool(
+        re.search(
+            r"(?i)(outdated|too\s+old|too\s+slow|good\s+enough|worth\s+upgrad|bottleneck|"
+            r"malware|infected|hacked|compromised|specs?\s+for\s+my)",
+            clean,
+        )
+    )
 
 
 def _is_knowledge_question(clean: str) -> bool:
