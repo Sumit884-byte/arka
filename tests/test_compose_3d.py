@@ -2,18 +2,23 @@
 
 from __future__ import annotations
 
+import math
+
 import pytest
 
 from arka.media.compose_3d import (
     generate_cube,
     generate_gear,
+    generate_humanoid,
     generate_sphere,
     generate_vase,
     nl_to_argv,
     parse_obj,
+    post_process_mesh,
     route_command,
     save_mesh,
     slugify,
+    validate_llm_mesh,
     write_obj,
     write_stl,
 )
@@ -96,15 +101,48 @@ def test_generate_sphere_mesh():
 
 
 def test_generate_gear_mesh():
-    vertices, faces = generate_gear(teeth=8, segments=32)
+    vertices, faces = generate_gear(teeth=8, segments=64)
     assert len(vertices) > 20
     assert len(faces) > 20
+    radii = [math.hypot(v[0], v[1]) for v in vertices if v[2] > 0]
+    assert max(radii) > min(radii)
 
 
 def test_generate_vase_mesh():
     vertices, faces = generate_vase(height=0.15, segments=16, rings=12)
     assert len(vertices) > 50
     assert len(faces) > 50
+    z_values = sorted({round(v[2], 4) for v in vertices})
+    assert len(z_values) > 8
+
+
+def test_generate_humanoid_boy():
+    vertices, faces = generate_humanoid("boy", height=1.0, segments=16)
+    assert len(vertices) >= 80
+    assert len(faces) >= 120
+    assert validate_llm_mesh(vertices, faces)
+    obj = write_obj(vertices, faces)
+    parsed_vertices, parsed_faces = parse_obj(obj)
+    assert len(parsed_vertices) == len(vertices)
+    assert len(parsed_faces) == len(faces)
+
+
+def test_invalid_llm_mesh_rejected():
+    bad_obj = "\n".join(
+        [
+            "v 0 0 0",
+            "v 1 0 0",
+            "v 0 1 0",
+            "f 0 1 2",
+        ]
+    )
+    vertices, faces = parse_obj(bad_obj)
+    assert not validate_llm_mesh(vertices, faces)
+
+
+def test_post_process_mesh_no_crash_on_invalid():
+    result = post_process_mesh([], [])
+    assert result is None or result == ([], [])
 
 
 def test_save_mesh_writes_obj_and_stl(tmp_path, monkeypatch):

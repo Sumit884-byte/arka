@@ -28,6 +28,28 @@ compose_3d gear --teeth 16 --format stl
 | `gear` | `compose_3d gear --teeth 12 --radius 1` |
 | `vase` | `compose_3d vase --height 0.2` |
 | `torus` | `compose_3d torus --major-radius 1 --minor-radius 0.3` |
+| `boy` / `girl` / `person` | `compose_3d boy` — clean low-poly humanoid template |
+| `robot` | `compose_3d robot` |
+| `tree` | `compose_3d tree` |
+| `house` | `compose_3d house` |
+| `car` | `compose_3d car` |
+
+### Quality tiers
+
+Use `--quality` to control curve smoothness (segment count):
+
+| Tier | Segments | Best for |
+| --- | --- | --- |
+| `low` | 16 | Fast previews |
+| `medium` | 32 | Default balance |
+| `high` | 64 | Smoother gears, vases, humanoids |
+
+```bash
+compose_3d gear --teeth 16 --quality high
+compose_3d boy --quality high
+```
+
+Human figures (`boy`, `girl`, `person`) use procedural capsule-based templates — not raw LLM vertex output — for consistent, printable meshes.
 
 ## Export formats
 
@@ -35,8 +57,8 @@ compose_3d gear --teeth 16 --format stl
 | --- | --- |
 | `-f obj` | Wavefront OBJ (view in Preview, Blender, online viewers) |
 | `-f stl` | ASCII STL (3D printing slicers) |
-| `-f glb` | Binary GLB (requires `pip install -e '.[3d]'`) |
-| `-f all` | OBJ + STL (default) |
+| `-f glb` | Binary GLB (requires `pip install -e '.[3d]'`; included in `-f all` when trimesh is installed) |
+| `-f all` | OBJ + STL (+ GLB when `.[3d]` extra is installed) |
 
 Models save to `~/Models/arka-generated/` by default. Override with `MODEL_3D_OUTPUT_DIR`.
 
@@ -55,6 +77,7 @@ Requires an LLM in `.env` (same stack as chat/compose_slides).
 After generation, Arka prints file paths and tips:
 
 - **macOS:** open the OBJ/STL in Preview, or `blender <file>`
+- **GLB:** [gltf-viewer.donmccurdy.com](https://gltf-viewer.donmccurdy.com/) or Blender
 - **Online:** drag the file to [3dviewer.net](https://3dviewer.net)
 - **3D printing:** import the STL into Cura, PrusaSlicer, or Bambu Studio
 
