@@ -601,6 +601,14 @@ def route_stt_install(cmd: str) -> str | None:
     return route_command(cmd)
 
 
+def route_free_credits(cmd: str) -> str | None:
+    try:
+        from arka.agent.free_credits import route_command
+    except ImportError:
+        return None
+    return route_command(cmd)
+
+
 def route_life_sciences(cmd: str) -> str | None:
     clean = cmd.lower()
     m = re.search(r"(?i)\b(life[- ]sciences?)\s+(list|install|info|doctor)(?:\s+(\S+))?", cmd)
@@ -774,6 +782,7 @@ def route_offline_extras(cmd: str) -> str | None:
         route_daily_brief,
         route_model_select,
         route_stt_install,
+        route_free_credits,
         route_provider_select,
         route_personalize,
         route_life_sciences,

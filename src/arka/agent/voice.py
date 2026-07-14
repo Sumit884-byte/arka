@@ -224,6 +224,7 @@ def voice_progress(skill: str) -> str:
         "select_model": "Finding the best model for your hardware.",
         "model_select": "Finding the best model for your hardware.",
         "best_model": "Finding the best model for your hardware.",
+        "free_credits": "Opening the free AI credits guide.",
         "ascii_art": "Making ASCII art.",
         "life_sciences": "Looking up life sciences tools.",
         "post_x": "Posting to X.",

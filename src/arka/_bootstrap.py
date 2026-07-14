@@ -61,6 +61,7 @@ LEGACY_MODULES: dict[str, str] = {
     "arka_competitions": "arka.agent.competitions",
     "arka_bookmarks": "arka.agent.bookmarks",
     "arka_repo_health": "arka.agent.repo_health",
+    "arka_free_credits": "arka.agent.free_credits",
     "arka_repo_map": "arka.agent.repo_map",
     "arka_repo_context": "arka.agent.repo_context",
     "arka_self_improve": "arka.agent.self_improve",

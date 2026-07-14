@@ -219,6 +219,12 @@ SKILL_CATALOG: dict[str, dict[str, Any]] = {
         "example": "select_model --apply",
         "beginner": True,
     },
+    "free_credits": {
+        "interests": ["productivity", "dev"],
+        "description": "Maximize free AI provider credits and local LLM setup",
+        "example": "free_credits",
+        "beginner": True,
+    },
     "voice": {
         "interests": ["voice"],
         "description": "Wake word listener and voice agent",

@@ -376,6 +376,15 @@ def _route_offline(cmd: str) -> Route | None:
     except ImportError:
         pass
 
+    try:
+        from arka.agent.free_credits import route_command as free_credits_route
+
+        credits_hit = free_credits_route(cmd)
+        if credits_hit:
+            return Route(credits_hit, source="offline")
+    except ImportError:
+        pass
+
     if re.search(r"(?i)\b(life[- ]sciences?)\s+(list|install|info|doctor)\b", clean):
         m = re.search(r"(?i)\b(life[- ]sciences?)\s+(list|install|info|doctor)(?:\s+(\S+))?", cmd)
         if m:

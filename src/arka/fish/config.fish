@@ -1987,6 +1987,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         rag_setup rag_status voice_agent wake_control \
         agent_ask web_answer deep_web_answer web_essay platform_howto interesting_fact calc chat_reset set_location files_preference_help google \
         select_model model_select best_model model_advisor \
+        free_credits \
         personalize \
         nearby_places map_download error_helper deep_queue app_usage internet_enhance aie \
         youtube_bulk yt_bulk
@@ -7170,6 +7171,12 @@ function repo_health --description "Detect and run quick lint/test checks for th
     $py $script $argv
 end
 
+function free_credits --description "Guide to maximize free AI provider credits and local LLM setup"
+    set -l py (_arka_python)
+    set -l script (_arka_py_script arka_free_credits.py)
+    $py $script show $argv
+end
+
 function repo_context --description "Read llm.txt repo context — optimized codebase Q&A"
     set -l py (_arka_python)
     set -l script (_arka_py_script arka_repo_context.py)
@@ -10321,6 +10328,16 @@ function _agent_route_stt_install --description "Build install_stt invocation fr
     $py (_arka_py_script arka_stt_install.py) route "$argv[1]" 2>/dev/null | string trim
 end
 
+function _agent_is_free_credits_request --description "True if user wants free AI credits setup guide (internal)"
+    set -l py (_arka_python)
+    test ($py (_arka_py_script arka_free_credits.py) is-request "$argv[1]" 2>/dev/null | string trim) = yes
+end
+
+function _agent_route_free_credits --description "Build free_credits invocation from NL (internal)"
+    set -l py (_arka_python)
+    $py (_arka_py_script arka_free_credits.py) route "$argv[1]" 2>/dev/null | string trim
+end
+
 function _agent_is_gemini_cli_request --description "True if user wants Google Gemini CLI (internal)"
     set -l py (_arka_python)
     $py -c "
@@ -11643,6 +11660,10 @@ function _agent_offline_route_cmd --description "Full symbolic NL to skill comma
     end
     if _agent_is_life_sciences_request "$cmd"
         echo (_agent_route_life_sciences "$cmd")
+        return 0
+    end
+    if _agent_is_free_credits_request "$cmd"
+        echo (_agent_route_free_credits "$cmd")
         return 0
     end
     if _agent_is_stt_install_request "$cmd"
@@ -14282,6 +14303,14 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         end
     end
 
+    if _agent_is_free_credits_request "$cmd"
+        set -l fc (_agent_route_free_credits "$cmd")
+        if test -n "$fc"
+            echo "skill|$fc|Free AI credits setup guide"
+            return
+        end
+    end
+
     if _agent_is_stt_install_request "$cmd"
         set -l stt (_agent_route_stt_install "$cmd")
         if test -n "$stt"
@@ -15392,6 +15421,13 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
             return
         end
     end
+    if _agent_is_free_credits_request "$cmd"
+        set -l fc (_agent_route_free_credits "$cmd")
+        if test -n "$fc"
+            echo "skill|$fc|Free AI credits setup guide"
+            return
+        end
+    end
     if _agent_is_stt_install_request "$cmd"
         set -l stt (_agent_route_stt_install "$cmd")
         if test -n "$stt"
@@ -15797,6 +15833,12 @@ function _agent_correct_interpretation --description "Fix bad LLM skill picks us
     end
     if _agent_is_general_chat "$cmd"
         echo (_agent_route_general_chat "$cmd")
+        return
+    end
+
+    if _agent_is_free_credits_request "$cmd"
+        set -l fc (_agent_route_free_credits "$cmd")
+        test -n "$fc"; and echo "$fc"
         return
     end
 
@@ -18875,6 +18917,12 @@ function agent --description "Run commands safely: executes safe commands automa
                     set plug "scvi-tools"
             end
             set interpreted "life_sciences install $plug"
+            set route_source offline
+        end
+    else if _agent_is_free_credits_request "$cmd"
+        set -l fc (_agent_route_free_credits "$cmd")
+        if test -n "$fc"
+            set interpreted $fc
             set route_source offline
         end
     else if _agent_is_stt_install_request "$cmd"

@@ -157,6 +157,10 @@ def run_skill(skill_line: str) -> int:
             from arka.llm.model_advisor import main as model_advisor_main
 
             code = model_advisor_main(rest or None)
+        elif head in ("free_credits", "free-credits", "max_credits", "ai_credits"):
+            from arka.agent.free_credits import run_guide
+
+            code = run_guide()
         elif head == "provider":
             from arka.llm.provider_select import main as provider_main
 

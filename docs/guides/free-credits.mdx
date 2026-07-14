@@ -1,0 +1,102 @@
+---
+title: "Maximize free AI credits"
+description: "Set up Gemini, Groq, OpenRouter, and Ollama for zero- or low-cost Arka usage — with failover, key rotation, and token-saving routing."
+keywords: ["free", "credits", "gemini", "groq", "ollama", "openrouter"]
+icon: "coins"
+---
+
+New to Arka? Start here to stretch free LLM quotas and run locally when you can.
+
+## Natural language
+
+```bash
+arka how to get free ai credits
+arka maximize free credits
+arka free tier setup
+how to use arka without paying
+learn free ai providers
+```
+
+## CLI
+
+```bash
+free_credits
+```
+
+Shows your configured providers, recommended `.env` settings, and verification steps.
+
+## Free providers (recommended stack)
+
+| Provider | Cost | Get a key |
+| --- | --- | --- |
+| **Gemini** | Free tier | [Google AI Studio](https://aistudio.google.com/apikey) |
+| **Groq** | Free tier | [Groq Console](https://console.groq.com/keys) |
+| **OpenRouter** | Free + paid models | [OpenRouter](https://openrouter.ai/keys) |
+| **Ollama** | Local — $0 API | [ollama.com](https://ollama.com) + `ollama pull llama3.2:1b` |
+
+Arka's default failover chain tries **Gemini Flash → Groq Llama → Ollama** before other configured providers.
+
+## Step-by-step
+
+### 1. Add keys to `.env`
+
+Edit `~/.config/arka/.env` (created by `arka setup`):
+
+```env
+GEMINI_API_KEY=your_key
+GROQ_API_KEY=your_key
+OPENROUTER_API_KEY=your_key
+```
+
+Use at least one cloud key, or run Ollama locally for zero API cost.
+
+### 2. Stretch quotas with backup keys
+
+```env
+GEMINI_API_KEYS=key2,key3
+GROQ_API_KEY_2=backup_key
+API_KEY_ROTATION=1
+```
+
+On 429 rate limits, Arka rotates keys before switching providers.
+
+### 3. Save routing tokens
+
+```env
+ROUTE_MODE=symbolic
+LLM_AUTO_FALLBACK=1
+```
+
+`symbolic` runs most skills locally; the LLM only classifies skill names — not full skill manuals.
+
+### 4. Pick models for your hardware
+
+```bash
+arka select best model for my pc
+select_model --apply
+```
+
+Or set a preferred fast model:
+
+```env
+AI_PREFERRED_PROVIDER=gemini
+AI_PREFERRED_MODEL=gemini-2.0-flash
+```
+
+### 5. Verify
+
+```bash
+arka setup
+arka doctor
+arka ai-models
+```
+
+## Context7 and MCP
+
+**Context7** (`CONTEXT7_API_KEY`) is optional — it powers library-docs MCP lookup, not chat LLM calls. Skip it until you need live documentation search.
+
+## Related
+
+- [LLM concepts](/concepts/llm) — providers and failover
+- [Select model](/guides/select-model) — hardware-aware recommendations
+- [Operation modes](/guides/operation-modes) — `ROUTE_MODE` reference

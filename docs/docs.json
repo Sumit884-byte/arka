@@ -19,7 +19,8 @@
             "pages": [
               "index",
               "quickstart",
-              "guides/personalize"
+              "guides/personalize",
+              "guides/free-credits"
             ]
           },
           {
@@ -154,7 +155,8 @@
             "pages": [
               "cn/index",
               "cn/quickstart",
-              "cn/guides/personalize"
+              "cn/guides/personalize",
+              "cn/guides/free-credits"
             ]
           },
           {

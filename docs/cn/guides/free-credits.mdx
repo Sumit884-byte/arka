@@ -1,0 +1,102 @@
+---
+title: "最大化免费 AI 额度"
+description: "配置 Gemini、Groq、OpenRouter 和 Ollama，以零或低成本使用 Arka —— 含故障转移、密钥轮换和节省 token 的路由。"
+keywords: ["free", "credits", "gemini", "groq", "ollama", "openrouter"]
+icon: "coins"
+---
+
+刚接触 Arka？从这里开始，充分利用免费 LLM 配额，并在可能时使用本地模型。
+
+## 自然语言
+
+```bash
+arka how to get free ai credits
+arka maximize free credits
+arka free tier setup
+how to use arka without paying
+learn free ai providers
+```
+
+## CLI
+
+```bash
+free_credits
+```
+
+显示已配置的提供商、推荐的 `.env` 设置以及验证步骤。
+
+## 免费提供商（推荐组合）
+
+| 提供商 | 成本 | 获取密钥 |
+| --- | --- | --- |
+| **Gemini** | 免费层 | [Google AI Studio](https://aistudio.google.com/apikey) |
+| **Groq** | 免费层 | [Groq Console](https://console.groq.com/keys) |
+| **OpenRouter** | 免费 + 付费模型 | [OpenRouter](https://openrouter.ai/keys) |
+| **Ollama** | 本地 — 无 API 费用 | [ollama.com](https://ollama.com) + `ollama pull llama3.2:1b` |
+
+Arka 默认故障转移链：**Gemini Flash → Groq Llama → Ollama**，然后才是其他已配置的提供商。
+
+## 分步设置
+
+### 1. 将密钥写入 `.env`
+
+编辑 `~/.config/arka/.env`（由 `arka setup` 创建）：
+
+```env
+GEMINI_API_KEY=your_key
+GROQ_API_KEY=your_key
+OPENROUTER_API_KEY=your_key
+```
+
+至少使用一个云端密钥，或在本地运行 Ollama 以实现零 API 成本。
+
+### 2. 用备用密钥延长配额
+
+```env
+GEMINI_API_KEYS=key2,key3
+GROQ_API_KEY_2=backup_key
+API_KEY_ROTATION=1
+```
+
+遇到 429 限流时，Arka 会在切换提供商之前轮换密钥。
+
+### 3. 节省路由 token
+
+```env
+ROUTE_MODE=symbolic
+LLM_AUTO_FALLBACK=1
+```
+
+`symbolic` 在本地运行大多数技能；LLM 仅分类技能名称，而非完整技能手册。
+
+### 4. 按硬件选择模型
+
+```bash
+arka select best model for my pc
+select_model --apply
+```
+
+或设置首选快速模型：
+
+```env
+AI_PREFERRED_PROVIDER=gemini
+AI_PREFERRED_MODEL=gemini-2.0-flash
+```
+
+### 5. 验证
+
+```bash
+arka setup
+arka doctor
+arka ai-models
+```
+
+## Context7 与 MCP
+
+**Context7**（`CONTEXT7_API_KEY`）为可选项 —— 用于库文档 MCP 查询，而非聊天 LLM 调用。需要实时文档搜索时再配置即可。
+
+## 相关内容
+
+- [LLM 概念](/cn/concepts/llm) — 提供商与故障转移
+- [选择模型](/cn/guides/select-model) — 硬件感知推荐
+- [运行模式](/cn/guides/operation-modes) — `ROUTE_MODE` 参考
