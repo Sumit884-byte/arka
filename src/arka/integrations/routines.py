@@ -27,6 +27,7 @@ FISH_DIR = fish_config()
 LOG_FILE = CACHE / "arka_routines.log"
 
 _KNOWN_CMDS = frozenset({"add", "list", "install", "remove", "run", "parse", "help", "enable", "disable"})
+_INTERVAL_RE = re.compile(r"(?i)\bevery\s+(\d+)\s+(minute|minutes|hour|hours|day|days)\b")
 
 
 def _load_json(path: Path, default: object) -> object:
@@ -100,6 +101,15 @@ def _normalize_time(token: str) -> str:
 
 def parse_schedule(text: str) -> str:
     t = text.lower()
+    m = _INTERVAL_RE.search(t)
+    if m:
+        qty = int(m.group(1))
+        unit = m.group(2).lower()
+        if unit.startswith("minute"):
+            return f"every {qty}m"
+        if unit.startswith("hour"):
+            return f"every {qty}h"
+        return f"every {qty}d"
     if re.search(r"\b(?:hourly|every\s+hour|each\s+hour)\b", t):
         return "hourly"
     m = re.search(r"(?:\bat|@)\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)", t, re.I)
@@ -133,6 +143,7 @@ def _strip_schedule_words(text: str) -> str:
         " ",
         t,
     )
+    t = re.sub(r"(?i)\bevery\s+\d+\s+(?:minute|minutes|hour|hours|day|days)\b", " ", t)
     t = re.sub(r"(?i)(?:\bat|@)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)?", " ", t)
     t = re.sub(r"(?i)^(?:to\s+|for\s+|run\s+|do\s+|that\s+)", "", t)
     return re.sub(r"\s+", " ", t).strip()
@@ -143,6 +154,24 @@ def normalize_action(task: str) -> str:
     if not t:
         return ""
     low = t.lower()
+    if re.search(r"(?i)\b(?:self\s+improve|improve\s+(?:the\s+)?(?:project|repo|repository|codebase)|update\s+(?:the\s+)?(?:project|repo|repository|codebase))\b", low):
+        target = re.sub(
+            r"(?i)\b(?:self\s+improve|improve\s+(?:the\s+)?(?:project|repo|repository|codebase)|update\s+(?:the\s+)?(?:project|repo|repository|codebase))\b",
+            "",
+            t,
+        ).strip()
+        target = re.sub(r"(?i)^(?:the\s+)?(?:project|repo|repository|codebase)\b", "", target).strip()
+        target = re.sub(r"(?i)^(?:the\s+)?", "", target).strip()
+        return f"self_improve {target}".strip()
+    if re.search(r"(?i)\b(?:repo\s+health|project\s+health|check\s+(?:the\s+)?(?:repo|project)\s+health)\b", low):
+        target = re.sub(
+            r"(?i)\b(?:repo\s+health|project\s+health|check\s+(?:the\s+)?(?:repo|project)\s+health)\b",
+            "",
+            t,
+        ).strip()
+        target = re.sub(r"(?i)^(?:the\s+)?(?:repo|project|repository|codebase)\b", "", target).strip()
+        target = re.sub(r"(?i)^(?:the\s+)?", "", target).strip()
+        return f"repo_health run {target}".strip()
     if re.search(
         r"(?i)\b("
         r"(?:daily|morning|news)\s+brief|"
@@ -188,7 +217,9 @@ def nl_to_argv(text: str) -> list[str]:
 
     if not re.search(
         r"(?i)\b(?:routine|routines|every\s+day|each\s+day|everyday|daily\s+at|"
-        r"every\s+morning|every\s+evening|every\s+hour|schedule\s+daily)\b",
+        r"every\s+morning|every\s+evening|every\s+hour|every\s+\d+\s+(?:minute|minutes|hour|hours|day|days)|schedule\s+daily|"
+        r"self\s+improve|update\s+(?:the\s+)?(?:project|repo|repository|codebase)|"
+        r"repo\s+health|project\s+health)\b",
         raw,
     ):
         return []
@@ -369,6 +400,15 @@ def _launchctl(*args: str) -> None:
 
 def _calendar_spec(schedule: str) -> str:
     sched = (schedule or "daily").lower().strip()
+    m = re.fullmatch(r"every\s+(\d+)([mhd])", sched)
+    if m:
+        qty = int(m.group(1))
+        unit = m.group(2)
+        if unit == "m":
+            return f"every {qty}m"
+        if unit == "h":
+            return f"every {qty}h"
+        return f"every {qty}d"
     if sched == "hourly":
         return "hourly"
     if sched == "daily":
@@ -396,12 +436,21 @@ def _install_systemd(entry: dict) -> None:
         encoding="utf-8",
     )
     on_calendar = _calendar_spec(sched)
-    timer.write_text(
-        f"[Unit]\nDescription=Arka routine timer {rid}\n\n"
-        f"[Timer]\nOnCalendar={on_calendar}\nPersistent=true\n\n"
-        f"[Install]\nWantedBy=timers.target\n",
-        encoding="utf-8",
-    )
+    if on_calendar.startswith("every "):
+        interval = on_calendar.split(" ", 1)[1]
+        timer.write_text(
+            f"[Unit]\nDescription=Arka routine timer {rid}\n\n"
+            f"[Timer]\nOnBootSec=1m\nOnUnitActiveSec={interval}\nPersistent=true\n\n"
+            f"[Install]\nWantedBy=timers.target\n",
+            encoding="utf-8",
+        )
+    else:
+        timer.write_text(
+            f"[Unit]\nDescription=Arka routine timer {rid}\n\n"
+            f"[Timer]\nOnCalendar={on_calendar}\nPersistent=true\n\n"
+            f"[Install]\nWantedBy=timers.target\n",
+            encoding="utf-8",
+        )
     _systemctl("--user", "daemon-reload")
     _systemctl("--user", "enable", "--now", f"arka-routine-{rid}.timer")
     print(f"Installed systemd timer arka-routine-{rid}.timer ({on_calendar})")
@@ -437,6 +486,11 @@ def _install_launchd(entry: dict) -> None:
     )
     if sched == "hourly":
         lines.extend(["  <key>StartInterval</key><integer>3600</integer>"])
+    elif re.fullmatch(r"every\s+\d+[mhd]", sched):
+        qty = int(re.search(r"\d+", sched).group(0))
+        unit = re.search(r"[mhd]$", sched).group(0)
+        seconds = qty * 60 if unit == "m" else qty * 3600 if unit == "h" else qty * 86400
+        lines.extend([f"  <key>StartInterval</key><integer>{seconds}</integer>"])
     else:
         if re.fullmatch(r"\d{1,2}:\d{2}", sched):
             hour, minute = sched.split(":", 1)
@@ -513,7 +567,7 @@ def cmd_add(args: argparse.Namespace) -> int:
         return 1
     if schedule.lower() not in {"daily", "hourly"} and not re.fullmatch(
         r"\d{1,2}:\d{2}", schedule
-    ):
+    ) and not re.fullmatch(r"every\s+\d+[mhd]", schedule.lower()):
         schedule = _normalize_time(schedule) if ":" not in schedule else schedule
     action = normalize_action(action) if not re.match(
         r"(?i)^(agent|daily_brief|chart|give|google)\b", action

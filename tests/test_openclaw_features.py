@@ -169,6 +169,35 @@ class RoutinesSecurityTests(unittest.TestCase):
         self.assertFalse(_security_gate_action("install_apt something"))
 
 
+class RoutineScheduleTests(unittest.TestCase):
+    def test_parse_interval_schedule(self) -> None:
+        from arka.integrations.routines import parse_schedule
+
+        self.assertEqual(parse_schedule("every 6 hours"), "every 6h")
+        self.assertEqual(parse_schedule("every 30 minutes"), "every 30m")
+
+    def test_normalize_action_for_self_improve_and_repo_health(self) -> None:
+        from arka.integrations.routines import normalize_action
+
+        self.assertEqual(normalize_action("self improve the repo"), "self_improve")
+        self.assertEqual(normalize_action("update the project"), "self_improve")
+        self.assertEqual(normalize_action("self improve routing"), "self_improve routing")
+        self.assertEqual(normalize_action("repo health"), "repo_health run")
+        self.assertEqual(normalize_action("check repo health"), "repo_health run")
+
+    def test_routines_nl_to_argv_for_maintenance(self) -> None:
+        from arka.integrations.routines import nl_to_argv
+
+        self.assertEqual(
+            nl_to_argv("every 6 hours self improve the repo"),
+            ["add", "every 6h", "self_improve"],
+        )
+        self.assertEqual(
+            nl_to_argv("daily update the project"),
+            ["add", "09:00", "self_improve"],
+        )
+
+
 class WebhookVerifyTests(unittest.TestCase):
     def test_blocks_injection_payload(self) -> None:
         from arka.integrations.webhook import _verify_inbound
