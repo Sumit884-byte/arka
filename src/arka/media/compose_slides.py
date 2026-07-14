@@ -38,6 +38,7 @@ from arka.media.compose_video import (
 from arka.media.stock_photos import any_source_available, setup_hint as stock_setup_hint
 
 SLIDE_STYLES = ("executive", "academic", "pitch")
+SLIDE_THEMES = ("dark", "light", "minimal")
 SLIDE_FORMATS = ("pptx", "pdf", "html", "md", "json")
 FORMAT_EXTENSIONS = {
     "pptx": ".pptx",
@@ -79,25 +80,47 @@ def normalize_slide_style(name: str | None) -> str:
     return raw if raw in SLIDE_STYLES else "executive"
 
 
+def normalize_slide_theme(name: str | None, *, style: str = "executive") -> str:
+    from arka.media.slide_design import normalize_slide_theme as _norm
+
+    raw = name or _env("SLIDES_DEFAULT_THEME", "")
+    return _norm(raw or None, style=normalize_slide_style(style))
+
+
+def extract_slide_theme(text: str, *, style: str = "executive") -> str | None:
+    t = text.strip().lower()
+    if not t:
+        return None
+    for theme in SLIDE_THEMES:
+        if re.search(rf"\b{theme}\s+theme\b", t):
+            return theme
+        if re.search(rf"\btheme\s+{theme}\b", t):
+            return theme
+    return None
+
+
 def _style_guidance(style: str) -> str:
     guides = {
         "executive": (
             "Executive deck: confident, concise, decision-oriented. "
-            "Action titles state the insight (not section labels like 'Background'). "
-            "Arc: hook → context → key insight → implications → recommendation → next steps. "
-            "Tone: boardroom-ready, one idea per slide."
+            "Action titles state the insight or KPI takeaway (never section labels like 'Background'). "
+            "Arc: title → hook → context → key insight → implications → recommendation → next steps. "
+            "One KPI or insight per slide; max 4 bullets (≤8 words each). "
+            "Tone: boardroom-ready."
         ),
         "academic": (
             "Academic presentation: formal, precise, evidence-led. "
-            "Titles name the claim or section clearly. "
-            "Arc: intro → context/literature → core concepts → evidence/examples → implications → conclusion. "
-            "Tone: seminar or conference talk; slightly more detail allowed."
+            "Titles name the claim clearly. "
+            "Arc: title → intro → literature → methodology → results → implications → conclusion. "
+            "Include a methodology slide and citation placeholders like [Author, Year]. "
+            "Max 4 bullets per slide; slightly more detail in speaker notes than on-screen text."
         ),
         "pitch": (
             "Investor pitch deck: bold, urgent, outcome-focused. "
             "Action titles sell momentum (problem size, solution edge, traction). "
-            "Arc: hook → problem → solution → market → traction → business model → team → ask/CTA. "
-            "Tone: startup pitch; every slide earns the next."
+            "Arc: title → problem → solution → market → traction → business model → team → ask. "
+            "Use section dividers between Problem/Solution and Market/Traction. "
+            "Max 4 bullets per slide (≤8 words); every slide earns the next."
         ),
     }
     return guides.get(normalize_slide_style(style), guides["executive"])
@@ -113,6 +136,16 @@ def extract_slide_style(text: str) -> str:
         if re.search(rf"\b(?:style|tone)\s+{style}\b", t):
             return style
     return normalize_slide_style(None)
+
+
+def _strip_theme_from_text(text: str) -> str:
+    t = text.strip()
+    for theme in SLIDE_THEMES:
+        t = re.sub(rf"(?i)\s+with\s+{theme}\s+theme\b", "", t)
+        t = re.sub(rf"(?i)\s+with\s+theme\s+{theme}\b", "", t)
+        t = re.sub(rf"(?i)\b{theme}\s+theme\b", "", t)
+        t = re.sub(rf"(?i)\btheme\s+{theme}\b", "", t)
+    return re.sub(r"\s{2,}", " ", t).strip(" ,;")
 
 
 def _strip_style_from_text(text: str) -> str:
@@ -147,9 +180,12 @@ def _enrich_slide_scenes(scenes: list[Scene]) -> list[Scene]:
         scene.body = _normalize_scene_text(scene.body)
         if scene.captions:
             scene.captions = [str(caption).strip() for caption in scene.captions if str(caption).strip()]
+        kind = (getattr(scene, "slide_kind", "") or "").strip().lower()
         caps = scene.captions[:4]
-        if caps:
-            scene.body = "\n".join(f"• {caption}" for caption in caps[:3])
+        if kind in {"title", "section"}:
+            pass
+        elif caps:
+            scene.body = "\n".join(f"• {caption}" for caption in caps[:4])
         elif scene.body.strip():
             pass
         elif scene.narration.strip():
@@ -166,9 +202,9 @@ def _slides_script_needs_shortening(scenes: list[Scene]) -> bool:
         caps = scene.captions or []
         if len(caps) > 4:
             return True
-        if any(len(str(caption).split()) > 12 for caption in caps):
+        if any(len(str(caption).split()) > 10 for caption in caps):
             return True
-        if len(scene.title.split()) > 14:
+        if len(scene.title.split()) > 12:
             return True
     return False
 
@@ -190,15 +226,16 @@ def _llm_slides_script(
         "You write high-quality presentation slide decks for live audiences. "
         "Return ONLY a JSON array (no markdown). Each item: "
         '{"title":"action title — insight, not a section label", '
-        '"narration":"speaker notes (2-4 sentences, optional detail for presenter)", '
-        '"body":"optional one-line subtitle on slide (max 10 words) OR empty string", '
-        '"captions":["bullet 1","bullet 2"] (0-3 bullets, max 10 words each; omit on title-only slides), '
-        '"image_keywords":["conference room","team whiteboard"] (3-5 short visual phrases, 2-3 words each), '
+        '"narration":"speaker notes (2-4 sentences; cite sources in academic style)", '
+        '"body":"optional subtitle on slide (max 8 words) OR empty string", '
+        '"captions":["bullet 1","bullet 2"] (0-4 bullets, max 8 words each; omit on title/section slides), '
+        '"slide_kind":"title|section|content (first slide=title; use section for dividers)", '
+        '"image_keywords":["conference room","team whiteboard"] (3-5 short visual phrases), '
         '"image_query":"optional 2-4 word stock photo fallback", '
         '"chart":{"type":"bar|barh|pie|line|grouped_bar", "title":"...", '
         '"data":"Label:10,Other:20", "ylabel":"...", "source":"..."}} '
         "Rules: one idea per slide; no walls of text; titles are conclusions or claims; "
-        "use charts only when numbers strengthen the story."
+        "never use generic titles like Background or Overview; use charts only when numbers strengthen the story."
     )
     if scenes is not None:
         scene_hint = f"Slides: exactly {scenes}"
@@ -212,7 +249,7 @@ def _llm_slides_script(
         f"Style: {style}\n"
         f"{_style_guidance(style)}\n"
         f"{scene_hint}\n"
-        "Keep on-screen text minimal; put depth in narration (speaker notes)."
+        "Keep on-screen text minimal (max 4 bullets, 8 words each); put depth in narration."
     )
     text = llm_complete(system, user, temperature=0.35, task="compose_slides")
     text = text.strip()
@@ -255,8 +292,8 @@ def _llm_slides_summarize_script(
     ]
     system = (
         "Tighten a presentation slide deck for on-screen readability. "
-        "Return ONLY a JSON array with: title, narration, body, captions, image_query, chart. "
-        "Keep action titles; shorten narration by 20-40%; max 3 captions per slide (max 10 words each); "
+        "Return ONLY a JSON array with: title, narration, body, captions, slide_kind, image_query, chart. "
+        "Keep action titles; shorten narration by 20-40%; max 4 captions per slide (max 8 words each); "
         "drop filler slides if the deck is too long."
     )
     user = (
@@ -288,135 +325,177 @@ def _template_slides_script(topic: str, *, style: str = "executive") -> list[Sce
     if style == "pitch":
         scenes = [
             Scene(
-                title=f"{label} will reshape its market",
+                title=label,
                 narration=f"Open with the big opportunity around {label} and why now is the moment to act.",
-                body="",
-                captions=["Urgent market shift", "Window is open now"],
+                body="Investor pitch deck",
+                slide_kind="title",
+                captions=[],
                 image_query="startup pitch audience",
+            ),
+            Scene(
+                title="Section: The Problem",
+                narration="Transition to the pain point the market feels today.",
+                body="",
+                slide_kind="section",
+                captions=[],
+                image_query="",
             ),
             Scene(
                 title="Customers face a costly, painful problem",
                 narration="Name the pain clearly — time lost, money wasted, or risk accepted today.",
                 body="",
-                captions=["Pain is widespread", "Status quo is expensive"],
+                slide_kind="content",
+                captions=["Pain is widespread", "Status quo is expensive", "Urgency is rising"],
                 image_query="frustrated business team",
+            ),
+            Scene(
+                title="Section: Our Solution",
+                narration="Bridge from problem to product.",
+                body="",
+                slide_kind="section",
+                captions=[],
+                image_query="",
             ),
             Scene(
                 title=f"Our approach to {label} is 10x better",
                 narration="Explain the solution in one crisp sentence and what makes it defensible.",
                 body="",
-                captions=["Clear product wedge", "Hard to copy advantage"],
+                slide_kind="content",
+                captions=["Clear product wedge", "Hard to copy advantage", "Ships today"],
                 image_query="product demo laptop",
             ),
             Scene(
                 title="A large market is ready to buy",
                 narration="Size the opportunity with a credible market framing and target segment.",
                 body="",
-                captions=["Growing demand", "Clear buyer persona"],
+                slide_kind="content",
+                captions=["$B+ TAM", "Growing demand", "Clear buyer persona"],
                 image_query="market growth chart",
             ),
             Scene(
                 title="Early traction proves the model",
                 narration="Share proof points: pilots, revenue, engagement, or design partners.",
                 body="",
-                captions=["Validated with users", "Metrics trending up"],
+                slide_kind="content",
+                captions=["Validated with users", "Metrics trending up", "Strong retention"],
                 image_query="team celebration office",
             ),
             Scene(
                 title="The ask: partner with us to scale",
-                narration="Close with a specific call to action — funding, pilot, or next meeting.",
+                narration="Close with a specific call to action — funding amount, pilot, or next meeting.",
                 body="",
-                captions=["Join the next phase", "Let's talk this week"],
+                slide_kind="content",
+                captions=["Join the next phase", "Raising $X", "Let's talk this week"],
                 image_query="handshake business deal",
             ),
         ]
     elif style == "academic":
         scenes = [
             Scene(
-                title=f"Why {label} matters today",
+                title=label,
                 narration=f"Introduce {label}, its relevance, and the question this talk answers.",
-                body="",
-                captions=["Research context", "Talk objective"],
+                body="Research presentation",
+                slide_kind="title",
+                captions=[],
                 image_query="university lecture hall",
             ),
             Scene(
-                title="Background and prior work",
-                narration="Summarize established knowledge and the gap your narrative addresses.",
+                title=f"Why {label} matters today",
+                narration="Frame the research question and its significance to the field.",
                 body="",
-                captions=["Key prior findings", "Open research gap"],
+                slide_kind="content",
+                captions=["Research context", "Open question", "Talk objective"],
                 image_query="library research books",
             ),
             Scene(
-                title=f"Core concepts in {label}",
-                narration="Define the essential ideas the audience needs for the rest of the deck.",
+                title="Prior work and research gap",
+                narration="Summarize established knowledge and the gap your work addresses. Cite [Author, Year].",
                 body="",
-                captions=["Definitions", "Framework"],
+                slide_kind="content",
+                captions=["Key prior findings [Smith, 2022]", "Open research gap", "Our contribution"],
+                image_query="scientific literature review",
+            ),
+            Scene(
+                title="Methodology",
+                narration="Describe methods, data sources, and evaluation criteria clearly.",
+                body="",
+                slide_kind="content",
+                captions=["Study design", "Data collection", "Analysis approach"],
                 image_query="whiteboard equations",
             ),
             Scene(
-                title="Evidence and examples",
+                title="Results and evidence",
                 narration="Present supporting data, cases, or results that substantiate the argument.",
                 body="",
-                captions=["Data-backed claims", "Illustrative cases"],
+                slide_kind="content",
+                captions=["Primary findings", "Statistical significance", "Illustrative cases"],
                 image_query="scientific data chart",
             ),
             Scene(
                 title="Implications and limitations",
                 narration="Discuss what the findings mean, caveats, and open questions.",
                 body="",
-                captions=["Practical implications", "Known limits"],
+                slide_kind="content",
+                captions=["Practical implications", "Known limits", "Future work"],
                 image_query="panel discussion academics",
             ),
             Scene(
-                title="Conclusion and future work",
+                title="Conclusion",
                 narration="Restate the main takeaway and suggest next research or application steps.",
                 body="",
-                captions=["Main takeaway", "Future directions"],
+                slide_kind="content",
+                captions=["Main takeaway", "Key citation [Author, Year]", "Questions welcome"],
                 image_query="graduation academic audience",
             ),
         ]
     else:
         scenes = [
             Scene(
-                title=f"{label} is a strategic priority now",
+                title=label,
                 narration=f"Hook the room: why {label} deserves executive attention this quarter.",
-                body="",
-                captions=["High stakes decision", "Momentum is building"],
+                body="Executive briefing",
+                slide_kind="title",
+                captions=[],
                 image_query="executive boardroom",
             ),
             Scene(
                 title="The core challenge we must solve",
                 narration="Frame the problem in business terms — cost, risk, speed, or customer impact.",
                 body="",
-                captions=["Problem is measurable", "Delay increases risk"],
+                slide_kind="content",
+                captions=["Problem is measurable", "Delay increases risk", "Stakeholders aligned"],
                 image_query="business strategy meeting",
             ),
             Scene(
                 title=f"Key insight: what changes with {label}",
-                narration="Deliver the central insight or finding that reframes the conversation.",
+                narration="Deliver the central insight or KPI that reframes the conversation.",
                 body="",
-                captions=["Clear point of view", "Supported by evidence"],
+                slide_kind="content",
+                captions=["One clear KPI shift", "Supported by evidence", "Actionable now"],
                 image_query="data dashboard office",
             ),
             Scene(
                 title="What this means for our organization",
                 narration="Translate the insight into operating impact, tradeoffs, and stakeholders affected.",
                 body="",
-                captions=["Operational impact", "Stakeholders affected"],
+                slide_kind="content",
+                captions=["Operational impact", "Stakeholders affected", "Risk if ignored"],
                 image_query="team planning session",
             ),
             Scene(
                 title="Recommended path forward",
                 narration="Propose a focused plan with priorities, owners, and a realistic timeline.",
                 body="",
-                captions=["3 priorities", "90-day horizon"],
+                slide_kind="content",
+                captions=["3 priorities", "90-day horizon", "Clear owners"],
                 image_query="project roadmap wall",
             ),
             Scene(
                 title="Decision and next step",
-                narration="End with a explicit ask — approve, fund, pilot, or schedule a follow-up.",
+                narration="End with an explicit ask — approve, fund, pilot, or schedule a follow-up.",
                 body="",
-                captions=["Decision needed", "Next meeting scheduled"],
+                slide_kind="content",
+                captions=["Decision needed", "Next meeting scheduled", "Budget ask"],
                 image_query="handshake executives",
             ),
         ]
@@ -800,6 +879,7 @@ def extract_slides_topic(text: str) -> str:
         return ""
     t, _ = _strip_format_from_text(t)
     t = _strip_style_from_text(t)
+    t = _strip_theme_from_text(t)
     patterns = [
         r"(?i)(?:^|\b)(?:make|create|compose|build|render|produce|generate|arka)\s+"
         r"(?:a\s+|an\s+)?(?:\d+\s+)?(?:slide|slides|presentation|deck|powerpoint|pptx?|pdf|html|markdown|marp)\s+"
@@ -819,10 +899,11 @@ def extract_slides_topic(text: str) -> str:
             topic = re.sub(r"(?i)\s+(?:with\s+llm|please)$", "", topic).strip()
             topic, _ = _strip_format_from_text(topic)
             topic = _strip_style_from_text(topic)
+            topic = _strip_theme_from_text(topic)
             if topic:
                 return topic
     cleaned, _ = _strip_format_from_text(t)
-    return normalize_topic(_strip_style_from_text(cleaned))
+    return normalize_topic(_strip_theme_from_text(_strip_style_from_text(cleaned)))
 
 
 def nl_to_argv_convert(text: str) -> list[str]:
@@ -931,6 +1012,9 @@ def nl_to_argv(text: str) -> list[str]:
     style = extract_slide_style(t)
     if re.search(r"(?i)\b(?:executive|academic|pitch)\b", t):
         argv.extend(["--style", style])
+    theme = extract_slide_theme(t, style=style)
+    if theme:
+        argv.extend(["--theme", theme])
     if re.search(r"(?i)\b(llm|write script)\b", t):
         argv.append("--llm")
     return argv
@@ -945,12 +1029,38 @@ def _render_scene_png(
     cfg: VideoConfig,
     used_photo_ids: set[str],
     credits: list[dict],
+    style: str = "executive",
+    theme: str | None = None,
+    total_slides: int = 1,
 ) -> Path:
     from arka.media.chart_slide import render_scene_visual, render_title_slide, scene_has_chart_visual
 
     out = work / f"slide-{index:02d}.png"
     if scene_has_chart_visual(scene):
-        return render_scene_visual(scene, work, cfg, index=index)
+        return render_scene_visual(
+            scene,
+            work,
+            cfg,
+            index=index,
+            style=style,
+            theme=theme,
+            topic=topic,
+            total_slides=total_slides,
+        )
+
+    kind = (getattr(scene, "slide_kind", "") or "").strip().lower()
+    if kind in {"title", "section"}:
+        return render_title_slide(
+            scene,
+            out,
+            cfg,
+            style=style,
+            theme=theme,
+            slide_kind=kind,
+            topic=topic,
+            slide_index=index,
+            total_slides=total_slides,
+        )
 
     if any_source_available():
         query = _scene_search_query(scene, topic)
@@ -984,7 +1094,17 @@ def _render_scene_png(
         except SystemExit:
             pass
 
-    return render_title_slide(scene, out, cfg)
+    return render_title_slide(
+        scene,
+        out,
+        cfg,
+        style=style,
+        theme=theme,
+        slide_kind=kind or "content",
+        topic=topic,
+        slide_index=index,
+        total_slides=total_slides,
+    )
 
 
 def _build_pptx(
@@ -1170,10 +1290,16 @@ def _build_markdown(
     for i, scene in enumerate(scenes):
         if i > 0:
             lines.extend(["", "---", ""])
-        lines.append(f"# {scene.title}")
+        kind = (getattr(scene, "slide_kind", "") or "").strip().lower()
+        if kind == "section":
+            lines.append(f"# {scene.title}")
+        else:
+            lines.append(f"# {scene.title}")
         body = (scene.body or "").strip()
-        if body:
+        if body and kind not in {"title", "section"}:
             lines.extend(["", body])
+        elif body and kind == "title":
+            lines.extend(["", f"*{body}*"])
         captions = [c.strip() for c in (scene.captions or []) if c and c.strip()]
         if captions:
             lines.append("")
@@ -1201,15 +1327,20 @@ def _metadata_payload(
     scenes: list[Scene],
     credits: list[dict],
     outputs: dict[str, str],
+    style: str = "executive",
+    theme: str = "dark",
 ) -> dict:
     return {
         "topic": topic,
+        "style": style,
+        "theme": theme,
         "scenes": [
             {
                 "title": s.title,
                 "narration": s.narration,
                 "body": s.body,
                 "captions": s.captions,
+                "slide_kind": getattr(s, "slide_kind", "") or "",
                 "image_query": s.image_query,
                 "image_keywords": s.image_keywords,
                 "chart": s.chart,
@@ -1233,6 +1364,8 @@ def _build_json_export(
     scenes: list[Scene],
     credits: list[dict],
     outputs: dict[str, str] | None = None,
+    style: str = "executive",
+    theme: str = "dark",
     **_,
 ) -> Path:
     _ = slide_images
@@ -1241,6 +1374,8 @@ def _build_json_export(
         scenes=scenes,
         credits=credits,
         outputs=outputs or {output.suffix.lstrip("."): str(output)},
+        style=style,
+        theme=theme,
     )
     output.parent.mkdir(parents=True, exist_ok=True)
     partial = output.with_name(f"{output.name}.partial")
@@ -1273,6 +1408,8 @@ def _export_formats(
     scenes: list[Scene],
     cfg: VideoConfig,
     credits: list[dict],
+    style: str = "executive",
+    theme: str = "dark",
 ) -> ExportBatch:
     saved: list[Path] = []
     errors: list[str] = []
@@ -1361,6 +1498,8 @@ def _export_formats(
                 credits=credits,
                 outputs=outputs_map,
                 cfg=cfg,
+                style=style,
+                theme=theme,
             )
             saved.append(saved_path)
             outputs_map["json"] = str(saved_path)
@@ -1394,10 +1533,16 @@ def compose(
     topic: str,
     cfg: VideoConfig | None = None,
     formats: list[str] | None = None,
+    style: str = "executive",
+    theme: str | None = None,
 ) -> ExportBatch:
     if not scenes:
         raise SystemExit("No scenes to render.")
-    cfg = cfg or load_config()
+    style = normalize_slide_style(style)
+    theme = normalize_slide_theme(theme, style=style)
+    from arka.media.slide_design import apply_slide_design
+
+    cfg = apply_slide_design(cfg or load_config(), style=style, theme=theme)
     formats = formats or [_default_format()]
     from arka.media.chart_slide import scene_has_chart_visual
 
@@ -1426,6 +1571,9 @@ def compose(
                 cfg=cfg,
                 used_photo_ids=used_photo_ids,
                 credits=credits,
+                style=style,
+                theme=theme,
+                total_slides=len(scenes),
             )
             _validate_slide_image(png)
             slide_images.append((png, scene))
@@ -1438,6 +1586,8 @@ def compose(
             scenes=scenes,
             cfg=cfg,
             credits=credits,
+            style=style,
+            theme=theme,
         )
 
         if "json" not in batch.outputs:
@@ -1449,6 +1599,8 @@ def compose(
                         scenes=scenes,
                         credits=credits,
                         outputs=batch.outputs,
+                        style=style,
+                        theme=theme,
                     ),
                     indent=2,
                 )
@@ -1468,6 +1620,8 @@ class LoadedDeck:
     scenes: list[Scene]
     slide_images: list[tuple[Path, Scene]] | None = None
     credits: list[dict] = field(default_factory=list)
+    style: str = "executive"
+    theme: str = "dark"
 
 
 def detect_format(path: Path, from_fmt: str | None = None) -> str:
@@ -1570,10 +1724,14 @@ def _load_json_deck(path: Path) -> LoadedDeck:
     if not scenes:
         raise SystemExit(f"No scenes found in {path.name}")
     credits = data.get("photo_credits") if isinstance(data.get("photo_credits"), list) else []
+    style = normalize_slide_style(str(data.get("style") or "executive"))
+    theme = normalize_slide_theme(str(data.get("theme") or ""), style=style)
     return LoadedDeck(
         topic=topic or scenes[0].title,
         scenes=scenes,
         credits=credits,
+        style=style,
+        theme=theme,
     )
 
 
@@ -1796,6 +1954,9 @@ def _render_convert_slides(
     work: Path,
     cfg: VideoConfig,
     existing_images: list[tuple[Path, Scene]] | None = None,
+    style: str = "executive",
+    theme: str | None = None,
+    topic: str = "",
 ) -> list[tuple[Path, Scene]]:
     from arka.media.chart_slide import render_scene_visual, render_title_slide, scene_has_chart_visual
 
@@ -1815,10 +1976,30 @@ def _render_convert_slides(
                 slide_images.append((dest, scene))
                 continue
         out = work / f"slide-{i:02d}.png"
+        kind = getattr(scene, "slide_kind", "") or ""
         if scene_has_chart_visual(scene):
-            png = render_scene_visual(scene, work, cfg, index=i)
+            png = render_scene_visual(
+                scene,
+                work,
+                cfg,
+                index=i,
+                style=style,
+                theme=theme,
+                topic=topic,
+                total_slides=len(scenes),
+            )
         else:
-            png = render_title_slide(scene, out, cfg)
+            png = render_title_slide(
+                scene,
+                out,
+                cfg,
+                style=style,
+                theme=theme,
+                slide_kind=kind,
+                topic=topic,
+                slide_index=i,
+                total_slides=len(scenes),
+            )
         slide_images.append((png, scene))
     return slide_images
 
@@ -1869,6 +2050,10 @@ def convert_deck(
         if not deck.scenes:
             raise SystemExit("No slides to convert.")
 
+        from arka.media.slide_design import apply_slide_design
+
+        cfg = apply_slide_design(cfg, style=deck.style, theme=deck.theme)
+
         print(
             f"Converting {input_path.name} ({src_fmt}) → {', '.join(formats)} ({len(deck.scenes)} slides)",
             file=sys.stderr,
@@ -1879,6 +2064,9 @@ def convert_deck(
             work=work,
             cfg=cfg,
             existing_images=deck.slide_images,
+            style=deck.style,
+            theme=deck.theme,
+            topic=deck.topic,
         )
 
         output_paths = _output_paths(output, formats)
@@ -1889,6 +2077,8 @@ def convert_deck(
             scenes=deck.scenes,
             cfg=cfg,
             credits=deck.credits,
+            style=deck.style,
+            theme=deck.theme,
         )
 
         if "json" not in batch.outputs:
@@ -1900,6 +2090,8 @@ def convert_deck(
                         scenes=deck.scenes,
                         credits=deck.credits,
                         outputs=batch.outputs,
+                        style=deck.style,
+                        theme=deck.theme,
                     ),
                     indent=2,
                 )
@@ -1928,6 +2120,12 @@ def build_parser() -> argparse.ArgumentParser:
         choices=SLIDE_STYLES,
         default=None,
         help="Deck tone: executive (default), academic, or pitch",
+    )
+    p_compose.add_argument(
+        "--theme",
+        choices=SLIDE_THEMES,
+        default=None,
+        help="Visual theme: dark, light, or minimal (default varies by style)",
     )
     p_compose.add_argument(
         "--scenes",
@@ -2043,6 +2241,7 @@ def cmd_compose(args: argparse.Namespace) -> int:
     scenes: list[Scene] = []
     topic = extract_slides_topic((args.topic or "").strip()) or normalize_topic((args.topic or "").strip())
     style = normalize_slide_style(args.style)
+    theme = normalize_slide_theme(getattr(args, "theme", None), style=style)
 
     if args.script:
         raw = Path(args.script).expanduser().read_text(encoding="utf-8") if Path(args.script).is_file() else args.script
@@ -2081,7 +2280,7 @@ def cmd_compose(args: argparse.Namespace) -> int:
         scenes = _llm_slides_enrich_image_keywords(topic, scenes)
 
     label = topic_label(topic)
-    debug_msg(f"Topic: {label} ({style})")
+    debug_msg(f"Topic: {label} ({style}, {theme})")
     try:
         formats = parse_formats_arg(args.format)
     except SystemExit as exc:
@@ -2095,7 +2294,7 @@ def cmd_compose(args: argparse.Namespace) -> int:
     )
     fmt_label = ", ".join(formats)
     user_msg(f"Composing {len(scenes)} slides ({fmt_label}) …")
-    batch = compose(scenes, output=out, topic=topic, formats=formats)
+    batch = compose(scenes, output=out, topic=topic, formats=formats, style=style, theme=theme)
     open_path = _report_export_batch(batch)
     meta = out.with_suffix(".meta.json")
     if meta.is_file():
@@ -2170,7 +2369,7 @@ def _open_slides(path: Path) -> None:
 
 
 _COMPOSE_SUBCMDS = frozenset({"compose", "convert", "parse", "check"})
-_COMPOSE_FLAG_PREFIXES = ("--topic", "--script", "--llm", "--style", "--scenes", "--format", "--output")
+_COMPOSE_FLAG_PREFIXES = ("--topic", "--script", "--llm", "--style", "--theme", "--scenes", "--format", "--output")
 
 
 def _normalize_compose_argv(argv: list[str]) -> list[str]:

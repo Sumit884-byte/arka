@@ -277,35 +277,238 @@ def _hex_rgb(color: str) -> tuple[int, int, int]:
     return (int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16))
 
 
-def render_title_slide(scene: Scene, output: Path, cfg: VideoConfig) -> Path:
-    """Simple title card when a scene has no chart and no Unsplash photo."""
-    plt = _require_matplotlib()
-    _apply_chart_theme(cfg)
-    fig, ax = plt.subplots(figsize=(cfg.width / DPI, cfg.height / DPI), dpi=DPI)
-    fig.patch.set_facecolor(cfg.bg_color)
-    ax.set_facecolor(cfg.bg_color)
-    ax.axis("off")
-    from arka.media.compose_video import prepare_slide_body, prepare_slide_title
+def _slide_font_family(style: str) -> str:
+    if style == "academic":
+        return "serif"
+    return "sans-serif"
 
+
+def _draw_slide_footer(ax, *, palette, slide_index: int, total: int, style: str) -> None:
+    if total <= 1:
+        return
+    ax.text(
+        0.96,
+        0.04,
+        f"{slide_index + 1} / {total}",
+        ha="right",
+        va="bottom",
+        fontsize=10,
+        color=palette.muted,
+        transform=ax.transAxes,
+        fontfamily=_slide_font_family(style),
+    )
+
+
+def _draw_accent_bar(ax, *, palette, y: float, width: float = 0.12, height: float = 0.006) -> None:
+    from matplotlib.patches import Rectangle
+
+    ax.add_patch(
+        Rectangle(
+            (0.5 - width / 2, y),
+            width,
+            height,
+            transform=ax.transAxes,
+            facecolor=palette.accent,
+            edgecolor="none",
+            clip_on=False,
+        )
+    )
+
+
+def render_title_slide(
+    scene: Scene,
+    output: Path,
+    cfg: VideoConfig,
+    *,
+    style: str = "executive",
+    theme: str | None = None,
+    slide_kind: str = "content",
+    topic: str = "",
+    slide_index: int = 0,
+    total_slides: int = 1,
+) -> Path:
+    """Render a styled presentation slide (title, section, or content layout)."""
+    from arka.media.compose_video import prepare_slide_body, prepare_slide_title
+    from arka.media.slide_design import infer_slide_kind, slide_palette, slide_typography
+
+    plt = _require_matplotlib()
+    from matplotlib.patches import Rectangle
+
+    _apply_chart_theme(cfg)
+    palette = slide_palette(style, theme or "")
+    typo = slide_typography(style)
+    font_family = _slide_font_family(style)
+
+    kind = slide_kind or infer_slide_kind(scene, index=slide_index, total=total_slides)
+    fig, ax = plt.subplots(figsize=(cfg.width / DPI, cfg.height / DPI), dpi=DPI)
+    fig.patch.set_facecolor(palette.bg)
+    ax.set_facecolor(palette.bg)
+    ax.axis("off")
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+
+    mx = typo.margin_x
     title_lines = prepare_slide_title(scene.title)
-    title = "\n".join(title_lines) if title_lines else scene.title
-    ax.text(0.5, 0.58, title, ha="center", va="center", fontsize=48, color=cfg.accent_color, fontweight="bold")
+    title_text = "\n".join(title_lines) if title_lines else (scene.title or topic or "Presentation")
     body_lines = prepare_slide_body(scene.body or "")
-    if body_lines:
+    captions = [str(c).strip() for c in (scene.captions or []) if str(c).strip()][: typo.max_bullets]
+
+    if kind == "title":
         ax.text(
-            0.5,
-            0.38,
-            "\n".join(body_lines),
+            mx,
+            0.62,
+            title_text,
+            ha="left",
+            va="center",
+            fontsize=typo.title_size + 8,
+            color=palette.text,
+            fontweight="bold",
+            linespacing=typo.line_spacing,
+            transform=ax.transAxes,
+            fontfamily=font_family,
+        )
+        _draw_accent_bar(ax, palette=palette, y=0.54, width=0.14)
+        subtitle = "\n".join(body_lines) if body_lines else (topic or "").strip()
+        if subtitle and subtitle.lower() != title_text.lower():
+            ax.text(
+                mx,
+                0.46,
+                subtitle,
+                ha="left",
+                va="top",
+                fontsize=typo.subtitle_size,
+                color=palette.muted,
+                linespacing=typo.line_spacing,
+                transform=ax.transAxes,
+                fontfamily=font_family,
+            )
+        logo_w, logo_h = 0.10, 0.08
+        ax.add_patch(
+            Rectangle(
+                (0.96 - logo_w, 0.88 - logo_h),
+                logo_w,
+                logo_h,
+                transform=ax.transAxes,
+                facecolor=palette.surface,
+                edgecolor=palette.muted,
+                linewidth=0.8,
+                linestyle="--",
+                clip_on=False,
+            )
+        )
+        ax.text(
+            0.96 - logo_w / 2,
+            0.88 - logo_h / 2,
+            "LOGO",
             ha="center",
             va="center",
-            fontsize=22,
-            color=cfg.text_color,
-            linespacing=1.4,
+            fontsize=8,
+            color=palette.muted,
+            transform=ax.transAxes,
+            fontfamily=font_family,
         )
+    elif kind == "section":
+        ax.add_patch(
+            Rectangle(
+                (0, 0.42),
+                1,
+                0.16,
+                transform=ax.transAxes,
+                facecolor=palette.surface,
+                edgecolor="none",
+                clip_on=False,
+            )
+        )
+        section_title = title_text
+        if section_title.lower().startswith("section:"):
+            section_title = section_title.split(":", 1)[1].strip() or section_title
+        ax.text(
+            0.5,
+            0.50,
+            section_title,
+            ha="center",
+            va="center",
+            fontsize=typo.section_size,
+            color=palette.accent,
+            fontweight="bold",
+            transform=ax.transAxes,
+            fontfamily=font_family,
+        )
+        if body_lines:
+            ax.text(
+                0.5,
+                0.38,
+                "\n".join(body_lines),
+                ha="center",
+                va="top",
+                fontsize=typo.subtitle_size,
+                color=palette.muted,
+                transform=ax.transAxes,
+                fontfamily=font_family,
+            )
+    else:
+        y = 0.88
+        ax.text(
+            mx,
+            y,
+            title_text,
+            ha="left",
+            va="top",
+            fontsize=typo.title_size,
+            color=palette.text,
+            fontweight="bold",
+            linespacing=typo.line_spacing,
+            transform=ax.transAxes,
+            fontfamily=font_family,
+        )
+        _draw_accent_bar(ax, palette=palette, y=y - 0.07, width=0.08)
+        y -= 0.12
+        if body_lines:
+            ax.text(
+                mx,
+                y,
+                "\n".join(body_lines),
+                ha="left",
+                va="top",
+                fontsize=typo.subtitle_size,
+                color=palette.muted,
+                linespacing=typo.line_spacing,
+                transform=ax.transAxes,
+                fontfamily=font_family,
+            )
+            y -= 0.08 * len(body_lines)
+        if captions:
+            bullet_y = max(0.22, y - 0.04)
+            for cap in captions:
+                ax.text(
+                    mx + 0.02,
+                    bullet_y,
+                    f"•  {cap}",
+                    ha="left",
+                    va="top",
+                    fontsize=typo.bullet_size,
+                    color=palette.bullet,
+                    linespacing=typo.line_spacing,
+                    transform=ax.transAxes,
+                    fontfamily=font_family,
+                )
+                bullet_y -= 0.07
+
+    _draw_slide_footer(ax, palette=palette, slide_index=slide_index, total=total_slides, style=style)
     return _save_figure(fig, output)
 
 
-def render_scene_visual(scene: Scene, work_dir: Path, cfg: VideoConfig, *, index: int) -> Path:
+def render_scene_visual(
+    scene: Scene,
+    work_dir: Path,
+    cfg: VideoConfig,
+    *,
+    index: int,
+    style: str = "executive",
+    theme: str | None = None,
+    topic: str = "",
+    total_slides: int = 1,
+) -> Path:
     """Build a full-frame PNG for one scene (chart spec, chart file, or slide image)."""
     out = work_dir / f"slide-{index:02d}.png"
 
@@ -320,7 +523,17 @@ def render_scene_visual(scene: Scene, work_dir: Path, cfg: VideoConfig, *, index
     if scene.chart:
         return _render_inline_chart(scene.chart, out, cfg)
 
-    return render_title_slide(scene, out, cfg)
+    return render_title_slide(
+        scene,
+        out,
+        cfg,
+        style=style,
+        theme=theme,
+        slide_kind=getattr(scene, "slide_kind", "") or "",
+        topic=topic,
+        slide_index=index,
+        total_slides=total_slides,
+    )
 
 
 def static_scene_clip_filter(cfg: VideoConfig) -> str:

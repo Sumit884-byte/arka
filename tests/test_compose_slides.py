@@ -16,10 +16,12 @@ from arka.media.compose_slides import (
     convert_deck,
     detect_format,
     extract_slide_style,
+    extract_slide_theme,
     extract_slides_topic,
     nl_to_argv,
     normalize_format,
     normalize_slide_style,
+    normalize_slide_theme,
     parse_formats_arg,
     _pptx_slide_dimensions,
     _prepare_pptx_image_stream,
@@ -29,10 +31,65 @@ from arka.media.compose_slides import (
     _template_slides_script,
     _validate_pptx_file,
 )
+from arka.media.slide_design import apply_slide_design, slide_palette, slide_typography
 from arka.media.compose_video import Scene, load_config
 
 
-def test_nl_to_argv_slides_about_topic():
+def test_normalize_slide_theme_defaults_by_style():
+    assert normalize_slide_theme(None, style="executive") == "dark"
+    assert normalize_slide_theme(None, style="academic") == "light"
+    assert normalize_slide_theme("minimal", style="pitch") == "minimal"
+
+
+def test_extract_slide_theme_from_nl():
+    assert extract_slide_theme("pitch deck with light theme") == "light"
+    assert extract_slide_theme("executive slides") is None
+
+
+def test_slide_palette_differs_by_style():
+    exec_dark = slide_palette("executive", "dark")
+    pitch_dark = slide_palette("pitch", "dark")
+    assert exec_dark.accent != pitch_dark.accent
+
+
+def test_apply_slide_design_overrides_config():
+    cfg = load_config()
+    styled = apply_slide_design(cfg, style="academic", theme="light")
+    assert styled.bg_color == slide_palette("academic", "light").bg
+    assert styled.title_size == slide_typography("academic").title_size
+
+
+def test_compose_pitch_theme_pptx(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    pytest.importorskip("pptx")
+    monkeypatch.setenv("OPEN_SLIDES", "0")
+    monkeypatch.delenv("UNSPLASH_ACCESS_KEY", raising=False)
+    monkeypatch.delenv("PEXELS_API_KEY", raising=False)
+    monkeypatch.delenv("PIXABAY_API_KEY", raising=False)
+
+    scenes = _template_slides_script("terminal AI agents", style="pitch")
+    out = tmp_path / "pitch-deck.pptx"
+    batch = compose(
+        scenes,
+        output=out,
+        topic="terminal AI agents",
+        cfg=load_config(),
+        formats=["pptx"],
+        style="pitch",
+        theme="dark",
+    )
+    assert batch.saved == [out]
+    _validate_pptx_file(out)
+    meta = json.loads(out.with_suffix(".meta.json").read_text(encoding="utf-8"))
+    assert meta["style"] == "pitch"
+    assert meta["theme"] == "dark"
+    assert meta["scenes"][0]["slide_kind"] == "title"
+
+
+def test_nl_to_argv_with_theme():
+    argv = nl_to_argv("pitch deck on AI with light theme")
+    assert argv == ["compose", "--topic", "AI", "--style", "pitch", "--theme", "light"]
+
+
     argv = nl_to_argv("make slides about kubernetes networking")
     assert argv == ["compose", "--topic", "kubernetes networking"]
 
@@ -80,13 +137,16 @@ def test_template_slides_script_executive_arc():
     scenes = _template_slides_script("cloud security", style="executive")
     assert 6 <= len(scenes) <= _slides_scene_bounds()[1]
     titles = [scene.title for scene in scenes]
-    assert any("priority" in title.lower() or "strategic" in title.lower() for title in titles)
+    assert scenes[0].slide_kind == "title"
+    assert any("challenge" in title.lower() or "insight" in title.lower() for title in titles)
     assert all(scene.narration.strip() for scene in scenes)
-    assert all(scene.body.strip() for scene in scenes)
+    assert all(scene.body.strip() or scene.slide_kind == "section" for scene in scenes)
 
 
-def test_template_slides_script_pitch_has_cta():
+def test_template_slides_script_pitch_has_section_dividers():
     scenes = _template_slides_script("fintech", style="pitch")
+    assert scenes[0].slide_kind == "title"
+    assert any(scene.slide_kind == "section" for scene in scenes)
     assert any("ask" in scene.title.lower() for scene in scenes)
 
 

@@ -1,11 +1,11 @@
 ---
 title: "Compose slides"
-description: "Generate executive-quality slide decks from a topic — pptx, pdf, html, or markdown with style presets."
-keywords: ["slides", "presentation", "pptx", "deck", "pitch"]
+description: "Generate executive-quality slide decks from a topic — pptx, pdf, html, or markdown with style presets and visual themes."
+keywords: ["slides", "presentation", "pptx", "deck", "pitch", "theme"]
 icon: "presentation-screen"
 ---
 
-Create structured slide decks from a topic. Arka uses presentation-specific prompts (action titles, speaker notes) — not video scripts.
+Create structured slide decks from a topic. Arka uses presentation-specific prompts (action titles, speaker notes, section dividers) — not video scripts.
 
 ## Quick start
 
@@ -18,16 +18,39 @@ compose_slides compose --topic "Python asyncio" --llm --style executive -f pptx
 
 ## Style presets
 
-| Style | Best for |
-| --- | --- |
-| `executive` | Business updates, clear action titles (default) |
-| `pitch` | Startup decks — hook → problem → solution → CTA |
-| `academic` | Research talks — precise terminology, methods |
+| Style | Best for | Default theme |
+| --- | --- | --- |
+| `executive` | Business updates, KPI-focused action titles | `dark` |
+| `pitch` | Startup decks — problem → solution → market → ask | `dark` |
+| `academic` | Research talks — methodology, citations | `light` |
 
 ```bash
 compose_slides compose --topic "Series A" --style pitch -f pptx
 compose_slides compose --topic "CRISPR" --style academic -f all
 ```
+
+## Visual themes
+
+Control colors and typography with `--theme`:
+
+| Theme | Look |
+| --- | --- |
+| `dark` | High-contrast slides (default for executive/pitch) |
+| `light` | Clean light background (default for academic) |
+| `minimal` | White/neutral, print-friendly |
+
+```bash
+compose_slides compose --topic "Q4 review" --style executive --theme light -f pptx
+arka pitch deck on terminal AI agents --theme dark
+```
+
+Design features per deck:
+
+- **Title slide** with subtitle and logo placeholder
+- **Section dividers** (pitch decks use Problem/Solution sections)
+- **Left-aligned action titles** with accent bar and slide numbers
+- **Max 4 bullets** per slide (≤8 words each)
+- **Speaker notes** in `narration`; minimal on-screen text
 
 ## Export formats
 
@@ -56,7 +79,7 @@ compose_slides convert deck.pptx --format pdf
 - One idea per slide
 - Action titles (not generic "Background")
 - 6–12 slides typical
-- Speaker notes in `narration`; minimal on-screen bullets
+- Speaker notes in `narration`; max 4 on-screen bullets
 
 ## Related
 

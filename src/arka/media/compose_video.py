@@ -46,6 +46,7 @@ class Scene:
     chart: dict | None = None
     chart_path: str = ""
     slide_image: str = ""
+    slide_kind: str = ""  # title | section | content (compose_slides layouts)
 
 
 @dataclass
@@ -1751,6 +1752,7 @@ def _parse_scenes_json(raw: str) -> list[Scene]:
                 chart=chart,
                 chart_path=str(row.get("chart_path") or row.get("chart_png") or "").strip(),
                 slide_image=str(row.get("slide_image") or row.get("slide") or "").strip(),
+                slide_kind=str(row.get("slide_kind") or row.get("kind") or "").strip().lower(),
             )
         )
     return scenes
