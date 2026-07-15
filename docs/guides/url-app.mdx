@@ -1,0 +1,14 @@
+# URL app design analyzer
+
+Generate an interactive design-review dashboard from a live app URL:
+
+```bash
+arka url-app https://example.com --output review.html
+arka url-app https://example.com --json
+```
+
+The dashboard includes page metadata, responsive/accessibility signals, and
+prioritized design-change prompts. It is an actual HTML review app rather than
+an `.md` summary. Recommendations remain viewport-scoped and preserve button
+order. Network access is read-only; use the browser screenshot skill for
+authenticated or JavaScript-heavy apps.

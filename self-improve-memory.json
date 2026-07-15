@@ -1,0 +1,229 @@
+{
+  "attempts": [
+    {
+      "focus": "memory detect",
+      "proposal": "Create a new Python module arka_memory_detect to hold the extract_fact function and import it in test_memory_detect.py.",
+      "files": [
+        "local/tests/test_memory_detect.py",
+        "src/arka/arka_memory_detect.py",
+        "src/arka/cli.py"
+      ],
+      "outcome": "planned",
+      "notes": "",
+      "at": "2026-07-13T15:13:35.862390+00:00"
+    },
+    {
+      "focus": "memory detect --apply",
+      "proposal": "Create a new Python module arka_memory_detect to hold the extract_fact function and import it in test_memory_detect.py.",
+      "files": [
+        "src/arka/arka_memory_detect.py",
+        "local/tests/test_memory_detect.py",
+        "src/arka/cli.py"
+      ],
+      "outcome": "planned",
+      "notes": "",
+      "at": "2026-07-13T15:15:16.468707+00:00"
+    },
+    {
+      "focus": "memory detect",
+      "proposal": "Create a new Python module arka_memory_detect to hold the extract_fact function and import it in test_memory_detect.py.",
+      "files": [
+        "src/arka/arka_memory_detect.py",
+        "local/tests/test_memory_detect.py",
+        "src/arka/router.py"
+      ],
+      "outcome": "failed",
+      "notes": "exit 1",
+      "at": "2026-07-13T15:20:37.932850+00:00"
+    },
+    {
+      "focus": "routing",
+      "proposal": "Check fish vs Python symbolic.py parity when adding NL patterns",
+      "files": [
+        "src/arka/router.py",
+        "src/arka/fish/config.fish"
+      ],
+      "outcome": "planned",
+      "notes": "",
+      "at": "2026-07-14T07:44:19.993514+00:00"
+    },
+    {
+      "focus": "general",
+      "proposal": "Add a new skill to the Arka agent for generating random passwords.",
+      "files": [],
+      "outcome": "planned",
+      "notes": "",
+      "at": "2026-07-15T12:39:26.929828+00:00"
+    },
+    {
+      "focus": "general",
+      "proposal": "Update the LLM route in the Python router (src/arka/router.py) to include a new skill for generating random passwords.",
+      "files": [
+        "src/arka/router.py"
+      ],
+      "outcome": "planned",
+      "notes": "",
+      "at": "2026-07-15T12:45:05.283719+00:00"
+    },
+    {
+      "focus": "general",
+      "proposal": "Add a new skill to the Arka agent for generating random passwords.",
+      "files": [
+        "src/arka/router.py"
+      ],
+      "outcome": "planned",
+      "notes": "",
+      "at": "2026-07-15T13:34:36.875598+00:00"
+    },
+    {
+      "focus": "routing",
+      "proposal": "Update the LLM route in the Python router (src/arka/router.py) to include a new skill for generating random passwords.",
+      "files": [
+        "src/arka/router.py"
+      ],
+      "outcome": "planned",
+      "notes": "",
+      "at": "2026-07-15T13:46:02.007946+00:00"
+    },
+    {
+      "focus": "routing",
+      "proposal": "Fix the LLM fallback in the Python router (src/arka/router.py) to ensure it works as expected.",
+      "files": [
+        "src/arka/router.py"
+      ],
+      "outcome": "planned",
+      "notes": "",
+      "at": "2026-07-15T13:51:55.510455+00:00"
+    },
+    {
+      "focus": "routing",
+      "proposal": "Fix the LLM fallback in the Python router (src/arka/router.py).",
+      "files": [
+        "src/arka/router.py"
+      ],
+      "outcome": "planned",
+      "notes": "",
+      "at": "2026-07-15T15:40:44.003518+00:00"
+    },
+    {
+      "focus": "general",
+      "proposal": "Enhance the routing pipeline by adding a new skill for generating random passwords and updating the LLM route in the Python router to include this new skill.",
+      "files": [
+        "src/arka/router.py",
+        "src/arka/cli.py",
+        "docs/concepts/routing.mdx",
+        "llm.txt"
+      ],
+      "outcome": "planned",
+      "notes": "",
+      "at": "2026-07-15T16:37:05.718353+00:00"
+    },
+    {
+      "focus": "routing",
+      "proposal": "Update LLM route in Python router (src/arka/router.py) to include a new skill for generating random passwords.",
+      "files": [
+        "src/arka/router.py"
+      ],
+      "outcome": "planned",
+      "notes": "",
+      "at": "2026-07-15T16:51:15.712407+00:00"
+    },
+    {
+      "focus": "routing",
+      "proposal": "Fix the LLM fallback in the Python router (src/arka/router.py) to ensure that it works as expected.",
+      "files": [
+        "src/arka/router.py"
+      ],
+      "outcome": "planned",
+      "notes": "",
+      "at": "2026-07-15T17:32:57.574499+00:00"
+    },
+    {
+      "focus": "routing",
+      "proposal": "Fix LLM fallback in Python router (src/arka/router.py)",
+      "files": [
+        "src/arka/router.py"
+      ],
+      "outcome": "planned",
+      "notes": "",
+      "at": "2026-07-15T18:05:53.759161+00:00"
+    },
+    {
+      "focus": "general",
+      "proposal": "Update LLM route in Python router (src/arka/router.py) to include a new skill for generating random passwords.",
+      "files": [
+        "src/arka/router.py"
+      ],
+      "outcome": "planned",
+      "notes": "",
+      "at": "2026-07-15T18:39:39.080735+00:00"
+    },
+    {
+      "focus": "general",
+      "proposal": "Fix test failure in SelfImproveGoalTests.test_run_diagnostics_scopes_to_tests_dir",
+      "files": [
+        "src/arka/router.py"
+      ],
+      "outcome": "planned",
+      "notes": "",
+      "at": "2026-07-15T19:18:24.994110+00:00"
+    },
+    {
+      "focus": "memory detect",
+      "proposal": "Fix test failure in SelfImproveLoopTests.test_run_self_improve_apply_from_embedded_flag",
+      "files": [
+        "src/arka/router.py"
+      ],
+      "outcome": "planned",
+      "notes": "",
+      "at": "2026-07-15T19:19:54.889509+00:00"
+    },
+    {
+      "focus": "memory detect",
+      "proposal": "Fix test failure in SelfImproveGoalTests.test_run_self_improve_apply_from_embedded_flag",
+      "files": [],
+      "outcome": "planned",
+      "notes": "",
+      "at": "2026-07-15T19:25:43.577256+00:00"
+    },
+    {
+      "focus": "general",
+      "proposal": "Fix failing diagnostics — 1 failure (tests/test_self_improve.py::SelfImproveLoopTests::test_run_self_improve_apply_from_embedded_flag) (tests/test_self_improve.py)",
+      "files": [
+        "src/arka/agent/self_improve.py",
+        "tests/test_self_improve.py"
+      ],
+      "outcome": "planned",
+      "notes": "",
+      "at": "2026-07-15T19:30:08.489255+00:00"
+    },
+    {
+      "focus": "memory detect",
+      "proposal": "Fix failing test in SelfImproveLoopTests.test_run_self_improve_apply_from_embedded_flag",
+      "files": [
+        "src/arka/router.py"
+      ],
+      "outcome": "planned",
+      "notes": "",
+      "at": "2026-07-15T19:31:40.181968+00:00"
+    },
+    {
+      "focus": "general",
+      "proposal": "Fix failing test in SelfImproveLoopTests.test_run_self_improve_apply_from_embedded_flag",
+      "files": [
+        "src/arka/router.py"
+      ],
+      "outcome": "planned",
+      "notes": "",
+      "at": "2026-07-15T19:39:23.321529+00:00"
+    },
+    {
+      "focus": "general",
+      "proposal": "Fix failing test in SelfImproveLoopTests.test_run_self_improve_apply_from_embedded_flag",
+      "files": [],
+      "outcome": "planned",
+      "notes": "",
+      "at": "2026-07-15T19:40:49.870007+00:00"
+    }
+  ]
+}

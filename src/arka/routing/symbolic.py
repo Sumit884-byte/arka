@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import shlex
+from pathlib import Path
 
 
 def route_remind(cmd: str) -> str | None:
@@ -71,10 +72,111 @@ def route_describe_image(cmd: str) -> str | None:
         return None
     return "describe_image " + " ".join(shlex.quote(a) for a in argv)
 
+def route_background_remove(cmd: str) -> str | None:
+    if not re.search(r"(?i)\b(remove|erase|delete)\b.*\bbackground\b|\bbackground\s+removal\b", cmd):
+        return None
+    paths = re.findall(r"(?:^|\s)([^\s]+\.(?:png|jpe?g|webp))\b", cmd, re.I)
+    return "background_remove " + shlex.quote(paths[0]) if paths else "background_remove"
+
+def route_iterate(cmd: str) -> str | None:
+    m = re.search(r"(?i)\biterate\s+(\d+)\s+(.+)$", cmd.strip())
+    if m:
+        return "iterate " + m.group(1) + " " + m.group(2)
+    m = re.search(r"(?i)\b(?:run|repeat)\s+(.+?)\s+every\s+(\d+(?:\.\d+)?)\s*(seconds?|minutes?|hours?)\b", cmd.strip())
+    if m:
+        factor = {"second": 1, "seconds": 1, "minute": 60, "minutes": 60, "hour": 3600, "hours": 3600}[m.group(3).lower()]
+        return f"loop {float(m.group(2)) * factor:g} {m.group(1)}"
+    return None
+
+
+def route_ultra_fast(cmd: str) -> str | None:
+    if re.search(r"(?i)\b(?:ultra\s*fast|fast\s+development|multitask).*(?:priority|iteration|iterate)|\bpriority\s+(?:0|1)\b|\bauto(?:matic)?\s+priority\b", cmd):
+        suffix = " --auto-priority" if re.search(r"(?i)\b(?:auto|automatic|all)\s+priorit(?:y|ize)|prioritize\s+everything", cmd) else ""
+        return "ultra_fast " + cmd + suffix
+    return None
+
+def route_env_setup(cmd: str) -> str | None:
+    if re.search(r"(?i)\b(?:create|generate|make)\s+(?:a\s+)?(?:safe\s+)?\.env\b", cmd):
+        return "env_setup"
+    return None
+
+def route_research_math(cmd: str) -> str | None:
+    if re.search(r"(?i)\b(?:research|reproducible|auditable)\s+math\b|\bwrite\s+(?:a\s+)?math(?:ematical)?\s+script\b", cmd):
+        return "research_math " + cmd.split("math", 1)[-1].strip()
+    return None
+
+def route_prompt_optimize(cmd: str) -> str | None:
+    m = re.search(r"(?i)\b(?:optimize|improve|rewrite)\s+(?:this\s+)?prompt\s*[:\-]?\s*(.+)$", cmd.strip())
+    return "prompt_optimize " + m.group(1) if m else None
+
+def route_deploy(cmd: str) -> str | None:
+    if re.search(r"(?i)\bdeploy\s+(?:this\s+)?(?:app|site|project|backend|api)\s+(?:to|on)\s+(?:vercel|netlify|railway|render)\b", cmd):
+        platform = re.search(r"(?i)\b(vercel|netlify|railway|render)\b", cmd).group(1).lower()
+        return f"deploy --platform {platform}"
+    return None
+
+def route_geo_seo(cmd: str) -> str | None:
+    if re.search(r"(?i)\b(?:geo|ai\s+search|seo)\s+(?:seo\s+)?(?:audit|analy[sz]e|check)\b", cmd):
+        return "geo_seo"
+    return None
+
+def route_templates(cmd: str) -> str | None:
+    if re.search(r"(?i)\b(?:list|show|choose|use)\b.*\b(?:prompt|workflow|loop)\s+templates?\b|\b(?:list|show)\s+(?:arka\s+)?templates?\b", cmd):
+        return "template list"
+    return None
+
+
+def route_blocks(cmd: str) -> str | None:
+    if not re.search(r"(?i)\b(?:reusable|app|ui|code)\s+blocks?\b|\b(?:login|sign\s*up|payment|password\s+reset|oauth|webhook|subscription)\s+(?:block|component|starter)", cmd):
+        return None
+    if re.search(r"(?i)\b(?:list|available)\b", cmd):
+        return "blocks list"
+    for name, words in (("auth_login", r"login|sign\s*in"), ("auth_signup", r"sign\s*up|signup|register"), ("auth_password_reset", r"password\s+reset|forgot\s+password"), ("auth_oauth", r"oauth|social\s+login"), ("auth_email_verification", r"email\s+verification|verify\s+email"), ("payments_subscription", r"subscription|recurring\s+payment"), ("payments_paypal", r"paypal"), ("webhook_receiver", r"webhook"), ("payments_stripe", r"payment|stripe|checkout")):
+        if re.search(rf"(?i)\b(?:{words})\b", cmd):
+            return f"blocks show {name}"
+    return "blocks list"
+
+def route_optimize(cmd: str) -> str | None:
+    if re.search(r"(?i)\b(?:optimize|evolve)\b.*\b(?:objective|parameters?|function)\b", cmd):
+        return "optimize " + cmd
+    return None
+
+def route_design_flow(cmd: str) -> str | None:
+    if re.search(r"(?i)\b(?:design|plan)\s+(?:this|a|an)?\s*(?:project|feature|app|workflow)\b", cmd):
+        return "design plan " + cmd
+    return None
+
+def route_repo_reverse(cmd: str) -> str | None:
+    if re.search(r"(?i)\b(?:reverse engineer|reverse-engineer|turn|convert)\b.*\b(?:repo|repository|codebase)\b", cmd):
+        return "repo_reverse"
+    return None
+
+def route_browser_check(cmd: str) -> str | None:
+    if re.search(r"(?i)\b(?:check|inspect|verify|test)\b.*\b(?:browser|rendered|frontend|ui)\b", cmd):
+        urls = re.findall(r"https?://[^\s]+", cmd)
+        return "browser_check " + (urls[0] if urls else "http://127.0.0.1:3000")
+    return None
+
+
+def route_app_automation(cmd: str) -> str | None:
+    if not re.search(r"(?i)\b(?:automate|automation|test)\b", cmd) or not re.search(r"(?i)\b(?:app|website|webs+app|browser)\b", cmd):
+        return None
+    urls = re.findall(r"https?://[^\s]+", cmd)
+    return "automate " + (urls[0] if urls else "http://127.0.0.1:3000")
+
 
 def route_design_from_screenshot(cmd: str) -> str | None:
     try:
         from arka.agent.design_from_screenshot import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd.strip())
+    return route or None
+
+
+def route_frontend_loop(cmd: str) -> str | None:
+    try:
+        from arka.agent.frontend_loop import route_command
     except ImportError:
         return None
     route = route_command(cmd.strip())
@@ -348,6 +450,16 @@ def route_compose_3d(cmd: str) -> str | None:
     return "compose_3d " + " ".join(shlex.quote(a) for a in argv)
 
 
+def route_model_to_image(cmd: str) -> str | None:
+    if not re.search(r"(?i)\b(?:render|turn|convert|generate)\b.*\b(?:3d|model|mesh)\b.*\b(?:image|png|picture|render)\b", cmd):
+        return None
+    path = re.search(r"(?:~|/|\./|\.\./)?[^\s]+\.(?:obj|stl|glb|gltf)\b", cmd, re.I)
+    if not path:
+        return None
+    source = path.group(0)
+    return f"model_to_image {shlex.quote(source)} --output {shlex.quote(Path(source).stem + '-render.png')}"
+
+
 def route_three_d(cmd: str) -> str | None:
     """Backward-compatible alias for compose_3d."""
     return route_compose_3d(cmd)
@@ -484,6 +596,17 @@ def route_daily_brief(cmd: str) -> str | None:
     return None
 
 
+def route_media_transform(cmd: str) -> str | None:
+    if not re.search(r"(?i)\b(?:convert|turn|transform)\b.*\b(?:podcast|playlist|audio|video|media)\b.*\b(?:book|podcast|audio)\b", cmd):
+        return None
+    target = "book" if re.search(r"(?i)\bbook\b", cmd) else "podcast"
+    source = re.search(r"https?://\S+|[\w./~-]+\.(?:mp3|mp4|wav|m4a|mov|txt|md)", cmd, re.I)
+    if not source:
+        return None
+    stem = Path(source.group(0).split("?")[0]).stem or "output"
+    return f"media_transform {shlex.quote(source.group(0))} --to {target} --output {shlex.quote(stem + ('.md' if target == 'book' else '.mp3'))}"
+
+
 def route_competitions(cmd: str) -> str | None:
     try:
         from arka.agent.competitions import route_command
@@ -509,6 +632,19 @@ def route_repo_health(cmd: str) -> str | None:
         return None
     route = route_command(cmd)
     return route or None
+
+
+def route_observability(cmd: str) -> str | None:
+    if not re.search(r"(?i)\b(?:signoz|observability|telemetry|otel|opentelemetry)\b", cmd):
+        return None
+    if not re.search(r"(?i)\b(?:check|doctor|diagnos|improv|setup|status|working|health)\w*\b", cmd):
+        return None
+    return "observability doctor"
+
+def route_telemetry_connector(cmd: str) -> str | None:
+    if re.search(r"(?i)\b(?:production|prod)\b.*\b(?:telemetry|errors?|traces?)\b.*\b(?:codebase|code|repo|repository)\b", cmd):
+        return "telemetry-connect"
+    return None
 
 
 def route_repo_context(cmd: str) -> str | None:
@@ -693,6 +829,65 @@ def route_life_sciences(cmd: str) -> str | None:
     return None
 
 
+def route_model_host_setup(cmd: str) -> str | None:
+    if not re.search(r"(?i)\b(?:setup|set\s+up|configure|host|serve)\b.*\b(?:ai|llm|model|ollama|vllm|lm\s*studio)\b", cmd):
+        return None
+    host = "ollama" if re.search(r"(?i)\bollama\b", cmd) else "vllm" if re.search(r"(?i)\bvllm\b", cmd) else "lmstudio" if re.search(r"(?i)\blm\s*studio\b", cmd) else "openai-compatible"
+    if re.search(r"(?i)\b(?:doctor|check|status)\b", cmd):
+        return f"model doctor {host}"
+    return f"model setup {host}"
+
+
+def route_free_models(cmd: str) -> str | None:
+    if re.search(r"(?i)\b(?:free|no[- ]cost|zero[- ]cost)\b.*\b(?:models?|llms?|providers?)\b", cmd) or re.search(r"(?i)\b(?:models?|llms?|gpt)\b.*\bfree\b", cmd) or re.search(r"(?i)\baccess\b.*\b(?:gpt|chatgpt|model)\b.*\bfree\b", cmd):
+        if re.search(r"(?i)\b(?:chatgpt|openai|gpt)\b", cmd):
+            model = re.search(r"(?i)\b(gpt[- ]?[0-9]+(?:\.[0-9]+)?(?:\s+luna)?)\b", cmd)
+            if model:
+                from arka.llm.free_models import normalize_model_name
+                canonical = normalize_model_name(model.group(1))
+                suffix = " --model " + shlex.quote(canonical)
+            else:
+                suffix = ""
+            select = " --select" if model else ""
+            return "free_models --provider openai" + suffix + select
+        return "free_models"
+    return None
+
+
+def route_repo_graph(cmd: str) -> str | None:
+    if re.search(r"(?i)\b(?:repo|repository|codebase)\b.*\b(?:graph|dependencies|priority|priorities|centrality)\b", cmd):
+        return "repo_graph"
+    return None
+
+def route_workspace(cmd: str) -> str | None:
+    if re.search(r"(?i)\b(?:workspace|microservices?|micro-frontends?|service\s+map|developer\s+workspace)\b", cmd) and re.search(r"(?i)\b(?:map|scan|discover|list|inspect|show|create)\b", cmd):
+        return "workspace"
+    return None
+
+def route_spreadsheet(cmd: str) -> str | None:
+    if re.search(r"(?i)\b(?:create|make|generate|build)\b.*\b(?:spreadsheet|workbook|xlsx|excel)\b", cmd):
+        return "spreadsheet " + cmd
+    return None
+
+def route_teammate_review(cmd: str) -> str | None:
+    if re.search(r"(?i)\b(?:ai\s+teammate|coderabbit|greptile|cross[- ]service|entire\s+codebase)\b", cmd) and re.search(r"(?i)\b(?:review|check|audit|break)\b", cmd):
+        return "teammate-review"
+    return None
+
+def route_society(cmd: str) -> str | None:
+    if re.search(r"(?i)\b(?:ai\s+society|multi[- ]agent\s+(?:society|simulation)|agents?)\b", cmd) and re.search(r"(?i)\b(?:collaborat|debate|vote|simulate|deliberat)\w*\b", cmd):
+        return "society " + cmd
+    return None
+    return None
+
+
+def route_data_collect(cmd: str) -> str | None:
+    if not re.search(r"(?i)\b(?:collect|gather|scrape)\b.*\bdata\b|\bdata\b.*\b(?:collect|gather|scrape)\b", cmd):
+        return None
+    clean = re.sub(r"(?i)\b(?:arka\s+)?(?:auto\s+)?(?:collect|gather|scrape)\s+(?:data\s+)?", "", cmd).strip()
+    return "data collect " + (clean or "research topic")
+
+
 def route_platform_howto(cmd: str) -> str | None:
     try:
         from arka.routing.platform_howto import is_platform_howto_question
@@ -775,6 +970,200 @@ def route_agent_hub(cmd: str) -> str | None:
     return "agent_hub " + " ".join(shlex.quote(a) for a in argv)
 
 
+def route_sandbox(cmd: str) -> str | None:
+    clean = re.sub(r"\s+", " ", cmd.strip().lower())
+    if not clean:
+        return None
+    if re.search(r"\b(list|show)\b.*\bsandboxes?\b", clean):
+        return "sandbox list"
+    if re.search(r"\b(create|make|start)\b.*\bsandbox\b", clean):
+        match = re.search(r"sandbox\s+([a-z][a-z0-9_-]{0,63})\b", clean)
+        return "sandbox create " + (match.group(1) if match else "default")
+    match = re.search(r"\b(?:destroy|delete|remove)\s+sandbox\s+([a-z][a-z0-9_-]{0,63})\b", clean)
+    if match:
+        return "sandbox destroy " + match.group(1)
+    if "sandbox status" in clean or re.search(r"\bstatus\b.*\bsandbox\b", clean):
+        match = re.search(r"sandbox\s+([a-z][a-z0-9_-]{0,63})\b", clean)
+        return "sandbox status" + (" " + match.group(1) if match else "")
+    return None
+
+
+def route_text_edit(cmd: str) -> str | None:
+    clean = cmd.strip()
+    low = clean.lower()
+    if not re.search(r"\b(inspect|find|remove|delete|erase)\b.*\btext\b|\btext\b.*\b(remove|inspect|find)\b", low):
+        return None
+    match = re.search(r"\b(?:in|from)\s+([\w./~-]+)", clean, re.I)
+    quoted = re.search(r"[\"']([^\"']+)[\"']", clean)
+    if not match or not quoted:
+        return None
+    action = "inspect" if re.search(r"\b(inspect|find)\b", low) else "remove"
+    extra = " --all --yes" if action == "remove" and re.search(r"\b(all|every)\b", low) else ""
+    if action == "remove" and re.search(r"\b(remove|delete|erase)\b", low) and "--yes" not in low:
+        return f"text {action} {shlex.quote(match.group(1))} {shlex.quote(quoted.group(1))}"
+    return f"text {action} {shlex.quote(match.group(1))} {shlex.quote(quoted.group(1))}{extra}"
+
+
+def route_surgical_edit(cmd: str) -> str | None:
+    if not re.search(r"\b(?:surgical|keyword[- ]first|precise)\b.*\b(?:edit|change|replace)\b|\bedit\b.*\b(?:only|after)\b.*\b(?:search|find)\b", cmd, re.I):
+        return None
+    quoted = re.findall(r"[\"']([^\"']+)[\"']", cmd)
+    path = re.search(r"(?:in|from|file)\s+([\w./~-]+)", cmd, re.I)
+    if not path or len(quoted) < 2:
+        return None
+    return "surgical_edit edit " + shlex.quote(path.group(1)) + " " + shlex.quote(quoted[0]) + " " + shlex.quote(quoted[1])
+
+
+def route_ideate(cmd: str) -> str | None:
+    if not re.search(r"\b(?:ideate|idea|brainstorm)\b", cmd, re.I) or not re.search(r"\b(?:open[- ]source|github|trending|project|tool)\b", cmd, re.I):
+        return None
+    topic = re.sub(r"(?i)\b(?:arka\s+)?(?:ideate|brainstorm|ideas?)\b", "", cmd).strip() or "open source tools"
+    return "ideate " + shlex.quote(topic)
+
+
+def route_cool_build(cmd: str) -> str | None:
+    if not re.search(r"\b(?:build|make|create)\b.*\b(?:something cool|cool project|cool app|cool features?|great features?)\b", cmd, re.I):
+        return None
+    idea = re.sub(r"(?i)\b(?:build|make|create)\b", "", cmd).strip()
+    return "build_something_cool " + shlex.quote(idea or "a useful small app")
+
+
+def route_play(cmd: str) -> str | None:
+    if not re.search(r"\b(?:play|benchmark)\b.*\bchess\b|\bchess\b.*\b(?:play|benchmark|game)\b", cmd, re.I):
+        return None
+    moves = re.findall(r"\b[a-h][1-8][a-h][1-8]\b", cmd.lower())
+    return "play chess --moves " + " ".join(moves) if moves else "play chess --moves e2e4"
+
+
+def route_vision_evidence(cmd: str) -> str | None:
+    if not re.search(r"\b(?:ocr|text\s+in\s+image|image\s+evidence)\b", cmd, re.I) or not re.search(r"\b(?:vllm|model|compare|combine|answer)\b", cmd, re.I):
+        return None
+    image = re.search(r"[\w./~-]+\.(?:png|jpe?g|webp|gif)\b", cmd, re.I)
+    if not image:
+        return None
+    question = re.sub(r"(?i)\b(?:use|compare|ocr|vllm|model|image|evidence)\b", "", cmd).strip() or "What does this image show?"
+    return "vision_evidence " + shlex.quote(image.group(0)) + " " + shlex.quote(question)
+
+
+def route_url_app(cmd: str) -> str | None:
+    if not re.search(r"\b(?:analy[sz]e|review|audit|improve)\b.*\b(?:app|website|design|ui)\b", cmd, re.I):
+        return None
+    url = re.search(r"https?://[^\s'\"]+", cmd, re.I)
+    return "url_app " + shlex.quote(url.group(0)) if url else None
+
+
+def route_ui_copy(cmd: str) -> str | None:
+    clean = cmd.strip().lower()
+    if not re.search(r"\b(?:duplicate|same|repeated|unique)\b.*\b(?:button|chip|ui|label|phrase|text)\b|\b(?:button|chip)\b.*\b(?:same|duplicate|repeated)\b", clean):
+        return None
+    path = re.search(r"(?:in|under|at)\s+([\w./~-]+)", cmd, re.I)
+    return "ui_copy " + shlex.quote(path.group(1) if path else ".")
+
+
+def route_web_screenshot(cmd: str) -> str | None:
+    if not re.search(r"\b(?:screenshot|snapshot|capture)(?:s)?\b.*(?:\b(?:website|site|webpage|url)\b|https?://)|\b(?:website|site|webpage)\b.*\b(?:screenshot|snapshot|capture)\b", cmd, re.I):
+        return None
+    url = re.search(r"https?://[^\s'\"]+", cmd, re.I)
+    if not url:
+        return None
+    low = cmd.lower()
+    viewport = "all"
+    for name in ("pc", "tablet", "mobile"):
+        if name in low:
+            viewport = name
+            break
+    return f"web_screenshot {shlex.quote(url.group(0))} --viewport {viewport}"
+
+
+def route_spline(cmd: str) -> str | None:
+    if not re.search(r"\bspline\b", cmd, re.I) or not re.search(r"\b(?:guide|use|embed|integrat|3d|model|scene)\w*\b", cmd, re.I):
+        return None
+    low = cmd.lower()
+    topic = "web"
+    for key, words in {"react": ("react", "next"), "performance": ("performance", "speed", "fast"), "responsive": ("responsive", "tablet", "mobile"), "accessibility": ("accessibility", "accessible", "a11y")}.items():
+        if any(word in low for word in words):
+            topic = key
+            break
+    return "spline " + topic
+
+
+def route_multi_llm(cmd: str) -> str | None:
+    if not re.search(r"\b(?:multiple|several|different|many)\s+(?:llms?|models?)\b|\b(?:llm|model)\s+(?:variants?|alternatives?)\b", cmd, re.I):
+        return None
+    prompt = re.sub(r"(?i)\b(?:run|ask|use|generate)\b.*?\b(?:multiple|several|different|many)\s+(?:llms?|models?)\b", "", cmd).strip()
+    return "multi_llm " + shlex.quote(prompt or cmd)
+
+
+def route_agent_race(cmd: str) -> str | None:
+    if not re.search(r"(?i)\b(?:race|compete|competition)\b", cmd) or not re.search(r"(?i)\b(?:agents?|models?)\b", cmd):
+        return None
+    task = re.sub(r"(?i)\b(?:race|compete|competition)\b", "", cmd).strip()
+    return "race " + shlex.quote(task) + " --models " + shlex.quote("gemini/gemini-2.5-flash,groq/llama-3.3-70b-versatile")
+
+
+def route_app_check(cmd: str) -> str | None:
+    if not re.search(r"\b(?:build|test|validate|check|run)\b.*\b(?:app|project|repo|application)\b", cmd, re.I):
+        return None
+    run = " --run" if re.search(r"\b(?:build|test|run)\b", cmd, re.I) else ""
+    path = re.search(r"(?:in|at|under)\s+([\w./~-]+)", cmd, re.I)
+    return "app_check " + shlex.quote(path.group(1) if path else ".") + run
+
+
+def route_github_actions(cmd: str) -> str | None:
+    if not re.search(r"\b(?:github\s+actions?|actions?\s+workflow|gha)\b", cmd, re.I):
+        return None
+    path = re.search(r"(?:in|at|under)\s+([\w./~-]+)", cmd, re.I)
+    root = shlex.quote(path.group(1) if path and path.group(1).lower() not in {"this", "the", "current", "repo"} else ".")
+    if re.search(r"\b(?:status|failed|failure|production)\b", cmd, re.I):
+        action = "status"
+    else:
+        action = "new" if re.search(r"\b(?:create|add|scaffold|setup)\b", cmd, re.I) else "inspect"
+    return f"github_actions {action} {root}"
+
+
+def route_parallel(cmd: str) -> str | None:
+    if not re.search(r"\b(?:parallel|concurrently|at the same time)\b", cmd, re.I) or not re.search(r"\b(?:skills?|tasks?|commands?)\b", cmd, re.I):
+        return None
+    quoted = re.findall(r"[\"']([^\"']+)[\"']", cmd)
+    if len(quoted) < 2:
+        return None
+    return "parallel " + " ".join("--job " + shlex.quote(job) for job in quoted)
+
+
+def route_script_understanding(cmd: str) -> str | None:
+    if not re.search(r"\b(?:understand|learn|remember|explain|know)\b.*\b(?:script|program|tool|code)\b", cmd, re.I):
+        return None
+    path = re.search(r"(?:script|file|program)\s+([\w./~-]+)", cmd, re.I)
+    if not path:
+        return None
+    return "understand_script remember " + shlex.quote(path.group(1))
+
+
+def route_super_replica(cmd: str) -> str | None:
+    if not re.search(r"\b(?:super\s+replica|repo(?:sitory)?\s+(?:patterns?|advisor|architecture|conventions?)|startup\s+architecture|analy[sz]e\s+(?:this\s+)?repo)\b", cmd, re.I):
+        return None
+    path = re.search(r"(?:repo|repository|project)\s+([\w./~-]+)", cmd, re.I)
+    root = path.group(1) if path and path.group(1).lower() not in {"this", "the", "current", "for"} else "."
+    return "super_replica " + shlex.quote(root)
+
+
+def route_pdf_interactive(cmd: str) -> str | None:
+    if not re.search(r"\b(?:pdf|document)\b.*\b(?:interactive|website|webpage|site)\b|\binteractive\b.*\bpdf\b", cmd, re.I):
+        return None
+    path = re.search(r"[\w./~-]+\.pdf\b", cmd, re.I)
+    if not path:
+        return None
+    suffix = " --ultra" if re.search(r"\b(?:ultra|rich|immersive|3d|animated)\b", cmd, re.I) else ""
+    return "pdf_interactive " + shlex.quote(path.group(0)) + suffix
+
+
+def route_media_quiz(cmd: str) -> str | None:
+    if not re.search(r"\b(?:media|image|video|audio|photo|document)\b.*\b(?:quiz|questionnaire|quiz\s+website)\b|\bquiz(?:\s+website)?\b.*\b(?:media|image|video|audio|from)\b", cmd, re.I):
+        return None
+    path = re.search(r"[\w./~-]+\.(?:png|jpe?g|webp|gif|mp3|wav|ogg|mp4|webm|mov|pdf)\b", cmd, re.I)
+    return "media_quiz " + shlex.quote(path.group(0)) if path else None
+
+
 def route_dev_tools(cmd: str) -> str | None:
     try:
         from arka.agent.dev_tools import route_command
@@ -810,6 +1199,32 @@ def route_urlkit(cmd: str) -> str | None:
     return None
 
 
+def route_move_file(cmd: str) -> str | None:
+    if not re.search(r"(?i)\b(?:move|relocate|rename)\b.*\b(?:file|script|module|\.py|\.js|\.ts|\.tsx)\b", cmd):
+        return None
+    match = re.search(r"(?i)\b(?:move|relocate|rename)\s+(?:the\s+)?(?:file\s+)?['\"]?([^\s'\"]+)['\"]?\s+(?:to|as|into)\s+['\"]?([^\s'\"]+)['\"]?", cmd)
+    candidates = [item for item in match.groups()] if match else []
+    if len(candidates) < 2:
+        return None
+    suffix = " --update-refs" if re.search(r"(?i)\b(?:update|fix)\s+(?:imports?|references?|links?)\b", cmd) else ""
+    return "move_file " + shlex.quote(candidates[-2]) + " " + shlex.quote(candidates[-1]) + suffix
+
+
+def route_hackathon(cmd: str) -> str | None:
+    clean = cmd.strip()
+    if not re.search(r"(?i)\b(?:hackathon|hackathons)\b", clean):
+        return None
+    if re.search(r"(?i)\b(?:find|discover|list|give|show)\b", clean):
+        topic = re.sub(r"(?i).*?\b(?:hackathon|hackathons)\b", "", clean).strip(" :-") or "technology"
+        return "hackathon find " + topic
+    topic = re.sub(r"(?i).*?\b(?:hackathon|hackathons)\b", "", clean).strip(" :-")
+    if not topic:
+        topic = re.sub(r"(?i)\b(?:hackathon|hackathons)\b.*$", "", clean).strip(" :-")
+        topic = re.sub(r"(?i)^(?:participate|join|enter)\s+(?:in\s+)?(?:a\s+)?", "", topic).strip()
+    topic = topic or "technology"
+    return "hackathon plan " + topic
+
+
 def route_lint_project(cmd: str) -> str | None:
     try:
         from arka.agent.lint_project import route_command
@@ -835,13 +1250,126 @@ def route_help(cmd: str) -> str | None:
     return None
 
 
+def route_sessions(cmd: str) -> str | None:
+    """Route conversational session-management requests."""
+    clean = re.sub(r"\s+", " ", cmd.strip().lower())
+    if clean in {"session", "sessions", "session status", "show session status"}:
+        return "session status"
+    if re.search(r"\b(list|show)\b.*\bsessions?\b", clean) or clean in {
+        "my sessions",
+        "list my sessions",
+    }:
+        return "session list"
+    if re.search(r"\b(clear|reset|forget)\b.*\bsession\b", clean):
+        return "session reset cli default"
+    if re.search(r"\b(resume|continue)\b.*\bsession\b", clean):
+        return "session resume cli default"
+    return None
+
+
+def route_hybrid_models(cmd: str) -> str | None:
+    """Route requests to combine local/offline and hosted models."""
+    clean = " ".join((cmd or "").split()).lower()
+    if re.search(r"(?i)\b(?:auto[- ]?configure|autoconfigure|setup)\b.*\b(?:popular\s+)?mcp\b|\bmcp\b.*\b(?:catalog|available\s+servers)\b", clean):
+        return "mcp-auto list" if re.search(r"(?i)\b(?:list|show|available|catalog)\b", clean) else "mcp-auto configure"
+    match = re.search(r"(?i)\b(?:use|run|create)\b.*\b(?:coding|feature|bugfix|frontend|api)\s+workflow\b", clean)
+    if match:
+        kind = next((item for item in ("feature", "bugfix", "frontend", "api") if item in clean), "feature")
+        return "coding-workflow " + kind
+    if re.search(r"(?i)\b(?:copy|fill|sync|project|populate)\b.*\b(?:arka|our)\s+\.env\b|\b\.env\b.*\b(?:local\s+llm|project)\b", clean):
+        return "env-bridge ."
+    if re.search(r"(?i)\b(?:flashattention|flash\s+attention|tensor\s+split|row[- ]level|multi[- ]gpu|ds4|co[- ]engine)\b", clean):
+        return "backend capabilities"
+    if re.search(r"(?i)\b(?:speculative|mtp|draft\s+model)\b.*\b(?:decode|token|inference|configure|enable|use)\b", clean):
+        return "speculative vllm"
+    if re.search(r"(?i)\b(?:grounded|anti[- ]hallucination|no hallucinat)\b", clean):
+        return "grounding"
+    if re.search(r"(?i)\b(?:quantiz|quantis|compress)\w*\b.*\b(?:model|llm|gguf)\b|\bgguf\b.*\b(?:q4|q5|q8|quant)\b", clean):
+        return "quantize " + cmd
+    if re.search(r"(?i)\b(?:cost|spend|latency|performance|token)\b.*\b(?:guardrail|budget|limit|monitor|track)\b", clean):
+        return "guardrails status"
+    if re.search(r"\b(?:run|use|execute)\b.*\b(?:only\s+)?local\s+(?:llm|model)s?\b|\brun-only-local-llm\b", clean):
+        return "local-llm " + cmd
+    if not re.search(r"\b(?:local|offline)\b", clean) or not re.search(r"\b(?:hosted|cloud|online)\b", clean):
+        return None
+    if re.search(r"\b(?:status|available|which|list)\b", clean):
+        return "hybrid status"
+    if re.search(r"\b(?:parallel|together|both|ensemble)\b", clean):
+        return "hybrid run --policy parallel " + cmd
+    if re.search(r"\b(?:hosted|cloud).*\b(?:first|priority)\b", clean):
+        return "hybrid run --policy hosted-first " + cmd
+    return "hybrid status"
+
+
+def route_integration_setup(cmd: str) -> str | None:
+    """Route setup/status requests for the unified integration wizard."""
+    clean = " ".join((cmd or "").split()).lower()
+    if not re.search(r"\b(?:integration|integrations|provider|api|connect|configure|setup|set\s+up)\b", clean):
+        return None
+    try:
+        from arka.agent.integration_setup import ALIASES, PROVIDERS
+
+        provider_names = sorted({*PROVIDERS, *ALIASES}, key=len, reverse=True)
+    except ImportError:
+        provider_names = []
+    providers = "|".join(re.escape(name) for name in provider_names)
+    if not providers:
+        return None
+    match = re.search(rf"\b({providers})\b", clean)
+    if re.search(r"\b(?:list|show|available)\b.*\bintegrations?\b", clean):
+        return "integration list"
+    if re.search(r"\b(?:doctor|diagnose|check)\b.*\bintegrations?\b", clean):
+        return "integration doctor"
+    if not match:
+        return None
+    provider = match.group(1)
+    if re.search(r"\b(?:remove|delete|clear|forget)\b", clean):
+        return f"integration remove {provider}"
+    if re.search(r"\b(?:setup|set\s+up|configure|connect|enable|add)\b", clean):
+        return f"integration setup {provider}"
+    return None
+
+
 def route_offline_extras(cmd: str) -> str | None:
     """Try supplemental NL routes not always available via fish bridge."""
     for fn in (
+        route_hybrid_models,
         route_help,
+        route_sessions,
+        route_model_host_setup,
+        route_free_models,
+        route_integration_setup,
+        route_sandbox,
+        route_text_edit,
+        route_move_file,
+        route_surgical_edit,
+        route_ideate,
+        route_cool_build,
+        route_hackathon,
+        route_play,
+        route_vision_evidence,
+        route_url_app,
+        route_ui_copy,
+        route_web_screenshot,
+        route_app_automation,
+        route_spline,
+        route_multi_llm,
+        route_agent_race,
+        # Specific intent must precede the broad "build/check this app" route.
+        route_frontend_loop,
+        route_design_from_screenshot,
+        route_repo_health,
+        route_observability,
+        route_telemetry_connector,
+        route_app_check,
+        route_github_actions,
+        route_parallel,
+        route_script_understanding,
+        route_super_replica,
+        route_pdf_interactive,
+        route_media_quiz,
         route_self_improve,
         route_mode,
-        route_design_from_screenshot,
         route_urlkit,
         route_lint_project,
         route_code_project,
@@ -854,17 +1382,37 @@ def route_offline_extras(cmd: str) -> str | None:
         route_competitions,
         route_bookmarks,
         route_pr_check,
-        route_repo_health,
         route_repo_context,
         route_repo_map,
+        route_repo_graph,
+        route_workspace,
+        route_spreadsheet,
+        route_teammate_review,
+        route_society,
         route_generate_data,
+        route_data_collect,
         route_view_data,
         route_describe_screen,
         route_describe_video,
         route_describe_image,
+        route_background_remove,
+        route_iterate,
+        route_ultra_fast,
+        route_env_setup,
+        route_research_math,
+        route_prompt_optimize,
+        route_deploy,
+        route_geo_seo,
+        route_templates,
+        route_blocks,
+        route_optimize,
+        route_design_flow,
+        route_repo_reverse,
+        route_browser_check,
         route_currency_convert,
         route_timezone_convert,
         route_convert,
+        route_media_transform,
         route_data_ask,
         route_docker_status,
         route_daily_brief,
@@ -893,6 +1441,7 @@ def route_offline_extras(cmd: str) -> str | None:
         route_quiz_practice,
         route_council,
         route_compose_3d,
+        route_model_to_image,
         route_three_d,
         route_chart,
         route_drawing,

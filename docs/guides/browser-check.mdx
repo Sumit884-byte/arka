@@ -1,0 +1,44 @@
+---
+title: "Browser validation"
+description: "Inspect rendered web changes with a bounded Playwright smoke check."
+---
+
+```bash
+arka browser_check http://127.0.0.1:3000 --json
+arka "check the frontend in a browser"
+```
+
+Arka loads the page headlessly, waits for network idle, captures a full-page
+screenshot, records page errors, and reports the HTTP status and title. Install
+the optional browser runtime with:
+
+```bash
+pip install playwright
+playwright install chromium
+
+## Declarative cross-platform app tests
+
+Arka can run the same browser workflow on macOS, Linux, and Windows:
+
+```bash
+arka automate http://localhost:3000 --steps '[{"action":"click","selector":"button"},{"action":"assert_text","selector":"body","text":"Done"}]' --json
+```
+
+Supported actions are `goto`, `click`, `fill`, `press`, `wait`, `assert_text`,
+and `screenshot`. Screenshots are temporary unless `--output` is supplied.
+Use `--headed` while developing a workflow; review the generated steps before
+running them against production applications.
+
+For native desktop apps, use the optional PyAutoGUI backend:
+
+```bash
+arka automate unused --backend desktop --steps '[{"action":"click","x":400,"y":300},{"action":"type","text":"hello"},{"action":"screenshot"}]'
+```
+
+Desktop steps support `click`, `type`, `hotkey`, `press`, `wait`, and
+`screenshot`. They never launch an app or perform shell commands implicitly;
+launch the target app separately and keep coordinates specific to the test
+environment.
+```
+
+This is validation only; it does not edit code or retry builds automatically.

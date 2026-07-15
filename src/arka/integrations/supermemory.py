@@ -12,6 +12,7 @@ import time
 import urllib.error
 import urllib.request
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 try:
@@ -40,7 +41,7 @@ def _mode() -> str:
 
 
 def _api_key() -> str:
-    return (os.environ.get("SUPERMEMORY_API_KEY") or os.environ.get("SUPERMEMORY_API_KEY") or "").strip()
+    return (os.environ.get("SUPERMEMORY_API_KEY") or os.environ.get("SUPERMEMORY_KEY") or "").strip()
 
 
 def _container_tag() -> str:
@@ -57,6 +58,11 @@ def _should_try_api() -> bool:
     if mode == "local":
         return False
     return bool(_api_key())
+
+
+def code_storage_enabled() -> bool:
+    """Code-aware storage defaults on; set SUPERMEMORY_CODE=0 to opt out."""
+    return (os.environ.get("SUPERMEMORY_CODE", "1").strip().lower() not in {"0", "false", "no", "off"})
 
 
 def load_json(path, default: object) -> object:
@@ -173,6 +179,11 @@ def _local_remember(
     items = load_json(MEMORY_FILE, [])
     if not isinstance(items, list):
         items = []
+    normalized = text.strip().casefold()
+    # Avoid growing local/cloud memory with identical retries from MCP clients.
+    for existing in items:
+        if str(existing.get("text") or "").strip().casefold() == normalized:
+            return str(existing.get("id") or "existing")
     tier = (trust_tier or "global").strip().lower()
     entry = {
         "id": hashlib.sha256(f"{text}{time.time()}".encode()).hexdigest()[:12],
@@ -207,6 +218,10 @@ def _local_recall(query: str, *, limit: int = 5) -> list[str]:
                 score += 2.0
             if word in tag_s:
                 score += 1.5
+        if score > 0:
+            # Prefer recent memories slightly, without overwhelming relevance.
+            age_days = max(0.0, (time.time() - float(row.get("ts") or 0)) / 86400)
+            score += 1.0 / (1.0 + age_days / 30.0)
         if score > 0:
             scored.append((score, row.get("text") or ""))
     scored.sort(key=lambda x: x[0], reverse=True)
@@ -416,6 +431,30 @@ def _remember_impl(
     return result
 
 
+def remember_code(path: str, *, chunk_lines: int = 120) -> dict[str, Any]:
+    """Store code chunks in Supermemory only when explicitly requested."""
+    target = Path(path).expanduser().resolve()
+    if not target.is_file():
+        raise ValueError(f"code file not found: {target}")
+    content = target.read_text(encoding="utf-8")
+    lines = content.splitlines()
+    if not lines:
+        return {"chunks": 0, "path": str(target)}
+    language = target.suffix.lstrip(".") or "text"
+    stored = 0
+    for start in range(0, len(lines), max(20, chunk_lines)):
+        end = min(len(lines), start + max(20, chunk_lines))
+        chunk = "\n".join(lines[start:end])
+        remember(
+            f"Code: {target}\nLines {start + 1}-{end}\n```{language}\n{chunk}\n```",
+            tags=["code", language, str(target)],
+            provenance={"kind": "code", "path": str(target), "start_line": start + 1, "end_line": end},
+            trust_tier="project",
+        )
+        stored += 1
+    return {"chunks": stored, "path": str(target), "language": language}
+
+
 def recall(query: str, *, limit: int = 5) -> str:
     """Recall memories — API first, local keyword fallback."""
     query = query.strip()
@@ -460,8 +499,6 @@ def _recall_impl(query: str, *, limit: int = 5) -> tuple[str, int]:
     if _should_try_api():
         try:
             hits = _api_search(query, limit=limit) if query else []
-            if not hits and query:
-                hits = _api_search(query, limit=limit)
             if hits:
                 for line in hits:
                     print(f"• {line}")
@@ -658,6 +695,7 @@ def status() -> None:
     print(f"Memory mode:     {mode}")
     print(f"Container tag:   {tag}")
     print(f"API key:         {'set' if key else 'not set'}")
+    print(f"Code RAG:        {'enabled' if code_storage_enabled() else 'disabled'}")
     print(f"Local cache:     {MEMORY_FILE} ({count} entries)")
     if mode == "auto":
         print("Behavior:        Supermemory API when key works, else local cache")
@@ -687,13 +725,17 @@ def remember_print(
         print(msg)
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Arka Supermemory — cloud + local fallback")
     sub = parser.add_subparsers(dest="cmd")
 
     p = sub.add_parser("remember", help="Store a memory")
     p.add_argument("text")
     p.add_argument("--tag", action="append", default=[])
+
+    p = sub.add_parser("remember-code", help="Explicitly store a code file as RAG chunks")
+    p.add_argument("path")
+    p.add_argument("--chunk-lines", type=int, default=120)
 
     p = sub.add_parser("recall", help="Search memories")
     p.add_argument("query", nargs="?", default="")
@@ -707,9 +749,15 @@ def main() -> int:
     p = sub.add_parser("forget", help="Remove from local cache")
     p.add_argument("ref")
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if args.cmd == "remember":
+        if code_storage_enabled() and os.path.isfile(args.text) and Path(args.text).suffix.lower() in {".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".rs", ".java", ".rb", ".php"}:
+            print(json.dumps(remember_code(args.text), indent=2))
+            return 0
         remember_print(args.text, tags=args.tag or None)
+        return 0
+    if args.cmd == "remember-code":
+        print(json.dumps(remember_code(args.path, chunk_lines=args.chunk_lines), indent=2))
         return 0
     if args.cmd == "recall":
         recall(args.query)

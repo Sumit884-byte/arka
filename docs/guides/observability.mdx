@@ -14,7 +14,15 @@ python3 bin/arka_signoz.py status
 python3 bin/arka_signoz.py setup -y
 python3 bin/arka_signoz.py demo
 python3 arka_llm.py trace-status
+arka observability doctor
 ```
+
+`arka observability doctor` is a read-only local check. It reports whether
+OpenTelemetry is enabled and configured, but does not claim that SigNoz has
+received data. After enabling telemetry, run `arka signoz demo` and verify
+`service.name = arka` in the SigNoz traces view. If the doctor reports a
+configured exporter but no traces appear, the problem is ingestion or the
+SigNoz endpoint—not Arka's route instrumentation.
 
 ## Configuration
 
@@ -33,6 +41,11 @@ OTEL_SERVICE_NAME=arka
 - MCP client calls
 - Supermemory operations
 
+Every dispatched skill records a bounded skill name, duration, exit status, and
+error state. Secrets and full user prompts are not added to these attributes.
+This makes failures in long-running loops and MCP-backed skills visible without
+turning telemetry into a copy of the user's code or credentials.
+
 ## SigNoz MCP \+ Cursor
 
 ```bash
@@ -45,3 +58,17 @@ Hackathon assets (dashboards, alerts, demos) live in `hackathon/signoz/` in the 
 <Note>
   Both `OTEL_TRACES_ENABLED=1` and `SIGNOZ_ENDPOINT` must be set for traces to export.
 </Note>
+
+## Production-to-codebase connectors
+
+Export JSON from SigNoz, Sentry, Datadog, or New Relic, then correlate stack
+paths with the current repository:
+
+```bash
+arka telemetry-connect ./production-events.json --root .
+arka telemetry-connect ./production-events.json --json
+```
+
+This is read-only: it reports event counts, providers, unmatched events, and
+frequent file/line hotspots without uploading exports, reading provider
+credentials, or editing code.

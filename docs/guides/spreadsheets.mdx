@@ -1,0 +1,14 @@
+---
+title: "Spreadsheet creation"
+description: "Generate CSV and Excel workbooks from Arka."
+---
+
+Create a workbook from a preset or schema:
+
+```bash
+arka spreadsheet users --count 50 --output users.xlsx
+arka spreadsheet sales --count 100 --output sales.xlsx
+```
+
+Arka uses the existing data generator, supports CSV/TSV/JSON/XLSX output,
+and refuses unsafe overwrites according to the generator's output rules.

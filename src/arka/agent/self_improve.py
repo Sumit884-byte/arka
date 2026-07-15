@@ -21,6 +21,11 @@ DIAG_TIMEOUT = int(os.environ.get("SELF_IMPROVE_DIAG_TIMEOUT", "120"))
 GIT_LOG_LIMIT = int(os.environ.get("SELF_IMPROVE_GIT_LOG_LIMIT", "15"))
 MEMORY_MAX_ATTEMPTS = 100
 
+
+def _run_git(args: list[str], root: Path) -> tuple[int, str, str]:
+    proc = subprocess.run(["git", *args], cwd=root, capture_output=True, text=True, check=False)
+    return proc.returncode, proc.stdout or "", proc.stderr or ""
+
 _BLOCKED_GIT_RE = re.compile(
     r"(?i)\bgit\s+(?:commit|push|reset\s+--hard|clean\s+-[fdx]|checkout\s+--\s+\.|rebase|merge|cherry-pick|stash\s+(?:drop|clear))\b"
 )
@@ -37,6 +42,7 @@ _SYSTEM_EXTRA = """SELF-IMPROVEMENT MODE — you are improving the Arka agent co
 - Read llm.txt (status read) before editing unfamiliar areas.
 - Only edit files inside the active code project root.
 - Prefer minimal, focused diffs; match existing style and conventions.
+- Before implementing, inspect and reuse preexisting Arka skills, MCP tools, and integration libraries; integrate them instead of recreating equivalent code.
 - After code changes run: pytest -q --tb=short (or targeted test file).
 - After significant edits run: arka repo index
 - NEVER run git commit, git push, git reset --hard, or other destructive git ops.
@@ -907,6 +913,7 @@ def run_self_improve(
     auto_init: bool = True,
     yes: bool = False,
     apply: bool = False,
+    fast: bool = False,
 ) -> int:
     """Analyze → plan → (optional --apply) goal agent execute loop."""
     from arka.core.output import debug_msg, summarize_pytest, user_msg
@@ -925,6 +932,16 @@ def run_self_improve(
     os.chdir(root)
     target, embedded_apply = _split_improve_flags_from_text(_normalize_target(target))
     apply = apply or embedded_apply
+    if fast:
+        from arka.agent.dev_tools import run_ci
+        ci = run_ci(root)
+        docs_ok, docs_note = _docs_check(root)
+        outcome = "planned" if ci["ok"] else "failed"
+        print(f"Self-improve fast: {'planned' if ci['ok'] else 'failed'}")
+        print(f"CI: {'passed' if ci['ok'] else 'failed'} ({len(ci['results'])} gates)")
+        print(f"llm.txt: {'fresh' if docs_ok else 'stale/missing'}")
+        record_attempt(ImprovementPlan(focus=target or "fast diagnostics", proposal="fast diagnostics"), outcome=outcome, notes=docs_note, root=root)
+        return 0 if ci["ok"] else 1
     debug_msg(f"Arka self-improve — {root}")
     if target:
         debug_msg(f"  target: {target}")
@@ -967,6 +984,7 @@ def run_self_improve(
     for round_num in range(1, max_rounds + 1):
         debug_msg(f"\n── Self-improve round {round_num}/{max_rounds} ──")
         user_msg(f"Round {round_num}/{max_rounds}…")
+        _, before_stat, _ = _run_git(["diff", "--stat"], root)
         context = _read_repo_context(root)
         diag = run_diagnostics(root)
         goal = build_goal(target, context=context, diag=diag, root=root, plan=plan)
@@ -981,10 +999,16 @@ def run_self_improve(
         _sync_changelog(root)
 
         diag_after = run_diagnostics(root)
-        if diag_after.passed:
-            user_msg("✓ Tests passed after round.")
+        _, after_stat, _ = _run_git(["diff", "--stat"], root)
+        changed = bool(after_stat.strip()) and after_stat.strip() != before_stat.strip()
+        if diag_after.passed and changed:
+            user_msg(f"✓ applied changes after round {round_num}")
             record_attempt(plan, outcome="passed", root=root)
             return 0 if last_rc == 0 else last_rc
+        if diag_after.passed and not changed:
+            user_msg("○ no code changes")
+            record_attempt(plan, outcome="no_changes", root=root)
+            return 1
 
         if last_rc != 0:
             user_msg(f"⚠ Goal agent exited {last_rc} — continuing if rounds remain.")
@@ -1040,8 +1064,12 @@ def route_command(text: str) -> str:
             target = stripped
             break
 
+    target = re.sub(r"(?i)\b(?:fast|quick)\b", "", target).strip()
     target, apply = _split_improve_flags_from_text(_normalize_target(target))
+    target = re.sub(r"(?i)\b(?:fast|quick)\b", "", target).strip()
     line = "self_improve"
+    if re.search(r"(?i)\b(?:fast|quick)\b", raw):
+        line += " --fast"
     if target:
         line += f" {target}"
     if apply:
@@ -1062,6 +1090,7 @@ def main(argv: list[str] | None = None) -> int:
     p_imp = sub.add_parser("improve", help="Analyze and plan improvements (--apply to execute)")
     p_imp.add_argument("target", nargs="*", help="Optional improvement focus")
     p_imp.add_argument("--apply", action="store_true", help="Run goal agent to implement the plan")
+    p_imp.add_argument("--fast", action="store_true", help="Run compact diagnostics without LLM planning")
     p_imp.add_argument("-n", "--max-rounds", type=int, default=DEFAULT_MAX_ROUNDS)
     p_imp.add_argument("-s", "--max-steps", type=int, default=DEFAULT_MAX_STEPS)
     p_imp.add_argument("-y", "--yes", action="store_true", help="Auto-approve risky actions")
@@ -1096,6 +1125,7 @@ def main(argv: list[str] | None = None) -> int:
             auto_init=auto_init,
             yes=yes,
             apply=apply,
+            fast=args.fast,
         )
 
     if args.cmd == "route":

@@ -66,6 +66,8 @@ NL_CASES: tuple[tuple[str, str], ...] = (
     ("build this project from screenshot.png", "design_from_screenshot"),
     ("turn this screenshot into a web app", "design_from_screenshot"),
     ("recreate the UI from screenshot", "design_from_screenshot"),
+    ("review this frontend and retry 3 loops", "frontend_loop"),
+    ("inspect this UI screenshot and rebuild for 2 loops", "frontend_loop"),
     ("repair broken links in this file", "urlkit"),
     ("lint this repo", "lint_project"),
     ("lint this project --full", "lint_project"),

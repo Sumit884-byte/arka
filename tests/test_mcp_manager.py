@@ -70,6 +70,8 @@ def test_nl_to_argv_routes():
     assert nl_to_argv("list arka mcp tools") == ["self-tools"]
     assert nl_to_argv("show arka self mcp tools") == ["self-tools"]
     assert nl_to_argv("hello world") is None
+    assert nl_to_argv("invoke tool search on github") == ["call", "github", "search"]
+    assert nl_to_argv("what MCP tools are available from signoz") == ["tools", "signoz"]
 
 
 def test_stdio_client_rpc_mock():

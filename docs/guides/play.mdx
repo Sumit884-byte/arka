@@ -1,0 +1,12 @@
+# Arka Play benchmarks
+
+Use symbolic-rule games to benchmark local model outputs:
+
+```bash
+pip install python-chess
+arka play chess --moves e2e4 e7e5 g1f3 b8c6 --json
+```
+
+Arka validates every move against the chess rules, reports illegal moves and
+accuracy, and returns the final FEN. The same harness can be extended with
+other deterministic games; an illegal model action never changes the board.

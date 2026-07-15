@@ -1,0 +1,14 @@
+---
+title: "In-engine speculative decoding"
+description: "Configure draft models for faster local generation."
+---
+
+```bash
+arka speculative vllm --draft-model qwen3:1.7b
+arka speculative vllm --draft-model qwen3:1.7b --num-draft-tokens 6 --apply
+```
+
+Arka stores draft settings without claiming that every runtime supports them.
+The active vLLM, Exo, Ollama, or MLX build must expose speculative-decoding
+options when launched. Verify generated output quality and latency after
+enabling it.

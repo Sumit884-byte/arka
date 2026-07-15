@@ -1,0 +1,14 @@
+---
+title: ".env setup"
+description: "Generate safe project environment templates with Arka."
+---
+
+```bash
+arka env_setup
+arka "create a .env for this project"
+```
+
+Arka scans local source files for referenced environment variable names and
+creates missing entries as blank or `your-secret-here` placeholders. It never
+invents, fetches, or overwrites credential values. Existing `.env` values are
+preserved; use `--force` only when replacing an empty file.

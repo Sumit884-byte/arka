@@ -1,0 +1,84 @@
+{
+  "exported_at": "2026-07-13T15:46:20+00:00",
+  "facts": [
+    {
+      "text": "Test memory from arka",
+      "when": "2026-06-29T10:44:10",
+      "trust_tier": "global",
+      "source": "local"
+    },
+    {
+      "text": "\"my name is sumit i like coding\"",
+      "when": "2026-07-02T14:36:34",
+      "trust_tier": "global",
+      "source": "local"
+    },
+    {
+      "text": "Promotable fact",
+      "when": "2026-07-13T21:04:15",
+      "trust_tier": "global",
+      "provenance": {
+        "team": "research",
+        "workflow": "",
+        "step": "",
+        "role": "",
+        "member_id": "",
+        "run_id": "",
+        "mcp_servers": [],
+        "source": "promoted",
+        "trust_tier": "global",
+        "when": "2026-07-13T15:34:15+00:00"
+      },
+      "source": "local"
+    },
+    {
+      "text": "Promotable fact",
+      "when": "2026-07-13T21:09:26",
+      "trust_tier": "global",
+      "provenance": {
+        "team": "research",
+        "workflow": "",
+        "step": "",
+        "role": "",
+        "member_id": "",
+        "run_id": "",
+        "mcp_servers": [],
+        "source": "promoted",
+        "trust_tier": "global",
+        "when": "2026-07-13T15:39:26+00:00"
+      },
+      "source": "local"
+    }
+  ],
+  "facts_status": {
+    "local_count": 4,
+    "backend": "auto",
+    "api_configured": false
+  },
+  "notes_status": {
+    "enabled": true,
+    "root": "/Users/sumitmishra/dev/arka/agent-memory",
+    "long_term_lines": 0,
+    "daily_files": 0,
+    "max_longterm_lines": 100
+  },
+  "sessions": [
+    {
+      "key": "cli:default",
+      "channel": "cli",
+      "chat_id": "default",
+      "title": "",
+      "turns": 40,
+      "last_activity": 1783953504.21469
+    }
+  ],
+  "scratchpad_preview": [],
+  "scope": {
+    "trust_max": "run",
+    "hub_scope": null,
+    "scratchpad_count": 0,
+    "scratchpad_path": "/Users/sumitmishra/dev/arka/memory-scratchpad/index.jsonl",
+    "default_ttl_hours": 72
+  },
+  "unified_memory": true
+}

@@ -1,0 +1,16 @@
+---
+title: "Use every Arka skill through MCP"
+description: "Discover and invoke dispatch-backed Arka capabilities from MCP clients."
+---
+
+Arka exposes two generic MCP entry points:
+
+- `arka_capabilities` lists the current MCP tools and dispatch-backed skills.
+- `arka_skill` invokes any dispatch command with a skill name and arguments.
+- `arka_route` accepts natural language and routes it through Arka's complete
+  symbolic/fallback router.
+
+This means newly added skills—including data collection, media transforms,
+agent races, reusable blocks, ultra-fast development, and future skills—do not
+need a separate MCP wrapper. Execution still passes through Arka's normal mode,
+security, and write-action gates.

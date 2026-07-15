@@ -1,0 +1,26 @@
+---
+title: "Sessions"
+description: "Persist and resume Arka conversation sessions from the CLI."
+---
+
+Arka stores channel conversations locally so a follow-up can keep its context.
+The default CLI session is `cli/default`; webhook and messaging integrations
+use their channel and chat id as the session key.
+
+```bash
+arka session status
+arka session list
+arka session resume cli default
+arka session context cli default
+arka session reset cli default
+```
+
+The same actions accept natural language:
+
+```bash
+arka "list my sessions"
+arka "resume my session"
+```
+
+Session files live under `~/.config/arka/message-sessions/` (or the directory
+selected by `ARKA_CONFIG_DIR`). Use `MESSAGE_SESSIONS=0` to disable persistence.

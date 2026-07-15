@@ -33,10 +33,23 @@ arka scan what checks are available
 | `arka ci` | Run the repo-specific CI mirror (`ruff` + targeted `pytest`) |
 | `arka ci --full` | Add the full pytest suite after the fast CI mirror |
 | `arka ci --fix` | Hand the first failed gate to the goal agent |
+| `arka ci --json` | Emit machine-readable gate results for scripts and dashboards |
+| `arka ci --changed` | Fast gate for changed Python files and focused tests |
 | `arka review --staged` | Review staged changes against project rules |
+| `arka review --staged --fail-on-hints` | Use review warnings as a CI/pre-commit gate |
+| `arka review --json` | Emit structured report and warning fields |
 | `arka route audit` | Report symbolic / fish / test parity gaps |
 | `arka lint this repo` | Run the detected lint tools for any language in the project |
 | `arka skill new <name> --template dev` | Scaffold a new plugin skill |
+| `arka security` | Scan tracked files for likely secrets and unsafe patterns |
+| `arka hooks install` | Install incremental CI/review pre-commit checks |
+| `arka hooks status` | Inspect Arka's pre-commit hook |
+| `arka hooks restore` | Restore the pre-Arka hook backup |
+| `arka dev-doctor` | Preflight repository, workflow, and developer-tool setup |
+
+Arka runs Ruff and Pytest through the active Python interpreter, so the local
+gate uses the same virtual environment as the `arka` installation. Use
+`--full` before a release or merge to run the complete test suite.
 
 ## Detected tools
 
@@ -49,3 +62,74 @@ Arka looks for:
 - **Make:** `make test` when a `Makefile` defines a `test` target
 
 Runs from the current git root when inside a repository, otherwise the current directory.
+
+For integrations that normally take manual setup, use the unified wizard:
+
+```bash
+arka integration status
+arka integration list
+arka integration status --provider sentry
+arka integration doctor --provider github
+arka integration status --json
+arka integration remove sentry --yes
+arka integration setup context7 --key YOUR_KEY
+arka integration setup signoz --key YOUR_KEY
+arka integration setup openrouter --key YOUR_KEY
+arka integration setup railway --key YOUR_TOKEN
+arka integration doctor
+```
+
+It also supports model providers (OpenRouter, OpenAI, Anthropic), deployment
+providers (Railway, Vercel), and media/memory tools. `doctor` reports missing
+optional integrations without printing credential values.
+
+Productivity tools are supported too:
+
+```bash
+arka integration setup notion
+arka integration setup jira
+arka integration setup teams
+arka integration setup supabase
+arka integration setup firebase
+arka integration setup stripe
+arka integration setup netlify
+arka integration setup render
+arka integration setup fly
+```
+It also reports missing optional CLIs (`gh`, `railway`, and `vercel`) when those
+integrations are selected.
+
+Repository and collaboration credentials use the same flow:
+
+```bash
+arka integration setup github
+arka integration setup slack
+arka integration setup google
+arka connect gh --key YOUR_TOKEN
+printf '%s' "$LINEAR_API_KEY" | arka integration setup linear --key-stdin
+```
+
+You can say `fix GitHub issues in my code`. Arka routes this to the repo-scoped
+coding agent, which inspects issues through `gh` when authenticated, reproduces
+the problem, edits locally, and runs focused tests. Authenticate with
+`gh auth login` first; Arka will not claim an issue is fixed without access or
+verification.
+
+For integrations that normally take manual setup, use the search provider
+wizard. It stores keys in Arka's user `.env` and supports Serper, Tavily, and
+Brave Search:
+
+```bash
+arka search setup serper --key YOUR_KEY
+arka search status
+```
+
+Omit `--key` for an interactive hidden prompt; keep `--key` for CI and scripts:
+
+```bash
+arka integration setup serper
+arka integration setup all
+```
+
+These commands also accept natural language, for example: `set up Serper`,
+`show available integrations`, or `check my Sentry integration`.

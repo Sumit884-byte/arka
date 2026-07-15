@@ -1,0 +1,28 @@
+---
+title: "Project structure improvement prompt"
+description: "A safe prompt for improving any repository's structure."
+---
+
+Use this with Arka:
+
+```text
+Inspect this repository before changing anything. Build a repo graph and identify
+the highest-impact structural problems using dependency centrality, tests,
+coupling, duplicate logic, and feature boundaries. Propose a small, ordered
+refactor plan. Do not change behavior, public APIs, button order, URLs, or
+configuration contracts. For each move, show source, destination, import/reference
+updates, risks, and a rollback path. Ask for approval before applying moves. After
+approval, make surgical edits, run only tests covering edited files after each
+step, then run the broader project gate and report the exact files and results.
+Preserve modules that are already clear and do not reorganize for aesthetics alone.
+```
+
+For a single file move:
+
+```bash
+arka move_file src/old.py src/new.py
+arka move_file src/old.py src/new.py --yes --update-refs
+```
+
+Moves preview by default, refuse destination collisions, and only update simple
+textual references when explicitly requested.

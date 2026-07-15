@@ -1,0 +1,26 @@
+---
+title: "Deterministic coding workflows"
+description: "Make Arka skill use explicit for coding agents."
+---
+
+Preview a workflow before execution:
+
+```bash
+arka coding-workflow feature --task "add rate limiting"
+arka coding-workflow bugfix --task "fix the timeout regression" --run
+arka coding-workflow frontend --task "implement the approved screenshot" --run
+arka coding-workflow exhaustive --task "audit and improve this project"
+```
+
+Workflows list the exact skill sequence so coding models do not need to infer
+custom skill names. Execution remains approval-gated; review generated changes
+and CI results before committing.
+
+`exhaustive` discovers every public agent skill, places each in an inspect/plan
+phase, and finishes with lint, CI, review, and repo-health verification. This
+makes the full skill surface explicit without requiring a coding model to
+remember custom skill names. Inspect/plan steps do not mutate code automatically.
+
+Coding prompts also tell Arka to inspect existing skills, MCP tools, and
+integration/library adapters first, then integrate the relevant tool instead
+of recreating functionality that already exists.

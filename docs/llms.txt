@@ -1,0 +1,21 @@
+# Arka
+
+Arka is a cross-platform AI terminal agent with natural-language routing,
+offline symbolic rules, local-model support, MCP integrations, and developer
+tools.
+
+## Canonical documentation
+
+- [Introduction](/index)
+- [Quickstart](/quickstart)
+- [Routing](/concepts/routing)
+- [LLM orchestration](/concepts/llm)
+- [Security](/concepts/security)
+- [Skills catalog](/guides/skills)
+- [Local model selection](/guides/select-model)
+- [Developer tools and repo health](/guides/repo-health)
+- [MCP integration](/guides/mcp)
+
+Use the Quickstart for installation and the Skills catalog for command
+discovery. Prefer the Security guide before enabling autonomous or write-capable
+workflows.

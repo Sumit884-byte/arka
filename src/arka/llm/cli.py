@@ -160,7 +160,7 @@ def _platform_hint(plat: str) -> str:
     return "Host: unknown. Prefer portable commands: uname, df, ps, python3."
 
 
-def llm_route(cmd: str, available_skills: str, aliases_list: str) -> str:
+def llm_route(cmd: str, available_skills: str, aliases_list: str, *, optimize_prompt: bool = True) -> str:
     """Interpret natural language into a skill name or shell command."""
     try:
         from arka.core.security import verify_user_prompt
@@ -217,8 +217,23 @@ def llm_route(cmd: str, available_skills: str, aliases_list: str) -> str:
             "Alternatively bypass the alias via command ls -lt.\n"
             "- cat is aliased to batcat."
         )
+        model_cmd = cmd
+        optimization_note = ""
+        if optimize_prompt:
+            try:
+                from arka.agent.prompt_optimize import optimize_user_prompt
+                result = optimize_user_prompt(cmd)
+                model_cmd = result.optimized
+                if result.changed:
+                    optimization_note = " Prompt optimization was applied locally; preserve literal URLs, commands, and user intent."
+                    if span is not None:
+                        current.set_attribute("arka.prompt_optimized", True)
+                        current.set_attribute("arka.prompt_original_chars", len(cmd))
+                        current.set_attribute("arka.prompt_optimized_chars", len(model_cmd))
+            except ImportError:
+                pass
         user = (
-            f"Convert to safe shell command(s) or skill(s): '{cmd}'. "
+            f"Convert to safe shell command(s) or skill(s): '{model_cmd}'. "
             f"Available skills: {available_skills}. "
             "IMPORTANT: For multiple tasks, use '&&' between commands. "
             "ROUTING RULES: Multi-step goals that need try/fix/retry -> goal <goal> (or loop <goal>). "
@@ -228,6 +243,7 @@ def llm_route(cmd: str, available_skills: str, aliases_list: str) -> str:
             "'install APP with apt' -> install_apt APP. "
             "Local machine specs (specs of my pc/mac, tell me about my mac, tell me my gpu/cpu/ram) -> system_info or system_info gpu|cpu|ram|disk. "
             "Opinion/advice questions (is my cpu good enough, should I upgrade) -> agent_ask <full question>. "
+            f"{optimization_note}"
             "Free AI credits / free tier setup / zero-cost LLM setup -> free_credits. "
             "Factual general-knowledge questions -> web_answer <full question> (NOT search_web). "
             "Live CPU/RAM usage meters -> system_monitor (NOT for specs dumps). "
@@ -545,7 +561,7 @@ def cmd_skill_models(args: argparse.Namespace) -> int:
 
 
 def cmd_route(args: argparse.Namespace) -> int:
-    text = llm_route(args.cmd, args.skills, env("ROUTE_ALIASES"))
+    text = llm_route(args.cmd, args.skills, env("ROUTE_ALIASES"), optimize_prompt=not args.no_optimize)
     if not text:
         return 1
     print(text)
@@ -577,6 +593,7 @@ def main() -> int:
     p_route = sub.add_parser("route", help="NL command -> skill/shell (agent routing)")
     p_route.add_argument("cmd")
     p_route.add_argument("--skills", required=True)
+    p_route.add_argument("--no-optimize", action="store_true", help="preserve exact user prompt")
     p_route.set_defaults(func=cmd_route)
 
     p_models = sub.add_parser("models", help="List provider/model fallback chain")

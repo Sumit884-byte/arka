@@ -461,6 +461,9 @@ def route_command(text: str) -> str:
         return ""
     low = raw.lower()
 
+    if re.search(r"\b(?:fix|resolve)\b.*\b(?:github|gh)\b.*\bissues?\b.*\b(?:code|repo|repository)\b", low):
+        return "agent_code inspect open GitHub issues, reproduce the relevant problems, implement fixes, and run focused tests"
+
     if re.search(r"(?i)\b(pr_check|pr check)\b", low):
         rest = re.sub(r"(?i)^(?:arka\s+)?(?:pr_check|pr check)\s*", "", raw).strip()
         return f"pr_check {rest}".strip() if rest else "pr_check ci"

@@ -1,0 +1,30 @@
+---
+title: "Deploy web projects"
+description: "Preview and safely deploy Arka projects to Vercel or Netlify."
+---
+
+Preview a deployment first:
+
+```bash
+arka deploy --platform vercel
+arka deploy --platform netlify --json
+arka deploy --platform railway --json
+arka deploy --platform render --json
+```
+
+Deploy only after authenticating the platform CLI and explicitly passing
+`--yes`:
+
+```bash
+arka deploy --platform vercel --production --yes
+arka deploy --platform netlify --production --yes
+arka deploy --platform railway --production --yes
+arka deploy --platform render --production --yes
+```
+
+Arka never sends credentials or deploys by default. It detects `vercel.json`,
+`netlify.toml`, `railway.toml`, `render.yaml`, `Dockerfile`,
+`docker-compose.yml`, and `package.json` to choose a sensible platform.
+
+Railway and Render are intended for backend/API services. Authenticate their
+CLI or connect the repository in the provider dashboard before using `--yes`.

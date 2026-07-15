@@ -1,0 +1,16 @@
+---
+title: "Find free models"
+description: "Discover local zero-cost and provider free-tier model options."
+---
+
+```bash
+arka free_models
+arka free_models --json
+arka free_models --offline
+```
+
+Results distinguish local zero-cost runtimes, live OpenRouter zero-price
+models, and provider free-tier-eligible models. Free-tier availability still
+depends on account, region, quotas, and provider policy; Arka never labels a
+paid model free merely because it has a free quota. Use `arka hybrid status` to
+see which discovered local or hosted options are actually reachable.

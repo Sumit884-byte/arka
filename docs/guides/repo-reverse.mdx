@@ -1,0 +1,14 @@
+---
+title: "Reverse-engineer a repository"
+description: "Turn local Git history and repository structure into a build-ready prompt."
+---
+
+```bash
+arka repo_reverse
+arka repo_reverse ./project --commits 50 --output rebuild-prompt.md
+arka "reverse engineer this repository"
+```
+
+Arka combines tracked files and recent Git evolution into an inspectable prompt
+for rebuilding or onboarding to a codebase. It runs locally and does not upload
+the repository.

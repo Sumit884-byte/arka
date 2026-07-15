@@ -1115,6 +1115,14 @@ def _cmd_help() -> int:
   arka youtube research <query>   # YouTube search + transcript digest
   arka download <id-or-url>       # YouTube playlist or video
   arka password save|get|set <name>
+  arka integration list|status       # show configured providers
+  arka hybrid status                 # inspect local + hosted model routes
+  arka hybrid run "prompt" --policy parallel
+  arka hybrid config local-first      # persist the default policy
+  arka integration setup <provider>  # securely configure an integration
+  arka connect <provider> --key ...  # short setup alias
+  arka integration doctor [--fix]    # diagnose credentials, CLIs, permissions
+  arka integration init --config-dir .  # generate project .env.example
   arka code init <folder>         # scoped coding workspace
   arka benchmark run|show|apply   # compare models on sample tasks"""
     )

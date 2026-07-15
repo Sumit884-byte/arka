@@ -1,0 +1,15 @@
+---
+title: "Prompt optimization"
+description: "Iteratively make prompts clearer, safer, and more reproducible."
+---
+
+```bash
+arka prompt_optimize "summarize this research paper" --rounds 3 --role "research assistant"
+arka "optimize this prompt: explain the experiment and cite assumptions"
+```
+
+Arka applies bounded refinement passes that clarify objectives, constraints,
+missing-information behavior, verification, and output structure. It is an
+original implementation inspired by the evaluation-oriented workflow described
+by [Prompt Optimizer](https://github.com/linshenkx/prompt-optimizer), whose
+repository is licensed AGPL-3.0-only. No source code is copied or bundled.

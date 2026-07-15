@@ -1,0 +1,14 @@
+# Multi-LLM alternatives
+
+Run the same request through several configured models and compare labeled
+outputs:
+
+```bash
+export ARKA_MULTI_LLM_MODELS="openai/gpt-4o-mini,anthropic/claude-3-5-haiku"
+arka multi-llm "propose three names for this product"
+arka multi-llm "write a concise API design" --json
+```
+
+Use `provider/model` entries separated by commas. A failed model is reported
+without discarding successful alternatives. Natural language such as “give me
+several model alternatives for this landing page” is routed automatically.

@@ -2,6 +2,7 @@ import json
 import os
 
 import pytest
+import arka.llm.fallback as fb
 
 
 def _clear_fallback_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -360,3 +361,16 @@ def test_llm_fallback_trace_visible_in_debug_mode(
     assert result.text == "Groq answer"
     captured = capsys.readouterr()
     assert "arka_llm: fallback ok" in captured.err
+
+
+def test_retired_model_error_is_permanent():
+    assert fb._is_retired_model_error("HTTP 410: minimax-m2 was retired")
+    assert fb._is_retired_model_error("model deprecated")
+    assert not fb._is_retired_model_error("temporary timeout")
+
+
+def test_exhaustion_notification_is_best_effort(monkeypatch):
+    monkeypatch.setattr(fb, "_EXHAUSTION_NOTIFIED", False)
+    monkeypatch.setattr(fb, "_truthy", lambda *args: True)
+    fb._notify_total_exhaustion("all exhausted")
+    assert fb._EXHAUSTION_NOTIFIED is True

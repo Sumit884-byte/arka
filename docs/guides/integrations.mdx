@@ -1,0 +1,62 @@
+# Integrations
+
+Arka keeps optional provider credentials in its user `.env` file. Setup never
+prints secret values and supports interactive, scripted, and stdin-based flows.
+
+```bash
+arka integration list
+arka integration init --config-dir .
+arka integration init --config-dir . --json
+arka integration init --config-dir . --gitignore
+arka integration setup all
+arka integration setup serper
+arka integration setup signoz --url https://signoz.example.com
+printf '%s' "$OPENROUTER_API_KEY" | arka integration setup openrouter --key-stdin
+arka integration setup stripe --key-file /run/secrets/stripe_key
+arka integration setup stripe --config-dir ./config --key-file ./stripe_key
+arka integration doctor --json
+arka integration doctor --fix
+```
+
+Use `--key` for CI, `--key-stdin` to avoid shell history, and `remove <name>
+--yes` to revoke a local configuration entry. Common aliases include `gh`
+for GitHub, `hf` for Hugging Face, `gemini`/`gcp` for Google, and `ctx7` for
+Context7.
+
+The registry covers search, model providers, collaboration, app services,
+databases (`postgres`, `redis`, `mongodb`), package registries (Docker Hub, npm,
+PyPI), observability (SigNoz, Sentry, Datadog, New Relic), infrastructure
+(Cloudflare, DigitalOcean, Hetzner), hosting (Railway, Vercel, Netlify, Render,
+Fly.io), email (Resend, SendGrid), authentication (Clerk, Auth0), analytics
+(PostHog, Amplitude), and feature flags (LaunchDarkly, Statsig).
+LLM observability includes Langfuse.
+AI development integrations also include LangSmith and Weights & Biases.
+Remote compute integrations include Modal and E2B.
+Local model runtimes include Ollama, vLLM, and LM Studio; use `--url` for a
+custom local endpoint.
+Hosted model integrations include Groq and Replicate.
+Messaging providers include Telegram and WhatsApp.
+
+Natural language works too: `set up Serper`, `show available integrations`,
+or `check my Sentry integration`.
+
+## Local and hosted models together
+
+Use `arka hybrid status` to see reachable local runtimes (Ollama, vLLM, or
+LM Studio) alongside configured hosted providers. `arka hybrid run "..."`
+uses local-first routing by default and falls back to hosted models. Select
+`--policy hosted-first`, `local-only`, or `hosted-only`; `--policy parallel`
+runs one local and one hosted model and returns both answers for comparison.
+Persist the default with `arka hybrid config local-first` (or another policy).
+
+For privacy-sensitive work, force a hard local-only boundary:
+
+```bash
+arka run-only-local-llm "summarize this repository"
+arka hybrid run --local-only "draft a migration plan"
+arka hybrid config local-only
+```
+
+`local-only` filters the candidate chain before inference, so hosted providers
+are not used as fallbacks. If no reachable Ollama, vLLM, or LM Studio model is
+configured, Arka returns an error instead of sending the prompt to the cloud.

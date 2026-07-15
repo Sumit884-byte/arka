@@ -142,5 +142,30 @@ class CodeProjectRoutingTests(unittest.TestCase):
         self.assertEqual(hit, "code status")
 
 
+class CodeAgentToolStepTests(unittest.TestCase):
+    def test_arka_tool_step_dispatches_via_run_skill(self) -> None:
+        from arka.agent.core import _run_arka_tool_step
+
+        with mock.patch("arka.dispatch.run_skill", return_value=0) as run_skill:
+            rc = _run_arka_tool_step("lint_project --full")
+        self.assertEqual(rc, 0)
+        run_skill.assert_called_once_with("lint_project --full")
+
+    def test_non_arka_shell_step_is_ignored(self) -> None:
+        from arka.agent.core import _run_arka_tool_step
+
+        self.assertIsNone(_run_arka_tool_step("git status"))
+
+    def test_routed_nl_step_uses_arka_router(self) -> None:
+        from arka.agent.core import _run_arka_tool_step
+
+        fake_route = mock.Mock(kind="skill", skill="lint_project --full")
+        with mock.patch("arka.router.route", return_value=fake_route):
+            with mock.patch("arka.dispatch.run_skill", return_value=0) as run_skill:
+                rc = _run_arka_tool_step("please lint this repo")
+        self.assertEqual(rc, 0)
+        run_skill.assert_called_once_with("lint_project --full")
+
+
 if __name__ == "__main__":
     unittest.main()

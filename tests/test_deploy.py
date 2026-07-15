@@ -1,0 +1,12 @@
+from arka.agent.deploy import deployment_command, detect_platform
+
+def test_detect_and_preview(tmp_path) -> None:
+    (tmp_path / "vercel.json").write_text("{}")
+    assert detect_platform(tmp_path) == "vercel"
+    assert deployment_command(tmp_path, "vercel", production=True) == ["vercel", "--prod"]
+
+
+def test_backend_detection_and_command(tmp_path) -> None:
+    (tmp_path / "Dockerfile").write_text("FROM python:3.13")
+    assert detect_platform(tmp_path) == "railway"
+    assert deployment_command(tmp_path, "railway", production=True) == ["railway", "up", "--ci"]

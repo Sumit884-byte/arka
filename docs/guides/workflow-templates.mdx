@@ -1,0 +1,51 @@
+---
+title: "Workflow templates"
+description: "Compose new Arka tasks from reusable prompts and loops."
+---
+
+```bash
+arka template list
+arka template show research_brief
+arka template use research_brief --set topic="local LLM serving"
+arka template use repo_release
+```
+
+Templates are inspectable text, not hidden agent behavior. Prompt templates
+produce a prompt; loop templates produce a command you can review and run.
+Create a new workflow by copying a template output into `arka iterate`,
+
+Code starters are also available for fast, distinctive scripts:
+
+```bash
+arka template list
+arka template use python_cli --set description="CSV inspector" --out tools/inspect.py
+arka template use api_health_check --set url="https://example.com/health" --out tools/health.py
+arka template use data_pipeline --out tools/normalize.py
+arka template use browser_smoke --out tests/smoke.py
+arka template use walk_folder --set pattern="*.py" --out tools/list_python.py
+```
+
+`--out` refuses to overwrite an existing file. Templates are intentionally
+small and inspectable so Arka can customize them without hiding generated
+logic.
+
+The `walk_folder` starter handles one folder by default and includes nested
+folders with `--recursive`:
+
+```bash
+python tools/list_python.py src --recursive --pattern "*.py"
+```
+
+## Automatic prompt optimization
+
+Arka automatically applies a local, deterministic pass to natural-language
+requests sent to AI routing. It clarifies the objective and expected output
+without inventing URLs, files, requirements, or facts. Symbolic routing keeps
+the original text, and code blocks, JSON, shell commands, and URLs are left
+unchanged. Use `arka llm route "..." --skills "..." --no-optimize` when exact
+prompt text must be preserved, or set `ARKA_PROMPT_OPTIMIZE=0` globally.
+
+Screenshots captured by `web_screenshot` and `browser_check` are temporary by
+default and cleaned up when the command exits. Pass `--output` when a review
+artifact must be retained for later inspection.
+`arka loop`, or another skill.

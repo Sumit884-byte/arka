@@ -24,6 +24,8 @@ select_model                    # show recommendations
 select_model --apply            # write to llm-skill-models.json
 select_model --json             # machine-readable output
 select_model probe              # hardware snapshot only
+select_model --local            # choose the strongest installed local model that fits
+select_model --local --run "summarize this repo"  # run a prompt with it via Ollama
 ```
 
 ## Hardware tiers
@@ -56,6 +58,11 @@ arka ai-skill-model chat gemini/gemini-2.0-flash
 
 - At least one cloud API key (`GEMINI_API_KEY`, `GROQ_API_KEY`, etc.) for cloud tiers.
 - `ollama serve` running with pulled models for local tiers.
+
+For an on-device-only choice, use `select_model --local`. Arka inspects the
+available Ollama models and local memory/GPU capacity, then selects the largest
+installed text model that should fit with runtime headroom. Add `--apply` to use
+that model for all skill profiles.
 
 ## Related
 

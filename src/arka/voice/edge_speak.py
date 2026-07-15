@@ -125,7 +125,29 @@ def resolve_lang(code: str | None = None) -> str:
     lang = (code or os.environ.get("SPEAK_LANG") or "en-IN").strip()
     if lang in VOICES:
         return lang
-    return LANG_ALIASES.get(lang.lower(), "en-IN")
+    return LANG_ALIASES.get(lang.lower(), lang)
+
+
+def _discover_voice(lang: str, gender: str) -> str | None:
+    """Find an Edge voice for any BCP-47 locale, not only curated Indian voices."""
+    try:
+        import edge_tts
+
+        voices = asyncio.run(edge_tts.list_voices())
+    except Exception:
+        return None
+    wanted = lang.lower().replace("_", "-")
+    candidates = [v for v in voices if str(v.get("Locale", "")).lower() == wanted]
+    if not candidates:
+        candidates = [v for v in voices if str(v.get("Locale", "")).lower().startswith(wanted.split("-")[0] + "-")]
+    if not candidates:
+        return None
+    preferred = "female" if gender in ("female", "f") else "male" if gender in ("male", "m") else ""
+    if preferred:
+        matching = [v for v in candidates if str(v.get("Gender", "")).lower() == preferred]
+        if matching:
+            candidates = matching
+    return str(candidates[0].get("ShortName") or "") or None
 
 
 def resolve_voice(lang: str | None = None, voice: str | None = None) -> str:
@@ -135,6 +157,11 @@ def resolve_voice(lang: str | None = None, voice: str | None = None) -> str:
     code = resolve_lang(lang)
     meta = VOICES.get(code, VOICES["en-IN"])
     gender = os.environ.get("SPEAK_GENDER", "female").strip().lower()
+    if code not in VOICES:
+        discovered = _discover_voice(code, gender)
+        if discovered:
+            return discovered
+        return VOICES["en-IN"]["default"]
     if gender in ("male", "m"):
         return meta["male"]
     if gender in ("female", "f"):

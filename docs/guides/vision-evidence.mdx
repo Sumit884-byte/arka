@@ -1,0 +1,15 @@
+# OCR + vLLM evidence
+
+Ground image answers in both OCR and model interpretation:
+
+```bash
+pip install pytesseract pillow
+arka vision-evidence screen.png "What price is shown?" \\
+  --model-view "The visual model sees a price label reading $10"
+arka vision-evidence screen.png "What price is shown?" --json
+```
+
+Arka reports what OCR says, what the visual/vLLM model says, and a combined
+answer that identifies agreement, conflicts, and uncertainty. It does not
+silently treat a model guess as text evidence. Natural language requests are
+supported.

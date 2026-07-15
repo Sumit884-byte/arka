@@ -98,6 +98,8 @@ Developer tooling now follows the same offline-first path: `arka ci`, `arka revi
 
 For UI work, `build this project from screenshot.png` and similar phrases route to the screenshot-to-design brief skill, which analyzes the image first and then produces an implementation-oriented build plan.
 
+If you want Arka to look at its own frontend output and iterate, phrases like `review this frontend`, `retry 3 loops`, or `check the UI screenshot and rebuild` route to the frontend visual loop skill. It captures the rendered result, critiques it, and can run another build command before the next pass.
+
 ## Skill router vs orchestrator
 
 The **skill router** decides _which skill runs_. The **LLM orchestrator** (see [LLM orchestration](/concepts/llm)) powers completions _inside_ skills — summarize, chat, research, PDF, predictions — with provider failover. They are separate systems.

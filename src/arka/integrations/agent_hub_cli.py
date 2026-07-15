@@ -12,6 +12,7 @@ from arka.integrations.agent_hub import (
     format_agent_list,
     format_detect,
     format_doctor,
+    format_mcp_tools,
     format_status,
     import_memory,
     launch_agent,
@@ -72,6 +73,13 @@ def cmd_sync(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_setup(args: argparse.Namespace) -> int:
+    if args.agent != "cursor":
+        print(f"unsupported setup target: {args.agent}", file=sys.stderr)
+        return 1
+    return cmd_sync(argparse.Namespace(unify=True, replace=False, force=True, symlink=False))
+
+
 def cmd_status(_args: argparse.Namespace) -> int:
     print(format_status())
     return 0
@@ -90,6 +98,11 @@ def cmd_detect(_args: argparse.Namespace) -> int:
 
 def cmd_adapters(_args: argparse.Namespace) -> int:
     print(format_adapters())
+    return 0
+
+
+def cmd_tools(_args: argparse.Namespace) -> int:
+    print(format_mcp_tools())
     return 0
 
 
@@ -159,6 +172,10 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("doctor", help="Check ollama, hub paths, and unify status")
     sub.add_parser("detect", help="Probe filesystem for agent config files")
     sub.add_parser("adapters", help="List per-agent MCP merge status")
+    sub.add_parser("tools", help="List MCP servers exported by the hub")
+    setup_p = sub.add_parser("setup", help="Set up an agent adapter")
+    setup_p.add_argument("agent", choices=("cursor",))
+    setup_p.set_defaults(func=cmd_setup)
 
     import_p = sub.add_parser("import-memory", help="Import memory export into Arka")
     import_p.add_argument("path", help="JSON or markdown memory export path")
@@ -199,6 +216,7 @@ def main(argv: list[str] | None = None) -> int:
         "doctor": cmd_doctor,
         "detect": cmd_detect,
         "adapters": cmd_adapters,
+        "tools": cmd_tools,
         "import-memory": cmd_import_memory,
         "launch": cmd_launch,
         "parse": cmd_parse,

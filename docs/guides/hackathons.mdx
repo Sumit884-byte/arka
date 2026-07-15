@@ -1,0 +1,22 @@
+---
+title: "Hackathon discovery and planning"
+description: "Find relevant hackathons and create bounded, reviewable build plans."
+---
+
+Find events related to a topic:
+
+```bash
+arka hackathon find "edge AI" --limit 10
+arka hackathon give "climate data" --json
+```
+
+Create a participation plan with a fixed time budget:
+
+```bash
+arka hackathon plan "robotics safety" --event "Selected event" --hours 24
+```
+
+Arka returns a demo-first idea, milestones, acceptance-oriented scope, and
+guardrails. It does not register, submit, contact organizers, or publish code
+without explicit approval. Search results should be checked against the event's
+official rules, deadline, eligibility, and judging criteria.

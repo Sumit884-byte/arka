@@ -1,0 +1,33 @@
+---
+title: "Cost and performance guardrails"
+description: "Keep development inference spend, tokens, and latency visible."
+---
+
+```bash
+arka guardrails status
+arka guardrails reset
+```
+
+Set optional local limits in `.env`:
+
+```env
+ARKA_COST_LIMIT_USD=1.00
+ARKA_TOKEN_LIMIT=100000
+ARKA_LATENCY_LIMIT_MS=15000
+```
+
+Hosted requests are blocked before dispatch when the token or estimated cost
+budget is exceeded. Local-only models are never blocked by cost guardrails.
+Arka stores only aggregate counters in its cache, not prompts.
+
+Grounded mode is enabled by default (`ARKA_GROUNDED_MODE=1`). It blocks
+unrequested mock data and instructs model-facing requests to use symbolic tools
+or configured APIs for current information. Unless you explicitly ask for a
+mock, prototype, placeholder, or example design, Arka biases toward real data,
+real integrations, and production-shaped error handling. Disable only when
+prototyping:
+
+```bash
+ARKA_GROUNDED_MODE=0 arka ask "..."
+arka grounding
+```

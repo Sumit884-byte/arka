@@ -1,0 +1,17 @@
+# PDF to interactive website
+
+Turn a PDF into a browser-based interactive viewer:
+
+```bash
+arka pdf-to-interactive guide.pdf
+arka pdf-to-interactive guide.pdf --output public/guide.html
+arka pdf-to-interactive guide.pdf --output public/experience.html --ultra
+```
+
+The generated page uses PDF.js and includes page navigation, zoom controls,
+scrollable rendered pages, and text search. Natural language such as “turn
+guide.pdf into an interactive website” is supported. The viewer loads PDF.js
+from a CDN and references the source PDF by filename, so place both files in
+the same deployed directory. `--ultra` adds animated transitions, theme/share
+controls, and an optional 3D model panel (`model.glb`) powered by
+`<model-viewer>`.

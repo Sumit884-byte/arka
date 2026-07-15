@@ -1,0 +1,21 @@
+---
+title: "Iterate and loop"
+description: "Repeat Arka commands by count or interval."
+---
+
+`iterate` is bounded repetition; it runs exactly N times and then exits:
+
+```bash
+arka iterate 5 "repo health"
+```
+
+`loop` is interval-based and continues until interrupted. Add `--count` when
+you want an interval loop with a finite number of cycles:
+
+```bash
+arka loop 300 "check repo health"
+arka loop 60 --count 10 "run tests"
+```
+
+These runners are independent of `arka goal`: they do not plan, mutate goals,
+or persist autonomous progress.

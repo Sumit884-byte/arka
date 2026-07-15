@@ -1,0 +1,26 @@
+---
+title: "AI society simulations"
+description: "Have specialized agents collaborate, debate, and vote."
+---
+
+Run an inspectable multi-agent decision simulation:
+
+```bash
+arka society "should we split this service?"
+arka society "choose a caching strategy" --json
+```
+
+The default society includes architecture, implementation, risk, and user
+advocacy roles. Each role proposes independently, the skeptic and architect
+debate tradeoffs, and weighted votes produce a reversible decision. The
+simulation is advisory and does not modify your repository.
+
+Generate code from the voted decision with explicit opt-in:
+
+```bash
+arka society "add a health endpoint" --generate
+arka society "add a health endpoint" --generate --output src/health.py
+```
+
+Code is printed by default. `--output` creates a new file and refuses to
+overwrite an existing one; review and test it before use.

@@ -384,6 +384,14 @@ def test_format_detect_and_adapters(hub_paths):
     assert "hub_servers\t" in adapters
 
 
+def test_format_mcp_tools(hub_paths):
+    from arka.integrations.agent_hub import format_mcp_tools, hub_mcp_path
+
+    hub_mcp_path().parent.mkdir(parents=True, exist_ok=True)
+    hub_mcp_path().write_text(json.dumps({"mcpServers": {"local": {"command": "arka"}}}))
+    assert "local\tstdio" in format_mcp_tools()
+
+
 def test_cli_list(capsys):
     from arka.integrations.agent_hub_cli import main
 

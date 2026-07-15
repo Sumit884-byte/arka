@@ -54,3 +54,12 @@ The public URL stays **https://arka-agent.mintlify.site**.
 ## Contributing
 
 Edit MDX pages in this folder and open a PR on `Sumit884-byte/arka`. Follow existing frontmatter (`title`, `description`, `keywords`) and Mintlify components (`Card`, `Tip`, `Note`, `Warning`).
+
+## SEO checklist
+
+- Give every public page a unique, search-oriented `title` and a 140–160 character `description`.
+- Add 3–8 specific `keywords` that match the page intent; avoid repeating the site name in every keyword.
+- Put the primary phrase in the opening paragraph and one heading, then link to the relevant guide.
+- Prefer descriptive internal links such as “local model selection” over “click here”.
+- Keep command examples indexable and human-readable; do not put secrets or user-specific paths in examples.
+- Mintlify supplies canonical URLs, sitemap, robots, and Open Graph metadata from this frontmatter and `docs.json`; verify them after deployment.

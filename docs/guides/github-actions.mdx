@@ -1,0 +1,15 @@
+# GitHub Actions
+
+```bash
+arka github-actions inspect .
+arka github-actions new .
+arka github-actions new . --force
+arka github-actions status .
+```
+
+The generated workflow installs the project, runs Ruff, and runs Pytest on
+pushes to `main` and pull requests. Existing workflows are not overwritten
+unless `--force` is explicit. Natural language requests such as “setup GitHub
+Actions in this repo” and “did the production build fail?” are supported. The
+status command is read-only and uses the GitHub CLI (`gh`) to inspect recent
+remote runs.

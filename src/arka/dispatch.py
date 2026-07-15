@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import time
 
 from arka.paths import arka_home, bundled_dir, cache_dir, config_dir, python_executable, script_path
 
@@ -38,6 +39,15 @@ def run_skill(skill_line: str) -> int:
     if not parts:
         return 1
     head = parts[0]
+    if head not in {"skills", "skill_settings"}:
+        try:
+            from arka.core.skill_settings import is_disabled
+            if is_disabled(head):
+                print(f"Skill disabled: {head}. Enable it with: arka skills enable {head}", file=sys.stderr)
+                return 1
+        except ImportError:
+            pass
+    started = time.perf_counter()
     rest = parts[1:]
 
     if head == "mode":
@@ -46,6 +56,9 @@ def run_skill(skill_line: str) -> int:
         if not rest:
             return cmd_show()
         return mode_main(["mode", *rest])
+    if head in ("skills", "skill_settings"):
+        from arka.core.skill_settings import main as skill_settings_main
+        return skill_settings_main(rest)
 
     allowed, reason = mode_allows_execution(skill_line)
     if not allowed:
@@ -124,6 +137,13 @@ def run_skill(skill_line: str) -> int:
             code = run_chat_ask(" ".join(rest), deep=True)
         elif head == "calc":
             code = run_chat_calc(" ".join(rest))
+        elif head in ("observability", "observability_doctor", "signoz_doctor"):
+            from arka.telemetry.observability_doctor import main as observability_main
+
+            code = observability_main(rest)
+        elif head in ("telemetry_connect", "telemetry-connect", "production_telemetry"):
+            from arka.telemetry.codebase_connectors import main as connector_main
+            code = connector_main(rest)
         elif head in ("hyperlocal_weather", "weather"):
             code = run_chat_weather(" ".join(rest))
         elif head == "price_check":
@@ -147,6 +167,9 @@ def run_skill(skill_line: str) -> int:
                 code = run_script("arka_timezone_convert.py", ["convert", *rest])
             else:
                 code = run_script("arka_currency.py", ["convert", *rest])
+        elif head in ("media_transform", "media-transform", "transform_media"):
+            from arka.media.media_transform import main as transform_main
+            code = transform_main(rest)
         elif head in ("currency_convert", "currency"):
             code = run_script("arka_currency.py", ["convert", *rest])
         elif head in ("timezone_convert", "tz_convert", "timezone"):
@@ -157,6 +180,56 @@ def run_skill(skill_line: str) -> int:
             from arka.llm.model_advisor import main as model_advisor_main
 
             code = model_advisor_main(rest or None)
+        elif head in ("model", "model_host", "model-host") and rest and rest[0] in {"setup", "doctor", "list"}:
+            from arka.llm.model_host_setup import main as model_setup_main
+            code = model_setup_main(rest)
+        elif head in ("free_models", "free-models", "free_models_list"):
+            from arka.llm.free_models import main as free_models_main
+            code = free_models_main(rest)
+        elif head in ("hybrid", "model_hybrid", "hybrid_model"):
+            from arka.llm.hybrid import main as hybrid_main
+
+            code = hybrid_main(rest or ["status"])
+        elif head in ("local_llm", "local-llm", "run_only_local_llm", "run-only-local-llm"):
+            from arka.llm.hybrid import main as hybrid_main
+            code = hybrid_main(["run", "--local-only", *rest]) if rest else hybrid_main(["status", "--policy", "local-only"])
+        elif head in ("guardrails", "llm_guardrails", "cost_guardrails"):
+            from arka.llm.guardrails import main as guardrails_main
+            code = guardrails_main(rest)
+        elif head in ("grounding", "grounded", "anti_hallucination"):
+            from arka.llm.grounding import enabled
+            print(f"grounded_mode\t{'on' if enabled() else 'off'}")
+            code = 0
+        elif head in ("quantize", "quantise", "model_quantize"):
+            from arka.llm.quantize import main as quantize_main
+            code = quantize_main(rest)
+        elif head in ("speculative", "speculative_decode", "mtp"):
+            from arka.llm.speculative import main as speculative_main
+            code = speculative_main(rest)
+        elif head in ("backend", "inference_backend", "multi_gpu"):
+            from arka.llm.backend import main as backend_main
+            code = backend_main(rest)
+        elif head in ("env_bridge", "env-bridge", "project_env"):
+            from arka.agent.env_bridge import main as env_bridge_main
+            code = env_bridge_main(rest)
+        elif head in ("coding_workflow", "coding-workflow", "workflow"):
+            from arka.agent.coding_workflows import main as workflow_main
+            code = workflow_main(rest)
+        elif head in ("mcp_auto", "mcp-auto", "mcp_autoconfig"):
+            from arka.integrations.mcp_autoconfig import main as mcp_auto_main
+            code = mcp_auto_main(rest)
+        elif head in ("thinking", "thinking_level", "thinking-level"):
+            from arka.llm.thinking import get, set_level
+            if not rest:
+                print(f"Thinking level: {get()}")
+                code = 0
+            else:
+                try:
+                    print(f"Thinking level set: {set_level(rest[0])}")
+                    code = 0
+                except ValueError as exc:
+                    print(exc)
+                    code = 2
         elif head in ("free_credits", "free-credits", "max_credits", "ai_credits"):
             from arka.agent.free_credits import run_guide
 
@@ -183,10 +256,130 @@ def run_skill(skill_line: str) -> int:
             from arka.core.code_project import main as code_main
 
             code = code_main(["code", *rest])
+        elif head in ("data", "data_collect", "collect_data", "data-collect") and rest and rest[0] == "collect":
+            from arka.agent.data_collect import main as collect_main
+            code = collect_main(rest[1:])
+        elif head in ("search", "search_setup", "search-setup"):
+            from arka.agent.search_setup import main as search_setup_main
+            code = search_setup_main(rest)
+        elif head in ("integration", "integrations", "setup-integration", "connect"):
+            from arka.agent.integration_setup import main as integration_main
+            code = integration_main(rest)
         elif head == "agent_code":
             from arka.agent.core import code_agent
 
             code = code_agent(" ".join(rest))
+        elif head in ("sandbox", "sandboxes"):
+            from arka.agent.sandbox import main as sandbox_main
+
+            code = sandbox_main(rest)
+        elif head in ("background_remove", "background-removal", "remove_background"):
+            from arka.agent.background_remove import main as remove_main
+            code = remove_main(rest)
+        elif head in ("model_to_image", "model-to-image", "render_3d"):
+            from arka.agent.model_to_image import main as model_image_main
+            code = model_image_main(rest)
+        elif head in ("text", "text_edit", "text-edit"):
+            from arka.agent.text_edit import main as text_main
+            code = text_main(rest)
+        elif head in ("move_file", "move-file", "move"):
+            from arka.agent.move_file import main as move_main
+            code = move_main(rest)
+        elif head in ("surgical_edit", "surgical-edit", "surgical"):
+            from arka.agent.surgical_edit import main as surgical_main
+            code = surgical_main(rest)
+        elif head in ("ideate", "arka_ideate", "open_source_ideate"):
+            from arka.agent.ideate import main as ideate_main
+            code = ideate_main(rest)
+        elif head in ("build_something_cool", "build-something-cool", "build_cool_feature", "build-cool-feature", "cool_build"):
+            from arka.agent.cool_build import main as cool_main
+            code = cool_main(rest)
+        elif head in ("play", "game_benchmark", "game-benchmark"):
+            from arka.agent.play import main as play_main
+            code = play_main(rest)
+        elif head in ("vision_evidence", "vision-evidence", "ocr_compare"):
+            from arka.agent.vision_evidence import main as evidence_main
+            code = evidence_main(rest)
+        elif head in ("url_app", "url-app", "app_design_review"):
+            from arka.agent.url_app_analyzer import main as url_app_main
+            code = url_app_main(rest)
+        elif head in ("coding_tui", "coding-tui", "code_tui"):
+            from arka.agent.coding_tui import main as coding_tui_main
+            code = coding_tui_main(rest)
+        elif head in ("iterate", "loop"):
+            from arka.agent.iterate import main as iterate_main
+            code = iterate_main([head, *rest])
+        elif head in ("ultra_fast", "ultra-fast", "fast_dev", "fast-dev"):
+            from arka.agent.ultra_fast import main as ultra_main
+            code = ultra_main(rest)
+        elif head in ("env_setup", "env-setup", "create_env"):
+            from arka.agent.env_setup import main as env_main
+            code = env_main(rest)
+        elif head in ("research_math", "math_script", "math-script"):
+            from arka.agent.research_math import main as math_main
+            code = math_main(rest)
+        elif head in ("prompt_optimize", "prompt-optimizer", "optimize_prompt"):
+            from arka.agent.prompt_optimize import main as prompt_main
+            code = prompt_main(rest)
+        elif head in ("deploy", "deployment"):
+            from arka.agent.deploy import main as deploy_main
+            code = deploy_main(rest)
+        elif head in ("geo_seo", "geo-seo", "seo_audit"):
+            from arka.agent.geo_seo import main as geo_main
+            code = geo_main(rest)
+        elif head in ("template", "templates", "workflow_template"):
+            from arka.agent.workflow_templates import main as template_main
+            code = template_main(rest)
+        elif head in ("blocks", "block", "app_blocks", "app-blocks"):
+            from arka.agent.blocks import main as blocks_main
+            code = blocks_main(rest)
+        elif head in ("hackathon", "hackathons"):
+            from arka.agent.hackathon import main as hackathon_main
+            code = hackathon_main(rest)
+        elif head in ("optimize", "optimize_params", "evolve"):
+            from arka.agent.optimize import main as optimize_main
+            code = optimize_main(rest)
+        elif head in ("repo_reverse", "repo-reverse", "reverse_repo"):
+            from arka.agent.repo_reverse import main as reverse_main
+            code = reverse_main(rest)
+        elif head in ("repo_graph", "repo-graph", "repository_graph"):
+            from arka.agent.repo_graph import main as graph_main
+            code = graph_main(rest)
+        elif head in ("workspace", "workspace_map", "workspace-map"):
+            from arka.agent.workspace import main as workspace_main
+            code = workspace_main(rest)
+        elif head in ("spreadsheet", "spreadsheet_create", "create_spreadsheet"):
+            from arka.agent.generate_data import main as generate_data_main
+            code = generate_data_main([*rest, "--format", "xlsx"] if "--format" not in rest else rest)
+        elif head in ("teammate_review", "teammate-review", "ai_teammate"):
+            from arka.agent.teammate_review import main as teammate_main
+            code = teammate_main(rest)
+        elif head in ("society", "ai_society", "ai-society"):
+            from arka.agent.society import main as society_main
+            code = society_main(rest)
+        elif head in ("browser_check", "browser-check", "ui_check"):
+            from arka.agent.browser_check import main as browser_main
+            code = browser_main(rest)
+        elif head in ("automate", "app_automate", "app-automate"):
+            from arka.agent.automation import main as automation_main
+            code = automation_main(rest)
+        elif head in ("usage", "skill_usage"):
+            from arka.core.skill_usage import report
+            payload = report()
+            print(f"Arka usage: {payload['total']} skill invocations")
+            for skill, count in payload["skills"][:20]:
+                print(f"  {skill}: {count}")
+            code = 0
+        elif head in ("design", "design_flow"):
+            from arka.agent.design_flow import main as design_main
+            code = design_main(rest)
+        elif head in ("session", "sessions", "message_session", "message-sessions"):
+            from arka.integrations.message_sessions import main as sessions_main
+
+            code = sessions_main(rest or ["status"])
+        elif head in ("supermemory", "super-memory"):
+            from arka.integrations.supermemory import main as supermemory_main
+            code = supermemory_main(rest)
         elif head in ("self_improve", "self"):
             from arka.agent.self_improve import main as self_main, resolve_improve_args, run_self_improve
 
@@ -205,17 +398,65 @@ def run_skill(skill_line: str) -> int:
                     yes=yes,
                     apply=apply,
                 )
-        elif head in ("ci", "review", "route_audit", "route-audit", "skill"):
+        elif head in ("ci", "review", "route_audit", "route-audit", "skill", "security", "doctor", "dev_doctor", "dev-doctor", "hooks"):
             from arka.agent.dev_tools import main as dev_tools_main
 
-            sub_argv = [head, *rest]
+            sub_argv = ["doctor" if head in ("dev_doctor", "dev-doctor") else head, *rest]
             if head == "route-audit":
                 sub_argv[0] = "route-audit"
             code = dev_tools_main(sub_argv)
+            try:
+                from arka.core.notifications import notify
+                notify(f"Arka {head}", "completed successfully" if code == 0 else f"failed (exit {code})")
+            except Exception:
+                pass
         elif head in ("design_from_screenshot", "design-screenshot", "designshot"):
             from arka.agent.design_from_screenshot import main as design_main
 
             code = design_main([head.replace("-", "_"), *rest])
+        elif head in ("frontend_loop", "frontend-review", "frontend_review", "ui_loop", "ui-review"):
+            from arka.agent.frontend_loop import main as frontend_main
+
+            code = frontend_main([head.replace("-", "_"), *rest])
+        elif head in ("ui_copy", "ui-copy", "copy_audit", "copy-audit"):
+            from arka.agent.ui_copy_audit import main as copy_main
+            code = copy_main(rest)
+        elif head in ("web_screenshot", "web-screenshot", "site_screenshot"):
+            from arka.agent.web_screenshot import main as screenshot_main
+            code = screenshot_main(rest)
+        elif head in ("spline", "spline_guide", "spline-guide"):
+            from arka.agent.spline_guide import main as spline_main
+            code = spline_main(rest)
+        elif head in ("multi_llm", "multi-llm", "llm_variants"):
+            from arka.agent.multi_llm import main as multi_main
+            code = multi_main(rest)
+        elif head in ("race", "agent_race", "agent-race"):
+            from arka.agent.race import main as race_main
+            code = race_main(rest)
+        elif head in ("app_check", "app-check", "build_app", "test_app"):
+            from arka.agent.app_check import main as app_main
+            code = app_main(rest)
+        elif head in ("design_memory", "design-memory", "remember_design"):
+            from arka.agent.design_memory import main as design_memory_main
+            code = design_memory_main(rest)
+        elif head in ("github_actions", "github-actions", "gha"):
+            from arka.agent.github_actions import main as actions_main
+            code = actions_main(rest)
+        elif head in ("parallel", "parallel_skills", "parallel-skills"):
+            from arka.agent.parallel import main as parallel_main
+            code = parallel_main(rest)
+        elif head in ("understand_script", "understand-script", "script_memory"):
+            from arka.agent.script_understanding import main as understand_main
+            code = understand_main(rest)
+        elif head in ("super_replica", "super-replica", "repo_advisor"):
+            from arka.agent.super_replica import main as replica_main
+            code = replica_main(rest)
+        elif head in ("pdf_interactive", "pdf-to-interactive", "interactive_pdf"):
+            from arka.agent.pdf_interactive import main as pdf_interactive_main
+            code = pdf_interactive_main(rest)
+        elif head in ("media_quiz", "media-quiz", "quiz_website"):
+            from arka.agent.media_quiz import main as media_quiz_main
+            code = media_quiz_main(rest)
         elif head in ("urlkit", "url-kit"):
             from arka.core.urlkit import main as urlkit_main
 
@@ -239,6 +480,11 @@ def run_skill(skill_line: str) -> int:
                 mark_ok(current)
             else:
                 mark_error(current, f"exit {code}")
+        try:
+            from arka.core.skill_usage import record
+            record(head, code, (time.perf_counter() - started) * 1000)
+        except Exception:
+            pass
         return code
 
 

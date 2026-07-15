@@ -982,6 +982,22 @@ def price_check(query: str) -> None:
 
 # ── Code agent ────────────────────────────────────────────────────────────────
 
+def _coding_summary(cwd: Path, goal: str, total: int, *, completed: int, failed_step: int | None = None) -> str:
+    """Return a compact, deterministic progress summary after a coding run."""
+    status = f"failed at step {failed_step}/{total}" if failed_step else f"completed {completed}/{total} step(s)"
+    lines = [f"Coding summary: {status} while working on {goal}"]
+    try:
+        diff = subprocess.run(
+            ["git", "diff", "--stat"], cwd=cwd, capture_output=True, text=True, timeout=10
+        )
+        if diff.returncode == 0 and diff.stdout.strip():
+            lines.append("Changed files:\n" + diff.stdout.strip())
+    except (OSError, subprocess.SubprocessError):
+        pass
+    lines.append("Next: run `arka ci --changed` to verify the edited files.")
+    return "\n".join(lines)
+
+
 def code_agent(goal: str, *, repo: str | None = None, ingest: bool = False) -> int:
     from arka.core.code_project import (
         CodeProjectError,
@@ -1020,6 +1036,14 @@ def code_agent(goal: str, *, repo: str | None = None, ingest: bool = False) -> i
             print("Codebase ingest failed.")
             return proc.returncode
 
+    arka_tool_hint = (
+        "Prefer existing Arka tools when they fit the task. "
+        "Examples include repo_health, lint_project, pr_check, review, route_audit, "
+        "self_improve, design_from_screenshot, compose_slides, urlkit, mcp, agent_hub, "
+        "frontend_loop, and skill scaffolding. "
+        "If a step names one of those tools directly, emit the skill call instead of a raw shell command."
+    )
+
     ctx = ""
     try:
         from arka.stock.turboquant_rag import search_documents, use_turboquant
@@ -1035,8 +1059,23 @@ def code_agent(goal: str, *, repo: str | None = None, ingest: bool = False) -> i
         '{"steps":["shell command or skill", ...], "summary":"plan"}'
     )
     plan_user = f"Repo: {cwd}\nGoal: {goal}\n"
+    plan_user += arka_tool_hint + "\n"
+    try:
+        from arka.agent.change_guards import animation_scope_guard
+        guard = animation_scope_guard(goal)
+        if guard:
+            plan_user += guard + "\n"
+    except ImportError:
+        pass
     if mem:
         plan_user += mem + "\n"
+    try:
+        from arka.agent.design_memory import context as design_context
+        design_mem = design_context()
+        if design_mem:
+            plan_user += design_mem + "\n"
+    except ImportError:
+        pass
     if ctx:
         plan_user += f"Relevant code context:\n{ctx[:6000]}\n"
     plan_raw = _llm(plan_system, plan_user)
@@ -1057,6 +1096,13 @@ def code_agent(goal: str, *, repo: str | None = None, ingest: bool = False) -> i
     for i, step in enumerate(steps, 1):
         print(f"━━━ Code step {i}/{len(steps)} ━━━")
         print(f"→ {step}")
+        skill_rc = _run_arka_tool_step(step)
+        if skill_rc is not None:
+            if skill_rc != 0:
+                print(f"Step failed (exit {skill_rc}).")
+                print(_coding_summary(cwd, goal, len(steps), completed=i - 1, failed_step=i))
+                return skill_rc
+            continue
         scope_ok, scope_reason = check_shell_scope(step, root=cwd)
         if not scope_ok:
             print(scope_reason, file=sys.stderr)
@@ -1064,8 +1110,39 @@ def code_agent(goal: str, *, repo: str | None = None, ingest: bool = False) -> i
         proc = subprocess.run(["fish", "-ic", step], cwd=cwd, timeout=300)
         if proc.returncode != 0:
             print(f"Step failed (exit {proc.returncode}).")
+            print(_coding_summary(cwd, goal, len(steps), completed=i - 1, failed_step=i))
             return proc.returncode
+    print(_coding_summary(cwd, goal, len(steps), completed=len(steps)))
     return 0
+
+
+def _run_arka_tool_step(step: str) -> int | None:
+    clean = " ".join((step or "").split()).strip()
+    if not clean:
+        return None
+    if clean.startswith("arka "):
+        clean = clean[5:].strip()
+    if not clean:
+        return None
+    try:
+        from arka.router import route
+    except ImportError:
+        route = None  # type: ignore[assignment]
+    if route is not None:
+        try:
+            routed = route(clean)
+        except Exception:
+            routed = None
+        if routed and routed.kind != "shell":
+            from arka.dispatch import run_skill
+
+            return run_skill(routed.skill)
+    first = clean.split()[0]
+    if not re.fullmatch(r"[a-z][a-z0-9_]*", first):
+        return None
+    from arka.dispatch import run_skill
+
+    return run_skill(clean)
 
 
 # ── Nudge (proactive hints) ───────────────────────────────────────────────────

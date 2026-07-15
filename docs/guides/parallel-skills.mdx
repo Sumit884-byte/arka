@@ -1,0 +1,13 @@
+# Parallel skills
+
+Run independent Arka skills concurrently:
+
+```bash
+arka parallel --job "ci" --job "route audit" --job "security"
+```
+
+Use `--workers` to bound concurrency. Arka preserves job order in the report
+and returns a failure if any job fails. Only parallelize independent work;
+avoid running commands that edit the same files at the same time. Natural
+language requests such as “run `ci` and `route audit` in parallel” are routed
+when each job is quoted.

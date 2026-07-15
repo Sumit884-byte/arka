@@ -1,0 +1,14 @@
+# Script understanding memory
+
+Teach Arka about scripts it uses repeatedly:
+
+```bash
+arka understand-script show scripts/build.py
+arka understand-script remember scripts/build.py
+arka understand-script list
+```
+
+Arka records a local summary of functions, imports, line count, and CLI hints.
+Future coding and routing tasks can use this summary instead of rediscovering
+the same script structure. It does not execute the script while analyzing it.
+Natural language such as “remember this script tools/build.py” is supported.

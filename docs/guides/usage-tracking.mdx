@@ -1,0 +1,12 @@
+---
+title: "Usage tracking"
+description: "Inspect Arka skill usage locally without collecting prompt content."
+---
+
+```bash
+arka usage
+```
+
+Arka stores up to 5,000 local events containing only the skill name, success
+state, duration, and timestamp. Prompts, arguments, file contents, and model
+responses are not recorded. Disable it with `ARKA_USAGE_TRACKING=0`.

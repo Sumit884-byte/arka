@@ -1,0 +1,15 @@
+---
+title: "3D model to transparent image"
+description: "Render a mesh and remove its background for reuse in designs."
+---
+
+```bash
+arka model_to_image chair.obj --output chair-render.png
+arka model_to_image asset.glb --output public/assets/asset.png --size 2048
+```
+
+Arka uses Blender for cross-platform mesh rendering, produces a transparent
+PNG, then runs the existing background-removal skill to remove residual pixels.
+Supported mesh inputs are OBJ, STL, GLB, and GLTF. Install Blender on PATH and
+the vision extra for background removal. Use `--keep-background` when a rendered
+transparent canvas is preferred without rembg processing.

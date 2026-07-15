@@ -386,6 +386,18 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
         default_models=("local-model",),
     ),
     ProviderSpec(
+        slug="exo",
+        display_name="Exo (LAN inference cluster)",
+        env_keys=("EXO_API_KEY",),
+        api_key_env="EXO_API_KEY",
+        default_model="default",
+        kind="local_openai",
+        base_url_env="EXO_API_BASE",
+        default_base_url="http://127.0.0.1:52415/v1",
+        models_env="EXO_MODELS",
+        default_models=("default",),
+    ),
+    ProviderSpec(
         slug="vllm",
         display_name="vLLM (local OpenAI-compatible)",
         env_keys=("VLLM_API_KEY", "VLLM_API_KEYS"),

@@ -1,0 +1,140 @@
+{
+  "topic": "kubernetes networking",
+  "scenes": [
+    {
+      "title": "Kubernetes Networking is a strategic priority now",
+      "narration": "Hook the room: why Kubernetes Networking deserves executive attention this quarter.",
+      "body": "\u2022 High stakes decision\n\u2022 Momentum is building",
+      "captions": [
+        "High stakes decision",
+        "Momentum is building"
+      ],
+      "image_query": "executive boardroom",
+      "image_keywords": [],
+      "chart": null,
+      "chart_path": "",
+      "slide_image": ""
+    },
+    {
+      "title": "The core challenge we must solve",
+      "narration": "Frame the problem in business terms \u2014 cost, risk, speed, or customer impact.",
+      "body": "\u2022 Problem is measurable\n\u2022 Delay increases risk",
+      "captions": [
+        "Problem is measurable",
+        "Delay increases risk"
+      ],
+      "image_query": "business strategy meeting",
+      "image_keywords": [],
+      "chart": null,
+      "chart_path": "",
+      "slide_image": ""
+    },
+    {
+      "title": "Key insight: what changes with Kubernetes Networking",
+      "narration": "Deliver the central insight or finding that reframes the conversation.",
+      "body": "\u2022 Clear point of view\n\u2022 Supported by evidence",
+      "captions": [
+        "Clear point of view",
+        "Supported by evidence"
+      ],
+      "image_query": "data dashboard office",
+      "image_keywords": [],
+      "chart": null,
+      "chart_path": "",
+      "slide_image": ""
+    },
+    {
+      "title": "What this means for our organization",
+      "narration": "Translate the insight into operating impact, tradeoffs, and stakeholders affected.",
+      "body": "\u2022 Operational impact\n\u2022 Stakeholders affected",
+      "captions": [
+        "Operational impact",
+        "Stakeholders affected"
+      ],
+      "image_query": "team planning session",
+      "image_keywords": [],
+      "chart": null,
+      "chart_path": "",
+      "slide_image": ""
+    },
+    {
+      "title": "Recommended path forward",
+      "narration": "Propose a focused plan with priorities, owners, and a realistic timeline.",
+      "body": "\u2022 3 priorities\n\u2022 90-day horizon",
+      "captions": [
+        "3 priorities",
+        "90-day horizon"
+      ],
+      "image_query": "project roadmap wall",
+      "image_keywords": [],
+      "chart": null,
+      "chart_path": "",
+      "slide_image": ""
+    },
+    {
+      "title": "Decision and next step",
+      "narration": "End with a explicit ask \u2014 approve, fund, pilot, or schedule a follow-up.",
+      "body": "\u2022 Decision needed\n\u2022 Next meeting scheduled",
+      "captions": [
+        "Decision needed",
+        "Next meeting scheduled"
+      ],
+      "image_query": "handshake executives",
+      "image_keywords": [],
+      "chart": null,
+      "chart_path": "",
+      "slide_image": ""
+    }
+  ],
+  "photo_credits": [
+    {
+      "title": "Kubernetes Networking is a strategic priority now",
+      "query": "executive boardroom",
+      "source": "unsplash",
+      "author": "",
+      "url": "https://images.unsplash.com/photo-1758691736433-4078b93abd72?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4MjA2NDl8MHwxfHNlYXJjaHwxM3x8ZXhlY3V0aXZlJTIwYm9hcmRyb29tJTIwb2ZmaWNlfGVufDF8MHx8fDE3ODM5NTY3Mzh8MA&ixlib=rb-4.1.0&q=80&w=1080"
+    },
+    {
+      "title": "The core challenge we must solve",
+      "query": "business strategy meeting",
+      "source": "unsplash",
+      "author": "",
+      "url": "https://images.unsplash.com/photo-1758691736424-4b4273948341?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4MjA2NDl8MHwxfHNlYXJjaHwyNXx8b2ZmaWNlJTIwYnVzaW5lc3MlMjBzdHJhdGVneXxlbnwxfDB8fHwxNzgzOTU2NzQxfDA&ixlib=rb-4.1.0&q=80&w=1080"
+    },
+    {
+      "title": "Key insight: what changes with Kubernetes Networking",
+      "query": "data dashboard office",
+      "source": "unsplash",
+      "author": "",
+      "url": "https://images.unsplash.com/photo-1748609160056-7b95f30041f0?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4MjA2NDl8MHwxfHNlYXJjaHwxM3x8ZGF0YSUyMGRhc2hib2FyZCUyMG9mZmljZXxlbnwxfDB8fHwxNzgzOTU2NzQ1fDA&ixlib=rb-4.1.0&q=80&w=1080"
+    },
+    {
+      "title": "What this means for our organization",
+      "query": "team planning session",
+      "source": "unsplash",
+      "author": "",
+      "url": "https://images.unsplash.com/photo-1707157284454-553ef0a4ed0d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4MjA2NDl8MHwxfHNlYXJjaHwzMHx8b2ZmaWNlJTIwcGxhbm5pbmclMjBzZXNzaW9ufGVufDF8MHx8fDE3ODM5NTY3NDh8MA&ixlib=rb-4.1.0&q=80&w=1080"
+    },
+    {
+      "title": "Recommended path forward",
+      "query": "project roadmap wall",
+      "source": "unsplash",
+      "author": "",
+      "url": "https://images.unsplash.com/photo-1716703373229-b0e43de7dd5c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4MjA2NDl8MHwxfHNlYXJjaHw0fHxvZmZpY2UlMjBwcm9qZWN0JTIwcm9hZG1hcHxlbnwxfDB8fHwxNzgzOTU2NzUxfDA&ixlib=rb-4.1.0&q=80&w=1080"
+    },
+    {
+      "title": "Decision and next step",
+      "query": "handshake executives",
+      "source": "unsplash",
+      "author": "",
+      "url": "https://images.unsplash.com/photo-1758599543157-bc1a94fec33c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4MjA2NDl8MHwxfHNlYXJjaHwxN3x8aGFuZHNoYWtlJTIwZXhlY3V0aXZlcyUyMG9mZmljZXxlbnwxfDB8fHwxNzgzOTU2NzU1fDA&ixlib=rb-4.1.0&q=80&w=1080"
+    }
+  ],
+  "outputs": {
+    "pptx": "/Users/sumitmishra/dev/arka/tmp/k8s-networking-slides.pptx"
+  },
+  "formats": [
+    "pptx"
+  ],
+  "source": "arka-compose-slides"
+}

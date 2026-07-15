@@ -196,6 +196,9 @@ def backend_catalog() -> list[BackendInfo]:
 def auto_backend_order(*, prefer_procedural: bool = False) -> list[str]:
     if prefer_procedural:
         return ["procedural"]
+    configured = [item.strip().lower() for item in _env("MODEL_3D_BACKEND_CHAIN", "").split(",") if item.strip()]
+    if configured:
+        return configured
     order: list[str] = []
     if _has_local_shap_e():
         order.append("shap-e")

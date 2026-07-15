@@ -53,3 +53,4 @@ hackathon/
 casting.yaml
 casting.yaml.lock
 bin/arka_signoz.py
+.third_party/local-llm-research/

@@ -1,0 +1,14 @@
+# Supermemory code RAG
+
+Normal memories remain opt-in and unchanged. To explicitly index code for
+retrieval-augmented advice, use:
+
+```bash
+arka supermemory remember-code src/arka/router.py
+arka supermemory remember-code src/arka/router.py --chunk-lines 160
+```
+
+Arka stores bounded chunks with file path, language, line ranges, `code` tags,
+and project trust metadata. This improves targeted retrieval without silently
+uploading an entire repository. Review your privacy and API settings before
+using cloud mode; `MEMORY=local` keeps the chunks local.

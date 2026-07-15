@@ -1,0 +1,18 @@
+---
+title: "Workspace discovery"
+description: "Map services, micro-frontends, and runtimes from one workspace."
+---
+
+Use `arka workspace` to build a read-only inventory across a monorepo or a
+directory containing multiple projects:
+
+```bash
+arka workspace .
+arka workspace . --json
+arka workspace . --depth 5
+```
+
+Arka detects common manifests (`package.json`, `pyproject.toml`, Go, Rust,
+Docker) and labels likely frontend boundaries. The inventory is intentionally
+non-mutating; use the resulting paths with `arka ci`, `arka review`, or
+`arka telemetry-connect` for service-specific work.

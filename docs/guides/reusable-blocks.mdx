@@ -1,0 +1,25 @@
+---
+title: "Reusable application blocks"
+description: "Scaffold common auth and payment building blocks with stack notes."
+---
+
+```bash
+arka blocks list
+arka blocks show auth_login
+arka blocks show payments_stripe
+arka blocks use auth_signup --stack "Next.js + Auth.js" --out components/signup.tsx
+```
+
+Available blocks include login, sign-up, password reset, OAuth, email
+verification, Stripe checkout/subscriptions, PayPal, and webhook receivers. Every block lists
+compatible technology stacks and security/implementation notes. Generated files
+are intentionally small and inspectable; existing files are never overwritten
+unless `--force` is supplied. These are starters, not production-ready auth or
+payment systems: add server validation, tests, secret management, webhooks, and
+provider-specific configuration before shipping. Generated output now includes
+production-readiness gates and required environment variables; implement and
+verify every gate before deployment. Arka does not mark a scaffold production
+ready merely because it was generated.
+
+Natural language works: “show reusable login blocks” or “list available app
+blocks.”

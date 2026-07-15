@@ -1,0 +1,17 @@
+# Design references
+
+Save a screenshot, design URL, or consistency note for future code edits:
+
+```bash
+arka design-memory remember ./design.png --note "dark cards, 16px radius"
+arka design-memory list
+```
+
+When Arka’s coding agent plans edits, it automatically includes saved design
+references. It preserves good viewport modes, changes only the affected layout,
+and keeps button and interaction order unchanged. References are stored locally
+in Arka’s cache; save only files and URLs you are comfortable retaining.
+
+Animation requests also use a symbolic scope guard: adding UI animations does
+not modify tests, fixtures, snapshots, or test animations. Those files are only
+eligible when the request explicitly names the test scope.

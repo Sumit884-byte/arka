@@ -1,0 +1,21 @@
+---
+title: "Media-to-media transformations"
+description: "Turn media content into books, podcasts, and other usable formats."
+---
+
+Arka supports content-aware transformations, not just file-extension changes:
+
+```bash
+arka media_transform podcast.mp3 --to book --output podcast-book.md
+arka media_transform notes.md --to podcast --output notes.mp3
+arka media_transform "https://youtube.com/playlist?list=PLAYLIST_ID" --to book --output playlist-book.md
+arka media_transform presentation.pptx --to book --output presentation-book.md
+arka media_transform slide.png --to book --output slide-book.md
+```
+
+Audio/video sources use captions or transcription, YouTube playlists combine
+the available video transcripts into chapters, and text/book sources can be
+spoken with Arka's TTS backend. Install FFmpeg/Whisper for local media
+transcription and run `arka tts-setup` for podcast output when Edge TTS is not
+already available. Missing captions or dependencies produce an explicit error;
+Arka never silently creates an empty book or audio file.

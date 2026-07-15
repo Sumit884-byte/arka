@@ -51,6 +51,12 @@ compose_3d boy --quality high
 
 Human figures (`boy`, `girl`, `person`) use procedural capsule-based templates — not raw LLM vertex output — for consistent, printable meshes.
 
+3D generation uses fallback orchestration. Configure a preferred chain when
+needed, for example `MODEL_3D_BACKEND_CHAIN=tripo,shap-e,openscad,llm`; each
+backend is tried in order and failures continue to the next backend. The LLM
+OBJ generator then uses Arka's normal model fallback, and procedural templates
+remain the offline-safe fallback for supported shapes.
+
 ## Free AI backends (better than procedural soup)
 
 For organic shapes (`dragon`, `vase with floral pattern`, etc.), use external generators before the LLM OBJ fallback:

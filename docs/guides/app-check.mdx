@@ -1,0 +1,15 @@
+# App build checks
+
+Ask Arka to detect and validate a project’s build/test workflow:
+
+```bash
+arka app-check .
+arka app-check . --run
+arka app-check . --run --json
+```
+
+Arka detects common Python, Node, Rust, and Go projects. Without `--run` it
+only previews checks. With `--run` it stops at the first failure and reports the
+command output so the problem can be fixed. Natural language works too:
+“build and test this app”. Run checks in an Arka sandbox when validating
+generated or untrusted code.

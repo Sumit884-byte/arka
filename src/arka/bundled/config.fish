@@ -1982,6 +1982,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         agent_resume agent_research agent_nudge agent_watch agent_routine agent_fanout \
         agent_code agent_handoff agent_browser transcript_ask media_ask \
         meeting_agent study_agent inbox_agent compare_agent product_reviewer price_check profession pr_check self_improve github_repo competitions route_learn \
+        frontend_loop \
         bookmarks repo_health repo_context repo_map generate_data data_gen data_ask ask_data query_data analyze_data view_data view_csv show_csv docker_status clipboard_history jsonkit heartbeat mcp agent_hub gemini_cli harvard_ark persona elon talk_to_elon elon_chat \
         arka_ask semantic_memory supermemory speak_research voice_session handoff_notify remind routines predictions stock \
         rag_setup rag_status voice_agent wake_control \
@@ -2547,6 +2548,8 @@ function skills --description "Show what commands the agent can auto-run"
                 echo (set_color green)"  compose_video   "(set_color normal)"--topic '…' [--llm] — YouTube info video (Unsplash + ffmpeg + TTS)"
             case compose_slides
                 echo (set_color green)"  compose_slides  "(set_color normal)"compose|convert — deck build/export (pptx|pdf|html|md|json|all)"
+            case frontend_loop
+                echo (set_color green)"  frontend_loop   "(set_color normal)"review|retry — inspect frontend screenshots and rerun builds"
             case compose_3d
                 echo (set_color green)"  compose_3d     "(set_color normal)"gear|vase|cube|sphere|… — local OBJ/STL 3D models"
             case convert_media
@@ -12044,6 +12047,23 @@ function _agent_is_compose_slides_request --description "True if user wants pres
     test -n "$(_agent_build_compose_slides_cmd "$argv[1]")"
 end
 
+function _agent_build_frontend_loop_cmd --description "Build frontend_loop args from NL (internal)"
+    set -l cmd "$argv[1]"
+    set -l name (_agent_call_name)
+    set cmd (string replace -r -i "^$name\\s+" '' "$cmd" | string trim)
+    set -l py (_arka_python)
+    set -l script (_arka_py_script arka_frontend_loop.py)
+    test -z "$script"; and return
+    set -l rest ($py "$script" parse (string escape --style=script -- $cmd) 2>/dev/null)
+    if test (count $rest) -gt 0
+        echo "frontend_loop $rest"
+    end
+end
+
+function _agent_is_frontend_loop_request --description "True if user wants frontend visual review/retry (internal)"
+    test -n "$(_agent_build_frontend_loop_cmd "$argv[1]")"
+end
+
 function _agent_build_convert_media_cmd --description "Build convert_media args from NL (internal)"
     set -l cmd "$argv[1]"
     set -l name (_agent_call_name)
@@ -18153,6 +18173,11 @@ function agent --description "Run commands safely: executes safe commands automa
 
     if test -z "$interpreted"; and _agent_is_compose_3d_request "$cmd"
         set interpreted (_agent_build_compose_3d_cmd "$cmd")
+        set route_source offline
+    end
+
+    if test -z "$interpreted"; and _agent_is_frontend_loop_request "$cmd"
+        set interpreted (_agent_build_frontend_loop_cmd "$cmd")
         set route_source offline
     end
 

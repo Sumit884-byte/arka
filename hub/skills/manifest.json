@@ -1,0 +1,61 @@
+{
+  "exported_at": "2026-07-13T15:46:20+00:00",
+  "count": 3,
+  "skills": [
+    {
+      "name": "astronomy",
+      "description": "Astronomy lookups \u2014 bright stars, planets, moon phase, ISS pass times",
+      "triggers": [
+        "astronomy",
+        "what star is",
+        "what is betelgeuse",
+        "moon phase",
+        "moon phase tonight",
+        "iss pass",
+        "iss pass times",
+        "international space station",
+        "planet position",
+        "constellation orion",
+        "look up star"
+      ],
+      "path": null,
+      "type": "python"
+    },
+    {
+      "name": "life_sciences",
+      "description": "Anthropic life-sciences marketplace \u2014 install PubMed, single-cell QC, Nextflow, and other research plugins",
+      "triggers": [
+        "life sciences",
+        "life sciences",
+        "life science",
+        "life-sciences",
+        "install life sciences",
+        "life sciences list",
+        "life sciences install",
+        "biomedical research tools",
+        "bioinformatics tools",
+        "pubmed plugin",
+        "single cell rna qc plugin"
+      ],
+      "path": null,
+      "type": "python"
+    },
+    {
+      "name": "metallurgy",
+      "description": "Metallurgy \u2014 alloy properties, composition lookup, and heat-treatment procedures",
+      "triggers": [
+        "metallurgy",
+        "alloy",
+        "steel grade",
+        "stainless steel",
+        "heat treatment",
+        "alloy composition",
+        "properties of steel",
+        "brass composition",
+        "aluminum heat treatment"
+      ],
+      "path": null,
+      "type": "python"
+    }
+  ]
+}

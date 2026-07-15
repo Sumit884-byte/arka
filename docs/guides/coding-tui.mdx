@@ -1,0 +1,34 @@
+# Coding TUI
+
+Start a focused terminal workspace for repository edits:
+
+```bash
+arka coding-tui .
+```
+
+Inside the TUI:
+
+```text
+/status
+/plan add a settings page
+/run add a settings page
+/help
+/quit
+```
+
+Plain-text requests are treated as plan requests. Use `/run` explicitly to
+execute a goal, keeping planning and code changes visibly separate. The coding
+agent automatically prints a completion/failure summary and suggests the next
+incremental CI command.
+
+Coding requests are language-agnostic: mention the language, framework, or file
+extension in your request and Arka will use the repository’s existing toolchain.
+Voice input and output can also use any Edge TTS-supported BCP-47 language:
+
+```bash
+arka speak --lang fr-FR "Crée un test pour cette fonction"
+SPEAK_LANG=ja-JP arka speak "このコードを説明してください"
+```
+
+For a locale outside the curated list, Arka discovers a matching Edge voice
+automatically and falls back to English only when that locale is unavailable.

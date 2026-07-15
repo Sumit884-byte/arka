@@ -1,0 +1,13 @@
+---
+title: "Local environment bridge"
+description: "Fill another project's .env from Arka's local configuration."
+---
+
+```bash
+arka env-bridge /path/to/project
+arka env-bridge /path/to/project --allow OPENAI_API_BASE,OLLAMA_HOST --apply
+```
+
+The bridge is deterministic and local-only; it does not send values to an LLM.
+It redacts values in previews, never overwrites existing keys, and requires
+`--apply` before writing. Prefer `--allow` to limit the variables copied.

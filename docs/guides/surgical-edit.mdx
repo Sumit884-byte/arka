@@ -1,0 +1,14 @@
+# Surgical editing
+
+Search before editing and refuse ambiguous changes:
+
+```bash
+arka surgical-edit find src/app.py "target function"
+arka surgical-edit edit src/app.py "old text" "new text" --yes
+arka surgical-edit edit src/app.py "old text" "new text" --all --yes
+```
+
+Arka prints matching lines first, requires a unique match by default, creates a
+`.bak` backup, and makes no change when the keyword is missing or ambiguous.
+Natural language requests are supported when the file and old/new text are
+quoted clearly.

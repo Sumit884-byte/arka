@@ -452,6 +452,9 @@ def nl_to_argv(cmd: str) -> list[str] | None:
         if re.search(r"(?i)\b(?:arka|self)\b", clean):
             return ["self-tools"]
         return ["list"]
+    if re.search(r"(?i)\b(?:what|which|show|list)\b.*\btools?\b.*\b(?:available|can)\b", clean) and re.search(r"(?i)\bmcp\b", clean):
+        m = re.search(r"(?i)\b(?:from|on|for)\s+([a-zA-Z0-9._-]+)", clean)
+        return ["tools", m.group(1)] if m else ["self-tools"]
     if re.search(r"(?i)\b(?:list|show)\b.*\b(?:arka\s+)?(?:self\s+)?mcp\s+tools?\b", clean):
         return ["self-tools"]
     if re.search(r"(?i)\b(?:list|show)\b.*\bmcp\s+self[- ]tools?\b", clean):
@@ -469,6 +472,9 @@ def nl_to_argv(cmd: str) -> list[str] | None:
         tool_m = re.search(r"(?i)\btool\s+([a-zA-Z0-9._-]+)", clean)
         if server_m and tool_m:
             return ["call", server_m.group(1), tool_m.group(1)]
+    m = re.search(r"(?i)\b(?:call|invoke|run|use)\s+(?:the\s+)?(?:mcp\s+)?tool\s+([a-zA-Z0-9._-]+)\s+(?:on|from)\s+([a-zA-Z0-9._-]+)", clean)
+    if m:
+        return ["call", m.group(2), m.group(1)]
     if lower in {"mcp", "mcp list", "list mcp", "mcp servers"}:
         return ["list"]
     return None

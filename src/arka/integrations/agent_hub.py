@@ -1145,6 +1145,17 @@ def doctor() -> list[dict[str, Any]]:
         }
     )
 
+    hub_data = _load_json_file(hub_mcp_path())
+    hub_servers = hub_data.get("mcpServers") or {}
+    checks.append({"name": "hub_mcp_valid", "ok": isinstance(hub_servers, dict), "detail": f"servers={len(hub_servers)} path={hub_mcp_path()}"})
+    try:
+        from arka.integrations.mcp_server import ARKA_MCP_SERVER_KEY
+        self_server = hub_servers.get(ARKA_MCP_SERVER_KEY) if isinstance(hub_servers, dict) else None
+        self_ok = isinstance(self_server, dict) and bool(self_server.get("command") or self_server.get("url"))
+        checks.append({"name": "hub_arka_mcp", "ok": self_ok, "detail": "self MCP server configured" if self_ok else "run agent_hub sync"})
+    except ImportError:
+        pass
+
     launch_env_path = hub_launch_env_path()
     checks.append(
         {
@@ -1270,6 +1281,15 @@ def format_adapters() -> str:
     return "\n".join(lines)
 
 
+def format_mcp_tools() -> str:
+    servers = _hub_mcp_servers()
+    lines = [f"hub\t{hub_mcp_path()}", f"servers\t{len(servers)}"]
+    for name, cfg in sorted(servers.items()):
+        kind = "http" if isinstance(cfg, dict) and cfg.get("url") else "stdio"
+        lines.append(f"{name}\t{kind}")
+    return "\n".join(lines)
+
+
 def format_detect() -> str:
     lines = [f"hub\t{hub_dir()}", ""]
     for row in detect_agents():
@@ -1310,6 +1330,8 @@ def nl_to_argv(cmd: str) -> list[str] | None:
         return ["detect"]
     if re.search(r"(?i)\b(?:agent\s+hub|hub)\b.*\b(?:adapters?|merge)\b", clean):
         return ["adapters"]
+    if re.search(r"(?i)\b(?:agent\s+hub|hub)\b.*\b(?:mcp\s+)?(?:tools?|servers?)\b", clean):
+        return ["tools"]
     if re.search(r"(?i)\b(?:import|ingest)\b.*\b(?:hub\s+)?memory\b", clean):
         return None
     if re.search(r"(?i)\b(?:agent\s+hub|arka\s+hub)\b.*\b(?:sync|refresh|update)\b", clean):
@@ -1363,6 +1385,7 @@ __all__ = [
     "format_agent_list",
     "format_detect",
     "format_doctor",
+    "format_mcp_tools",
     "format_status",
     "hub_dir",
     "hub_mcp_path",

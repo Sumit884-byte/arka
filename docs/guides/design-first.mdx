@@ -1,0 +1,15 @@
+---
+title: "Design first, build after approval"
+description: "Draft, review, redo, and approve Arka implementation plans before code changes."
+---
+
+```bash
+arka design plan "build a dashboard for local model benchmarks"
+arka design show
+arka design redo "include offline support and a CSV export"
+arka design accept
+arka design build --yes
+```
+
+`design plan` and `design redo` do not modify the project. `design build` is
+blocked until the draft is accepted, keeping planning separate from execution.

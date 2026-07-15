@@ -1,197 +1,27 @@
 ---
-title: "Built-in skills catalog"
-description: "Catalog of Arka's 70+ built-in skills spanning media, web search, documents, system control, developer tools, and finance automation."
-keywords: ["skills", "automation", "features"]
-icon: "list-check"
+title: "Managing skills"
+description: "Enable or disable Arka skills without editing configuration files."
 ---
 
-Arka ships with **70\+ built-in skills**. Say what you want in natural language and the router picks the right one.
-
-<CardGroup cols={3}>
-  <Card title="Arka Council" icon="users" href="/guides/council">
-    Multi-persona deliberation with synthesis.
-  </Card>
-  <Card title="Quiz practice" icon="graduation-cap" href="/guides/quiz-practice">
-    Infinite quizzes with memory.
-  </Card>
-  <Card title="Timezone convert" icon="clock" href="/guides/timezone-convert">
-    PDT to IST and more.
-  </Card>
-  <Card title="Open URL" icon="arrow-up-right-from-square" href="/guides/open-url">
-    Open sites in your browser.
-  </Card>
-  <Card title="Compose 3D" icon="cube" href="/guides/compose-3d">
-    Local OBJ/STL model generation.
-  </Card>
-  <Card title="Compose slides" icon="presentation-screen" href="/guides/compose-slides">
-    Executive-quality decks.
-  </Card>
-  <Card title="Self-improve" icon="arrows-rotate" href="/guides/self-improve">
-    Codebase improvement loop.
-  </Card>
-  <Card title="Bookmarks" icon="bookmark" href="/guides/bookmarks">
-    Save and recall URLs.
-  </Card>
-  <Card title="Clipboard history" icon="clipboard" href="/guides/clipboard-history">
-    Search pasted text history.
-  </Card>
-  <Card title="Operation modes" icon="toggle-on" href="/guides/operation-modes">
-    Agent, ask, plan, debug.
-  </Card>
-</CardGroup>
-
-## Media
-
-| Skill | Example |
-| --- | --- |
-| `play_spotify` | `arka play bohemian rhapsody on spotify` |
-| `play_youtube` | `arka play lofi beats on youtube` |
-| `play_movie` | `arka play inception` |
-| `compose_video` | `arka compose a video about climate change` |
-| `compose_slides` | `arka make slides about climate change` · `arka pitch deck on AI` · `--style pitch --theme dark` |
-| `compose_slides` | See [Compose slides guide](/guides/compose-slides) for style presets and themes |
-| `compose_3d` | `arka create a 3d model of a gear` · `make 3d vase 10cm tall` · `-f stl` |
-| `compose_3d` | See [Compose 3D guide](/guides/compose-3d) for shapes and formats |
-| `generate_thumbnail` | `arka generate thumbnail for my video` |
-
-## YouTube
-
-Full guide: [YouTube research and downloads](/guides/youtube)
-
-| Skill | Example |
-| --- | --- |
-| `youtube_research` | `arka youtube research "python asyncio tutorial" --limit 5` |
-| `youtube_download` | `youtube_download <url> --audio` |
-| `youtube_bulk` | `youtube_bulk download PLxxx --wait` |
-| `youtube_transcript` | `youtube_transcript <url> --summarize` |
-| `find_videos` | `find_videos swimming tutorial` |
-| `playlist_summarize` | `arka summarize youtube PLxxx` |
-
-## Web and chat
-
-| Skill | Example |
-| --- | --- |
-| `web_answer` | `arka ask who won IPL 2025` |
-| `interesting_fact` | `tell me something interesting` · `give me a fun fact` |
-| `council` | `arka council "should I learn Rust?"` · `deliberate with arka on …` |
-| `deep_web_answer` | `arka /latest AI regulation news` |
-| `search_web` | `arka search rust async tutorials` |
-| `calc` | `arka calc 2^10 + sqrt(144)` |
-| `hyperlocal_weather` | `arka weather near me` |
-
-## Documents and vision
-
-| Skill | Example |
-| --- | --- |
-| `pdf_ingest` | `pdf_ingest ~/Documents/resume.pdf` |
-| `pdf_ask` | `pdf_ask --doc resume.pdf "summarize skills"` |
-| `pdf_tools` | `pdf_tools merge a.pdf b.pdf -o combined.pdf` |
-| `pdf_tools` | `pdf_tools compress report.pdf` |
-| `pdf_tools` | `pdf_tools edit doc.pdf --text 'Approved'` |
-| `drawing_ask` | `drawing_ask plan.pdf "extract door schedule"` |
-| `describe_image` | `arka describe photo.jpg` |
-| `describe_screen` | `arka describe my screen` |
-| `design_from_screenshot` | `arka build this project from screenshot.png` |
-
-`design_from_screenshot` is the screenshot-to-project path. It asks the vision stack for a build brief instead of a generic caption, so you can hand Arka a UI screenshot, mockup, or wireframe and get an implementation-oriented breakdown back.
-
-## Productivity
-
-| Skill | Example |
-| --- | --- |
-| `google` | `arka google gmail --unread --summarize` |
-| `remind` | `arka remind me in 2 hours to call mom` |
-| `routines` | `routines add daily 9am "check email"` |
-| `routines` | `arka every 6 hours self improve the repo` · `arka daily update the project` |
-
-The routines scheduler accepts daily, hourly, clock-time, and interval phrases. For maintenance tasks, Arka understands `self improve`, `update the project`, and `repo health` language and turns it into a recurring routine.
-
-| `todo` | `arka add buy milk to todo` |
-| `daily_brief` | `arka daily brief` |
-| `route_learn` | `arka teach route "ping ops" to system_monitor` |
-| `competitions` | `arka find hackathons for computer vision` |
-| `post_x` | `arka post this on my X https://example.com` |
-| `ascii_art` | `arka make ascii art HELLO` |
-| `select_model` | `arka select best model for my pc` |
-| `gemini_cli` | `arka gemini explain asyncio` |
-| `persona` | `arka persona list` · `arka persona chat elon` · `arka persona create coach` |
-| `quiz_practice` | `arka quiz python` · `quiz me on world history` |
-| `elon` | `elon "should I learn Rust?"` · `elon chat` · `talk to elon about rockets` (shortcut) |
-
-## System
-
-| Skill | Example |
-| --- | --- |
-| `weather` | `arka what's the weather` |
-| `system_monitor` | `arka system monitor` |
-| `disk_breakdown` | `arka how much disk is videos taking` |
-| `app_usage` | `arka usage report` |
-| `screenshot` | `arka screenshot` |
-
-## Development
-
-| Skill | Example |
-| --- | --- |
-| `install_uv` | `arka install uv` |
-| `install_app` | `arka install docker` |
-| `git_summary` | `arka git summary` |
-| `lint_python` | `arka lint this file` |
-| `lint_project` | `arka lint this repo` |
-| `github_repo` | `arka github repo stats for arka-agent/arka` |
-| `goal` | `arka goal set up venv and run pytest` |
-| `self_improve` | `arka self improve` · `arka self improve routing --apply` |
-
-`self_improve` also recognizes routing-focused self-improvement phrases like `self improve routing` as a dedicated skill path.
-
-## Finance and stocks
-
-Full guide: [Stock intelligence](/guides/stocks)
-
-| Skill | Example |
-| --- | --- |
-| `stock` | `arka stock news` |
-| `stock` | `arka stock analyze AAPL` |
-| `stock` | `arka stock fundamentals RELIANCE.NS` |
-| `stock` | `arka stock invest "where to invest 3000 for 1 month"` |
-| `predictions` | `predictions --domain stocks --deep "banking sector"` |
-| `currency_convert` | `arka convert 100 USD to INR` |
-| `timezone_convert` | `arka convert 9am PDT to IST` · See [Timezone guide](/guides/timezone-convert) |
-| `open_url` | `arka open youtube` · `arka browse github.com` |
-| `urlkit` | `arka repair broken links in this file` |
-| `kalshi` | `kalshi search bitcoin` |
-| `price_check` | `arka price check iPhone 16` |
-| `macro` | `arka stock macro 8` |
-| `emotion` | `arka stock emotion 20` |
-
-## Charts
-
-Full guide: [Charts and graphs](/guides/charts)
-
-Generate matplotlib PNG charts to `~/Pictures/arka-generated/`:
-
 ```bash
-chart line AAPL TSLA --range 1y
-arka phone sales Apple 230 Samsung 210 Xiaomi 140
+arka skills list
+arka skills disable compose_video
+arka skills enable compose_video
 ```
 
-Supported types: line, bar, pie, scatter, histogram, pareto.
+Disabled skills remain visible to routing and capability discovery, but
+execution is blocked with an explicit enable command. Preferences are stored
+in Arka's user configuration under `skills.json`.
 
-## Memory
+Create a guided skill with metadata and a test plan:
 
-Full guide: [Long-term memory](/guides/memory)
+```bash
+arka skill new api_checker --template dev --guided
+```
 
-| Skill | Example |
-| --- | --- |
-| `agent_remember` | `agent_remember I prefer Hindi TTS` |
-| `agent_recall` | `agent_recall what TTS do I prefer` |
-| `supermemory` | `supermemory status` |
+The wizard asks for a description and natural-language triggers, then creates
+`skill.json`, `run.py`, `README.md`, and `TEST_PLAN.md`.
 
-## Professions
-
-Full guide: [Profession domains](/guides/professions)
-
-12 profession domains with curated source registries: health, legal, journalism, architecture, and more. Each domain adds citation-aware research skills.
-
-<Tip>
-  Run `arka help` to see all available skills in your install. The list varies by platform mode and installed extras.
-</Tip>
+It also checks existing skill manifests for duplicate triggers. Collisions are
+reported with the owning skill, and the wizard prints an AI-led trigger
+suggestion such as “ask the AI teammate to use the api checker skill.”

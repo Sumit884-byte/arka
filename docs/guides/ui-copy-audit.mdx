@@ -1,0 +1,14 @@
+# UI copy audit
+
+LLM-generated interfaces sometimes give two buttons or chips the same phrase.
+Audit frontend source before shipping:
+
+```bash
+arka ui-copy .
+arka ui-copy src --json
+```
+
+The audit checks HTML, JSX/TSX, Vue, and Svelte button/chip/link content,
+normalizes case and whitespace, and reports duplicate phrases with file and
+line locations. It is inspection-only; rename labels deliberately after
+reviewing the context.

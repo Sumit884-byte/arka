@@ -1,0 +1,22 @@
+---
+title: "Bounded data collection"
+description: "Collect, clean, deduplicate, and export web research data with a time limit."
+---
+
+Arka can collect web data for a topic, clean the text, remove duplicate URLs,
+and write a machine-readable dataset. Collection is bounded by both time and
+record count so it finishes predictably.
+
+```bash
+arka data collect "renewable energy incentives" --for 5m --limit 50 --output data.jsonl
+arka data collect "AI infrastructure" --for 30s --format csv --output data.csv --json
+```
+
+Each record includes the topic, title, source URL, cleaned text, and source
+type. The final report includes row count, elapsed time, output path, and
+whether the time or record bound was reached. Configure Serper, Tavily, or
+Brave through `arka integration setup` for stronger search coverage; the
+collector still has a DuckDuckGo fallback.
+
+Natural language also works: “auto collect data about battery recycling for
+10 minutes.”

@@ -33,5 +33,18 @@ class SupermemoryObsTests(unittest.TestCase):
         record_supermemory_op(operation="context", backend="local", success=True, hits=1)
 
 
+def test_supermemory_local_fallback_on_api_error(tmp_path, monkeypatch):
+    import arka.integrations.supermemory as sm
+
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("MEMORY", "auto")
+    monkeypatch.setenv("SUPERMEMORY_API_KEY", "test-key")
+    monkeypatch.setattr(sm, "MEMORY_FILE", tmp_path / "memory.json")
+    monkeypatch.setattr(sm, "_api_remember", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("HTTP 503")))
+    result = sm._remember_impl("fallback memory")
+    assert result["backend"] == "local"
+    assert "api_error" in result
+
+
 if __name__ == "__main__":
     unittest.main()

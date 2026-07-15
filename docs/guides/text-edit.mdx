@@ -1,0 +1,14 @@
+# Inspect and remove text
+
+Use Arka to inspect exact text matches before editing a file:
+
+```bash
+arka text inspect README.md "old phrase"
+arka text remove README.md "old phrase" --yes
+arka text remove README.md "old phrase" --all --yes
+```
+
+Removal creates a `.bak` backup by default. Without `--yes`, Arka only previews
+the match count and makes no changes. Natural language requests such as
+“inspect the text `old phrase` in README.md” are routed when the file and text
+are quoted clearly.

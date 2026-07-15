@@ -1,0 +1,21 @@
+# Sandboxes
+
+Arka can create disposable project workspaces for generated code and experiments:
+
+```bash
+arka sandbox create demo
+arka sandbox create demo_app --from .
+arka sandbox list
+arka sandbox run demo python -m pytest
+arka sandbox status demo
+arka sandbox destroy demo --yes
+```
+
+Commands run with the sandbox as their working directory, a bounded timeout, and
+`ARKA_SANDBOX=1`. The default location is Arka's cache (`sandboxes/`); set
+`ARKA_SANDBOX_DIR` to choose another location. Natural language also works:
+“create a sandbox”, “list sandboxes”, or “show sandbox demo status”.
+
+This is directory/process isolation for safe development workflows, not a
+hardened security boundary. Run untrusted or hostile code in Docker or a VM.
+Destroying a sandbox always requires the explicit `--yes` confirmation.

@@ -272,6 +272,52 @@ class ExhaustionStore:
 
 
 EXHAUSTION = ExhaustionStore()
+_EXHAUSTION_NOTIFIED = False
+_LAST_EXHAUSTION_LOG = 0.0
+
+
+def _notify_total_exhaustion(message: str) -> None:
+    """Best-effort cross-platform notification; never disrupts fallback."""
+    global _EXHAUSTION_NOTIFIED
+    if _EXHAUSTION_NOTIFIED or not _truthy("LLM_EXHAUSTION_NOTIFY", "1"):
+        return
+    try:
+        from arka.paths import cache_dir
+        stamp = cache_dir() / "llm-exhaustion-notified"
+        cooldown = max(60, int(float(os.environ.get("LLM_EXHAUSTION_COOLDOWN", "3600"))))
+        if stamp.is_file() and time.time() - stamp.stat().st_mtime < cooldown:
+            _EXHAUSTION_NOTIFIED = True
+            return
+        stamp.parent.mkdir(parents=True, exist_ok=True)
+        stamp.touch()
+    except (OSError, ValueError):
+        pass
+    _EXHAUSTION_NOTIFIED = True
+    try:
+        import platform
+        import subprocess
+        if platform.system() == "Darwin":
+            subprocess.run(["osascript", "-e", f'display notification "{message[:180]}" with title "Arka LLM"'], check=False, timeout=2)
+        elif platform.system() == "Linux":
+            subprocess.run(["notify-send", "Arka LLM", message[:180]], check=False, timeout=2)
+        elif platform.system() == "Windows":
+            print(f"Arka notification: {message}", file=sys.stderr)
+        else:
+            print(f"Arka notification: {message}", file=sys.stderr)
+    except Exception:
+        print(f"Arka notification: {message}", file=sys.stderr)
+
+
+def _log_exhaustion_once(message: str, *, verbose: bool) -> None:
+    """Avoid repeating the same exhaustion line in tight loops."""
+    global _LAST_EXHAUSTION_LOG
+    if not verbose:
+        return
+    cooldown = max(60, int(float(os.environ.get("LLM_EXHAUSTION_LOG_COOLDOWN", "3600"))))
+    now = time.time()
+    if now - _LAST_EXHAUSTION_LOG >= cooldown:
+        print(f"arka_llm: all providers failed ({message})", file=sys.stderr)
+        _LAST_EXHAUSTION_LOG = now
 _LAST_MODEL: tuple[str, str] | None = None
 _LAST_ERROR: str = ""
 
@@ -389,6 +435,7 @@ def parse_chain(raw: str) -> list[tuple[str, str]]:
                 "openrouter",
                 "litellm",
                 "lmstudio",
+                "exo",
                 "mistral",
                 "cohere",
                 "together",
@@ -1154,6 +1201,11 @@ def _is_openrouter_credit_error(msg: str) -> bool:
     )
 
 
+def _is_retired_model_error(msg: str) -> bool:
+    """Retirement/410 responses are permanent for this model, not key failures."""
+    return bool(re.search(r"(?i)\b410\b|\b(?:retired|deprecated|shut\s*down|no longer available)\b", str(msg or "")))
+
+
 def _is_openrouter_account_credit_failure(err_text: str, attempt_max_tokens: int) -> bool:
     """True when lowering max_tokens is unlikely to help (account balance vs request cap)."""
     if not _is_openrouter_credit_error(err_text):
@@ -1435,6 +1487,10 @@ def build_default_chain(*, task: str = "default", skill: str | None = None) -> l
             seen.add(key)
             ordered.append(key)
 
+    # Local vLLM is a text-generation fallback; multimodal/embedding/TTS tasks
+    # should stay on providers that advertise those capabilities.
+    non_text_task = bool(re.search(r"(?i)\b(?:vision|image|audio|speech|tts|stt|embedding|embed|rerank|moderation)\b", f"{task} {skill or ''}"))
+
     if pref_provider and pref_model:
         if pref_provider == "gemini":
             add(pref_provider, normalize_gemini_model(pref_model))
@@ -1452,14 +1508,15 @@ def build_default_chain(*, task: str = "default", skill: str | None = None) -> l
         else:
             add(pref_provider, pref_model)
 
-    if env("VLLM_CLOUD_URL") or env("VLLM_CLOUD_API_URL"):
+    if (env("VLLM_CLOUD_URL") or env("VLLM_CLOUD_API_URL")) and not non_text_task:
         cloud_model = env("VLLM_CLOUD_MODEL") or "default"
         add("vllm-cloud", cloud_model)
 
     explicit_vllm = vllm_explicitly_configured()
+    vllm_fallback = env("VLLM_FALLBACK", "0").lower() in {"1", "true", "yes", "on"}
     if explicit_vllm:
         apply_vllm_defaults()
-    if explicit_vllm or is_reachable("vllm"):
+    if (explicit_vllm or vllm_fallback or is_reachable("vllm")) and not non_text_task:
         add("vllm", env("VLLM_MODEL") or "default")
 
     openrouter_only = _has_openrouter() and not _has_primary_cloud_keys()
@@ -1960,6 +2017,11 @@ class LlmFallbackEngine:
                                             if code is not None:
                                                 set_http_span_attributes(attempt_span, status_code=code)
                                         mark_error(attempt_span, err_text)
+                                    if _is_retired_model_error(err_text):
+                                        self.store.mark(provider, model_id, RuntimeError(f"retired model: {err_text}"))
+                                        if verbose:
+                                            print(f"arka_llm: skip retired model {label}", file=sys.stderr)
+                                        break
                                     if rotate_provider_key(provider, err_text):
                                         if verbose:
                                             print(
@@ -2018,6 +2080,11 @@ class LlmFallbackEngine:
                                         if code is not None:
                                             set_http_span_attributes(attempt_span, status_code=code)
                                     mark_error(attempt_span, err_text, exc=exc)
+                                if _is_retired_model_error(err_text):
+                                    self.store.mark(provider, model_id, RuntimeError(f"retired model: {err_text}"))
+                                    if verbose:
+                                        print(f"arka_llm: skip retired model {label}", file=sys.stderr)
+                                    continue
                                 if rotate_provider_key(provider, exc):
                                     if verbose:
                                         print(
@@ -2067,8 +2134,10 @@ class LlmFallbackEngine:
                 session.close()
 
         _LAST_ERROR = last_error
+        if last_error and chain and all(self.store.exhausted(p, m) for p, m in chain):
+            _notify_total_exhaustion("All configured models/providers are exhausted. Check quotas or reset the fallback chain.")
         if last_error and verbose:
-            print(f"arka_llm: all providers failed ({last_error})", file=sys.stderr)
+            _log_exhaustion_once(last_error, verbose=verbose)
         return CompletionResult(error=last_error, attempts=attempts)
 
     def stream_complete(
@@ -2177,6 +2246,8 @@ def llm_complete(
     skill: str | None = None,
     chain: list[tuple[str, str]] | None = None,
 ) -> str:
+    from arka.llm.thinking import instruction
+    system = f"{system}\n\nThinking preference: {instruction()}"
     resolved_task, resolved_skill = resolve_llm_context(task=task, skill=skill)
     if task or skill or chain:
         engine = LlmFallbackEngine(

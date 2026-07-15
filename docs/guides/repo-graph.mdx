@@ -1,0 +1,19 @@
+---
+title: "Repository dependency and priority graph"
+description: "Understand code dependencies and prioritize feature work."
+---
+
+Generate a dependency graph and priority report:
+
+```bash
+arka repo_graph .
+arka repo_graph . --format json --output repo-graph.json
+arka repo_graph . --format mermaid --output repo-graph.mmd
+```
+
+The report scans supported Python imports, counts dependent files, and combines
+that centrality with TODO/FIXME markers. High-centrality files are surfaced first
+because changes there affect more of the repository. This is a planning signal,
+not a substitute for product impact, security review, or tests.
+
+Natural language works: “show the repository dependency graph and priorities.”

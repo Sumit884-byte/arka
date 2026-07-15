@@ -122,6 +122,46 @@ def _handle_arka_skill(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"dispatch unavailable: {exc}") from exc
 
 
+def _handle_arka_capabilities(arguments: dict[str, Any]) -> str:
+    """Return the current MCP and dispatch-backed capability catalog."""
+    include_internal = bool(arguments.get("include_internal", False))
+    try:
+        skill_dir = Path(__file__).resolve().parents[1] / "agent"
+        names = sorted(path.stem for path in skill_dir.glob("*.py") if path.stem != "__init__")
+        tools = sorted(tool.name for tool in _build_tools())
+        payload = {"mcp_tools": tools, "dispatch_skills": names}
+        if not include_internal:
+            payload["dispatch_skills"] = [name for name in names if not name.startswith("_")]
+        return json.dumps(payload, indent=2)
+    except (OSError, ImportError) as exc:
+        raise RuntimeError(f"capability catalog unavailable: {exc}") from exc
+
+
+def _handle_arka_route(arguments: dict[str, Any]) -> str:
+    """Route arbitrary natural language through Arka, not just design skills."""
+    prompt = str(arguments.get("prompt") or "").strip()
+    if not prompt:
+        raise ValueError("prompt is required")
+    try:
+        from arka.router import route
+        from arka.dispatch import run_skill
+
+        decision = route(prompt)
+        skill = getattr(decision, "skill", "") or ""
+        if not skill:
+            return "No Arka route found; use arka_ask for general questions."
+        import contextlib
+        import io
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+            code = run_skill(skill)
+        output = buf.getvalue().strip()
+        return output or f"Routed `{skill}` (exit {code})"
+    except ImportError as exc:
+        raise RuntimeError(f"routing unavailable: {exc}") from exc
+
+
 def _handle_arka_repo_map(arguments: dict[str, Any]) -> str:
     depth = int(arguments.get("depth") or 2)
     include_symbols = bool(arguments.get("symbols", True))
@@ -1155,7 +1195,14 @@ def _build_tools() -> list[ArkaMcpTool]:
         ),
         ArkaMcpTool(
             name="arka_skill",
-            description="Invoke an Arka skill or routed command by name.",
+            description=(
+                "Invoke any Arka skill or routed command by name—not only design. "
+                "Supports repo_health, lint_project, pr_check, review, route_audit, "
+                "self_improve, design_from_screenshot, compose_slides, urlkit, mcp, "
+                "agent_hub, frontend_loop, sandbox, text, web_screenshot, spline, "
+                "multi_llm, data collection, media transforms, races, reusable blocks, "
+                "ultra-fast development, and all future dispatch-backed skills."
+            ),
             input_schema={
                 "type": "object",
                 "properties": {
@@ -1168,6 +1215,22 @@ def _build_tools() -> list[ArkaMcpTool]:
                 "required": ["skill"],
             },
             handler=_handle_arka_skill,
+        ),
+        ArkaMcpTool(
+            name="arka_capabilities",
+            description="List all MCP tools and dispatch-backed Arka skills currently available.",
+            input_schema={"type": "object", "properties": {"include_internal": {"type": "boolean", "default": False}}},
+            handler=_handle_arka_capabilities,
+        ),
+        ArkaMcpTool(
+            name="arka_route",
+            description="Route and execute any natural-language Arka request across all skills; use this for coding, CI/CD, research, MCP, sandbox, text editing, or design tasks.",
+            input_schema={
+                "type": "object",
+                "properties": {"prompt": {"type": "string", "description": "The complete natural-language Arka request"}},
+                "required": ["prompt"],
+            },
+            handler=_handle_arka_route,
         ),
         ArkaMcpTool(
             name="arka_repo_map",

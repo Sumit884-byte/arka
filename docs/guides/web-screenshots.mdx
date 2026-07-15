@@ -1,0 +1,29 @@
+# Responsive website screenshots
+
+Capture a website at desktop, tablet, and mobile sizes:
+
+```bash
+arka web-screenshot https://example.com
+arka web-screenshot https://example.com --viewport pc
+arka web-screenshot https://example.com --viewport tablet
+arka web-screenshot https://example.com --viewport mobile --output qa-shots
+```
+
+The default `all` mode creates `website-pc.png`, `website-tablet.png`, and
+`website-mobile.png`. Screenshots use Playwright Chromium and capture the full
+page by default; add `--viewport-only` for only the visible viewport. Install
+the browser runtime once with `pip install playwright && playwright install chromium`.
+
+Generate design-change prompts from an existing capture set:
+
+```bash
+arka web-screenshot --review --output screenshots
+```
+
+The advisory review covers responsive layout, hierarchy, spacing, typography,
+accessibility, duplicate labels, overflow, and visual polish. Apply changes
+only after reviewing the suggested prompts. The review is viewport-scoped: if
+tablet looks wrong but PC and mobile look good, change only the tablet layout.
+Do not change a mode that is already working well to fix a different mode.
+Design suggestions are layout-only: preserve the existing button order and
+interaction order exactly.

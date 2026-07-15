@@ -1,0 +1,15 @@
+# Arka Super Replica
+
+Use Super Replica for repository-pattern advice:
+
+```bash
+arka super-replica .
+arka super-replica . --stage startup
+arka super-replica . --stage growth --json
+```
+
+Arka reads repository structure and common frontend/backend file patterns
+without modifying code. If the stack or app shape is unspecified, it asks
+targeted questions instead of inventing a technology choice. Advice is stage
+aware: startup projects prioritize user value and iteration, while growth and
+scale stages add observability, performance, and scaling work based on evidence.

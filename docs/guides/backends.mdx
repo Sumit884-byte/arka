@@ -1,0 +1,16 @@
+---
+title: "Advanced inference backends"
+description: "Detect capabilities and plan experimental multi-GPU profiles."
+---
+
+```bash
+arka backend capabilities vllm
+arka backend capabilities exo --json
+arka backend profile vllm --model my-model --gpus 2 --flash-attention
+arka backend profile exo --model my-model --gpus 4 --row-split --co-engine ds4
+```
+
+Profiles are preview-only. Use `--run` to launch. Arka reports capability
+assumptions and rejects unsupported combinations before starting a process.
+Backend flags are experimental and must be validated against the installed
+runtime version and hardware.

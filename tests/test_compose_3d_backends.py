@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -38,6 +36,11 @@ def test_auto_backend_order_prefers_tripo_when_key_set(monkeypatch):
 def test_auto_backend_order_procedural_only():
     order = auto_backend_order(prefer_procedural=True)
     assert order == ["procedural"]
+
+
+def test_configured_backend_chain_is_respected(monkeypatch):
+    monkeypatch.setenv("MODEL_3D_BACKEND_CHAIN", "tripo,openscad,llm")
+    assert auto_backend_order() == ["tripo", "openscad", "llm"]
 
 
 def test_meshy_model_url_prefers_obj():

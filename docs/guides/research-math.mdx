@@ -1,0 +1,13 @@
+---
+title: "Research math"
+description: "Run reproducible, auditable math calculations with Arka."
+---
+
+```bash
+arka research_math "sqrt(16) + 2**3"
+arka math_script "exp(-0.5) / sqrt(2*pi)" --output gaussian.py
+```
+
+Arka validates expressions with a restricted AST, evaluates them without
+imports or builtins, and saves the exact calculation as a Python script for
+reproduction in AI and scientific research workflows.

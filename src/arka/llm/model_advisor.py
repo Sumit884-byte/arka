@@ -39,9 +39,13 @@ _SELECT_PATTERNS: tuple[re.Pattern[str], ...] = (
         r"(?i)\b(?:select|pick|choose)\s+(?:the\s+)?best\s+(?:llm\s+)?models?\b"
     ),
     re.compile(r"(?i)\b(?:select|pick|choose)\s+(?:the\s+)?(?:best\s+)?model\b"),
+    re.compile(r"(?i)\b(?:best|strongest)\s+(?:runnable\s+)?local\s+(?:llm\s+)?model\b"),
+    re.compile(r"(?i)\brun\s+the\s+best\s+(?:local|offline)\s+model\b"),
+    re.compile(r"(?i)\b(?:list)\s+(?:the\s+)?\d*\s*(?:(?:(?:strongest|best)\s+)?runnable|(?:strongest|best))\s+(?:local\s+)?models?\b"),
 )
 
 _APPLY_RE = re.compile(r"(?i)\b(?:apply|auto[- ]?apply|save|write|configure)\b")
+_LOCAL_RE = re.compile(r"(?i)\b(?:local|offline|on[- ]device|on device)\b")
 
 
 @dataclass
@@ -395,6 +399,39 @@ def _ollama_rank(model_id: str) -> tuple[int, int, str]:
     return (cloud, tiny, mid)
 
 
+def best_runnable_local_model(hw: HardwareSnapshot | None = None) -> str:
+    """Return the strongest installed Ollama model likely to fit this machine."""
+    snap = hw or probe_hardware()
+    models = [m for m in snap.ollama_models if ":cloud" not in m.lower() and not _VISION_OLLAMA_RE.search(m)]
+    if not models:
+        return ""
+    budget = (snap.gpu_vram_gb or 0.0) or (snap.ram_available_gb or snap.ram_total_gb * 0.6)
+
+    def size(model: str) -> float:
+        match = re.search(r":(\d+(?:\.\d+)?)b\b", model.lower())
+        return float(match.group(1)) if match else 7.0
+
+    # Rough conservative fit: quantized models generally need ~0.8 GB/B,
+    # with headroom for the OS and context window.
+    runnable = [m for m in models if size(m) * 0.8 <= max(1.0, budget - 1.5)]
+    pool = runnable or models
+    return max(pool, key=lambda m: (size(m), _ollama_rank(m)[2]))
+
+
+def strongest_runnable_local_models(hw: HardwareSnapshot | None = None, *, limit: int = 5) -> list[str]:
+    """Return installed local models ranked strongest-first for this hardware."""
+    snap = hw or probe_hardware()
+    models = [m for m in snap.ollama_models if ":cloud" not in m.lower() and not _VISION_OLLAMA_RE.search(m)]
+    budget = (snap.gpu_vram_gb or 0.0) or (snap.ram_available_gb or snap.ram_total_gb * 0.6)
+
+    def size(model: str) -> float:
+        match = re.search(r":(\d+(?:\.\d+)?)b\b", model.lower())
+        return float(match.group(1)) if match else 7.0
+
+    runnable = [m for m in models if size(m) * 0.8 <= max(1.0, budget - 1.5)] or models
+    return sorted(runnable, key=lambda m: (size(m), m.lower()), reverse=True)[: max(1, limit)]
+
+
 def _openrouter_default_model() -> str:
     try:
         from arka.llm.providers import get_provider
@@ -533,6 +570,13 @@ def build_report(hw: HardwareSnapshot | None = None) -> AdvisorReport:
         recs.append(ProfileRecommendation(profile=profile, model=model, reason=reason))
 
     notes: list[str] = []
+    if sys.platform == "darwin" and ("apple" in snap.cpu_model.lower() or snap.gpu_kind in {"mps", "metal"}):
+        notes.append("Apple Silicon detected — consider MLX-native models and leave memory headroom for the OS/context.")
+    model_text = " ".join(snap.ollama_models).lower()
+    if any(tag in model_text for tag in ("moe", "mixtral", "qwen3", "deepseek")):
+        notes.append("MoE-capable model detected — ranking should consider active parameters, not only total parameters.")
+    if any(tag in model_text for tag in ("mtp", "speculative", "qwen3")):
+        notes.append("Speculative/MTP-capable model hint detected — verify runtime support for faster local decoding.")
     if snap.on_battery:
         notes.append("On battery — preferring lighter cloud models where possible.")
     if snap.disk_free_gb and snap.disk_free_gb < 15:
@@ -624,6 +668,13 @@ def nl_to_argv(text: str) -> list[str]:
     argv: list[str] = []
     if _APPLY_RE.search(clean):
         argv.append("--apply")
+    if _LOCAL_RE.search(clean):
+        argv.append("--local")
+    count = re.search(r"\blist\s+(\d+)\s+(?:strongest|best|runnable)", clean, re.I)
+    if count:
+        if "--local" not in argv:
+            argv.append("--local")
+        argv.extend(["--top", count.group(1)])
     if re.search(r"(?i)\bjson\b", clean):
         argv.append("--json")
     return argv
@@ -631,6 +682,31 @@ def nl_to_argv(text: str) -> list[str]:
 
 def cmd_recommend(args: argparse.Namespace) -> int:
     report = build_report()
+    if getattr(args, "local", False):
+        models = strongest_runnable_local_models(report.hardware, limit=getattr(args, "top", 1))
+        model = models[0] if models else ""
+        if not model:
+            print("No runnable local Ollama model found. Start Ollama and pull one first.", file=sys.stderr)
+            return 1
+        if getattr(args, "top", 1) > 1:
+            print("Strongest runnable local models:")
+            for index, candidate in enumerate(models, 1):
+                print(f"  {index}. ollama/{candidate}")
+        else:
+            print(f"Best runnable local model: ollama/{model}")
+        if getattr(args, "run", ""):
+            ollama = shutil.which("ollama")
+            if not ollama:
+                print("Ollama is not installed or not on PATH.", file=sys.stderr)
+                return 1
+            return subprocess.call([ollama, "run", model, args.run])
+        if getattr(args, "apply", False):
+            for profile in known_task_profiles():
+                from arka.llm.skill_models import set_skill_model
+
+                set_skill_model(profile, f"ollama/{model}")
+            print("Applied local model to all skill profiles.")
+        return 0
     print(format_report(report, json_out=bool(getattr(args, "json", False))))
     if getattr(args, "apply", False):
         path = apply_recommendations(report)
@@ -658,6 +734,9 @@ def main(argv: list[str] | None = None) -> int:
     p_rec = sub.add_parser("recommend", help="Show hardware-based model recommendations")
     p_rec.add_argument("--apply", action="store_true", help="Write recommendations to llm-skill-models.json")
     p_rec.add_argument("--json", action="store_true", help="JSON output")
+    p_rec.add_argument("--local", action="store_true", help="Choose the strongest installed model that fits locally")
+    p_rec.add_argument("--run", metavar="PROMPT", help="Run a prompt with the selected local model")
+    p_rec.add_argument("--top", type=int, default=1, help="List this many local models (use with --local)")
     p_rec.set_defaults(func=cmd_recommend)
 
     p_probe = sub.add_parser("probe", help="Dump hardware snapshot as JSON")
