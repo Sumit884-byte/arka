@@ -43,6 +43,12 @@ def active_context7_label() -> str | None:
     return None
 
 
+def print_section(title: str) -> None:
+    """Section header matching print_block style (title only)."""
+    print(f"━━━ {(title or 'Arka').strip()} ━━━")
+    print()
+
+
 def print_block(title: str, body: str, *, model: str | None = None) -> None:
     """Standard answer block: green-style header, indented body, optional model footer."""
     title = (title or "Answer").strip()

@@ -959,10 +959,33 @@ def _cmd_platform(extra: list[str]) -> int:
     return subprocess.run(cmd).returncode
 
 
+def _doctor_next_steps(
+    *,
+    vpy,
+    chat_missing: list[str] | None,
+    skill_mode_name: str,
+    llm_configured: bool,
+) -> list[str]:
+    hints: list[str] = []
+    if not vpy or chat_missing:
+        hints.append("arka setup                         # venv + chat deps + Context7 MCP")
+    if not llm_configured:
+        hints.append("cp .env.example ~/.config/arka/.env  # add GEMINI_API_KEY or GROQ_API_KEY")
+    if skill_mode_name != "full":
+        hints.append("Install fish for 70+ skills — see: arka help")
+    hints.append('arka ask "what is Rust?"             # first command')
+    hints.append("Docs: https://arka-agent.mintlify.site/quickstart")
+    return hints
+
+
 def _cmd_doctor() -> int:
+    from arka.integrations.context7_mcp import format_doctor_lines
+    from arka.llm.fallback import llm_doctor_lines, provider_specs, provider_available
+    from arka.output import print_section
     from arka.platform_info import ensure_platform_cache
     from arka.setup_runtime import resolve_venv_python, venv_dir, verify_chat_imports
 
+    print_section("Arka Doctor")
     profile = ensure_platform_cache()
     plat = profile.get("platform", system())
     print(f"arka {__version__} — {plat}")
@@ -977,10 +1000,11 @@ def _cmd_doctor() -> int:
     print(f"  config.fish:    {('ok' if (arka_home() / 'config.fish').is_file() else 'missing — run: python scripts/sync_bundled.py')}")
     vpy = resolve_venv_python(require_agno=False)
     print(f"  venv-arka:      {venv_dir()}{(' → ' + str(vpy) if vpy else ' (missing — run: arka setup)')}")
+    chat_missing: list[str] | None = None
     if vpy:
-        missing = verify_chat_imports(vpy)
-        if missing:
-            print(f"  chat modules:   missing {', '.join(missing)} — run: arka setup")
+        chat_missing = verify_chat_imports(vpy)
+        if chat_missing:
+            print(f"  chat modules:   missing {', '.join(chat_missing)} — run: arka setup")
         else:
             print("  chat modules:   ok (agno, ddgs, trafilatura, …)")
     mode = skill_mode()
@@ -989,13 +1013,20 @@ def _cmd_doctor() -> int:
     else:
         print("  Skills:         portable Python subset (chat, passwords, weather, calc, …)")
         print(f"  Install fish:   {fish_install_hint()}")
-    from arka.integrations.context7_mcp import format_doctor_lines
-    from arka.llm.fallback import llm_doctor_lines
-
     for line in llm_doctor_lines():
         print(line)
     for line in format_doctor_lines():
         print(line)
+    llm_configured = any(provider_available(spec.slug) for spec in provider_specs())
+    print()
+    print("Next steps:")
+    for hint in _doctor_next_steps(
+        vpy=vpy,
+        chat_missing=chat_missing,
+        skill_mode_name=mode,
+        llm_configured=llm_configured,
+    ):
+        print(f"  {hint}")
     return 0
 
 
@@ -1040,77 +1071,61 @@ def _cmd_ai_skill_model(rest: list[str]) -> int:
 
 
 def _cmd_help() -> int:
+    from arka.output import print_section
+
+    print_section("Arka Help")
+    print("Cross-platform AI agent — route plain English to 70+ local skills.")
+    print()
+    print_section("Install & setup")
     print(
-        """Arka — cross-platform AI agent
-
-Install:
-  pip install arka-agent          # core
-  pip install 'arka-agent[chat]'  # web answers, calc, weather
-  arka setup                      # config dirs + venv-arka + chat deps + Context7 MCP
-  arka platform [detect|show]     # cache OS profile on first run (~/.config/arka/platform.json)
-  arka refetch [--install]        # git pull + sync bundled (after clone or on another PC)
-  arka repo index                 # append git file deltas to llm.txt changelog
-  arka llm sync                   # alias for arka repo index
-  arka reload [--listen] [--dev]  # re-source config in this shell (fish); --listen restarts mic
-  arka youtube research <query>   # YouTube search + transcript digest (default 2 videos)
-  arka download <id-or-url>       # YouTube playlist ID, video ID, or quoted URL
-  arka summarize youtube <id>     # Summarize video/playlist (captions → optional STT)
-  arka remind in 30m stretch      # Reminder at time; again when you're back if idle/off
-
-Usage:
-  arka <request>                  # natural language (routes to best skill)
+        """  pip install 'arka-agent[chat]'  # web answers, calc, weather
+  arka setup                      # config dirs + venv-arka + chat deps
+  arka doctor                     # verify install + API keys
+  arka refetch [--install]        # git pull + sync bundled (dev checkout)
+  arka platform [detect|show]     # cache OS profile (~/.config/arka/platform.json)
+  arka reload [--listen] [--dev]  # re-source fish config; --listen restarts mic"""
+    )
+    print()
+    print_section("Everyday usage")
+    print(
+        """  arka <request>                  # natural language → best skill
   arka ask <question>             # web + AI answer
-  arka goal <goal>                # autonomous multi-step agent (zsh/bash/fish)
-  arka goal -b <goal>             # Butterfish Goal Mode (install on confirm)
-  arka loop <goal>                # alias for arka goal
-  arka password save wifi         # generate + store password
-  arka password set wifi <secret> # store your own password
-  arka password get wifi          # retrieve stored password
-  arka google setup               # Google Calendar + Gmail OAuth setup
-  arka google login               # sign in via browser URL
-  arka google gmail --unread      # list unread mail
-  arka google gmail --draft --to you@example.com --about "topic"
-  arka google calendar --today    # today's events
-  arka gemini <prompt>            # Google Gemini CLI (npm @google/gemini-cli)
-  arka gemini status              # check Gemini CLI install
-  arka harvard-ark install        # Harvard ARK KG CLI (PrimeKG — external, not Arka itself)
-  arka harvard-ark chat           # interactive biomedical knowledge graph chat
-  arka harvard-ark list           # list PrimeKG / AfriMedKG / OptimusKG graphs
-  arka fugu <prompt>              # Sakana Fugu multi-agent orchestrator
-  arka fugu ultra <prompt>        # Fugu Ultra (deeper orchestration)
-  arka fugu status                # check Sakana API key + provider
-  arka benchmark run [--dry-run]  # compare models/providers on sample tasks
-  arka benchmark show             # view benchmark rankings by task profile
-  arka benchmark apply            # write winners to llm-skill-models.json
-  arka orchestrate --benchmark <request>  # route using benchmark winners
-  arka chat calc integrate sin(x) # SymPy
-  arka ascii "HELLO"              # ASCII banner (figlet / pyfiglet)
-  arka ascii --from-image cat.jpg # image → ASCII art
-  arka council "should I learn Rust?"  # multi-persona deliberation chamber
-  arka council list               # past council questions
-  arka mode [ask|plan|agent|debug|multitask]  # operation mode (default: agent)
-  arka code init <folder>         # initialize scoped coding workspace
-  arka code write <goal>          # write code only inside project folder
-  arka code status                # show active code project
-  arka self improve [target] [--apply]  # analyze + plan; --apply runs goal agent
+  arka goal <goal>                # autonomous multi-step agent
+  arka council "should I learn Rust?"  # multi-persona deliberation
   arka route <request>            # preview routing (no run)
-  arka route learn "phrase" "skill"  # teach NL → CLI mapping
-  arka route list                 # show learned routes
-  arka teach route "phrase" "skill"  # alias for route learn
+  arka mode [ask|plan|agent|debug]  # operation mode (default: agent)
+  arka remind in 30m stretch      # reminder at time"""
+    )
+    print()
+    print_section("LLM & routing")
+    print(
+        """  arka provider list              # providers with keys configured
+  arka provider set openrouter    # set preferred provider + model
   arka ai-models                  # list LLM providers and models
-  arka provider list              # providers with keys configured
-  arka provider set openrouter    # set preferred provider + autodetect model
-  arka provider models            # list live models for preferred provider
-  arka provider show              # show current preference
-  arka ai-skill-model profiles    # per-skill model choices by profile
-  arka ai-skill-model web_answer groq/llama-3.3-70b-versatile
-  arka doctor                     # install diagnostics
-
-Platforms:
-  All platforms   70+ skills when fish is installed (bundled config.fish in pip package)
-  Without fish    Portable Python skills (chat, passwords, web, calc, weather, sports)
+  arka ai-skill-model profiles    # per-skill model choices
+  arka route learn "phrase" "skill"  # teach NL → CLI mapping
+  arka self improve [target] [--apply]  # analyze + plan codebase fixes"""
+    )
+    print()
+    print_section("Integrations")
+    print(
+        """  arka google setup | login | gmail --unread | calendar --today
+  arka gemini <prompt>            # Google Gemini CLI
+  arka fugu <prompt>              # Sakana Fugu multi-agent orchestrator
+  arka youtube research <query>   # YouTube search + transcript digest
+  arka download <id-or-url>       # YouTube playlist or video
+  arka password save|get|set <name>
+  arka code init <folder>         # scoped coding workspace
+  arka benchmark run|show|apply   # compare models on sample tasks"""
+    )
+    print()
+    print_section("Platforms")
+    print(
+        """  With fish       70+ skills via bundled config.fish (recommended)
+  Without fish    Portable Python subset (chat, web, calc, weather, …)
   Install fish:   macOS brew install fish | Linux apt install fish | Windows scoop install fish
 
-Docs: README.md in ARKA_HOME"""
+  Docs: https://arka-agent.mintlify.site
+  Full command list: README.md in ARKA_HOME"""
     )
     return 0

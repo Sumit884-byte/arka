@@ -1,10 +1,11 @@
 # Arka
 
-A cross-platform, **extensible** AI agent for your terminal. Route plain English to **70+ local skills** — with **deterministic** offline routing, voice, 24-provider LLM failover, and security gates on by default.
+**Your terminal, upgraded.** Route plain English to **70+ local skills** — deterministic offline routing, voice, 24-provider LLM failover, and security gates on by default.
 
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
-[![PyPI](https://img.shields.io/pypi/v/arka-agent.svg)](https://pypi.org/project/arka-agent/)
+[![PyPI](https://img.shields.io/badge/PyPI-coming%20soon-lightgrey)](https://pypi.org/project/arka-agent/)
+[![Docs](https://img.shields.io/badge/docs-Mintlify-6366F1)](https://arka-agent.mintlify.site)
 
 **Documentation:** [arka-agent.mintlify.site](https://arka-agent.mintlify.site)
 
@@ -45,10 +46,10 @@ cp .env.example ~/.config/arka/.env
 Get to a working answer in under a minute:
 
 ```bash
-arka doctor
-arka ask "what is Rust?"
-arka "convert 100 USD to INR"
-arka council "should I learn Rust?"
+arka doctor                              # verify install + keys
+arka ask "what is Rust?"                 # web + AI answer
+arka "convert 100 USD to INR"            # natural language routing
+arka council "should I learn Rust?"      # multi-persona deliberation
 ```
 
 Voice (optional):
