@@ -1,0 +1,13 @@
+---
+title: "Repository structure audit"
+description: "Find misplaced files and cleanup opportunities safely."
+---
+
+```bash
+arka structure .
+arka structure . --json
+```
+
+The audit is read-only. It reports top-level runtime files, cache directories,
+and suggested moves; it never relocates files automatically because imports,
+packaging, and deployment paths must be reviewed first.

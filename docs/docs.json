@@ -12,176 +12,221 @@
     "languages": [
       {
         "language": "en",
-        "groups": [
+        "tabs": [
           {
-            "group": "Getting started",
+            "tab": "Get Started",
             "icon": "rocket",
-            "pages": [
-              "index",
-              "quickstart",
-              "guides/personalize",
-              "guides/free-credits"
+            "groups": [
+              {
+                "group": "Introduction",
+                "pages": [
+                  "index",
+                  "quickstart",
+                  "guides/personalize",
+                  "guides/free-credits"
+                ]
+              },
+              {
+                "group": "Setup & CLI",
+                "icon": "terminal",
+                "pages": [
+                  "guides/operation-modes",
+                  "guides/env-setup",
+                  "guides/env-bridge",
+                  "guides/cli"
+                ]
+              },
+              {
+                "group": "Troubleshooting",
+                "icon": "stethoscope",
+                "pages": [
+                  "reference/troubleshooting",
+                  "guides/docker-status"
+                ]
+              }
             ]
           },
           {
-            "group": "Core concepts",
-            "icon": "brain",
+            "tab": "Guides",
+            "icon": "book-open",
+            "groups": [
+              {
+                "group": "Routing & CLI",
+                "icon": "route",
+                "pages": [
+                  "guides/mcp",
+                  "guides/skills",
+                  "guides/self-improve",
+                  "guides/agent-hub",
+                  "guides/repo-health",
+                  "guides/council",
+                  "guides/route-learn",
+                  "guides/sessions",
+                  "guides/mcp-all-skills",
+                  "guides/mcp-auto",
+                  "guides/parallel-skills"
+                ]
+              },
+              {
+                "group": "Agent & memory",
+                "icon": "robot",
+                "pages": [
+                  "guides/chat",
+                  "guides/personas",
+                  "guides/memory",
+                  "guides/goal-agent",
+                  "guides/agent-teams",
+                  "guides/openclaw-features",
+                  "guides/hermes-features",
+                  "guides/supermemory",
+                  "guides/design-memory",
+                  "guides/daily-brief",
+                  "guides/interesting-fact",
+                  "guides/voice"
+                ]
+              },
+              {
+                "group": "Developer tools",
+                "icon": "code",
+                "pages": [
+                  "guides/repo-map",
+                  "guides/repo-graph",
+                  "guides/repo-reverse",
+                  "guides/coding-workflows",
+                  "guides/coding-tui",
+                  "guides/github-actions",
+                  "guides/testing",
+                  "guides/structure",
+                  "guides/workspace",
+                  "guides/project-structure-prompt",
+                  "guides/sandbox",
+                  "guides/integrations",
+                  "guides/iterate-loop",
+                  "guides/deploy",
+                  "guides/browser-check",
+                  "guides/observability"
+                ]
+              },
+              {
+                "group": "Models & inference",
+                "icon": "brain",
+                "pages": [
+                  "guides/select-model",
+                  "guides/multi-llm",
+                  "guides/vllm",
+                  "guides/free-models",
+                  "guides/model-hosting",
+                  "guides/prompt-optimization",
+                  "guides/local-llm-research",
+                  "guides/research-math",
+                  "guides/llm-guardrails",
+                  "guides/quantization",
+                  "guides/speculative-decoding",
+                  "guides/backends",
+                  "guides/thinking-levels",
+                  "guides/optimization",
+                  "guides/usage-tracking"
+                ]
+              },
+              {
+                "group": "Media & documents",
+                "icon": "file-text",
+                "pages": [
+                  "guides/pdf-rag",
+                  "guides/compose-slides",
+                  "guides/compose-3d",
+                  "guides/charts",
+                  "guides/vision",
+                  "guides/youtube",
+                  "guides/ascii-art",
+                  "guides/media-transform",
+                  "guides/model-to-image",
+                  "guides/background-removal",
+                  "guides/spline",
+                  "guides/web-screenshots",
+                  "guides/pdf-interactive",
+                  "guides/media-quiz",
+                  "guides/super-replica",
+                  "guides/script-understanding",
+                  "guides/text-edit",
+                  "guides/surgical-edit",
+                  "guides/ui-copy-audit",
+                  "guides/vision-evidence"
+                ]
+              },
+              {
+                "group": "Integrations",
+                "icon": "plug",
+                "pages": [
+                  "guides/google-workspace",
+                  "guides/plugins",
+                  "guides/life-sciences",
+                  "guides/gemini-cli",
+                  "guides/fugu",
+                  "guides/post-x"
+                ]
+              },
+              {
+                "group": "Finance & data",
+                "icon": "chart-line",
+                "pages": [
+                  "guides/stocks",
+                  "guides/kalshi",
+                  "guides/kaggle",
+                  "guides/generate-data",
+                  "guides/data-ask",
+                  "guides/spreadsheets"
+                ]
+              },
+              {
+                "group": "Workflows & productivity",
+                "icon": "sparkles",
+                "pages": [
+                  "guides/geo-seo",
+                  "guides/workflow-templates",
+                  "guides/design-first",
+                  "guides/data-collection",
+                  "guides/hackathons",
+                  "guides/ultra-fast-development",
+                  "guides/reusable-blocks",
+                  "guides/agent-race",
+                  "guides/notifications",
+                  "guides/open-url",
+                  "guides/bookmarks",
+                  "guides/clipboard-history",
+                  "guides/timezone-convert",
+                  "guides/quiz-practice",
+                  "guides/competitions",
+                  "guides/professions",
+                  "guides/ideate",
+                  "guides/build-something-cool",
+                  "guides/play",
+                  "guides/url-app",
+                  "guides/app-check"
+                ]
+              },
+              {
+                "group": "More",
+                "icon": "ellipsis",
+                "expanded": false,
+                "pages": [
+                  "guides/ai-society",
+                  "guides/teammate-review"
+                ]
+              }
+            ]
+          },
+          {
+            "tab": "Concepts",
+            "icon": "lightbulb",
             "pages": [
               "concepts/routing",
               "concepts/llm",
-              "concepts/security",
-              "guides/select-model"
+              "concepts/security"
             ]
           },
           {
-            "group": "Using Arka",
-            "icon": "terminal",
-            "pages": [
-              "guides/cli",
-              "guides/sessions",
-              "guides/background-removal",
-              "guides/research-math",
-              "guides/local-llm-research",
-              "guides/prompt-optimization",
-              "guides/deploy",
-              "guides/geo-seo",
-              "guides/workflow-templates",
-              "guides/optimization",
-              "guides/usage-tracking",
-              "guides/vllm",
-              "guides/design-first",
-              "guides/repo-reverse",
-              "guides/browser-check",
-              "guides/data-collection",
-              "guides/repo-graph",
-              "guides/hackathons",
-              "guides/media-transform",
-              "guides/reusable-blocks",
-              "guides/ultra-fast-development",
-              "guides/mcp-all-skills",
-              "guides/model-hosting",
-              "guides/free-models",
-              "guides/model-to-image",
-              "guides/project-structure-prompt",
-              "guides/agent-race",
-              "guides/skills",
-              "guides/route-learn",
-              "guides/competitions",
-              "guides/ascii-art",
-              "guides/generate-data",
-              "guides/data-ask"
-            ]
-          },
-          {
-            "group": "Chat & search",
-            "icon": "comments",
-            "pages": [
-              "guides/chat",
-              "guides/personas",
-              "guides/council",
-              "guides/interesting-fact",
-              "guides/memory",
-              "guides/daily-brief"
-            ]
-          },
-          {
-            "group": "Documents & media",
-            "icon": "file-text",
-            "pages": [
-              "guides/pdf-rag",
-              "guides/compose-slides",
-              "guides/compose-3d",
-              "guides/charts",
-              "guides/vision",
-              "guides/youtube"
-            ]
-          },
-          {
-            "group": "Learning & utilities",
-            "icon": "sparkles",
-            "pages": [
-              "guides/quiz-practice",
-              "guides/timezone-convert",
-              "guides/open-url",
-              "guides/bookmarks",
-              "guides/clipboard-history"
-            ]
-          },
-          {
-            "group": "Integrations",
-            "icon": "plug",
-            "pages": [
-              "guides/google-workspace",
-              "guides/plugins",
-              "guides/life-sciences",
-              "guides/gemini-cli",
-              "guides/fugu",
-              "guides/mcp",
-              "guides/agent-hub",
-              "guides/sandbox",
-        "guides/text-edit",
-        "guides/surgical-edit",
-        "guides/ideate",
-        "guides/build-something-cool",
-        "guides/play",
-        "guides/vision-evidence",
-        "guides/url-app",
-        "guides/coding-tui",
-        "guides/notifications",
-        "guides/thinking-levels",
-              "guides/ui-copy-audit",
-              "guides/web-screenshots",
-              "guides/spline",
-              "guides/multi-llm",
-              "guides/app-check",
-        "guides/design-memory",
-        "guides/supermemory",
-        "guides/github-actions",
-        "guides/parallel-skills",
-        "guides/script-understanding",
-        "guides/super-replica",
-        "guides/pdf-interactive",
-        "guides/media-quiz",
-              "guides/agent-teams",
-              "guides/post-x"
-            ]
-          },
-          {
-            "group": "Finance",
-            "icon": "chart-line",
-            "pages": [
-              "guides/stocks",
-              "guides/kalshi",
-              "guides/kaggle"
-            ]
-          },
-          {
-            "group": "Agent & voice",
-            "icon": "robot",
-            "pages": [
-              "guides/voice",
-              "guides/goal-agent",
-              "guides/self-improve",
-              "guides/operation-modes",
-              "guides/repo-map",
-    "guides/repo-health",
-    "guides/integrations",
-              "guides/openclaw-features",
-              "guides/hermes-features",
-              "guides/professions"
-            ]
-          },
-          {
-            "group": "Operations",
-            "icon": "wrench",
-            "pages": [
-              "guides/observability",
-              "guides/docker-status",
-              "guides/testing"
-            ]
-          },
-          {
-            "group": "Reference",
+            "tab": "Reference",
             "icon": "list",
             "pages": [
               "reference/configuration",
@@ -190,7 +235,7 @@
             ]
           },
           {
-            "group": "Changelog",
+            "tab": "Changelog",
             "icon": "newspaper",
             "pages": [
               "changelog/2026-07-13"
@@ -200,20 +245,126 @@
       },
       {
         "language": "cn",
-        "groups": [
+        "tabs": [
           {
-            "group": "入门",
+            "tab": "入门",
             "icon": "rocket",
-            "pages": [
-              "cn/index",
-              "cn/quickstart",
-              "cn/guides/personalize",
-              "cn/guides/free-credits"
+            "groups": [
+              {
+                "group": "介绍",
+                "pages": [
+                  "cn/index",
+                  "cn/quickstart",
+                  "cn/guides/personalize",
+                  "cn/guides/free-credits"
+                ]
+              },
+              {
+                "group": "设置与 CLI",
+                "icon": "terminal",
+                "pages": [
+                  "cn/guides/cli"
+                ]
+              },
+              {
+                "group": "故障排除",
+                "icon": "stethoscope",
+                "pages": [
+                  "cn/reference/troubleshooting",
+                  "cn/guides/docker-status"
+                ]
+              }
             ]
           },
           {
-            "group": "核心概念",
-            "icon": "brain",
+            "tab": "指南",
+            "icon": "book-open",
+            "groups": [
+              {
+                "group": "路由与 CLI",
+                "icon": "route",
+                "pages": [
+                  "cn/guides/mcp",
+                  "cn/guides/skills",
+                  "cn/guides/agent-hub",
+                  "cn/guides/repo-health",
+                  "cn/guides/route-learn"
+                ]
+              },
+              {
+                "group": "代理与记忆",
+                "icon": "robot",
+                "pages": [
+                  "cn/guides/chat",
+                  "cn/guides/personas",
+                  "cn/guides/memory",
+                  "cn/guides/goal-agent",
+                  "cn/guides/agent-teams",
+                  "cn/guides/openclaw-features",
+                  "cn/guides/hermes-features",
+                  "cn/guides/daily-brief",
+                  "cn/guides/voice",
+                  "cn/guides/repo-map"
+                ]
+              },
+              {
+                "group": "文档与媒体",
+                "icon": "file-text",
+                "pages": [
+                  "cn/guides/pdf-rag",
+                  "cn/guides/compose-3d",
+                  "cn/guides/charts",
+                  "cn/guides/vision",
+                  "cn/guides/youtube"
+                ]
+              },
+              {
+                "group": "集成",
+                "icon": "plug",
+                "pages": [
+                  "cn/guides/google-workspace",
+                  "cn/guides/plugins",
+                  "cn/guides/life-sciences",
+                  "cn/guides/gemini-cli",
+                  "cn/guides/fugu",
+                  "cn/guides/post-x"
+                ]
+              },
+              {
+                "group": "金融与数据",
+                "icon": "chart-line",
+                "pages": [
+                  "cn/guides/stocks",
+                  "cn/guides/kalshi",
+                  "cn/guides/kaggle",
+                  "cn/guides/generate-data",
+                  "cn/guides/data-ask"
+                ]
+              },
+              {
+                "group": "学习与工具",
+                "icon": "sparkles",
+                "pages": [
+                  "cn/guides/competitions",
+                  "cn/guides/ascii-art",
+                  "cn/guides/professions",
+                  "cn/guides/bookmarks",
+                  "cn/guides/clipboard-history"
+                ]
+              },
+              {
+                "group": "运维",
+                "icon": "wrench",
+                "pages": [
+                  "cn/guides/observability",
+                  "cn/guides/testing"
+                ]
+              }
+            ]
+          },
+          {
+            "tab": "概念",
+            "icon": "lightbulb",
             "pages": [
               "cn/concepts/routing",
               "cn/concepts/llm",
@@ -222,95 +373,7 @@
             ]
           },
           {
-            "group": "使用 Arka",
-            "icon": "terminal",
-            "pages": [
-              "cn/guides/cli",
-              "cn/guides/skills",
-              "cn/guides/route-learn",
-              "cn/guides/competitions",
-              "cn/guides/ascii-art",
-              "cn/guides/generate-data",
-              "cn/guides/data-ask"
-            ]
-          },
-          {
-            "group": "聊天与搜索",
-            "icon": "comments",
-            "pages": [
-              "cn/guides/chat",
-              "cn/guides/personas",
-              "cn/guides/memory",
-              "cn/guides/daily-brief"
-            ]
-          },
-          {
-            "group": "文档与媒体",
-            "icon": "file-text",
-            "pages": [
-              "cn/guides/pdf-rag",
-              "cn/guides/compose-3d",
-              "cn/guides/charts",
-              "cn/guides/vision",
-              "cn/guides/youtube"
-            ]
-          },
-          {
-            "group": "学习与工具",
-            "icon": "sparkles",
-            "pages": [
-              "cn/guides/bookmarks",
-              "cn/guides/clipboard-history"
-            ]
-          },
-          {
-            "group": "集成",
-            "icon": "plug",
-            "pages": [
-              "cn/guides/google-workspace",
-              "cn/guides/plugins",
-              "cn/guides/life-sciences",
-              "cn/guides/gemini-cli",
-              "cn/guides/fugu",
-              "cn/guides/mcp",
-              "cn/guides/agent-hub",
-              "cn/guides/agent-teams",
-              "cn/guides/post-x"
-            ]
-          },
-          {
-            "group": "金融",
-            "icon": "chart-line",
-            "pages": [
-              "cn/guides/stocks",
-              "cn/guides/kalshi",
-              "cn/guides/kaggle"
-            ]
-          },
-          {
-            "group": "代理与语音",
-            "icon": "robot",
-            "pages": [
-              "cn/guides/voice",
-              "cn/guides/goal-agent",
-              "cn/guides/repo-map",
-              "cn/guides/repo-health",
-              "cn/guides/openclaw-features",
-              "cn/guides/hermes-features",
-              "cn/guides/professions"
-            ]
-          },
-          {
-            "group": "运维",
-            "icon": "wrench",
-            "pages": [
-              "cn/guides/observability",
-              "cn/guides/docker-status",
-              "cn/guides/testing"
-            ]
-          },
-          {
-            "group": "参考",
+            "tab": "参考",
             "icon": "list",
             "pages": [
               "cn/reference/configuration",
