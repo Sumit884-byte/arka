@@ -173,12 +173,22 @@ _GIT_BLOCKED_HINT = (
 
 _MAX_INVALID_ACTIONS = 2
 _MAX_EMPTY_ACTIONS = 4
+_MAX_NON_TEST_ACTIONS = 2
 
 _EMPTY_ACTION_RETRY_HINT = (
     "\n\nREMINDER: Return ONLY one complete JSON object with keys status, cmd, why "
     '(and file when status is read). No markdown fences.\n'
     'Example: {"status":"continue","cmd":"pytest -q tests/test_coding_tui.py","why":"run focused tests"}'
 )
+
+_NON_TEST_ACTION_RETRY_HINT = (
+    "\n\nREMINDER: This is a testing/verification goal. Return an executable test or inspection command.\n"
+    'Examples: {"status":"continue","cmd":"pytest -q","why":"run test suite"} '
+    'or {"status":"continue","cmd":"python -m pytest tests/ -q","why":"run tests"} '
+    'or {"status":"read","file":"pyproject.toml","why":"find test config"}.'
+)
+
+_TESTING_GOAL_FALLBACK_CMD = f"{sys.executable} -m pytest -q --tb=line"
 
 _FAILURE_OUTPUT_HINTS = (
     "invalid action",
@@ -238,7 +248,47 @@ def _looks_like_prose_action(cmd: str) -> bool:
     return True
 
 
+_READONLY_SHORT_GOALS = frozenset({
+    "tests", "run tests", "test", "ci", "lint", "review", "ruff",
+})
+
+_WRITE_SHELL_PATTERNS = (
+    re.compile(r"(?<![\d=])>\s*\S"),
+    re.compile(r"(?:^|[;&|])\s*\d?>>?"),
+    re.compile(r"\|\s*tee\b"),
+    re.compile(r"(?:^|[;&|])\s*sed\b[^|;&]*\s-(?:i(?:\s|$|\S)|in-place\b)"),
+    re.compile(r"(?:^|[;&|])\s*(?:mv|cp|rm|mkdir|touch|chmod|chown|truncate)\b"),
+    re.compile(r"(?:^|[;&|])\s*(?:git\s+(?:add|commit|push|pull|merge|rebase|checkout|restore|reset|clean|stash|cherry-pick|apply))\b"),
+    re.compile(r"(?:^|[;&|])\s*(?:vi(?:m)?|nano|emacs|code|cursor)\b"),
+    re.compile(r"(?:^|[;&|])\s*(?:apply_patch|patch\s+-p)"),
+)
+
+_MUTATING_ARKA_TOKENS = frozenset({
+    "compose_3d", "generate_image", "design_from_screenshot", "compose_slides",
+    "compose_video", "model_to_image", "goal", "self_improve", "code_agent",
+    "coding-tui", "coding_tui",
+})
+
+_READONLY_GIT_SUBCOMMANDS = frozenset({
+    "diff", "status", "log", "show", "branch", "rev-parse", "describe", "shortlog",
+})
+
+
+def _goal_allows_fix(goal: str) -> bool:
+    text = " ".join((goal or "").lower().split())
+    return bool(re.search(r"\b(?:--fix|fix(?:es|ing)?|repair|patch)\b", text))
+
+
+def _is_readonly_short_goal(goal: str, *, allow_fix: bool = False) -> bool:
+    if allow_fix or _goal_allows_fix(goal):
+        return False
+    normalized = " ".join((goal or "").lower().split()).strip()
+    return normalized in _READONLY_SHORT_GOALS
+
+
 def _is_testing_goal(goal: str) -> bool:
+    if _is_readonly_short_goal(goal):
+        return True
     text = " ".join((goal or "").lower().split()).strip()
     if re.fullmatch(
         r"(?:tests?|run\s+tests?|ci|lint|ruff|pytest|smoke|verify|validate|repo_health|quality)",
@@ -255,9 +305,52 @@ def _is_testing_goal(goal: str) -> bool:
     )
 
 
+def _is_readonly_verification_goal(goal: str, *, readonly: bool = False) -> bool:
+    if readonly:
+        return True
+    if _goal_allows_fix(goal):
+        return False
+    return _is_testing_goal(goal)
+
+
+def _is_readonly_git_command(cmd: str) -> bool:
+    match = re.search(r"(?i)(?:^|[;&|])\s*git\s+(\S+)", cmd)
+    if not match:
+        return False
+    return match.group(1).lower() in _READONLY_GIT_SUBCOMMANDS
+
+
+def _is_write_shell_command(cmd: str) -> bool:
+    text = (cmd or "").strip()
+    if not text:
+        return False
+    lowered = text.lower()
+    if any(pattern.search(text) for pattern in _WRITE_SHELL_PATTERNS):
+        return True
+    if re.search(r"(?:^|[;&|])\s*sed\b", lowered) and re.search(r"\s-i(?:\s|$|\S)", lowered):
+        return True
+    return False
+
+
+def _is_mutating_arka_action(cmd: str) -> bool:
+    parts = (cmd or "").strip().split()
+    if not parts:
+        return False
+    first = parts[0].lower()
+    if first == "arka" and len(parts) > 1 and parts[1].lower() in _MUTATING_ARKA_TOKENS:
+        return True
+    if first in _MUTATING_ARKA_TOKENS:
+        return True
+    if re.search(r"(?i)\bself_improve\b.*\b--apply\b", cmd):
+        return True
+    return False
+
+
 def _is_test_action(cmd: str) -> bool:
     """Allow only useful inspection/test commands for a testing-focused goal."""
     lowered = (cmd or "").lower()
+    if _is_mutating_arka_action(cmd):
+        return False
     if any(
         token in lowered
         for token in (
@@ -275,14 +368,24 @@ def _is_test_action(cmd: str) -> bool:
     if not parts:
         return False
     first = parts[0].lower()
+    if first == "git":
+        return len(parts) > 1 and parts[1].lower() in _READONLY_GIT_SUBCOMMANDS
     if first in {"pytest", "ruff", "mypy", "pyright", "coverage", "nosetests", "tox"}:
         return True
-    if first in {"ls", "pwd", "cat", "head", "tail", "sed", "awk", "rg", "grep", "find", "file", "stat"}:
+    if first in {"ls", "pwd", "cat", "head", "tail", "awk", "rg", "grep", "find", "file", "stat"}:
+        return True
+    if first == "sed" and not re.search(r"\s-i(?:\s|$|\S)", lowered):
         return True
     if first in {"python", "python3", "uv", "poetry", "pipenv"}:
         return any(token in parts for token in ("pytest", "ruff", "mypy", "tox"))
     if first == "arka":
-        return len(parts) > 1 and parts[1].lower() in {"ci", "repo_health", "lint_project", "route_audit", "review"}
+        if len(parts) < 2:
+            return False
+        action = parts[1].lower()
+        if action in {"route", "route_audit", "review", "ci", "repo_health", "lint_project"}:
+            return True
+        if action == "self_improve" and not any(part.lower() == "--apply" for part in parts):
+            return True
     return False
 
 
@@ -512,6 +615,7 @@ def run_goal(
     verify: bool = False,
     system_extra: str = "",
     cmd_hook: "callable[[str], tuple[int, str] | None] | None" = None,
+    readonly: bool = False,
 ) -> int:
     goal = " ".join(goal.split()).strip()
     if not goal:
@@ -532,7 +636,8 @@ def run_goal(
         pass
 
     cwd = project_root or Path.cwd()
-    git_allowed = _git_authorized(goal)
+    readonly_mode = _is_readonly_verification_goal(goal, readonly=readonly)
+    git_allowed = _git_authorized(goal) or readonly_mode
     if project_root is not None:
         os.chdir(project_root)
     tree, listing = _dir_context(cwd, TREE_DEPTH)
@@ -543,6 +648,9 @@ def run_goal(
     blocked_cd_count = 0
     empty_action_count = 0
     invalid_action_count = 0
+    non_test_action_count = 0
+    executed_commands = 0
+    read_actions = 0
 
     system = f"""You are an autonomous shell agent (Butterfish Goal Mode style) on fish shell.
 Each turn return ONLY valid JSON (no markdown fences):
@@ -559,7 +667,16 @@ Rules:
 - Decompose complex goals across many small steps."""
     system += "\n- Never launch coding-tui, goal, or another interactive Arka agent; operate on the current workspace directly."
     system += f"\n- Working directory is already {cwd}. NEVER emit cd commands (standalone or chained); cd is blocked and wastes steps."
-    if re.search(r"(?i)\b(test|tests|testing|verify|smoke|validate|ci|lint|pytest|repo_health)\b", goal):
+    if readonly_mode:
+        system += (
+            "\n- READ-ONLY verification goal: run tests/lint/ci/review commands only. "
+            "Do not edit files, redirect output, or invoke mutating skills."
+        )
+        system += (
+            '\n- Good first actions: {"status":"continue","cmd":"pytest -q","why":"run test suite"} '
+            'or {"status":"read","file":"pyproject.toml","why":"find test config"}.'
+        )
+    elif re.search(r"(?i)\b(test|tests|testing|verify|smoke|validate|ci|lint|pytest|repo_health)\b", goal):
         system += (
             "\n- This is a testing/verification goal: use repository inspection and actual test/lint commands. "
             "Do not answer with web research or explanatory prose; return an executable command or a read action."
@@ -694,14 +811,19 @@ Step {step}/{max_steps} — return the NEXT action as JSON."""
                         pass
 
                 if status == "done":
+                    if executed_commands == 0 and read_actions == 0:
+                        print("○ Goal finished — no commands executed.", file=sys.stderr)
+                        if span is not None:
+                            mark_error(goal_span, "no commands executed")
+                        return 2
                     print("✓ Goal complete.", file=sys.stderr)
                     if why:
                         print(f"  {why}", file=sys.stderr)
                     try:
                         from arka.agent.git_changes import format_changed_files
 
-                        changed_files = format_changed_files(cwd)
-                        if changed_files != "○ No changes.":
+                        changed_files = format_changed_files(cwd, empty_message="○ No files changed.")
+                        if changed_files != "○ No files changed.":
                             print(changed_files, file=sys.stderr)
                     except ImportError:
                         pass
@@ -739,6 +861,7 @@ Step {step}/{max_steps} — return the NEXT action as JSON."""
                     continue
 
                 if status == "read" and file_path:
+                    read_actions += 1
                     content = _read_file(file_path, cwd)
                     print(f"  📄 read {file_path}", file=sys.stderr)
                     history += f"\n--- step {step} (read) ---\nfile: {file_path}\ncontent:\n{content}\n"
@@ -771,7 +894,7 @@ Step {step}/{max_steps} — return the NEXT action as JSON."""
 
                 if _looks_like_prose_action(cmd):
                     invalid_action_count += 1
-                    print("Rejected prose from action slot; requesting an executable command.", file=sys.stderr)
+                    print("  ⊘ rejected (prose action); requesting an executable command.", file=sys.stderr)
                     history += f"\n--- step {step} (invalid) ---\ncmd: {cmd}\nreason: prose action\n"
                     if invalid_action_count >= _MAX_INVALID_ACTIONS:
                         print("Repeated prose actions; stopping.", file=sys.stderr)
@@ -780,16 +903,30 @@ Step {step}/{max_steps} — return the NEXT action as JSON."""
                         return 1
                     continue
 
-                if _is_testing_goal(goal) and not _is_test_action(cmd):
-                    invalid_action_count += 1
-                    print("Rejected non-test action for testing goal; requesting a test or inspection command.", file=sys.stderr)
-                    history += f"\n--- step {step} (invalid) ---\ncmd: {cmd}\nreason: non-test action\n"
-                    if invalid_action_count >= _MAX_INVALID_ACTIONS:
-                        print("Repeated non-test actions; stopping.", file=sys.stderr)
-                        if span is not None:
-                            mark_error(goal_span, "non-test action")
-                        return 1
+                if readonly_mode and _is_write_shell_command(cmd):
+                    print("  ⊘ blocked write during test-only goal", file=sys.stderr)
+                    history += (
+                        f"\n--- step {step} (blocked) ---\ncmd: {cmd}\n"
+                        "reason: write blocked during read-only verification goal\n"
+                    )
                     continue
+
+                if (readonly_mode or _is_testing_goal(goal)) and not _is_test_action(cmd):
+                    non_test_action_count += 1
+                    print(
+                        "  ⊘ rejected (non-test action); requesting pytest, ruff, or inspection.",
+                        file=sys.stderr,
+                    )
+                    history += (
+                        f"\n--- step {step} (invalid) ---\ncmd: {cmd}\nreason: non-test action\n"
+                        f"{_NON_TEST_ACTION_RETRY_HINT.strip()}\n"
+                    )
+                    if non_test_action_count >= _MAX_NON_TEST_ACTIONS:
+                        cmd = _TESTING_GOAL_FALLBACK_CMD
+                        why = "fallback: run test suite after repeated non-test actions"
+                        print(f"  → fallback: {cmd}", file=sys.stderr)
+                    else:
+                        continue
 
                 # Each action runs in a fresh subprocess with cwd already set;
                 # standalone directory changes cannot persist between steps.
@@ -832,6 +969,7 @@ Step {step}/{max_steps} — return the NEXT action as JSON."""
                     print(f"    {why}", file=sys.stderr)
 
                 code, out = _run_cmd(cmd, cwd, auto_yes=auto_yes, git_allowed=git_allowed)
+                executed_commands += 1
                 if _command_reported_success(code, out):
                     print("  ✓ exit 0", file=sys.stderr)
                 elif code == 2:
@@ -896,9 +1034,11 @@ Step {step}/{max_steps} — return the NEXT action as JSON."""
                         return 0
 
         print(f"Max steps ({max_steps}) reached.", file=sys.stderr)
+        if executed_commands == 0 and read_actions == 0:
+            print("○ Run finished: no commands executed.", file=sys.stderr)
         if span is not None:
             mark_error(goal_span, "max steps reached")
-        return 1
+        return 1 if executed_commands > 0 else 2
 
 
 def goal_engine_name() -> str:

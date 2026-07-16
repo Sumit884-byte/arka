@@ -201,7 +201,7 @@ def test_coding_tui_approve_auto_executes(monkeypatch, tmp_path, capsys):
     )
     monkeypatch.setattr(
         "arka.agent.core.code_agent",
-        lambda goal, repo, plan_context, system_extra="": called.append(
+        lambda goal, repo, plan_context, system_extra="", readonly=False: called.append(
             (goal, repo, plan_context, system_extra)
         )
         or 0,
@@ -225,7 +225,7 @@ def test_coding_tui_decline_does_not_execute(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr("arka.agent.coding_tui.generate_plan", lambda goal, root: (f"Plan for: {goal}", "local"))
     monkeypatch.setattr(
         "arka.agent.core.code_agent",
-        lambda goal, repo, plan_context, system_extra="": called.append(goal) or 0,
+        lambda goal, repo, plan_context, system_extra="", readonly=False: called.append(goal) or 0,
     )
     assert coding_tui.run(str(tmp_path)) == 0
     output = capsys.readouterr().out
@@ -245,7 +245,7 @@ def test_coding_tui_run_without_prior_plan(monkeypatch, tmp_path, capsys):
     )
     monkeypatch.setattr(
         "arka.agent.core.code_agent",
-        lambda goal, repo, plan_context, system_extra="": called.append(goal) or 0,
+        lambda goal, repo, plan_context, system_extra="", readonly=False: called.append(goal) or 0,
     )
     assert coding_tui.run(str(tmp_path)) == 0
     output = capsys.readouterr().out
@@ -349,8 +349,9 @@ def test_direct_tests_report_scope_and_verbose_command(monkeypatch, tmp_path, ca
     )
     assert coding_tui._run_direct_tests(tmp_path) == 0
     output = capsys.readouterr().out
+    assert "Running tests:" in output
     assert "Test scope:" in output
-    assert seen[0][0][-1] == "-v"
+    assert seen[0][0] == [coding_tui.sys.executable, "-m", "pytest", "-q", "--tb=line"]
 
 
 def test_coding_tui_diff_files_open(monkeypatch, tmp_path, capsys):
@@ -402,18 +403,57 @@ def test_run_tests_expands_and_proposes_pytest(monkeypatch, tmp_path, capsys):
     from arka.agent import coding_tui
 
     commands = iter(["/run tests", "/quit"])
-    captured: list[tuple[str, str]] = []
+    seen: list[tuple[list[str], Path]] = []
 
-    def fake_code_agent(goal, repo, plan_context="", system_extra=""):
-        captured.append((goal, system_extra))
-        return 0
+    class Result:
+        returncode = 0
+
+    def fake_subprocess_run(command, cwd, check=False):
+        seen.append((command, cwd))
+        return Result()
 
     monkeypatch.setattr("builtins.input", lambda _: next(commands))
-    monkeypatch.setattr("arka.agent.coding_tui.prepare_prompt", lambda prompt: (prompt, prompt, False))
-    monkeypatch.setattr("arka.agent.core.code_agent", fake_code_agent)
+    monkeypatch.setattr(coding_tui.subprocess, "run", fake_subprocess_run)
+    monkeypatch.setattr(
+        "arka.agent.core.code_agent",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("/run tests must not use code_agent")),
+    )
     assert coding_tui.run(str(tmp_path)) == 0
-    assert captured
-    goal, system_extra = captured[0]
-    assert "pytest" in goal.lower()
-    assert "compose_3d" in system_extra
-    assert "Test suite" in goal or "test suite" in goal.lower()
+    output = capsys.readouterr().out
+    assert seen
+    assert seen[0][0] == [coding_tui.sys.executable, "-m", "pytest", "-q", "--tb=line"]
+    assert "✓ Tests passed." in output
+    assert "Running tests:" in output
+    assert "no files modified" in output.lower()
+
+
+def test_run_tests_short_goal_is_deterministic(monkeypatch, tmp_path):
+    from arka.agent import coding_tui
+
+    assert coding_tui._is_deterministic_short_goal("tests")
+    assert coding_tui._is_deterministic_short_goal("run tests")
+    assert coding_tui._is_deterministic_short_goal("ci")
+    assert not coding_tui._is_deterministic_short_goal("run tests and fix failures")
+    assert not coding_tui._is_deterministic_short_goal("tests", allow_fix=True)
+    goal, allow_fix = coding_tui._parse_run_request("tests --fix")
+    assert goal == "tests"
+    assert allow_fix is True
+
+
+def test_run_ci_and_lint_are_deterministic(monkeypatch, tmp_path):
+    from arka.agent import coding_tui
+
+    calls: list[str] = []
+    monkeypatch.setattr(
+        coding_tui,
+        "_run_deterministic_goal",
+        lambda goal, repo: calls.append(goal) or 0,
+    )
+    monkeypatch.setattr(
+        "arka.agent.core.code_agent",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("must not use code_agent")),
+    )
+    commands = iter(["/run ci", "/run lint", "/run review", "/quit"])
+    monkeypatch.setattr("builtins.input", lambda _: next(commands))
+    assert coding_tui.run(str(tmp_path)) == 0
+    assert calls == ["ci", "lint", "review"]

@@ -987,11 +987,21 @@ def _coding_summary(cwd: Path, goal: str, total: int, *, completed: int, failed_
     """Return a compact, deterministic progress summary after a coding run."""
     from arka.agent.git_changes import format_changed_files
 
-    status = f"failed at step {failed_step}/{total}" if failed_step else f"completed {completed}/{total} step(s)"
-    mark = "✗" if failed_step else "✓"
+    if total == 0:
+        status = "no plan steps generated"
+        mark = "○"
+    elif failed_step:
+        status = f"failed at step {failed_step}/{total}"
+        mark = "✗"
+    elif completed == 0:
+        status = f"no steps executed (0/{total})"
+        mark = "○"
+    else:
+        status = f"completed {completed}/{total} step(s)"
+        mark = "✓"
     lines = [f"{mark} Coding summary: {status} while working on {goal}"]
-    changed_files = format_changed_files(cwd)
-    if changed_files != "○ No changes.":
+    changed_files = format_changed_files(cwd, empty_message="○ No files changed.")
+    if changed_files != "○ No files changed.":
         lines.extend(["", changed_files])
     lines.append("Next: run `arka ci --changed` to verify the edited files.")
     return "\n".join(lines)
@@ -1004,7 +1014,13 @@ def code_agent(
     ingest: bool = False,
     plan_context: str = "",
     system_extra: str = "",
+    readonly: bool | None = None,
 ) -> int:
+    from arka.agent.goal import (
+        _is_mutating_arka_action,
+        _is_readonly_verification_goal,
+        _is_write_shell_command,
+    )
     from arka.core.code_project import (
         CodeProjectError,
         apply_env,
@@ -1030,6 +1046,8 @@ def code_agent(
 
     apply_env()
     os.chdir(cwd)
+    if readonly is None:
+        readonly = _is_readonly_verification_goal(goal)
     doc_name = cwd.name
     if ingest:
         from arka.paths import entry_script
@@ -1073,6 +1091,8 @@ def code_agent(
             "(pytest for tests, arka ci --changed for ci, ruff for lint, review for staged diff). "
             "Do not invoke unrelated creative skills.\n"
         )
+        if readonly:
+            plan_user += "READ-ONLY: report results only; do not edit files or run mutating commands.\n"
     if plan_context:
         plan_user += (
             "\nApproved coding-TUI plan (follow its proposed files and reasons; "
@@ -1131,10 +1151,14 @@ def code_agent(
             max_steps=10,
             auto_continue=True,
             system_extra="\n".join(extra_parts),
+            readonly=readonly,
         )
 
     for i, step in enumerate(steps, 1):
         if _is_planner_placeholder(step):
+            continue
+        if readonly and (_is_write_shell_command(step) or _is_mutating_arka_action(step)):
+            print(f"⊘ blocked write during test-only goal: {step}", file=sys.stderr)
             continue
         print(f"━━━ Code step {i}/{len(steps)} ━━━")
         print(f"→ {step}")

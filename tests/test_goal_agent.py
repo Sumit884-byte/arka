@@ -20,8 +20,11 @@ def test_goal_command_prefix_is_normalized(tmp_path: Path):
 
 
 def test_git_commands_require_explicit_goal_authorization(tmp_path):
+    import subprocess
+
     from arka.agent.goal import _run_cmd
 
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
     code, output = _run_cmd("git status", tmp_path, auto_yes=True)
     assert code == 2
     assert "explicit user authorization" in output
@@ -89,10 +92,11 @@ def test_run_goal_continues_after_two_blocked_cd_commands(tmp_path: Path):
         redirect_stderr(stderr),
     ):
         rc = run_goal("improve the tui", max_steps=5)
-    assert rc == 0
+    assert rc == 2
     err = stderr.getvalue()
     assert err.count("skipped cd") == 2
     assert "Repeated cd actions detected" not in err
+    assert "no commands executed" in err
 
 
 def test_run_goal_strips_cd_prefix_before_execution(tmp_path: Path):
@@ -277,16 +281,18 @@ def test_testing_goal_quality_gate_rejects_web_prose_before_execution(tmp_path: 
     assert rc == 0
     assert calls == ["python -m pytest tests/test_goal_agent.py -q"]
     assert any("testing/verification goal" in prompt for prompt in prompts)
-    assert "Rejected prose from action slot" in stderr.getvalue()
+    assert "⊘ rejected (prose action)" in stderr.getvalue()
 
 
 def test_testing_goal_quality_gate_rejects_unrelated_skill_action():
-    from arka.agent.goal import _is_test_action, _is_testing_goal
+    from arka.agent.goal import _is_mutating_arka_action, _is_test_action, _is_testing_goal
 
     assert _is_testing_goal("run tests in this repo")
     assert _is_test_action("python -m pytest tests -q")
+    assert _is_test_action("pytest -q tests/test_goal_agent.py")
     assert _is_test_action("arka ci --changed")
     assert not _is_test_action("arka create an 3d model of an boy")
+    assert not _is_mutating_arka_action("pytest -q tests/test_goal_agent.py")
 
 
 def test_unknown_arka_action_is_skipped_before_fish(tmp_path):
@@ -349,7 +355,59 @@ def test_testing_goal_rejects_compose_3d_before_execution(tmp_path: Path):
         rc = run_goal("tests", max_steps=4)
     assert rc == 0
     assert calls == ["pytest -q"]
-    assert "Rejected non-test action" in stderr.getvalue()
+    assert "⊘ rejected (non-test action)" in stderr.getvalue()
+
+
+def test_testing_goal_falls_back_to_pytest_after_repeated_rejections(tmp_path: Path):
+    from arka.agent.goal import run_goal
+
+    responses = [
+        '{"status":"continue","cmd":"arka create an 3d model of an boy","why":"creative"}',
+        '{"status":"continue","cmd":"arka generate_image cat","why":"creative"}',
+        '{"status":"done","cmd":"","why":"done"}',
+    ]
+    calls: list[str] = []
+    stderr = io.StringIO()
+    with (
+        mock.patch("arka.agent.goal._llm", side_effect=responses),
+        mock.patch("arka.agent.goal._dir_context", return_value=("", "")),
+        mock.patch("arka.agent.goal._fish_history", return_value=""),
+        mock.patch("arka.agent.goal._skills_list", return_value="test"),
+        mock.patch(
+            "arka.agent.goal._run_cmd",
+            side_effect=lambda cmd, _cwd, **_: calls.append(cmd) or (0, "ok"),
+        ),
+        redirect_stderr(stderr),
+    ):
+        rc = run_goal("tests", max_steps=4)
+    assert rc == 0
+    assert len(calls) == 1
+    assert "pytest" in calls[0]
+    err = stderr.getvalue()
+    assert err.count("⊘ rejected (non-test action)") == 2
+    assert "fallback:" in err
+    assert "Repeated non-test actions; stopping." not in err
+
+
+def test_goal_done_without_execution_is_honest_failure(tmp_path: Path):
+    from arka.agent.goal import run_goal
+
+    responses = [
+        '{"status":"done","cmd":"","why":"finished"}',
+    ]
+    stderr = io.StringIO()
+    with (
+        mock.patch("arka.agent.goal._llm", side_effect=responses),
+        mock.patch("arka.agent.goal._dir_context", return_value=("", "")),
+        mock.patch("arka.agent.goal._fish_history", return_value=""),
+        mock.patch("arka.agent.goal._skills_list", return_value="test"),
+        redirect_stderr(stderr),
+    ):
+        rc = run_goal("run tests in this repo", max_steps=3)
+    assert rc == 2
+    err = stderr.getvalue()
+    assert "no commands executed" in err
+    assert "✓ Goal complete." not in err
 
 
 def test_command_reported_success_rejects_invalid_output():
@@ -359,3 +417,65 @@ def test_command_reported_success_rejects_invalid_output():
     assert _command_reported_success(0, "ok")
     assert not _command_reported_success(2, "")
     assert not _command_reported_success(1, "failed")
+
+
+def test_write_shell_command_detection():
+    from arka.agent.goal import _is_test_action, _is_write_shell_command
+
+    assert _is_write_shell_command("sed -i 's/foo/bar/' file.py")
+    assert _is_write_shell_command("echo hi > out.txt")
+    assert _is_write_shell_command("git commit -m test")
+    assert not _is_write_shell_command("pytest -q")
+    assert not _is_write_shell_command("sed -n '1,5p' file.py")
+    assert _is_test_action("pytest -q tests/")
+    assert not _is_test_action("sed -i 's/a/b/' x.py")
+
+
+def test_readonly_testing_goal_blocks_sed_i(tmp_path: Path):
+    from arka.agent.goal import run_goal
+
+    responses = [
+        '{"status":"continue","cmd":"sed -i \\"s/a/b/\\" src/foo.py","why":"fix"}',
+        '{"status":"continue","cmd":"pytest -q","why":"verify"}',
+        '{"status":"done","cmd":"","why":"done"}',
+    ]
+    calls: list[str] = []
+    stderr = io.StringIO()
+    with (
+        mock.patch("arka.agent.goal._llm", side_effect=responses),
+        mock.patch("arka.agent.goal._dir_context", return_value=("", "")),
+        mock.patch("arka.agent.goal._fish_history", return_value=""),
+        mock.patch("arka.agent.goal._skills_list", return_value="test"),
+        mock.patch(
+            "arka.agent.goal._run_cmd",
+            side_effect=lambda cmd, _cwd, **_: calls.append(cmd) or (0, "ok"),
+        ),
+        redirect_stderr(stderr),
+    ):
+        rc = run_goal("tests", max_steps=4, readonly=True)
+    assert rc == 0
+    assert calls == ["pytest -q"]
+    assert "blocked write during test-only goal" in stderr.getvalue()
+
+
+def test_readonly_testing_goal_allows_pytest(tmp_path: Path):
+    from arka.agent.goal import run_goal
+
+    responses = [
+        '{"status":"continue","cmd":"pytest -q tests/test_goal_agent.py","why":"run tests"}',
+        '{"status":"done","cmd":"","why":"done"}',
+    ]
+    calls: list[str] = []
+    with (
+        mock.patch("arka.agent.goal._llm", side_effect=responses),
+        mock.patch("arka.agent.goal._dir_context", return_value=("", "")),
+        mock.patch("arka.agent.goal._fish_history", return_value=""),
+        mock.patch("arka.agent.goal._skills_list", return_value="test"),
+        mock.patch(
+            "arka.agent.goal._run_cmd",
+            side_effect=lambda cmd, _cwd, **_: calls.append(cmd) or (0, "ok"),
+        ),
+    ):
+        rc = run_goal("tests", max_steps=3, readonly=True)
+    assert rc == 0
+    assert calls == ["pytest -q tests/test_goal_agent.py"]

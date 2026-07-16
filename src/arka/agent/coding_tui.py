@@ -50,6 +50,28 @@ WELCOME_TIPS = (
 
 HISTORY_FILE = Path.home() / ".cache" / "arka" / "coding_tui_history"
 
+DETERMINISTIC_SHORT_GOALS = frozenset({"tests", "run tests", "test", "ci", "lint", "review", "ruff"})
+
+
+def _normalize_goal_text(text: str) -> str:
+    return " ".join((text or "").lower().split()).strip()
+
+
+def _parse_run_request(text: str) -> tuple[str, bool]:
+    """Return (goal, allow_fix) from /run input."""
+    raw = (text or "").strip()
+    allow_fix = bool(re.search(r"(?:^|\s)--fix(?:\s|$)", raw, re.I))
+    goal = re.sub(r"(?:^|\s)--fix(?:\s|$)", " ", raw, flags=re.I).strip()
+    goal = " ".join(goal.split())
+    return goal, allow_fix
+
+
+def _is_deterministic_short_goal(text: str, *, allow_fix: bool = False) -> bool:
+    """Short /run goals that should execute directly without the goal agent."""
+    if allow_fix:
+        return False
+    return _normalize_goal_text(text) in DETERMINISTIC_SHORT_GOALS
+
 
 def _expand_short_goal(goal: str) -> str:
     """Expand underspecified coding-TUI goals into actionable agent prompts."""
@@ -67,13 +89,14 @@ def _expand_short_goal(goal: str) -> str:
 
 def _is_direct_test_request(text: str) -> bool:
     """Recognize test requests that should not enter the edit-planning flow."""
-    normalized = " ".join((text or "").lower().split()).strip()
+    normalized = _normalize_goal_text(text)
     return bool(
         re.fullmatch(
             r"(?:please\s+)?(?:run|execute|rerun)\s+(?:(?:the\s+)?(?:all\s+)?tests?(?:\s+(?:suite|for\s+arka|for\s+this\s+project))?|arka\s+tests)",
             normalized,
         )
-        or normalized in {"test arka", "test arka features", "test the project"}
+        or normalized in {"test arka", "test arka features", "test the project", "tests", "test"}
+        or _is_deterministic_short_goal(normalized) and normalized in {"tests", "run tests", "test"}
     )
 
 
@@ -88,8 +111,8 @@ def _is_agent_test_request(text: str) -> bool:
 
 def _run_direct_tests(repo: Path) -> int:
     """Run the repository test suite directly, without asking an agent to plan edits."""
-    command = [sys.executable, "-m", "pytest", "-v"]
-    print(f"Running tests directly: {' '.join(command)}")
+    command = [sys.executable, "-m", "pytest", "-q", "--tb=line"]
+    print(f"Running tests: {' '.join(command)}")
     print(f"Test scope: repository at {repo}")
     try:
         proc = subprocess.run(command, cwd=repo, check=False)
@@ -98,11 +121,72 @@ def _run_direct_tests(repo: Path) -> int:
         return 1
     if proc.returncode == 0:
         print("✓ Tests passed.")
-        print("For agent-assisted fixes or extra checks, use: /run tests and fix failures")
+        print("○ Test run complete (no files modified)")
+        print("For agent-assisted fixes, use: /run tests --fix")
     else:
         print(f"✗ Tests failed (exit {proc.returncode}).")
-        print("For agent-assisted diagnosis and fixes, use: /run tests and fix failures")
+        print("○ Test run complete (no files modified)")
+        print("For agent-assisted diagnosis and fixes, use: /run tests --fix")
     return proc.returncode
+
+
+def _changed_python_files(repo: Path) -> list[str]:
+    from arka.agent.git_changes import list_changed_files
+
+    return [row.path for row in list_changed_files(repo) if row.path.endswith(".py")]
+
+
+def _run_direct_ci(repo: Path) -> int:
+    from arka.agent.dev_tools import ci_text, run_ci
+
+    print(ci_text(repo, changed_only=True))
+    ok = run_ci(repo, changed_only=True)["ok"]
+    print("○ CI run complete (no files modified)")
+    return 0 if ok else 1
+
+
+def _run_direct_lint(repo: Path) -> int:
+    changed = _changed_python_files(repo)
+    if not changed:
+        print("○ No changed Python files to lint.")
+        print("○ Lint run complete (no files modified)")
+        return 0
+    command = [sys.executable, "-m", "ruff", "check", *changed]
+    print(f"Running lint: {' '.join(command)}")
+    try:
+        proc = subprocess.run(command, cwd=repo, check=False)
+    except OSError as exc:
+        print(f"Could not start ruff: {exc}")
+        return 1
+    if proc.returncode == 0:
+        print("✓ Lint passed.")
+    else:
+        print(f"✗ Lint failed (exit {proc.returncode}).")
+    print("○ Lint run complete (no files modified)")
+    print("For agent-assisted fixes, use: /run lint --fix")
+    return proc.returncode
+
+
+def _run_direct_review(repo: Path) -> int:
+    from arka.agent.dev_tools import review_text
+
+    print(review_text(repo, staged=True))
+    print("○ Review complete (no files modified)")
+    return 0
+
+
+def _run_deterministic_goal(goal: str, repo: Path) -> int:
+    """Run repository workflow goals directly without the goal agent."""
+    normalized = _normalize_goal_text(goal)
+    if normalized in {"tests", "run tests", "test"}:
+        return _run_direct_tests(repo)
+    if normalized == "ci":
+        return _run_direct_ci(repo)
+    if normalized in {"lint", "ruff"}:
+        return _run_direct_lint(repo)
+    if normalized == "review":
+        return _run_direct_review(repo)
+    return 1
 
 
 def _run_agent_tests(goal: str, repo: Path, code_agent) -> int:
@@ -417,11 +501,14 @@ def coding_tui_system_extra(root: Path, goal: str) -> str:
             "- Do not invoke creative skills (compose_3d, generate_image, model_to_image).\n"
         )
     elif normalized == "ci":
-        short_goal_hint = "- Short goal 'ci' means run `arka ci --changed` and fix the first failure.\n"
+        short_goal_hint = "- Short goal 'ci' means run `arka ci --changed` (read-only unless --fix).\n"
     elif normalized == "lint":
-        short_goal_hint = "- Short goal 'lint' means run ruff on changed Python files.\n"
+        short_goal_hint = "- Short goal 'lint' means run ruff on changed Python files (read-only unless --fix).\n"
     elif normalized == "review":
         short_goal_hint = "- Short goal 'review' means inspect staged changes (`arka review` or git diff).\n"
+    edit_hint = ""
+    if normalized not in DETERMINISTIC_SHORT_GOALS:
+        edit_hint = "- Make concrete file edits under src/ and tests/; verify with pytest on changed modules."
     return (
         f"Coding TUI context: working directory is already {root}. Never use cd.\n"
         "- Do not run git pull, git commit, or other git commands unless the user explicitly asked for git.\n"
@@ -429,7 +516,7 @@ def coding_tui_system_extra(root: Path, goal: str) -> str:
         "- Prefer existing Arka tools (repo_health, lint_project, review, ci) over raw shell when applicable.\n"
         f"{tui_hint}"
         f"{short_goal_hint}"
-        "- Make concrete file edits under src/ and tests/; verify with pytest on changed modules."
+        f"{edit_hint}"
     )
 
 
@@ -497,6 +584,7 @@ def _execute_goal(
     *,
     last_plan: str | None,
     code_agent,
+    readonly: bool = False,
 ) -> int:
     original_goal = goal.strip()
     goal = _expand_short_goal(goal)
@@ -508,20 +596,28 @@ def _execute_goal(
         repo=str(repo),
         plan_context=last_plan or "",
         system_extra=coding_tui_system_extra(repo, original_goal),
+        readonly=readonly,
     )
     from arka.agent.git_changes import format_changed_files
 
+    changed_files = format_changed_files(repo, empty_message="○ No files changed.")
+    if readonly:
+        if rc == 0:
+            print("○ Verification run complete (no files modified)")
+        else:
+            print(f"✗ Run finished with exit code {rc}.")
+        print(changed_files)
+        return rc
     if rc == 0:
         print("✓ Done.")
-        changed_files = format_changed_files(repo)
-        if changed_files != "○ No changes.":
-            print(changed_files)
+        print(changed_files)
         print("Next: `arka ci --changed` to verify edited files.")
+    elif rc == 2:
+        print("○ Run finished: no commands executed.")
+        print(changed_files)
     else:
         print(f"✗ Run finished with exit code {rc}.")
-        changed_files = format_changed_files(repo)
-        if changed_files != "○ No changes.":
-            print(changed_files)
+        print(changed_files)
         print("Inspect output, then try `arka ci --changed`.")
     return rc
 
@@ -613,7 +709,14 @@ def run(root: str = ".") -> int:
                 code_agent=code_agent,
             )
         elif line == "/run" or line.startswith("/run "):
-            requested_goal = line[4:].strip() or pending_goal
+            requested_goal, allow_fix = _parse_run_request(line[4:].strip() or (pending_goal or ""))
+            if requested_goal and _is_deterministic_short_goal(requested_goal, allow_fix=allow_fix):
+                _run_deterministic_goal(requested_goal, repo)
+                continue
+            if requested_goal and allow_fix and _normalize_goal_text(requested_goal) in DETERMINISTIC_SHORT_GOALS:
+                print(f"Executing with --fix: {requested_goal}")
+                _execute_goal(requested_goal, repo, last_plan=last_plan, code_agent=code_agent, readonly=False)
+                continue
             if requested_goal and _is_direct_test_request(requested_goal):
                 _run_direct_tests(repo)
                 continue
@@ -650,7 +753,11 @@ def run(root: str = ".") -> int:
 
             print(review_text(repo, staged=True))
         elif _is_direct_test_request(line):
-            _run_direct_tests(repo)
+            goal_part, allow_fix = _parse_run_request(line)
+            if _is_deterministic_short_goal(goal_part, allow_fix=allow_fix):
+                _run_deterministic_goal(goal_part, repo)
+            else:
+                _run_direct_tests(repo)
         elif _is_agent_test_request(line):
             _run_agent_tests(line, repo, code_agent)
         elif line.startswith("/"):
