@@ -1,0 +1,85 @@
+---
+title: "如何用 Arka 写代码"
+description: "Arka 终端编码实用工作流 —— 设置、日常命令、运行模式、IDE 集成与五分钟示例。"
+icon: "laptop-code"
+---
+
+Arka 是面向终端的**编码副驾驶**：用自然语言描述需求，Arka 将请求路由到合适技能并在本地执行，写入操作限定在你初始化的代码项目内。配合 **agent 模式**、**Cursor MCP** 与 **仓库健康检查**，即可形成完整的终端编码循环。
+
+<Tip>
+  首次使用？先完成[快速开始](/cn/quickstart)，然后在目标仓库中运行 `arka code init .`。
+</Tip>
+
+## 概览
+
+编码时三个能力协同工作：
+
+| 能力 | 作用 |
+| --- | --- |
+| **路由** | 离线符号规则选择技能；必要时才调用 LLM。见[路由概念](/cn/concepts/routing)。 |
+| **Agent 模式** | 默认模式，完整技能执行与安全网关。`arka mode agent`。 |
+| **MCP** | 向 Cursor 等编辑器暴露 Arka 技能，或从 CLI 调用外部 MCP 服务。见 [MCP 集成](/cn/guides/mcp)。 |
+
+## 编码环境设置
+
+```bash
+arka mode agent
+cd ~/dev/myapp
+arka code init .
+arka mcp doctor
+arka mcp install          # 将输出合并到 Cursor MCP 配置
+arka agent_hub sync --unify   # 可选：多代理共享 MCP
+```
+
+可选安装 [fish shell](https://fishshell.com) 以启用完整 70+ 技能路由与自然语言别名。
+
+## 日常工作流
+
+| 场景 | 示例命令 |
+| --- | --- |
+| 提问 / 解释 | `arka ask "路由在哪里处理？"`、`arka gemini explain asyncio` |
+| 编辑代码 | `arka goal 重构 auth 并运行 pytest`、`arka surgical-edit …`、`arka structure .` |
+| 审查 | `arka review --staged`、`arka teammate-review .` |
+| 测试与 CI | `arka ci`、`arka repo_health run`、`arka pr_check babysit` |
+| 自我改进 | `arka self improve routing`、`arka self improve routing --apply` |
+
+## 运行模式
+
+| 模式 | 适用场景 |
+| --- | --- |
+| `agent` | 默认 —— 执行技能与写入 |
+| `ask` | 只读探索 |
+| `plan` | 仅输出计划，不执行 |
+| `debug` | 查看路由与 LLM 回退轨迹 |
+
+详见英文版 [Operation modes](/guides/operation-modes)（中文页待补充）。
+
+## 五分钟示例
+
+```bash
+arka code init .
+arka ask "where is routing handled?"
+arka review --staged
+arka ci --changed
+arka self improve routing
+```
+
+## 延伸阅读
+
+<CardGroup cols={2}>
+  <Card title="目标代理" icon="bullseye" href="/cn/guides/goal-agent">
+    多步骤自主编码任务。
+  </Card>
+
+  <Card title="MCP 集成" icon="network-wired" href="/cn/guides/mcp">
+    Cursor 与外部 MCP 服务器连接。
+  </Card>
+
+  <Card title="仓库健康" icon="heart-pulse" href="/cn/guides/repo-health">
+    本地 CI 镜像与审查门禁。
+  </Card>
+
+  <Card title="完整英文指南" icon="laptop-code" href="/guides/code-with-arka">
+    How to code with Arka（完整版）。
+  </Card>
+</CardGroup>

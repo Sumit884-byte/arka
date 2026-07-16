@@ -1,0 +1,226 @@
+---
+title: "How to code with Arka"
+description: "A practical terminal workflow for coding with Arka — setup, daily commands, operation modes, IDE integration, and a five-minute example session."
+icon: "laptop-code"
+---
+
+Arka is a **terminal coding copilot**. You describe what you need in plain English; Arka routes the request to the right skill, runs it locally, and keeps risky writes scoped to your project. Combine the CLI with **agent mode**, **MCP tools in Cursor**, and **repo health gates** for a full coding loop without leaving the terminal.
+
+<Tip>
+  New here? Complete [Quickstart](/quickstart) first, then run `arka code init .` in the repo you are working on.
+</Tip>
+
+## Overview
+
+Three pieces work together while you code:
+
+| Piece | What it does |
+| --- | --- |
+| **Routing** | Offline symbolic rules pick the skill; LLM fallback only when needed. See [How routing works](/concepts/routing). |
+| **Agent mode** | Full skill execution with security gates (default). Switch with `arka mode agent`. |
+| **MCP** | Expose Arka skills to Cursor and other agents, or call external MCP servers from the CLI. See [MCP integration](/guides/mcp). |
+
+Arka is not a replacement for your editor — it complements it. Use the terminal for fast asks, reviews, CI, and autonomous edits; use Cursor for inline diffs when Arka is connected over MCP.
+
+## Setup for coding
+
+Run these once per machine (or per repo) before your daily workflow.
+
+<Steps>
+  <Step title="Confirm agent mode">
+    Agent mode is the default. Verify or switch:
+
+    ```bash
+    arka mode list
+    arka mode agent
+    ```
+  </Step>
+
+  <Step title="Initialize a code project">
+    Scope writes to one repository root:
+
+    ```bash
+    cd ~/dev/myapp
+    arka code init .
+    arka code status
+    ```
+
+    The goal agent, `self improve --apply`, and other write skills stay inside this folder until you `arka code clear` or init another path.
+  </Step>
+
+  <Step title="Optional: fish shell">
+    Fish unlocks the full 70+ skill router and natural-language aliases (`agent "…"`, `pr_check babysit`, etc.). From bash/zsh, use explicit `arka` subcommands — they work the same.
+
+    ```bash
+    brew install fish   # macOS
+    ```
+  </Step>
+
+  <Step title="Connect Cursor (recommended)">
+    Let the IDE agent call Arka skills over MCP:
+
+    ```bash
+    arka mcp doctor
+    arka mcp install
+    ```
+
+    Copy the printed snippet into **Cursor Settings → MCP** (or use the project-level `.cursor/mcp.json` in the Arka repo). For shared MCP across multiple coding agents, run `arka agent_hub sync --unify`. See [Agent Hub](/guides/agent-hub) and [MCP integration](/guides/mcp).
+  </Step>
+</Steps>
+
+## Daily workflow
+
+Use natural language or explicit commands — Arka routes both.
+
+### Ask and explain
+
+Orient yourself in an unfamiliar codebase:
+
+```bash
+arka ask "where is routing handled?"
+arka gemini explain asyncio
+arka repo_map
+```
+
+`arka ask` runs the web-answer skill; `gemini explain` uses the Gemini CLI integration for code-focused explanations. Use [repo map](/guides/repo-map) for a structured tree of the current project.
+
+### Edit code
+
+| Task | Command |
+| --- | --- |
+| Multi-step autonomous work | `arka goal refactor auth and run pytest` |
+| Deterministic skill sequence | `arka coding-workflow feature --task "add rate limiting"` |
+| Targeted text replacement | `arka surgical-edit edit src/app.py "old" "new" --yes` |
+| Layout / hygiene audit | `arka structure .` |
+| Focused TUI workspace | `arka coding-tui .` |
+
+The [goal agent](/guides/goal-agent) is best for open-ended tasks (debug, set up env, run tests). [Coding workflows](/guides/coding-workflows) list an explicit skill sequence before execution — useful when you want predictable steps. [Structure](/guides/structure) is read-only; it suggests moves but never relocates files.
+
+### Review
+
+Catch issues before you commit:
+
+```bash
+arka review --staged
+arka council "is this API change safe to ship?"
+arka teammate-review .
+```
+
+`review --staged` checks the diff against project rules. [Council](/guides/council) runs multi-persona deliberation for design decisions. [Teammate review](/guides/teammate-review) flags cross-service impact using workspace discovery.
+
+### Test and CI
+
+Gate changes locally before opening a PR:
+
+```bash
+arka ci
+arka ci --changed
+arka repo_health run
+arka pr_check babysit
+```
+
+`arka ci` mirrors the repo's GitHub Actions gate (Ruff + targeted pytest for the Arka repo). Use `repo_health` for generic lint/test detection in any project. `pr_check babysit` loops on CI status until the PR is merge-ready. See [Repo health](/guides/repo-health).
+
+<Note>
+  Install pre-commit hooks for incremental gates: `arka hooks install` runs `arka ci --changed` and `arka review --staged --fail-on-hints` on each commit.
+</Note>
+
+### Self-improve
+
+When you are working on Arka itself (or any repo with tests and routing):
+
+```bash
+arka self improve              # plan only
+arka self improve routing      # focused plan
+arka self improve routing --apply   # goal agent implements fixes
+```
+
+Plan-only is the default; `--apply` requires agent mode. See [Self-improve loop](/guides/self-improve).
+
+## Operation modes while coding
+
+| Mode | When to use |
+| --- | --- |
+| `agent` | **Default** — run skills, apply edits, execute shell |
+| `ask` | Read-only exploration; risky actions blocked |
+| `plan` | Sketch steps without execution (e.g. before a large refactor) |
+| `debug` | See routing traces and LLM fallback (troubleshooting) |
+
+```bash
+arka mode plan
+arka "refactor the auth module and add tests"
+arka mode agent
+arka goal refactor the auth module and add tests
+```
+
+Use **plan** to preview what Arka would do; switch back to **agent** to execute. Full details: [Operation modes](/guides/operation-modes).
+
+## Cursor and IDE integration
+
+| Integration | Command / path |
+| --- | --- |
+| Arka as MCP server in Cursor | `arka mcp install` → merge into `~/.cursor/mcp.json` |
+| Project rules for agents | `arka_project_rules` MCP tool, or repo `AGENTS.md` / `.cursor/rules` |
+| Shared hub for multiple agents | `arka agent_hub sync --unify` |
+| Hub status | `arka agent_hub status` |
+
+In Cursor chat, ask the agent to call `arka_ask`, `arka_skill`, `arka_repo_map`, or `arka_recall`. From the terminal, the same tools are available via `arka mcp call arka <tool>`.
+
+## Example session
+
+A realistic five-minute flow in a repo you just cloned:
+
+<CodeGroup>
+
+```bash Setup
+cd myapp
+arka code init .
+arka mode agent
+```
+
+```bash Explore
+arka ask "where is routing handled?"
+arka repo_map
+```
+
+```bash Review & gate
+git add -p
+arka review --staged
+arka ci --changed
+```
+
+```bash Improve (Arka repo)
+arka self improve routing
+```
+
+</CodeGroup>
+
+You oriented in the codebase, reviewed staged changes, ran a fast CI mirror, and (on the Arka repo) generated a self-improvement plan — without leaving the terminal.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Goal agent" icon="bullseye" href="/guides/goal-agent">
+    Autonomous multi-step coding tasks with step budgets.
+  </Card>
+
+  <Card title="Coding workflows" icon="diagram-project" href="/guides/coding-workflows">
+    Deterministic skill sequences for feature, bugfix, and audit work.
+  </Card>
+
+  <Card title="MCP integration" icon="network-wired" href="/guides/mcp">
+    Connect Arka to Cursor and external MCP servers.
+  </Card>
+
+  <Card title="Self-improve" icon="arrows-rotate" href="/guides/self-improve">
+    Analyze routing, tests, and docs; apply fixes with safety gates.
+  </Card>
+
+  <Card title="Repo health" icon="heart-pulse" href="/guides/repo-health">
+    Local CI mirror, review gates, and pre-commit hooks.
+  </Card>
+
+  <Card title="Agent Hub" icon="hub" href="/guides/agent-hub">
+    Shared MCP, memory, and skills for ollama launch agents.
+  </Card>
+</CardGroup>

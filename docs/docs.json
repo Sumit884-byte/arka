@@ -22,6 +22,7 @@
                 "pages": [
                   "index",
                   "quickstart",
+                  "guides/code-with-arka",
                   "guides/personalize",
                   "guides/free-credits"
                 ]
@@ -102,9 +103,13 @@
                   "guides/sandbox",
                   "guides/integrations",
                   "guides/iterate-loop",
+                  "guides/loop-engineering",
                   "guides/deploy",
                   "guides/browser-check",
-                  "guides/observability"
+                  "guides/observability",
+                  "guides/local-models",
+                  "guides/hosted-mode",
+                  "guides/configuration"
                 ]
               },
               {
@@ -255,6 +260,7 @@
                 "pages": [
                   "cn/index",
                   "cn/quickstart",
+                  "cn/guides/code-with-arka",
                   "cn/guides/personalize",
                   "cn/guides/free-credits"
                 ]
