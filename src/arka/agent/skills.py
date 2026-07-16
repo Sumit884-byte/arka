@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shutil
+import shlex
 import subprocess
 import sys
 import time
@@ -36,6 +37,7 @@ except ImportError:
         return Path(__file__).resolve().parent
 
 REGISTRY_FILE = cache_dir() / "third_party_skills.json"
+PLUGIN_RESULT_LIMIT = 64 * 1024
 SKILL_NAME_RE = re.compile(r"^[a-z][a-z0-9_-]{1,48}$")
 
 
@@ -129,6 +131,37 @@ def _skill_from_manifest(manifest_path: Path) -> dict[str, Any] | None:
         "permissions": [str(x).strip().lower() for x in permissions if str(x).strip()],
         "root": str(root),
         "manifest": str(manifest_path),
+        "adapter": "arka-manifest",
+        "capabilities": [str(x) for x in (data.get("capabilities") or [])],
+        "source": str(data.get("source") or root),
+        "health": "ok",
+    }
+
+
+def _skill_from_external(root: Path) -> dict[str, Any] | None:
+    """Adapt common Claude/Codex and executable plugin layouts."""
+    name = root.name.lower().replace("-", "_")
+    if not SKILL_NAME_RE.match(name):
+        return None
+    entry = ""
+    adapter = "external"
+    if (root / "SKILL.md").is_file() or (root / "README.md").is_file():
+        entry = "SKILL.md" if (root / "SKILL.md").is_file() else "README.md"
+        adapter = "claude-skill"
+    for candidate in ("run.py", "main.py", "index.js", "run.sh"):
+        if (root / candidate).is_file():
+            entry = candidate
+            adapter = "executable"
+            break
+    if not entry:
+        return None
+    return {
+        "name": name, "description": f"External plugin from {root.name}",
+        "version": "0.0.0", "author": "", "type": "prompt" if adapter == "claude-skill" else ("python" if entry.endswith(".py") else "shell"),
+        "entry": entry, "triggers": [name.replace("_", " ")], "enabled": True,
+        "voice_ack": "", "requires": {}, "os": [], "permissions": ["read"],
+        "root": str(root), "manifest": "", "adapter": adapter,
+        "capabilities": ["execute"], "source": str(root), "health": "ok",
     }
 
 
@@ -192,15 +225,55 @@ def discover_skills(*, refresh: bool = False) -> list[dict[str, Any]]:
                     sk = _skill_from_fish(fish_file)
                     if sk:
                         by_name[sk["name"]] = sk
+                else:
+                    sk = _skill_from_external(child)
+                    if sk:
+                        by_name[sk["name"]] = sk
 
     skills = sorted(by_name.values(), key=lambda s: s["name"])
+    # MCP servers are first-class plugins; keep discovery read-only and let
+    # the MCP manager own connection lifecycle and credentials.
+    try:
+        from arka.integrations.mcp_manager import load_mcp_config
+
+        for name, server in (load_mcp_config().get("mcpServers") or {}).items():
+            if name in by_name or not SKILL_NAME_RE.match(str(name)):
+                continue
+            endpoint = server.get("url") or server.get("command") or ""
+            skills.append({
+                "name": str(name), "description": "MCP plugin server", "version": "0.0.0",
+                "author": "", "type": "mcp", "entry": endpoint,
+                "triggers": [str(name).replace("_", " ")], "enabled": True,
+                "voice_ack": "", "requires": {}, "os": [], "permissions": ["network"],
+                "root": "", "manifest": "", "adapter": "mcp", "capabilities": ["tools"],
+                "source": endpoint, "health": "unknown",
+            })
+    except (ImportError, OSError, ValueError):
+        pass
+    skills.sort(key=lambda s: s["name"])
     for sk in skills:
         _annotate_gates(sk)
-    REGISTRY_FILE.parent.mkdir(parents=True, exist_ok=True)
-    REGISTRY_FILE.write_text(
-        json.dumps({"updated": time.time(), "skills": skills}, indent=2),
-        encoding="utf-8",
-    )
+    names: dict[str, int] = {}
+    triggers: dict[str, list[str]] = {}
+    for sk in skills:
+        names[sk["name"]] = names.get(sk["name"], 0) + 1
+        for trigger in sk.get("triggers") or []:
+            triggers.setdefault(trigger, []).append(sk["name"])
+    for sk in skills:
+        collisions = [t for t, owners in triggers.items() if sk["name"] in owners and len(set(owners)) > 1]
+        sk["conflicts"] = sorted(collisions)
+        if sk["conflicts"]:
+            sk["gate_ok"] = False
+            sk["gate_reason"] = "trigger conflict: " + ", ".join(sk["conflicts"][:3])
+    try:
+        REGISTRY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        REGISTRY_FILE.write_text(
+            json.dumps({"updated": time.time(), "skills": skills}, indent=2),
+            encoding="utf-8",
+        )
+    except OSError:
+        # Read-only/hosted filesystems must still be able to discover plugins.
+        pass
     return skills
 
 
@@ -409,8 +482,38 @@ def run_skill(name: str, args: list[str]) -> int:
         if not template:
             print(f"Skill {name} has type command but no entry template", file=sys.stderr)
             return 1
-        cmd = template.replace("{args}", arg_str).replace("{name}", name)
-        return subprocess.run(cmd, shell=True, cwd=str(root), env=os.environ.copy()).returncode
+        if any(ch in arg_str for ch in (";", "&&", "||", "|", ">", "<", "`", "$")):
+            print("Plugin arguments contain unsafe shell syntax; refusing execution.", file=sys.stderr)
+            return 2
+        cmd = template.replace("{args}", shlex.join(args)).replace("{name}", name)
+        try:
+            argv = shlex.split(cmd)
+        except ValueError as exc:
+            print(f"Invalid plugin command template: {exc}", file=sys.stderr)
+            return 1
+        return subprocess.run(argv, shell=False, cwd=str(root), env=os.environ.copy(), timeout=120).returncode
+
+    if skill_type == "mcp":
+        if not args:
+            print(f"MCP plugin '{name}' requires a tool name: {name} <tool> [json-args]", file=sys.stderr)
+            return 1
+
+    if skill_type == "prompt":
+        prompt_file = root / entry
+        try:
+            print(prompt_file.read_text(encoding="utf-8", errors="replace")[:PLUGIN_RESULT_LIMIT])
+            return 0
+        except OSError as exc:
+            print(f"Plugin instructions unavailable: {exc}", file=sys.stderr)
+            return 1
+        try:
+            from arka.integrations.mcp_manager import call_tool
+            payload = json.loads(args[1]) if len(args) > 1 else {}
+            print(call_tool(name, args[0], payload))
+            return 0
+        except (ImportError, OSError, ValueError, RuntimeError) as exc:
+            print(f"MCP plugin failed: {exc}", file=sys.stderr)
+            return 1
 
     print(f"Unsupported skill type: {skill_type}", file=sys.stderr)
     return 1
@@ -484,7 +587,7 @@ def print_list(*, verbose: bool = False) -> None:
             line += f" [gated: {sk.get('gate_reason', '?')}]"
         print(line)
         if verbose:
-            print(f"       type={sk.get('type')} root={sk.get('root')}")
+            print(f"       adapter={sk.get('adapter', 'arka-manifest')} type={sk.get('type')} root={sk.get('root')}")
             if sk.get("triggers"):
                 print(f"       triggers: {', '.join(sk['triggers'][:8])}")
             if sk.get("requires"):
@@ -495,11 +598,30 @@ def print_list(*, verbose: bool = False) -> None:
                 print(f"       gate: blocked ({sk.get('gate_reason', '?')})")
 
 
-def main() -> int:
+def plugin_doctor() -> int:
+    skills = discover_skills(refresh=True)
+    failed = [s for s in skills if not s.get("gate_ok", True) or s.get("health") != "ok"]
+    print(f"Plugins checked: {len(skills)}")
+    for sk in skills:
+        state = "ok" if sk not in failed else f"blocked: {sk.get('gate_reason', 'unhealthy')}"
+        print(f"  {sk['name']}: {state}")
+    return 1 if failed else 0
+
+
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Arka third-party skills")
     sub = parser.add_subparsers(dest="cmd")
 
     sub.add_parser("list")
+    sub.add_parser("doctor")
+    p_search = sub.add_parser("search")
+    p_search.add_argument("query")
+    p_inspect = sub.add_parser("inspect")
+    p_inspect.add_argument("name")
+    p_enable = sub.add_parser("enable")
+    p_enable.add_argument("name")
+    p_disable = sub.add_parser("disable")
+    p_disable.add_argument("name")
 
     p_names = sub.add_parser("list-names")
     p_names.add_argument("--all", action="store_true")
@@ -523,10 +645,28 @@ def main() -> int:
     p_info = sub.add_parser("info")
     p_info.add_argument("name")
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if args.cmd == "list":
         print_list(verbose=True)
         return 0
+    if args.cmd == "doctor":
+        return plugin_doctor()
+    if args.cmd == "search":
+        query = args.query.lower()
+        for sk in discover_skills(refresh=True):
+            if query in sk["name"].lower() or query in sk.get("description", "").lower():
+                print(f"{sk['name']}\t{sk.get('description', '')}")
+        return 0
+    if args.cmd == "inspect":
+        sk = get_skill(args.name)
+        if not sk:
+            print(f"Plugin not found: {args.name}", file=sys.stderr)
+            return 1
+        print(json.dumps(sk, indent=2))
+        return 0
+    if args.cmd in {"enable", "disable"}:
+        from arka.core.skill_settings import main as settings_main
+        return settings_main([args.cmd, args.name])
     if args.cmd == "list-names":
         for n in list_names(enabled_only=not args.all):
             print(n)
@@ -554,7 +694,7 @@ def main() -> int:
     if args.cmd == "info":
         sk = get_skill(args.name)
         if not sk:
-            print(f"Skill not found: {args.name}", file=sys.stderr)
+            print(f"Plugin not found: {args.name}", file=sys.stderr)
             return 1
         print(json.dumps(sk, indent=2))
         return 0

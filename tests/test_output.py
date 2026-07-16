@@ -190,15 +190,19 @@ class GoalOutputTests(unittest.TestCase):
             "Improve the Arka codebase. === llm.txt === PROJECT SUMMARY " + ("x" * 500)
         )
         stderr = io.StringIO()
-        with (
-            mock.patch("arka.agent.goal._llm", return_value='{"status":"done","cmd":"","why":"done"}'),
-            mock.patch("arka.agent.goal._dir_context", return_value=("", "")),
-            mock.patch("arka.agent.goal._fish_history", return_value=""),
-            mock.patch("arka.agent.goal._skills_list", return_value="test"),
-            redirect_stderr(stderr),
-        ):
-            os.chdir(self.tmp.name)
-            rc = run_goal(huge_goal, max_steps=1)
+        previous = os.getcwd()
+        try:
+            with (
+                mock.patch("arka.agent.goal._llm", return_value='{"status":"done","cmd":"","why":"done"}'),
+                mock.patch("arka.agent.goal._dir_context", return_value=("", "")),
+                mock.patch("arka.agent.goal._fish_history", return_value=""),
+                mock.patch("arka.agent.goal._skills_list", return_value="test"),
+                redirect_stderr(stderr),
+            ):
+                os.chdir(self.tmp.name)
+                rc = run_goal(huge_goal, max_steps=1)
+        finally:
+            os.chdir(previous)
         self.assertEqual(rc, 0)
         err = stderr.getvalue()
         self.assertNotIn("PROJECT SUMMARY", err)
@@ -210,15 +214,19 @@ class GoalOutputTests(unittest.TestCase):
         set_mode("debug")
         huge_goal = "Improve the Arka codebase.\n=== llm.txt ===\nPROJECT SUMMARY\nsecret"
         stderr = io.StringIO()
-        with (
-            mock.patch("arka.agent.goal._llm", return_value='{"status":"done","cmd":"","why":"done"}'),
-            mock.patch("arka.agent.goal._dir_context", return_value=("", "")),
-            mock.patch("arka.agent.goal._fish_history", return_value=""),
-            mock.patch("arka.agent.goal._skills_list", return_value="test"),
-            redirect_stderr(stderr),
-        ):
-            os.chdir(self.tmp.name)
-            rc = run_goal(huge_goal, max_steps=1)
+        previous = os.getcwd()
+        try:
+            with (
+                mock.patch("arka.agent.goal._llm", return_value='{"status":"done","cmd":"","why":"done"}'),
+                mock.patch("arka.agent.goal._dir_context", return_value=("", "")),
+                mock.patch("arka.agent.goal._fish_history", return_value=""),
+                mock.patch("arka.agent.goal._skills_list", return_value="test"),
+                redirect_stderr(stderr),
+            ):
+                os.chdir(self.tmp.name)
+                rc = run_goal(huge_goal, max_steps=1)
+        finally:
+            os.chdir(previous)
         self.assertEqual(rc, 0)
         err = stderr.getvalue()
         self.assertIn("PROJECT SUMMARY", err)
