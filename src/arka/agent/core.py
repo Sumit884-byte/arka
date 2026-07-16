@@ -985,16 +985,14 @@ def price_check(query: str) -> None:
 
 def _coding_summary(cwd: Path, goal: str, total: int, *, completed: int, failed_step: int | None = None) -> str:
     """Return a compact, deterministic progress summary after a coding run."""
+    from arka.agent.git_changes import format_changed_files
+
     status = f"failed at step {failed_step}/{total}" if failed_step else f"completed {completed}/{total} step(s)"
-    lines = [f"Coding summary: {status} while working on {goal}"]
-    try:
-        diff = subprocess.run(
-            ["git", "diff", "--stat"], cwd=cwd, capture_output=True, text=True, timeout=10
-        )
-        if diff.returncode == 0 and diff.stdout.strip():
-            lines.append("Changed files:\n" + diff.stdout.strip())
-    except (OSError, subprocess.SubprocessError):
-        pass
+    mark = "✗" if failed_step else "✓"
+    lines = [f"{mark} Coding summary: {status} while working on {goal}"]
+    changed_files = format_changed_files(cwd)
+    if changed_files != "○ No changes.":
+        lines.extend(["", changed_files])
     lines.append("Next: run `arka ci --changed` to verify the edited files.")
     return "\n".join(lines)
 

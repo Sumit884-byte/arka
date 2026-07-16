@@ -57,7 +57,8 @@ def test_format_llm_plan_structured(tmp_path):
     )
     assert "Source: LLM plan-only" in text
     assert "Summary: Add a settings route" in text
-    assert "src/settings.tsx" in text
+    assert "━━━ Files to touch (1) ━━━" in text
+    assert "1. src/settings.tsx — new page" in text
     assert "1. Add route" in text
 
 
@@ -181,7 +182,8 @@ def test_coding_tui_approve_auto_executes(monkeypatch, tmp_path, capsys):
     assert coding_tui.run(str(tmp_path)) == 0
     output = capsys.readouterr().out
     assert "Plan approved — executing…" in output
-    assert "Done. Next: `arka ci --changed`" in output
+    assert "✓ Done." in output
+    assert "Next: `arka ci --changed`" in output
     assert len(called) == 1
     assert called[0][0] == "improve tests"
     assert "Plan for: improve tests" in called[0][2]
@@ -220,7 +222,8 @@ def test_coding_tui_run_without_prior_plan(monkeypatch, tmp_path, capsys):
     )
     assert coding_tui.run(str(tmp_path)) == 0
     output = capsys.readouterr().out
-    assert "Done. Next: `arka ci --changed`" in output
+    assert "✓ Done." in output
+    assert "Next: `arka ci --changed`" in output
     assert called == ["add logging"]
 
 
@@ -257,9 +260,11 @@ def test_coding_tui_diff_files_open(monkeypatch, tmp_path, capsys):
     sample.write_text("print('hello')\nprint('world')\n")
     commands = iter(["/diff", "/files coding_tui", "/open src/coding_tui.py", "/quit"])
     monkeypatch.setattr("builtins.input", lambda _: next(commands))
-    monkeypatch.setattr("arka.agent.coding_tui._git_diff_stat", lambda root: " src/coding_tui.py | 2 ++")
+    monkeypatch.setattr("arka.agent.coding_tui._git_diff_stat", lambda root: "━━━ Changed files (1) ━━━\n\n  M  src/coding_tui.py\n\n src/coding_tui.py | 2 ++")
     assert coding_tui.run(str(tmp_path)) == 0
     output = capsys.readouterr().out
+    assert "━━━ Changed files (1) ━━━" in output
+    assert "  M  src/coding_tui.py" in output
     assert "src/coding_tui.py | 2 ++" in output
     assert "src/coding_tui.py" in output
     assert "print('hello')" in output

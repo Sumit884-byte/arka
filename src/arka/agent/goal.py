@@ -221,12 +221,10 @@ def _parse_step(raw: str) -> dict:
         if isinstance(data, dict):
             return data
     except json.JSONDecodeError:
-        # Never pass truncated JSON (often emitted by a model at token limit)
-        # to Fish as if it were a shell command.
-        if text.startswith("{") or '"status"' in text or '"cmd"' in text:
-            return {"status": "invalid", "cmd": "", "why": "unparsed JSON action"}
-    shell_cmd = re.sub(r"^```[a-zA-Z0-9]*\n*|\n*```$", "", (raw or "").strip())
-    return {"status": "continue", "cmd": shell_cmd, "why": "unparsed LLM output"}
+        # The goal protocol is JSON-only. Never reinterpret prose, truncated
+        # JSON, or vision descriptions as shell commands.
+        return {"status": "invalid", "cmd": "", "why": "unparsed JSON action"}
+    return {"status": "invalid", "cmd": "", "why": "invalid action object"}
 
 
 def _security_gate(cmd: str, *, auto_yes: bool) -> bool:
@@ -571,6 +569,14 @@ Step {step}/{max_steps} — return the NEXT action as JSON."""
                     print("✓ Goal complete.", file=sys.stderr)
                     if why:
                         print(f"  {why}", file=sys.stderr)
+                    try:
+                        from arka.agent.git_changes import format_changed_files
+
+                        changed_files = format_changed_files(cwd)
+                        if changed_files != "○ No changes.":
+                            print(changed_files, file=sys.stderr)
+                    except ImportError:
+                        pass
                     if verify:
                         from arka.agent.core import loop_verify
 

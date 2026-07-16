@@ -161,21 +161,28 @@ def plan_preview(goal: str, root: Path) -> str:
             ("docs/guides/repo-health.mdx", "document the command, prerequisites, and verification"),
         ]
     proposals = [(path, why) for path, why in proposals if (root / path).exists() or path.startswith("tests/")]
+    from arka.agent.git_changes import format_plan_files
+
+    plan_files = format_plan_files(proposals, title="Proposed files")
     lines = [
         f"Plan for: {goal}",
         f"Repository: {root} ({files} files)",
         f"Focus: {focus}",
         "Relevant paths: " + (", ".join(relevant) if relevant else "repository source and tests"),
-        "Proposed files:",
-        *[f"  - {path} — {why}" for path, why in proposals],
-        f"Working tree: {changed} changed path(s)",
-        "1. Read the listed modules and project rules; map the current call path and existing extension points.",
-        f"2. Trace {focus}; identify one measurable gap (missing route, unsafe dispatch, weak gate, or test hole) before editing.",
-        "3. Implement the smallest end-to-end change across routing, dispatch, and user-facing output where applicable.",
-        "4. Add a table-driven regression test for the request and preserve unrelated behavior/configuration.",
-        "5. Run the focused suite, Ruff/lint, and inspect git diff for unrelated changes before proposing follow-ups.",
-        "Review this plan — approve with y to execute immediately.",
     ]
+    if plan_files:
+        lines.extend(["", plan_files])
+    lines.extend(
+        [
+            f"Working tree: {changed} changed path(s)",
+            "1. Read the listed modules and project rules; map the current call path and existing extension points.",
+            f"2. Trace {focus}; identify one measurable gap (missing route, unsafe dispatch, weak gate, or test hole) before editing.",
+            "3. Implement the smallest end-to-end change across routing, dispatch, and user-facing output where applicable.",
+            "4. Add a table-driven regression test for the request and preserve unrelated behavior/configuration.",
+            "5. Run the focused suite, Ruff/lint, and inspect git diff for unrelated changes before proposing follow-ups.",
+            "Review this plan — approve with y to execute immediately.",
+        ]
+    )
     return "\n".join(lines)
 
 
@@ -191,15 +198,20 @@ def _format_llm_plan(goal: str, root: Path, data: dict) -> str:
     if summary:
         lines.extend(["", f"Summary: {summary}"])
     if files:
-        lines.extend(["", "Files to touch:"])
+        from arka.agent.git_changes import format_plan_files
+
+        entries: list[tuple[str, str]] = []
         for item in files:
             if isinstance(item, dict):
                 path = str(item.get("path") or item.get("file") or "").strip()
                 reason = str(item.get("reason") or item.get("action") or "").strip()
                 if path:
-                    lines.append(f"  - {path}" + (f" — {reason}" if reason else ""))
+                    entries.append((path, reason))
             elif item:
-                lines.append(f"  - {item}")
+                entries.append((str(item).strip(), ""))
+        plan_files = format_plan_files(entries)
+        if plan_files:
+            lines.extend(["", plan_files])
     if steps:
         lines.extend(["", "Steps:"])
         lines.extend(f"  {index}. {step}" for index, step in enumerate(steps, 1))
@@ -273,10 +285,13 @@ def generate_plan(goal: str, root: Path) -> tuple[str, str]:
 
 
 def _git_diff_stat(root: Path) -> str:
-    diff = _git_value(root, "diff", "--stat")
-    if not diff:
-        return "No changes (git diff --stat is empty)."
-    return diff
+    from arka.agent.git_changes import format_changed_files
+
+    return format_changed_files(
+        root,
+        empty_message="○ No changes.",
+        include_stat=True,
+    )
 
 
 def _list_files(root: Path, pattern: str) -> str:
@@ -412,10 +427,20 @@ def _execute_goal(
         plan_context=last_plan or "",
         system_extra=coding_tui_system_extra(repo, goal),
     )
+    from arka.agent.git_changes import format_changed_files
+
     if rc == 0:
-        print("Done. Next: `arka ci --changed` to verify edited files.")
+        print("✓ Done.")
+        changed_files = format_changed_files(repo)
+        if changed_files != "○ No changes.":
+            print(changed_files)
+        print("Next: `arka ci --changed` to verify edited files.")
     else:
-        print(f"Run finished with exit code {rc}. Inspect output, then try `arka ci --changed`.")
+        print(f"✗ Run finished with exit code {rc}.")
+        changed_files = format_changed_files(repo)
+        if changed_files != "○ No changes.":
+            print(changed_files)
+        print("Inspect output, then try `arka ci --changed`.")
     return rc
 
 
