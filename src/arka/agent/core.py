@@ -1062,15 +1062,31 @@ def code_agent(
     mem = memory_context_for(goal)
     plan_system = (
         "You are a repo-scoped coding agent. Return JSON only: "
-        '{"steps":["shell command or skill", ...], "summary":"plan"}'
+        '{"steps":["one complete executable shell command or registered Arka skill", ...], "summary":"plan"}. '
+        "Never emit placeholders such as 'shell command or skill', prose, incomplete JSON, or unknown skills."
     )
     plan_user = f"Repo: {cwd}\nGoal: {goal}\n"
+    short = " ".join(goal.lower().split()).strip()
+    if short in {"tests", "run tests", "test", "ci", "lint", "review"}:
+        plan_user += (
+            "This is an underspecified coding goal — interpret it as a repository workflow "
+            "(pytest for tests, arka ci --changed for ci, ruff for lint, review for staged diff). "
+            "Do not invoke unrelated creative skills.\n"
+        )
     if plan_context:
         plan_user += (
             "\nApproved coding-TUI plan (follow its proposed files and reasons; "
             "do not replace it with a generic plan):\n" + plan_context[:12000] + "\n"
         )
     plan_user += arka_tool_hint + "\n"
+    try:
+        from arka.agent.skill_hints import recommend_skill_hint
+
+        hint = recommend_skill_hint(goal)
+        if hint:
+            plan_user += hint + "\n"
+    except ImportError:
+        pass
     try:
         from arka.agent.change_guards import animation_scope_guard
         guard = animation_scope_guard(goal)
@@ -1094,7 +1110,7 @@ def code_agent(
     if plan_raw:
         try:
             data = json.loads(re.sub(r"^```[a-zA-Z0-9]*\n*|\n*```$", "", plan_raw.strip()))
-            steps = [str(s) for s in (data.get("steps") or []) if s]
+            steps = _sanitize_code_steps(data.get("steps") or [])
             if data.get("summary"):
                 print(f"Plan: {data['summary']}")
         except json.JSONDecodeError:
@@ -1118,6 +1134,8 @@ def code_agent(
         )
 
     for i, step in enumerate(steps, 1):
+        if _is_planner_placeholder(step):
+            continue
         print(f"━━━ Code step {i}/{len(steps)} ━━━")
         print(f"→ {step}")
         previous_cwd = Path.cwd()
@@ -1149,6 +1167,8 @@ def _run_arka_tool_step(step: str) -> int | None:
     clean = " ".join((step or "").split()).strip()
     if not clean:
         return None
+    if _is_planner_placeholder(clean):
+        return 0
     if clean.startswith("arka "):
         clean = clean[5:].strip()
     if not clean:
@@ -1207,6 +1227,27 @@ def _run_arka_tool_step(step: str) -> int | None:
     from arka.dispatch import run_skill
 
     return run_skill(clean)
+
+
+def _is_planner_placeholder(step: str) -> bool:
+    """Identify template text accidentally returned as a coding step."""
+    text = " ".join((step or "").split()).strip().lower()
+    return text in {"shell command", "shell command or skill", "skill"} or text.startswith("shell command or skill:")
+
+
+def _sanitize_code_steps(raw_steps: list[object]) -> list[str]:
+    """Keep only complete, actionable plan steps before displaying/executing."""
+    out: list[str] = []
+    for raw in raw_steps:
+        step = " ".join(str(raw).split()).strip()
+        if not step or _is_planner_placeholder(step):
+            continue
+        if step.lower().startswith(("the image shows", "overall,", "here is", "i will ")):
+            continue
+        if step.startswith("{") or step.endswith("}"):
+            continue
+        out.append(step)
+    return out
 
 
 # ── Nudge (proactive hints) ───────────────────────────────────────────────────

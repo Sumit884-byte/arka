@@ -242,3 +242,120 @@ def test_run_goal_improve_tui_past_step_two_with_mock_llm(tmp_path: Path):
     err = stderr.getvalue()
     assert "Step 2/" in err
     assert "stopping before shell execution" not in err
+
+
+def test_testing_goal_quality_gate_rejects_web_prose_before_execution(tmp_path: Path):
+    """Quality gate: testing goals must execute a real test, not web narration."""
+    from arka.agent.goal import run_goal
+
+    responses = [
+        '{"status":"continue","cmd":"Search web for repository module details","why":"research"}',
+        '{"status":"continue","cmd":"python -m pytest tests/test_goal_agent.py -q","why":"run tests"}',
+        '{"status":"done","cmd":"","why":"tests completed"}',
+    ]
+    calls: list[str] = []
+    prompts: list[str] = []
+
+    def fake_llm(system: str, user: str) -> str:
+        prompts.append(system)
+        return responses.pop(0)
+
+    stderr = io.StringIO()
+    with (
+        mock.patch("arka.agent.goal._llm", side_effect=fake_llm),
+        mock.patch("arka.agent.goal._dir_context", return_value=("", "")),
+        mock.patch("arka.agent.goal._fish_history", return_value=""),
+        mock.patch("arka.agent.goal._skills_list", return_value="test"),
+        mock.patch(
+            "arka.agent.goal._run_cmd",
+            side_effect=lambda cmd, _cwd, **_: calls.append(cmd) or (0, "ok"),
+        ),
+        redirect_stderr(stderr),
+    ):
+        rc = run_goal("test Arka features", max_steps=4)
+
+    assert rc == 0
+    assert calls == ["python -m pytest tests/test_goal_agent.py -q"]
+    assert any("testing/verification goal" in prompt for prompt in prompts)
+    assert "Rejected prose from action slot" in stderr.getvalue()
+
+
+def test_testing_goal_quality_gate_rejects_unrelated_skill_action():
+    from arka.agent.goal import _is_test_action, _is_testing_goal
+
+    assert _is_testing_goal("run tests in this repo")
+    assert _is_test_action("python -m pytest tests -q")
+    assert _is_test_action("arka ci --changed")
+    assert not _is_test_action("arka create an 3d model of an boy")
+
+
+def test_unknown_arka_action_is_skipped_before_fish(tmp_path):
+    from arka.agent.goal import _run_cmd
+
+    code, output = _run_cmd("arka create an 3d model of an boy", tmp_path, auto_yes=False)
+    assert code == 2
+    assert "Invalid action specified" not in output
+    assert "unknown Arka action" in output
+
+
+def test_run_goal_continues_after_empty_actions_with_retry(tmp_path: Path):
+    from arka.agent.goal import run_goal
+
+    responses = [
+        '{"status":"continue","cmd":"","why":"thinking"}',
+        '{"status":"continue","cmd":"","why":"still thinking"}',
+        '{"status":"continue","cmd":"pytest -q tests/test_goal_agent.py","why":"run tests"}',
+        '{"status":"done","cmd":"","why":"done"}',
+    ]
+    stderr = io.StringIO()
+    llm_mock = mock.Mock(side_effect=responses)
+    with (
+        mock.patch("arka.agent.goal._llm", llm_mock),
+        mock.patch("arka.agent.goal._dir_context", return_value=("", "")),
+        mock.patch("arka.agent.goal._fish_history", return_value=""),
+        mock.patch("arka.agent.goal._skills_list", return_value="test"),
+        mock.patch("arka.agent.goal._run_cmd", return_value=(0, "ok")),
+        redirect_stderr(stderr),
+    ):
+        rc = run_goal("tests", max_steps=6)
+    assert rc == 0
+    err = stderr.getvalue()
+    assert "Empty action from agent" in err
+    assert "Repeated empty actions; stopping." not in err
+    assert llm_mock.call_count >= 4
+
+
+def test_testing_goal_rejects_compose_3d_before_execution(tmp_path: Path):
+    from arka.agent.goal import run_goal
+
+    responses = [
+        '{"status":"continue","cmd":"arka create an 3d model of an boy","why":"creative"}',
+        '{"status":"continue","cmd":"pytest -q","why":"run tests"}',
+        '{"status":"done","cmd":"","why":"done"}',
+    ]
+    calls: list[str] = []
+    stderr = io.StringIO()
+    with (
+        mock.patch("arka.agent.goal._llm", side_effect=responses),
+        mock.patch("arka.agent.goal._dir_context", return_value=("", "")),
+        mock.patch("arka.agent.goal._fish_history", return_value=""),
+        mock.patch("arka.agent.goal._skills_list", return_value="test"),
+        mock.patch(
+            "arka.agent.goal._run_cmd",
+            side_effect=lambda cmd, _cwd, **_: calls.append(cmd) or (0, "ok"),
+        ),
+        redirect_stderr(stderr),
+    ):
+        rc = run_goal("tests", max_steps=4)
+    assert rc == 0
+    assert calls == ["pytest -q"]
+    assert "Rejected non-test action" in stderr.getvalue()
+
+
+def test_command_reported_success_rejects_invalid_output():
+    from arka.agent.goal import _command_reported_success
+
+    assert not _command_reported_success(0, "Invalid action specified.")
+    assert _command_reported_success(0, "ok")
+    assert not _command_reported_success(2, "")
+    assert not _command_reported_success(1, "failed")

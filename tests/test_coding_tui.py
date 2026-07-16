@@ -135,7 +135,25 @@ def test_coding_agent_skips_planner_placeholder(capsys):
     from arka.agent.core import _run_arka_tool_step
 
     assert _run_arka_tool_step("shell command or skill") == 0
-    assert "planner placeholder" in capsys.readouterr().out
+    assert capsys.readouterr().out == ""
+
+
+def test_planner_placeholder_detection_is_silent_in_step_filter():
+    from arka.agent.core import _is_planner_placeholder
+
+    assert _is_planner_placeholder("shell command or skill: python -m arka repo_health")
+    assert _is_planner_placeholder("shell command or skill")
+    assert not _is_planner_placeholder("python -m pytest tests/test_app.py")
+
+
+def test_code_plan_sanitizes_invalid_steps():
+    from arka.agent.core import _sanitize_code_steps
+
+    assert _sanitize_code_steps([
+        "shell command or skill: python -m arka repo_health",
+        "The image shows a directory listing",
+        "python -m pytest tests/test_app.py",
+    ]) == ["python -m pytest tests/test_app.py"]
 
 
 def test_coding_agent_skips_placeholder_shell_and_incomplete_pr_check(capsys):
@@ -144,8 +162,17 @@ def test_coding_agent_skips_placeholder_shell_and_incomplete_pr_check(capsys):
     assert _run_arka_tool_step("shell command or skill: git checkout <branch-name>") == 0
     assert _run_arka_tool_step("pr_check") == 0
     output = capsys.readouterr().out
-    assert "planner placeholder" in output
+    assert "planner placeholder" not in output
     assert "choose an action" in output
+
+
+def test_goal_rejects_prose_in_shell_action_slot():
+    from arka.agent.goal import _looks_like_prose_action
+
+    assert _looks_like_prose_action("Read the listed modules and project rules")
+    assert _looks_like_prose_action("Search web for the answer")
+    assert not _looks_like_prose_action("pytest tests/test_coding_tui.py -q")
+    assert not _looks_like_prose_action("python -m pytest -q")
 
 
 def test_coding_tui_history_and_clear(monkeypatch, tmp_path, capsys):
@@ -252,6 +279,80 @@ def test_coding_tui_ci_and_review(monkeypatch, tmp_path, capsys):
     assert "Review scope: staged" in output
 
 
+def test_run_tests_is_direct_and_does_not_create_plan(monkeypatch, tmp_path, capsys):
+    from arka.agent import coding_tui
+
+    commands = iter(["run tests", "/quit"])
+    calls = []
+    monkeypatch.setattr("builtins.input", lambda _: next(commands))
+    monkeypatch.setattr(coding_tui, "_run_direct_tests", lambda repo: calls.append(repo) or 0)
+    monkeypatch.setattr(
+        coding_tui,
+        "_handle_plan",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("test request must not enter planning")
+        ),
+    )
+    assert coding_tui.run(str(tmp_path)) == 0
+    assert calls == [tmp_path.resolve()]
+    assert "Plan for:" not in capsys.readouterr().out
+
+
+def test_arka_tests_request_uses_direct_test_path():
+    from arka.agent.coding_tui import _is_direct_test_request
+
+    assert _is_direct_test_request("run Arka tests")
+    assert _is_direct_test_request("run tests for Arka")
+    assert not _is_direct_test_request("run tests and fix failures")
+
+
+def test_scoped_tests_request_is_agent_driven(monkeypatch, tmp_path):
+    from arka.agent import coding_tui
+
+    assert coding_tui._is_agent_test_request("run tests in tests/")
+    assert coding_tui._is_agent_test_request("test this repo")
+    assert not coding_tui._is_agent_test_request("run tests")
+    calls = []
+    monkeypatch.setattr(
+        coding_tui,
+        "_execute_goal",
+        lambda goal, repo, last_plan, code_agent: calls.append((goal, repo, last_plan)) or 0,
+    )
+    assert coding_tui._run_agent_tests("run tests in tests/", tmp_path, object()) == 0
+    assert calls and "diagnose failures" in calls[0][0]
+
+
+def test_browser_open_is_off_by_default_in_coding_session(monkeypatch, capsys):
+    from arka import dispatch
+
+    monkeypatch.setenv("ARKA_CODING_SESSION", "1")
+    monkeypatch.delenv("ARKA_CODING_AUTO_BROWSER", raising=False)
+    opened = []
+    monkeypatch.setattr(dispatch, "run_script", lambda *args: opened.append(args) or 0)
+    assert dispatch.run_skill("open_url https://arkatest.com") == 0
+    assert opened == []
+    assert "Browser opening disabled" in capsys.readouterr().out
+
+
+def test_direct_tests_report_scope_and_verbose_command(monkeypatch, tmp_path, capsys):
+    from arka.agent import coding_tui
+
+    seen = []
+
+    class Result:
+        returncode = 0
+
+    monkeypatch.setattr(
+        coding_tui.subprocess,
+        "run",
+        lambda command, cwd, check: seen.append((command, cwd, check)) or Result(),
+    )
+    assert coding_tui._run_direct_tests(tmp_path) == 0
+    output = capsys.readouterr().out
+    assert "Test scope:" in output
+    assert seen[0][0][-1] == "-v"
+
+
 def test_coding_tui_diff_files_open(monkeypatch, tmp_path, capsys):
     from arka.agent import coding_tui
 
@@ -277,3 +378,42 @@ def test_coding_tui_system_extra_targets_tui_file(tmp_path):
     assert "coding_tui.py" in text
     assert "Never use cd" in text
     assert "git pull" in text
+
+
+def test_expand_short_goal_tests():
+    from arka.agent.coding_tui import _expand_short_goal
+
+    assert _expand_short_goal("tests") == "Run the project test suite (pytest) and report failures"
+    assert _expand_short_goal("run tests") == "Run the project test suite (pytest) and report failures"
+    assert _expand_short_goal("ci") == "Run arka ci --changed and fix first failure"
+    assert _expand_short_goal("lint") == "Run ruff on changed Python files"
+    assert _expand_short_goal("add logging") == "add logging"
+
+
+def test_coding_tui_system_extra_maps_short_tests_goal(tmp_path):
+    from arka.agent.coding_tui import coding_tui_system_extra
+
+    text = coding_tui_system_extra(tmp_path, "tests")
+    assert "pytest" in text
+    assert "compose_3d" in text
+
+
+def test_run_tests_expands_and_proposes_pytest(monkeypatch, tmp_path, capsys):
+    from arka.agent import coding_tui
+
+    commands = iter(["/run tests", "/quit"])
+    captured: list[tuple[str, str]] = []
+
+    def fake_code_agent(goal, repo, plan_context="", system_extra=""):
+        captured.append((goal, system_extra))
+        return 0
+
+    monkeypatch.setattr("builtins.input", lambda _: next(commands))
+    monkeypatch.setattr("arka.agent.coding_tui.prepare_prompt", lambda prompt: (prompt, prompt, False))
+    monkeypatch.setattr("arka.agent.core.code_agent", fake_code_agent)
+    assert coding_tui.run(str(tmp_path)) == 0
+    assert captured
+    goal, system_extra = captured[0]
+    assert "pytest" in goal.lower()
+    assert "compose_3d" in system_extra
+    assert "Test suite" in goal or "test suite" in goal.lower()

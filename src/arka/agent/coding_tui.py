@@ -4,8 +4,10 @@ from __future__ import annotations
 import argparse
 import atexit
 import json
+import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 _CODING_TUI_CLI_RE = re.compile(
@@ -47,6 +49,70 @@ WELCOME_TIPS = (
 )
 
 HISTORY_FILE = Path.home() / ".cache" / "arka" / "coding_tui_history"
+
+
+def _expand_short_goal(goal: str) -> str:
+    """Expand underspecified coding-TUI goals into actionable agent prompts."""
+    normalized = " ".join((goal or "").lower().split()).strip()
+    expansions = {
+        "tests": "Run the project test suite (pytest) and report failures",
+        "run tests": "Run the project test suite (pytest) and report failures",
+        "test": "Run the project test suite (pytest) and report failures",
+        "ci": "Run arka ci --changed and fix first failure",
+        "lint": "Run ruff on changed Python files",
+        "review": "Review staged code changes and summarize issues",
+    }
+    return expansions.get(normalized, (goal or "").strip())
+
+
+def _is_direct_test_request(text: str) -> bool:
+    """Recognize test requests that should not enter the edit-planning flow."""
+    normalized = " ".join((text or "").lower().split()).strip()
+    return bool(
+        re.fullmatch(
+            r"(?:please\s+)?(?:run|execute|rerun)\s+(?:(?:the\s+)?(?:all\s+)?tests?(?:\s+(?:suite|for\s+arka|for\s+this\s+project))?|arka\s+tests)",
+            normalized,
+        )
+        or normalized in {"test arka", "test arka features", "test the project"}
+    )
+
+
+def _is_agent_test_request(text: str) -> bool:
+    """Recognize scoped test requests that need agent-led diagnosis/iteration."""
+    normalized = " ".join((text or "").lower().split()).strip()
+    return bool(
+        re.fullmatch(r"(?:please\s+)?(?:run\s+)?tests?\s+(?:in|for)\s+.+", normalized)
+        or normalized in {"run tests in this repo", "run tests in this repository", "test this repo"}
+    )
+
+
+def _run_direct_tests(repo: Path) -> int:
+    """Run the repository test suite directly, without asking an agent to plan edits."""
+    command = [sys.executable, "-m", "pytest", "-v"]
+    print(f"Running tests directly: {' '.join(command)}")
+    print(f"Test scope: repository at {repo}")
+    try:
+        proc = subprocess.run(command, cwd=repo, check=False)
+    except OSError as exc:
+        print(f"Could not start pytest: {exc}")
+        return 1
+    if proc.returncode == 0:
+        print("✓ Tests passed.")
+        print("For agent-assisted fixes or extra checks, use: /run tests and fix failures")
+    else:
+        print(f"✗ Tests failed (exit {proc.returncode}).")
+        print("For agent-assisted diagnosis and fixes, use: /run tests and fix failures")
+    return proc.returncode
+
+
+def _run_agent_tests(goal: str, repo: Path, code_agent) -> int:
+    """Let the coding agent inspect, run, diagnose, and iterate on scoped tests."""
+    test_goal = (
+        f"{goal}. Use the repository working directory already provided. "
+        "Inspect the requested test folder/repository, run the relevant tests, diagnose failures, "
+        "and make only justified fixes; verify with the same tests before finishing."
+    )
+    return _execute_goal(test_goal, repo, last_plan=None, code_agent=code_agent)
 
 
 def route_command(text: str) -> str:
@@ -338,17 +404,31 @@ def _open_file_head(root: Path, rel_path: str, *, lines: int = 40) -> str:
 def coding_tui_system_extra(root: Path, goal: str) -> str:
     """Goal-agent hints when /run is launched from the coding TUI."""
     lowered = goal.lower()
+    normalized = " ".join(lowered.split()).strip()
     tui_hint = ""
-    if any(word in lowered for word in ("tui", "terminal", "coding-tui", "coding tui", "interface", "ui")):
+    if re.search(r"(?i)\b(?:coding[-_ ]?tui|code_tui|terminal ui|tui)\b", lowered):
         tui_hint = (
             "- For TUI/interface goals, prefer editing src/arka/agent/coding_tui.py first.\n"
         )
+    short_goal_hint = ""
+    if normalized in {"tests", "run tests", "test"}:
+        short_goal_hint = (
+            "- Short goal 'tests' means run pytest on this repository (e.g. `pytest -q` or `python -m pytest`).\n"
+            "- Do not invoke creative skills (compose_3d, generate_image, model_to_image).\n"
+        )
+    elif normalized == "ci":
+        short_goal_hint = "- Short goal 'ci' means run `arka ci --changed` and fix the first failure.\n"
+    elif normalized == "lint":
+        short_goal_hint = "- Short goal 'lint' means run ruff on changed Python files.\n"
+    elif normalized == "review":
+        short_goal_hint = "- Short goal 'review' means inspect staged changes (`arka review` or git diff).\n"
     return (
         f"Coding TUI context: working directory is already {root}. Never use cd.\n"
         "- Do not run git pull, git commit, or other git commands unless the user explicitly asked for git.\n"
         "- Prefer read (status read) and file edits over shell navigation.\n"
         "- Prefer existing Arka tools (repo_health, lint_project, review, ci) over raw shell when applicable.\n"
         f"{tui_hint}"
+        f"{short_goal_hint}"
         "- Make concrete file edits under src/ and tests/; verify with pytest on changed modules."
     )
 
@@ -418,6 +498,8 @@ def _execute_goal(
     last_plan: str | None,
     code_agent,
 ) -> int:
+    original_goal = goal.strip()
+    goal = _expand_short_goal(goal)
     goal, summary, changed = prepare_prompt(goal)
     if changed:
         print(f"Prompt improved: {summary}")
@@ -425,7 +507,7 @@ def _execute_goal(
         goal,
         repo=str(repo),
         plan_context=last_plan or "",
-        system_extra=coding_tui_system_extra(repo, goal),
+        system_extra=coding_tui_system_extra(repo, original_goal),
     )
     from arka.agent.git_changes import format_changed_files
 
@@ -480,6 +562,16 @@ def run(root: str = ".") -> int:
     repo = Path(root).expanduser().resolve()
     from arka.agent.core import code_agent
 
+    previous_session = os.environ.get("ARKA_CODING_SESSION")
+    os.environ["ARKA_CODING_SESSION"] = "1"
+
+    def finish() -> int:
+        if previous_session is None:
+            os.environ.pop("ARKA_CODING_SESSION", None)
+        else:
+            os.environ["ARKA_CODING_SESSION"] = previous_session
+        return 0
+
     _setup_readline()
     print_welcome(repo)
     history: list[str] = []
@@ -491,7 +583,7 @@ def run(root: str = ".") -> int:
             line = input(f"arka ({repo.name})> ").strip()
         except (EOFError, KeyboardInterrupt):
             print()
-            return 0
+            return finish()
         if not line:
             continue
         if line == "/clear":
@@ -505,7 +597,7 @@ def run(root: str = ".") -> int:
             continue
         history.append(line)
         if line in {"/quit", "/exit", "quit", "exit"}:
-            return 0
+            return finish()
         if line == "/help":
             print(HELP)
         elif line == "/status":
@@ -521,10 +613,16 @@ def run(root: str = ".") -> int:
                 code_agent=code_agent,
             )
         elif line == "/run" or line.startswith("/run "):
+            requested_goal = line[4:].strip() or pending_goal
+            if requested_goal and _is_direct_test_request(requested_goal):
+                _run_direct_tests(repo)
+                continue
+            if requested_goal and _is_agent_test_request(requested_goal):
+                _run_agent_tests(requested_goal, repo, code_agent)
+                continue
             if last_plan and not plan_approved:
                 print("Plan has not been approved. Run /plan <goal> and answer yes before /run.")
                 continue
-            requested_goal = line[4:].strip() or pending_goal
             if not requested_goal:
                 print("Usage: /run <goal>, or approve a plan first and use /run.")
                 continue
@@ -551,6 +649,10 @@ def run(root: str = ".") -> int:
             from arka.agent.dev_tools import review_text
 
             print(review_text(repo, staged=True))
+        elif _is_direct_test_request(line):
+            _run_direct_tests(repo)
+        elif _is_agent_test_request(line):
+            _run_agent_tests(line, repo, code_agent)
         elif line.startswith("/"):
             print(f"Unknown command. {HELP}")
         else:
@@ -562,7 +664,7 @@ def run(root: str = ".") -> int:
                 plan_approved=plan_approved,
                 code_agent=code_agent,
             )
-    return 0
+    return finish()
 
 
 def main(argv: list[str] | None = None) -> int:

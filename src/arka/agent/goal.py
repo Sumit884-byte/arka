@@ -172,6 +172,22 @@ _GIT_BLOCKED_HINT = (
 )
 
 _MAX_INVALID_ACTIONS = 2
+_MAX_EMPTY_ACTIONS = 4
+
+_EMPTY_ACTION_RETRY_HINT = (
+    "\n\nREMINDER: Return ONLY one complete JSON object with keys status, cmd, why "
+    '(and file when status is read). No markdown fences.\n'
+    'Example: {"status":"continue","cmd":"pytest -q tests/test_coding_tui.py","why":"run focused tests"}'
+)
+
+_FAILURE_OUTPUT_HINTS = (
+    "invalid action",
+    "unknown arka",
+    "unknown skill",
+    "skipped unknown",
+    "could not",
+    "not found",
+)
 
 
 def _strip_leading_cd_chain(cmd: str, cwd: Path) -> str:
@@ -200,6 +216,94 @@ def _is_standalone_cd(cmd: str) -> bool:
     if not cmd:
         return False
     return bool(re.match(r"(?i)^cd(?:\s+[^;&|]+)?\s*$", cmd))
+
+
+_PROSE_ACTION_PREFIXES = frozenset({
+    "according", "analyze", "check", "design", "implement", "inspect", "map",
+    "read", "search", "trace", "update", "use", "write", "the", "this",
+})
+
+
+def _looks_like_prose_action(cmd: str) -> bool:
+    """Reject model narration accidentally emitted in the shell-action slot."""
+    text = " ".join((cmd or "").split()).strip()
+    if not text:
+        return False
+    first = text.split(maxsplit=1)[0].lower().rstrip(":,.;")
+    if first not in _PROSE_ACTION_PREFIXES:
+        return False
+    # These are valid executable commands despite looking like prose.
+    if first in {"read", "write", "use"} and len(text.split()) == 1:
+        return False
+    return True
+
+
+def _is_testing_goal(goal: str) -> bool:
+    text = " ".join((goal or "").lower().split()).strip()
+    if re.fullmatch(
+        r"(?:tests?|run\s+tests?|ci|lint|ruff|pytest|smoke|verify|validate|repo_health|quality)",
+        text,
+    ):
+        return True
+    return bool(
+        re.search(
+            r"(?i)\b(?:run|execute|rerun|test|testing|verify|validate)\b.*\btests?\b|"
+            r"\btests?\b.*\b(?:repo|repository|folder|suite)\b|"
+            r"\b(?:pytest|repo_health|lint_project)\b",
+            goal,
+        )
+    )
+
+
+def _is_test_action(cmd: str) -> bool:
+    """Allow only useful inspection/test commands for a testing-focused goal."""
+    lowered = (cmd or "").lower()
+    if any(
+        token in lowered
+        for token in (
+            "compose_3d",
+            "3d model",
+            "generate_image",
+            "design_from_screenshot",
+            "compose_slides",
+            "compose_video",
+            "model_to_image",
+        )
+    ):
+        return False
+    parts = (cmd or "").strip().split()
+    if not parts:
+        return False
+    first = parts[0].lower()
+    if first in {"pytest", "ruff", "mypy", "pyright", "coverage", "nosetests", "tox"}:
+        return True
+    if first in {"ls", "pwd", "cat", "head", "tail", "sed", "awk", "rg", "grep", "find", "file", "stat"}:
+        return True
+    if first in {"python", "python3", "uv", "poetry", "pipenv"}:
+        return any(token in parts for token in ("pytest", "ruff", "mypy", "tox"))
+    if first == "arka":
+        return len(parts) > 1 and parts[1].lower() in {"ci", "repo_health", "lint_project", "route_audit", "review"}
+    return False
+
+
+_KNOWN_ARKA_ACTIONS = frozenset({
+    "ci", "config", "describe", "doctor", "lint_project", "plugin", "plugins",
+    "repo_health", "review", "route", "route_audit", "self", "skill", "skills",
+    "coding-tui", "coding_tui", "goal", "mcp", "agent_hub", "frontend_loop",
+})
+
+
+def _is_unknown_arka_action(cmd: str) -> bool:
+    parts = (cmd or "").strip().split()
+    return len(parts) > 1 and parts[0].lower() == "arka" and parts[1].lower() not in _KNOWN_ARKA_ACTIONS
+
+
+def _command_reported_success(code: int, out: str) -> bool:
+    """Treat shell exit 0 as failure when output clearly reports an invalid/skipped action."""
+    if code != 0:
+        return False
+    text = (out or "").lower()
+    return not any(hint in text for hint in _FAILURE_OUTPUT_HINTS)
 
 
 def _extract_json_object(text: str) -> str:
@@ -311,6 +415,10 @@ def _run_cmd(cmd: str, cwd: Path, *, auto_yes: bool, git_allowed: bool = False) 
             if span is not None:
                 mark_error(current, "recursive agent launch")
             return 2, "[skipped: recursive Arka agent launch; work in the current goal instead]"
+        if _is_unknown_arka_action(cmd):
+            if span is not None:
+                mark_error(current, "unknown Arka action")
+            return 2, "[skipped: unknown Arka action; choose a registered skill or shell command]"
         if re.search(r"(?i)(?:^|[;&|])\s*git(?:\s|$)", cmd) and not git_allowed:
             if span is not None:
                 mark_error(current, "git authorization gate")
@@ -451,9 +559,29 @@ Rules:
 - Decompose complex goals across many small steps."""
     system += "\n- Never launch coding-tui, goal, or another interactive Arka agent; operate on the current workspace directly."
     system += f"\n- Working directory is already {cwd}. NEVER emit cd commands (standalone or chained); cd is blocked and wastes steps."
+    if re.search(r"(?i)\b(test|tests|testing|verify|smoke|validate|ci|lint|pytest|repo_health)\b", goal):
+        system += (
+            "\n- This is a testing/verification goal: use repository inspection and actual test/lint commands. "
+            "Do not answer with web research or explanatory prose; return an executable command or a read action."
+        )
+        system += (
+            " Only use inspection, lint, or test commands; do not create unrelated artifacts or invoke creative skills."
+        )
+        system += (
+            '\n- Good first actions: {"status":"continue","cmd":"pytest -q","why":"run test suite"} '
+            'or {"status":"read","file":"pyproject.toml","why":"find test config"}.'
+        )
 
     if system_extra:
         system += f"\n{system_extra.strip()}"
+    try:
+        from arka.agent.skill_hints import recommend_skill_hint
+
+        hint = recommend_skill_hint(goal)
+        if hint:
+            system += f"\n- {hint}"
+    except ImportError:
+        pass
 
     if project_root is not None:
         system += f"\n- CODE PROJECT: all file edits must stay inside {project_root}."
@@ -617,13 +745,49 @@ Step {step}/{max_steps} — return the NEXT action as JSON."""
                     continue
 
                 if not cmd:
+                    retry_user = user + _EMPTY_ACTION_RETRY_HINT
+                    raw_retry = _llm(system, retry_user)
+                    if raw_retry:
+                        parsed = _parse_step(raw_retry)
+                        status = str(parsed.get("status") or "continue").lower()
+                        cmd = str(parsed.get("cmd") or "").strip()
+                        why = str(parsed.get("why") or "").strip()
+                        file_path = str(parsed.get("file") or "").strip()
+
+                if not cmd:
                     empty_action_count += 1
                     print("Empty action from agent; requesting a complete next action.", file=sys.stderr)
-                    history += f"\n--- step {step} (invalid) ---\nreason: empty action\n"
-                    if empty_action_count >= 2:
+                    history += (
+                        f"\n--- step {step} (invalid) ---\n"
+                        "reason: empty action — return JSON with status and cmd\n"
+                        f"{_EMPTY_ACTION_RETRY_HINT.strip()}\n"
+                    )
+                    if empty_action_count >= _MAX_EMPTY_ACTIONS:
                         print("Repeated empty actions; stopping.", file=sys.stderr)
                         if span is not None:
                             mark_error(goal_span, "empty action")
+                        return 1
+                    continue
+
+                if _looks_like_prose_action(cmd):
+                    invalid_action_count += 1
+                    print("Rejected prose from action slot; requesting an executable command.", file=sys.stderr)
+                    history += f"\n--- step {step} (invalid) ---\ncmd: {cmd}\nreason: prose action\n"
+                    if invalid_action_count >= _MAX_INVALID_ACTIONS:
+                        print("Repeated prose actions; stopping.", file=sys.stderr)
+                        if span is not None:
+                            mark_error(goal_span, "prose action")
+                        return 1
+                    continue
+
+                if _is_testing_goal(goal) and not _is_test_action(cmd):
+                    invalid_action_count += 1
+                    print("Rejected non-test action for testing goal; requesting a test or inspection command.", file=sys.stderr)
+                    history += f"\n--- step {step} (invalid) ---\ncmd: {cmd}\nreason: non-test action\n"
+                    if invalid_action_count >= _MAX_INVALID_ACTIONS:
+                        print("Repeated non-test actions; stopping.", file=sys.stderr)
+                        if span is not None:
+                            mark_error(goal_span, "non-test action")
                         return 1
                     continue
 
@@ -668,10 +832,12 @@ Step {step}/{max_steps} — return the NEXT action as JSON."""
                     print(f"    {why}", file=sys.stderr)
 
                 code, out = _run_cmd(cmd, cwd, auto_yes=auto_yes, git_allowed=git_allowed)
-                if code == 0:
+                if _command_reported_success(code, out):
                     print("  ✓ exit 0", file=sys.stderr)
                 elif code == 2:
                     print("  ⊘ skipped", file=sys.stderr)
+                elif code == 0:
+                    print("  ⊘ invalid (exit 0 but action failed)", file=sys.stderr)
                 else:
                     print(f"  ✗ exit {code}", file=sys.stderr)
                     try:
