@@ -36,14 +36,14 @@ SLASH_COMMANDS = (
 HELP = (
     "Commands: /help, /status, /plan <goal>, /run <goal>, /history, /clear, "
     "/diff, /files <pattern>, /open <path>, /ci, /review, /quit. "
-    "Plain text is treated as a plan request."
+    "Plain text is treated as a plan request; approve with y to execute immediately."
 )
 
 WELCOME_TIPS = (
-    "Tip: /plan <goal> builds a reviewable plan; /run <goal> executes it.",
+    "Tip: /plan <goal> builds a reviewable plan; approve with y to execute immediately.",
     "Tip: /diff, /files <pattern>, /open <path> inspect the repo without leaving the TUI.",
     "Tip: /ci runs fast gates; /review summarizes staged changes.",
-    "Tip: plain text is shorthand for /plan — approve before /run.",
+    "Tip: plain text is shorthand for /plan — approve with y to execute immediately.",
 )
 
 HISTORY_FILE = Path.home() / ".cache" / "arka" / "coding_tui_history"
@@ -101,7 +101,7 @@ def status(root: Path) -> str:
         f"dirty files: {dirty}",
         f"files: {files}",
         f"code project initialized: {code_project}",
-        "Tip: use /plan before /run for a reviewable change plan.",
+        "Tip: /plan builds a reviewable plan; approve with y to execute immediately.",
     ]
     return "\n".join(lines)
 
@@ -174,7 +174,7 @@ def plan_preview(goal: str, root: Path) -> str:
         "3. Implement the smallest end-to-end change across routing, dispatch, and user-facing output where applicable.",
         "4. Add a table-driven regression test for the request and preserve unrelated behavior/configuration.",
         "5. Run the focused suite, Ruff/lint, and inspect git diff for unrelated changes before proposing follow-ups.",
-        "Review this plan, then use /run <goal> to execute it.",
+        "Review this plan — approve with y to execute immediately.",
     ]
     return "\n".join(lines)
 
@@ -207,7 +207,7 @@ def _format_llm_plan(goal: str, root: Path, data: dict) -> str:
         [
             "",
             f"Working tree: {_dirty_count(root)} changed path(s)",
-            "Review this plan, then use /run <goal> to execute it.",
+            "Review this plan — approve with y to execute immediately.",
         ]
     )
     return "\n".join(lines)
@@ -396,6 +396,29 @@ def _prompt_user(question: str) -> str:
         return ""
 
 
+def _execute_goal(
+    goal: str,
+    repo: Path,
+    *,
+    last_plan: str | None,
+    code_agent,
+) -> int:
+    goal, summary, changed = prepare_prompt(goal)
+    if changed:
+        print(f"Prompt improved: {summary}")
+    rc = code_agent(
+        goal,
+        repo=str(repo),
+        plan_context=last_plan or "",
+        system_extra=coding_tui_system_extra(repo, goal),
+    )
+    if rc == 0:
+        print("Done. Next: `arka ci --changed` to verify edited files.")
+    else:
+        print(f"Run finished with exit code {rc}. Inspect output, then try `arka ci --changed`.")
+    return rc
+
+
 def _handle_plan(
     original_goal: str,
     repo: Path,
@@ -403,6 +426,7 @@ def _handle_plan(
     last_plan: str | None,
     pending_goal: str | None,
     plan_approved: bool,
+    code_agent,
 ) -> tuple[str | None, str | None, bool]:
     goal = original_goal.strip()
     if not goal:
@@ -418,8 +442,12 @@ def _handle_plan(
         print("LLM unavailable — using local repository plan.")
     print(plan_text)
     answer = _prompt_user("Approve this plan? [y/N]: ")
-    approved = answer in {"y", "yes"}
-    print("Plan approved. Use /run <goal> to execute." if approved else "Plan not approved; no changes will be made.")
+    approved = answer in {"y", "yes", "approve"}
+    if approved:
+        print("Plan approved — executing…")
+        _execute_goal(goal, repo, last_plan=plan_text, code_agent=code_agent)
+    else:
+        print("Plan not approved. Use /run when ready.")
     return plan_text, goal, approved
 
 
@@ -465,6 +493,7 @@ def run(root: str = ".") -> int:
                 last_plan=last_plan,
                 pending_goal=pending_goal,
                 plan_approved=plan_approved,
+                code_agent=code_agent,
             )
         elif line == "/run" or line.startswith("/run "):
             if last_plan and not plan_approved:
@@ -476,19 +505,7 @@ def run(root: str = ".") -> int:
                 continue
             if last_plan:
                 print("Executing the last reviewed plan…")
-            goal, summary, changed = prepare_prompt(requested_goal)
-            if changed:
-                print(f"Prompt improved: {summary}")
-            rc = code_agent(
-                goal,
-                repo=str(repo),
-                plan_context=last_plan or "",
-                system_extra=coding_tui_system_extra(repo, goal),
-            )
-            if rc == 0:
-                print("Done. Next: `arka ci --changed` to verify edited files.")
-            else:
-                print(f"Run finished with exit code {rc}. Inspect output, then try `arka ci --changed`.")
+            _execute_goal(requested_goal, repo, last_plan=last_plan, code_agent=code_agent)
         elif line == "/history":
             if not history:
                 print("No commands yet.")
@@ -518,6 +535,7 @@ def run(root: str = ".") -> int:
                 last_plan=last_plan,
                 pending_goal=pending_goal,
                 plan_approved=plan_approved,
+                code_agent=code_agent,
             )
     return 0
 

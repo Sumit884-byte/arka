@@ -15,7 +15,6 @@ Inside the TUI:
 ```text
 /status
 /plan add a settings page
-/run add a settings page
 /ci
 /review
 /history
@@ -25,9 +24,11 @@ Inside the TUI:
 ```
 
 Plain-text requests are treated as plan requests (same as `/plan`). Approve the
-plan when prompted, then use `/run` to execute. `/plan` calls the LLM in
-plan-only mode and prints a structured plan (summary, files, steps) without
-making changes. When the LLM is unavailable, Arka falls back to a local
+plan when prompted (`y`, `yes`, or `approve`) to execute immediately — no
+separate `/run` is required. Use `/run <goal>` to re-execute the last approved
+plan or run a goal without planning first. `/plan` calls the LLM in plan-only
+mode and prints a structured plan (summary, files, steps) without making
+changes. When the LLM is unavailable, Arka falls back to a local
 repository-aware plan.
 
 `/status` shows the current branch, dirty file count, and whether the code
@@ -35,7 +36,7 @@ project is initialized. `/ci` runs fast changed-only gates; `/review` summarizes
 staged changes. `/history` lists commands from the current session; `/clear`
 clears the screen and resets session state.
 
-The coding agent prints a completion/failure summary after `/run` and suggests
+The coding agent prints a completion/failure summary after execution and suggests
 `arka ci --changed` for incremental verification.
 
 Coding requests are language-agnostic: mention the language, framework, or file

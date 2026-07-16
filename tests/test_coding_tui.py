@@ -27,7 +27,8 @@ def test_coding_tui_plan_is_visible(tmp_path):
     text = plan_preview("improve arka", tmp_path)
     assert "Plan for: improve arka" in text
     assert "1. Read the listed modules" in text
-    assert "/run <goal>" in text
+    assert "/run <goal>" not in text
+    assert "approve with y" in text
 
 
 def test_plan_preview_tailors_devtool_focus(tmp_path):
@@ -159,13 +160,17 @@ def test_coding_tui_history_and_clear(monkeypatch, tmp_path, capsys):
     assert output.rstrip().endswith("1  /history")
 
 
-def test_coding_tui_requires_plan_approval(monkeypatch, tmp_path, capsys):
+def test_coding_tui_approve_auto_executes(monkeypatch, tmp_path, capsys):
     from arka.agent import coding_tui
 
-    commands = iter(["/plan improve tests", "yes", "/run", "/quit"])
+    commands = iter(["/plan improve tests", "yes", "/quit"])
     called = []
     monkeypatch.setattr("builtins.input", lambda _: next(commands))
     monkeypatch.setattr("arka.agent.coding_tui.generate_plan", lambda goal, root: (f"Plan for: {goal}", "local"))
+    monkeypatch.setattr(
+        "arka.agent.coding_tui.prepare_prompt",
+        lambda prompt: (prompt, prompt, False),
+    )
     monkeypatch.setattr(
         "arka.agent.core.code_agent",
         lambda goal, repo, plan_context, system_extra="": called.append(
@@ -175,9 +180,48 @@ def test_coding_tui_requires_plan_approval(monkeypatch, tmp_path, capsys):
     )
     assert coding_tui.run(str(tmp_path)) == 0
     output = capsys.readouterr().out
-    assert "Plan approved" in output
+    assert "Plan approved — executing…" in output
     assert "Done. Next: `arka ci --changed`" in output
-    assert called
+    assert len(called) == 1
+    assert called[0][0] == "improve tests"
+    assert "Plan for: improve tests" in called[0][2]
+
+
+def test_coding_tui_decline_does_not_execute(monkeypatch, tmp_path, capsys):
+    from arka.agent import coding_tui
+
+    commands = iter(["/plan improve tests", "n", "/quit"])
+    called = []
+    monkeypatch.setattr("builtins.input", lambda _: next(commands))
+    monkeypatch.setattr("arka.agent.coding_tui.generate_plan", lambda goal, root: (f"Plan for: {goal}", "local"))
+    monkeypatch.setattr(
+        "arka.agent.core.code_agent",
+        lambda goal, repo, plan_context, system_extra="": called.append(goal) or 0,
+    )
+    assert coding_tui.run(str(tmp_path)) == 0
+    output = capsys.readouterr().out
+    assert "Plan not approved. Use /run when ready." in output
+    assert called == []
+
+
+def test_coding_tui_run_without_prior_plan(monkeypatch, tmp_path, capsys):
+    from arka.agent import coding_tui
+
+    commands = iter(["/run add logging", "/quit"])
+    called = []
+    monkeypatch.setattr("builtins.input", lambda _: next(commands))
+    monkeypatch.setattr(
+        "arka.agent.coding_tui.prepare_prompt",
+        lambda prompt: (prompt, prompt, False),
+    )
+    monkeypatch.setattr(
+        "arka.agent.core.code_agent",
+        lambda goal, repo, plan_context, system_extra="": called.append(goal) or 0,
+    )
+    assert coding_tui.run(str(tmp_path)) == 0
+    output = capsys.readouterr().out
+    assert "Done. Next: `arka ci --changed`" in output
+    assert called == ["add logging"]
 
 
 def test_coding_tui_plain_text_triggers_plan(monkeypatch, tmp_path, capsys):
@@ -189,7 +233,7 @@ def test_coding_tui_plain_text_triggers_plan(monkeypatch, tmp_path, capsys):
     assert coding_tui.run(str(tmp_path)) == 0
     output = capsys.readouterr().out
     assert "Plan for: improve login flow" in output
-    assert "Plan not approved" in output
+    assert "Plan not approved. Use /run when ready." in output
 
 
 def test_coding_tui_ci_and_review(monkeypatch, tmp_path, capsys):
