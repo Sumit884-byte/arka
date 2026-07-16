@@ -161,6 +161,40 @@ def _goal_null_context():
     return nullcontext()
 
 
+_CD_BLOCKED_HINT = (
+    "cd is blocked — the working directory is already set to the repository root. "
+    "Use ls, read files, pytest, or edit paths relative to CWD without cd."
+)
+
+
+def _strip_leading_cd_chain(cmd: str, cwd: Path) -> str:
+    """Remove leading cd prefixes that cannot persist across goal-agent subprocess steps."""
+    cmd = (cmd or "").strip()
+    patterns = [
+        rf"^cd\s+{re.escape(cwd.name)}/?\s*&&\s*",
+        rf"^cd\s+{re.escape(str(cwd))}/?\s*&&\s*",
+        r"^cd\s+\.\s*&&\s*",
+    ]
+    for pat in patterns:
+        cmd = re.sub(pat, "", cmd, flags=re.IGNORECASE).strip()
+    while True:
+        match = re.match(r"(?i)^cd\s+([^;&|]+?)\s*&&\s*(.+)$", cmd)
+        if not match:
+            break
+        target = match.group(1).strip().strip("\"'")
+        if ".." in target or target.startswith("/"):
+            break
+        cmd = match.group(2).strip()
+    return cmd
+
+
+def _is_standalone_cd(cmd: str) -> bool:
+    cmd = (cmd or "").strip()
+    if not cmd:
+        return False
+    return bool(re.match(r"(?i)^cd(?:\s+[^;&|]+)?\s*$", cmd))
+
+
 def _parse_step(raw: str) -> dict:
     text = raw.strip()
     text = re.sub(r"^```json\s*", "", text, flags=re.I)
@@ -173,7 +207,10 @@ def _parse_step(raw: str) -> dict:
         if isinstance(data, dict):
             return data
     except json.JSONDecodeError:
-        pass
+        # Never pass truncated JSON (often emitted by a model at token limit)
+        # to Fish as if it were a shell command.
+        if text.startswith("{") or '"status"' in text or '"cmd"' in text:
+            return {"status": "invalid", "cmd": "", "why": "unparsed JSON action"}
     return {"status": "continue", "cmd": text, "why": "unparsed LLM output"}
 
 
@@ -232,7 +269,13 @@ def _annotate_llm_http(span_obj: Any) -> None:
         pass
 
 
-def _run_cmd(cmd: str, cwd: Path, *, auto_yes: bool) -> tuple[int, str]:
+def _git_authorized(goal: str) -> bool:
+    """Require explicit user intent before an agent can mutate/inspect Git."""
+    text = goal.lower()
+    return bool(re.search(r"\b(?:git|commit|pull|push|branch|merge|rebase|checkout|stash|cherry[- ]pick|diff)\b", text))
+
+
+def _run_cmd(cmd: str, cwd: Path, *, auto_yes: bool, git_allowed: bool = False) -> tuple[int, str]:
     try:
         from arka.telemetry import mark_error, mark_ok, set_span_attributes, span
     except ImportError:
@@ -251,6 +294,14 @@ def _run_cmd(cmd: str, cwd: Path, *, auto_yes: bool) -> tuple[int, str]:
         else _goal_null_context()
     )
     with ctx as current:
+        if re.match(r"(?i)^(?:arka\s+)?(?:coding[-_]tui|code_tui|goal)\b", cmd.strip()):
+            if span is not None:
+                mark_error(current, "recursive agent launch")
+            return 2, "[skipped: recursive Arka agent launch; work in the current goal instead]"
+        if re.search(r"(?i)(?:^|[;&|])\s*git(?:\s|$)", cmd) and not git_allowed:
+            if span is not None:
+                mark_error(current, "git authorization gate")
+            return 2, "[skipped: Git actions require explicit user authorization]"
         if not _security_gate(cmd, auto_yes=auto_yes):
             if span is not None:
                 mark_error(current, "security gate")
@@ -360,12 +411,16 @@ def run_goal(
         pass
 
     cwd = project_root or Path.cwd()
+    git_allowed = _git_authorized(goal)
     if project_root is not None:
         os.chdir(project_root)
     tree, listing = _dir_context(cwd, TREE_DEPTH)
     shell_hist = _fish_history()
     skills = _skills_list()
     plat_hint = _platform_hint()
+    recent_commands: list[str] = []
+    blocked_cd_count = 0
+    empty_action_count = 0
 
     system = f"""You are an autonomous shell agent (Butterfish Goal Mode style) on fish shell.
 Each turn return ONLY valid JSON (no markdown fences):
@@ -380,6 +435,8 @@ Rules:
 - {plat_hint}
 - Commands run in fish syntax.
 - Decompose complex goals across many small steps."""
+    system += "\n- Never launch coding-tui, goal, or another interactive Arka agent; operate on the current workspace directly."
+    system += f"\n- Working directory is already {cwd}. NEVER emit cd commands (standalone or chained); cd is blocked and wastes steps."
 
     if system_extra:
         system += f"\n{system_extra.strip()}"
@@ -422,9 +479,16 @@ Rules:
                 else _goal_null_context()
             )
             with step_ctx as step_span:
+                cd_reminder = ""
+                if blocked_cd_count:
+                    cd_reminder = (
+                        f"\nREMINDER: CWD is already {cwd}. Do NOT use cd — pick ls, read, pytest, "
+                        "or an edit command instead.\n"
+                    )
+
                 user = f"""GOAL: {goal}
 CWD: {cwd}
-
+{cd_reminder}
 DIRECTORY (depth {TREE_DEPTH}):
 {tree or '(empty)'}
 
@@ -483,6 +547,13 @@ Step {step}/{max_steps} — return the NEXT action as JSON."""
                         mark_ok(goal_span)
                     return 0
 
+                if status == "invalid":
+                    print("Invalid action from agent; stopping before shell execution.", file=sys.stderr)
+                    print("  Ask the agent to return one complete JSON action.", file=sys.stderr)
+                    if span is not None:
+                        mark_error(goal_span, "invalid action")
+                    return 1
+
                 if status == "read" and file_path:
                     content = _read_file(file_path, cwd)
                     print(f"  📄 read {file_path}", file=sys.stderr)
@@ -490,10 +561,41 @@ Step {step}/{max_steps} — return the NEXT action as JSON."""
                     continue
 
                 if not cmd:
-                    print("Empty command from agent; stopping.", file=sys.stderr)
+                    empty_action_count += 1
+                    print("Empty action from agent; requesting a complete next action.", file=sys.stderr)
+                    history += f"\n--- step {step} (invalid) ---\nreason: empty action\n"
+                    if empty_action_count >= 2:
+                        print("Repeated empty actions; stopping.", file=sys.stderr)
+                        if span is not None:
+                            mark_error(goal_span, "empty action")
+                        return 1
+                    continue
+
+                # Each action runs in a fresh subprocess with cwd already set;
+                # standalone directory changes cannot persist between steps.
+                cmd = _strip_leading_cd_chain(cmd, cwd)
+                if _is_standalone_cd(cmd):
+                    blocked_cd_count += 1
+                    print("  ⊘ skipped cd (Arka already set the repository working directory)", file=sys.stderr)
+                    history += (
+                        f"\n--- step {step} (skipped) ---\ncmd: {cmd}\nreason: {_CD_BLOCKED_HINT}\n"
+                    )
+                    if blocked_cd_count >= 4:
+                        print(
+                            "Repeated cd actions detected; stopping so the agent can choose a real action.",
+                            file=sys.stderr,
+                        )
+                        if span is not None:
+                            mark_error(goal_span, "repeated cd")
+                        return 1
+                    continue
+
+                if recent_commands.count(cmd) >= 2:
+                    print("Repeated action detected; stopping to avoid wasting steps.", file=sys.stderr)
                     if span is not None:
-                        mark_error(goal_span, "empty command")
+                        mark_error(goal_span, "repeated action")
                     return 1
+                recent_commands.append(cmd)
 
                 if cmd_hook is not None:
                     blocked = cmd_hook(cmd)
@@ -509,7 +611,7 @@ Step {step}/{max_steps} — return the NEXT action as JSON."""
                 if why:
                     print(f"    {why}", file=sys.stderr)
 
-                code, out = _run_cmd(cmd, cwd, auto_yes=auto_yes)
+                code, out = _run_cmd(cmd, cwd, auto_yes=auto_yes, git_allowed=git_allowed)
                 if code == 0:
                     print("  ✓ exit 0", file=sys.stderr)
                 elif code == 2:

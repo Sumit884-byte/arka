@@ -120,15 +120,16 @@ def memory_remember_silent(
     tier = (trust_tier or "global").strip().lower()
     if tier not in ("global", "team", "workflow", "run"):
         tier = "global"
-    try:
-        from arka.integrations.supermemory import remember
+    memory_backend = (os.environ.get("MEMORY") or "auto").strip().lower()
+    if memory_backend in ("supermemory", "cloud", "api"):
+        try:
+            from arka.integrations.supermemory import remember
 
-        remember(text, tags=tags, provenance=provenance, trust_tier=tier)
-        return True
-    except ImportError:
-        pass
-    except Exception as exc:
-        if (os.environ.get("MEMORY") or "auto").strip().lower() in ("supermemory", "cloud", "api"):
+            remember(text, tags=tags, provenance=provenance, trust_tier=tier)
+            return True
+        except ImportError:
+            pass
+        except Exception as exc:
             print(f"Supermemory error: {exc}", file=sys.stderr)
             raise
 
@@ -998,7 +999,13 @@ def _coding_summary(cwd: Path, goal: str, total: int, *, completed: int, failed_
     return "\n".join(lines)
 
 
-def code_agent(goal: str, *, repo: str | None = None, ingest: bool = False) -> int:
+def code_agent(
+    goal: str,
+    *,
+    repo: str | None = None,
+    ingest: bool = False,
+    plan_context: str = "",
+) -> int:
     from arka.core.code_project import (
         CodeProjectError,
         apply_env,
@@ -1059,6 +1066,11 @@ def code_agent(goal: str, *, repo: str | None = None, ingest: bool = False) -> i
         '{"steps":["shell command or skill", ...], "summary":"plan"}'
     )
     plan_user = f"Repo: {cwd}\nGoal: {goal}\n"
+    if plan_context:
+        plan_user += (
+            "\nApproved coding-TUI plan (follow its proposed files and reasons; "
+            "do not replace it with a generic plan):\n" + plan_context[:12000] + "\n"
+        )
     plan_user += arka_tool_hint + "\n"
     try:
         from arka.agent.change_guards import animation_scope_guard
@@ -1089,14 +1101,29 @@ def code_agent(goal: str, *, repo: str | None = None, ingest: bool = False) -> i
         except json.JSONDecodeError:
             pass
     if not steps:
-        cmd = f"cd {shlex.quote(str(cwd))}; goal -n 10 {shlex.quote(goal)}"
-        return subprocess.run(["fish", "-ic", cmd]).returncode
+        # The subprocess cwd is already the repository; never ask the goal
+        # agent to navigate there, which commonly causes repeated `cd` loops.
+        from arka.agent.goal import run_goal
 
-    os.chdir(cwd)
+        return run_goal(
+            goal,
+            max_steps=10,
+            auto_continue=True,
+            system_extra=(
+                f"Repository working directory is already {cwd}. "
+                "Never use cd — run commands relative to this directory."
+            ),
+        )
+
     for i, step in enumerate(steps, 1):
         print(f"━━━ Code step {i}/{len(steps)} ━━━")
         print(f"→ {step}")
-        skill_rc = _run_arka_tool_step(step)
+        previous_cwd = Path.cwd()
+        try:
+            os.chdir(cwd)
+            skill_rc = _run_arka_tool_step(step)
+        finally:
+            os.chdir(previous_cwd)
         if skill_rc is not None:
             if skill_rc != 0:
                 print(f"Step failed (exit {skill_rc}).")
@@ -1124,6 +1151,42 @@ def _run_arka_tool_step(step: str) -> int | None:
         clean = clean[5:].strip()
     if not clean:
         return None
+    first = clean.split()[0]
+    if first in {"git", "ls", "cat", "pwd", "pytest", "python", "python3", "npm", "make", "cargo", "docker", "curl", "rm", "mv", "cp"}:
+        return None
+    known_tools = {
+        "repo_health", "lint_project", "pr_check", "review", "route_audit",
+        "self_improve", "design_from_screenshot", "compose_slides", "urlkit",
+        "mcp", "agent_hub", "frontend_loop", "ci", "repo_context", "repo_map",
+    }
+    # LLM plans sometimes prefix a registered skill with the generic
+    # ``skill`` word.  Normalize it before validating required arguments.
+    parts = clean.split()
+    if first == "skill" and len(parts) > 1 and parts[1] != "new":
+        clean = " ".join(parts[1:])
+        first = parts[1]
+    if first == "skill":
+        print(f"Skipped unknown skill step: {clean}")
+        print("Use a registered Arka skill name or an explicit shell command.")
+        return 1
+    if parts and parts[0] == "skill" and first not in known_tools:
+        print(f"Skipped unknown skill step: {first}")
+        print("Use a registered Arka skill name or an explicit shell command.")
+        return 1
+    if clean.lower() in {"shell command or skill", "shell command", "skill"} or clean.lower().startswith("shell command or skill:"):
+        print(f"Skipped planner placeholder: {clean}")
+        return 0
+    if first == "pr_check" and len(clean.split()) == 1:
+        print("Skipped pr_check: choose an action such as diff, summary, ci, explain, or babysit.")
+        return 0
+    if first == "design_from_screenshot" and len(clean.split()) == 1:
+        print("Skipped design_from_screenshot: an image path or URL is required.")
+        print("Add it explicitly, for example: design_from_screenshot ~/Pictures/design.png")
+        return 0
+    if first in known_tools:
+        from arka.dispatch import run_skill
+
+        return run_skill(clean)
     try:
         from arka.router import route
     except ImportError:
@@ -1137,7 +1200,6 @@ def _run_arka_tool_step(step: str) -> int | None:
             from arka.dispatch import run_skill
 
             return run_skill(routed.skill)
-    first = clean.split()[0]
     if not re.fullmatch(r"[a-z][a-z0-9_]*", first):
         return None
     from arka.dispatch import run_skill
