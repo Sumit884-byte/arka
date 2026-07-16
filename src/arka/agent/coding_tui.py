@@ -71,3 +71,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="arka coding-tui")
     parser.add_argument("path", nargs="?", default=".")
     return run(parser.parse_args(argv).path)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

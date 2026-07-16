@@ -1930,6 +1930,16 @@ function _agent_dispatch_one --description "Run one skill by name or shell via _
         _arka_run_third_party_skills $first $tokens
         return $status
     end
+    if test "$first" = coding_tui; or test "$first" = coding-tui
+        set -e tokens[1]
+        set -lx ARKA_SKILL coding_tui
+        if test (count $tokens) -gt 0
+            coding_tui $tokens
+        else
+            coding_tui .
+        end
+        return $status
+    end
     if _agent_looks_like_markdown_shell "$cmd_trim"
         echo (set_color red)"✗ Routing returned markdown, not a skill — try: arka route \"…\""(set_color normal) >&2
         return 1
@@ -1983,7 +1993,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         agent_remember agent_recall agent_memory agent_trace agent_why agent_last \
         agent_resume agent_research agent_nudge agent_watch agent_routine agent_fanout \
         agent_code agent_handoff agent_browser transcript_ask media_ask \
-        meeting_agent study_agent inbox_agent compare_agent product_reviewer price_check profession pr_check self_improve github_repo competitions route_learn \
+        meeting_agent study_agent inbox_agent compare_agent product_reviewer price_check profession pr_check self_improve coding_tui github_repo competitions route_learn \
         bookmarks repo_health repo_context repo_map generate_data data_gen data_ask ask_data query_data analyze_data view_data view_csv show_csv docker_status clipboard_history jsonkit heartbeat mcp agent_hub gemini_cli harvard_ark persona elon talk_to_elon elon_chat \
         arka_ask semantic_memory supermemory speak_research voice_session handoff_notify remind routines predictions stock \
         rag_setup rag_status voice_agent wake_control \
@@ -7155,6 +7165,16 @@ function self --description "Arka self-improvement loop (goal agent on arka repo
     end
 end
 
+
+function coding_tui --description "Focused Arka coding workspace TUI (Python)"
+    set -l py (_arka_python)
+    set -lx ARKA_SKILL coding_tui
+    if test (count $argv) -gt 0
+        $py -m arka.agent.coding_tui $argv
+    else
+        $py -m arka.agent.coding_tui .
+    end
+end
 function self_improve --description "Alias for self improve — Arka codebase self-improvement loop"
     if test (count $argv) -eq 0
         self improve
@@ -18199,6 +18219,13 @@ function agent --description "Run commands safely: executes safe commands automa
         return $status
     end
 
+    if _agent_is_coding_tui_request "$cmd"
+        set -l ctr (_agent_route_coding_tui "$cmd")
+        set ctr (string replace coding-tui coding_tui -- $ctr)
+        _agent_dispatch_one "$ctr"
+        return $status
+    end
+
     if _agent_try_listen_control "$cmd"
         return $status
     end
@@ -19321,7 +19348,11 @@ function agent --description "Run commands safely: executes safe commands automa
 
     # If LLM just echoed the original input, treat as no interpretation
     if test "$interpreted" = "$cmd"
-        set interpreted ""
+        if _agent_is_coding_tui_request "$cmd"
+            set interpreted (string replace coding-tui coding_tui -- (_agent_route_coding_tui "$cmd"))
+        else
+            set interpreted ""
+        end
     else if test -n "$interpreted"
         set -l interp_first (string split -f 1 " " -- "$interpreted")
         if _agent_is_skill "$interp_first"
