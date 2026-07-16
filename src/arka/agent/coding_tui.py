@@ -2,7 +2,31 @@
 from __future__ import annotations
 
 import argparse
+import re
 from pathlib import Path
+
+
+_CODING_TUI_CLI_RE = re.compile(
+    r"(?i)^(?:arka\s+)?(?:coding[-_ ]?tui|code_tui)\b(?:\s+(.*))?$"
+)
+_CODING_TUI_NL_RE = re.compile(
+    r"(?i)\b(?:open|start|launch)\s+(?:the\s+)?coding\s+tui\b|"
+    r"^coding\s+tui\b|"
+    r"\bstart\s+coding\s+workspace\b"
+)
+
+
+def route_command(text: str) -> str:
+    raw = (text or "").strip()
+    if not raw:
+        return ""
+    match = _CODING_TUI_CLI_RE.match(raw)
+    if match:
+        rest = (match.group(1) or "").strip() or "."
+        return f"coding-tui {rest}"
+    if _CODING_TUI_NL_RE.search(raw):
+        return "coding-tui ."
+    return ""
 
 
 HELP = "Commands: /help, /status, /plan <goal>, /run <goal>, /quit. Plain text is treated as a plan request."

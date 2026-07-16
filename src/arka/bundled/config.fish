@@ -682,6 +682,7 @@ if status is-interactive
         echo "translate       -> Translate text via AI"
         echo "survive_lang    -> Travel survival phrases (native → target language)"
         echo "pr_check        -> PR diff, CI status, explain failures, babysit until green"
+        echo "design_from_screenshot -> Turn screenshot into a build brief"
         echo "self_improve    -> Self-improvement loop on the Arka codebase (goal agent)"
         echo "generate_password -> Secure password"
         echo "ip_info         -> Public IP & location"
@@ -690,6 +691,7 @@ if status is-interactive
         echo "create_venv     -> Create new virtual environment"
         echo "write_script    -> Create a Python script"
         echo "run_script      -> Run a Python script"
+        echo "lint_project    -> Lint any project with detected language tools"
         echo "create_folder   -> Create directories"
         echo "list_folders    -> List subfolder names"
         echo "show_folder     -> Show folder contents"
@@ -1982,7 +1984,6 @@ function _agent_all_skills --description "Canonical registered agent skill names
         agent_resume agent_research agent_nudge agent_watch agent_routine agent_fanout \
         agent_code agent_handoff agent_browser transcript_ask media_ask \
         meeting_agent study_agent inbox_agent compare_agent product_reviewer price_check profession pr_check self_improve github_repo competitions route_learn \
-        frontend_loop \
         bookmarks repo_health repo_context repo_map generate_data data_gen data_ask ask_data query_data analyze_data view_data view_csv show_csv docker_status clipboard_history jsonkit heartbeat mcp agent_hub gemini_cli harvard_ark persona elon talk_to_elon elon_chat \
         arka_ask semantic_memory supermemory speak_research voice_session handoff_notify remind routines predictions stock \
         rag_setup rag_status voice_agent wake_control \
@@ -2455,6 +2456,14 @@ function skills --description "Show what commands the agent can auto-run"
                 echo (set_color green)"  survive_lang     "(set_color normal)"<language> [phrase] — travel survival phrases"
             case pr_check pr-check pr
                 echo (set_color green)"  pr_check         "(set_color normal)"diff|summary|ci|explain|babysit — PR until merge-ready"
+            case ci
+                echo (set_color green)"  ci               "(set_color normal)"full|fix — local CI gate mirrored from GitHub Actions"
+            case review
+                echo (set_color green)"  review           "(set_color normal)"[--staged] — local diff review with project rules"
+            case route_audit route-audit
+                echo (set_color green)"  route_audit      "(set_color normal)"— symbolic / fish / test parity audit"
+            case skill
+                echo (set_color green)"  skill new        "(set_color normal)"<name> --template dev — scaffold a plugin skill"
             case self_improve self
                 echo (set_color green)"  self_improve     "(set_color normal)"improve [target] — Arka self-improvement loop"
             case codebase_ingest
@@ -2548,8 +2557,6 @@ function skills --description "Show what commands the agent can auto-run"
                 echo (set_color green)"  compose_video   "(set_color normal)"--topic '…' [--llm] — YouTube info video (Unsplash + ffmpeg + TTS)"
             case compose_slides
                 echo (set_color green)"  compose_slides  "(set_color normal)"compose|convert — deck build/export (pptx|pdf|html|md|json|all)"
-            case frontend_loop
-                echo (set_color green)"  frontend_loop   "(set_color normal)"review|retry — inspect frontend screenshots and rerun builds"
             case compose_3d
                 echo (set_color green)"  compose_3d     "(set_color normal)"gear|vase|cube|sphere|… — local OBJ/STL 3D models"
             case convert_media
@@ -4359,6 +4366,33 @@ function lint_python --description "Lint Python files using flake8/pylint/ruff"
                 echo "Install: pip install ruff"
                 return 1
             end
+    end
+end
+
+function _agent_is_lint_project_request --description "True if user wants language-agnostic linting (internal)"
+    set -l py (_arka_python)
+    set -l route ($py -m arka.agent.lint_project route "$argv[1]" 2>/dev/null | string trim)
+    test -n "$route"
+end
+
+function _agent_build_lint_project_cmd --description "Build lint_project args from NL (internal)"
+    set -l py (_arka_python)
+    set -l route ($py -m arka.agent.lint_project route "$argv[1]" 2>/dev/null | string trim)
+    echo "$route"
+end
+
+function lint_project --description "Lint any project with detected language tools"
+    set -l py (_arka_python)
+    $py -m arka.agent.lint_project run $argv
+end
+
+function lint_project --description "Lint any project using detected language tools"
+    set -l py (_arka_python)
+    set -l rest ($py (_arka_py_script arka_lint_project.py) run (string escape --style=script -- $argv) 2>/dev/null)
+    if test -n "$rest"
+        echo $rest
+    else
+        $py (_arka_py_script arka_lint_project.py) run $argv
     end
 end
 
@@ -10154,9 +10188,65 @@ function _agent_route_self_improve --description "Build self_improve invocation 
     echo "$route"
 end
 
+function _agent_is_coding_tui_request --description "True if user wants the coding TUI workspace (internal)"
+    set -l clean (string lower (string trim -- "$argv[1]"))
+    if string match -qr '(?i)^(?:arka\s+)?(?:coding[-_ ]?tui|code_tui)\b' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)\b(?:open|start|launch)\s+(?:the\s+)?coding\s+tui\b' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)^coding\s+tui\b' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)\bstart\s+coding\s+workspace\b' "$clean"
+        return 0
+    end
+    return 1
+end
+
+function _agent_route_coding_tui --description "Build coding-tui invocation from NL (internal)"
+    set -l cmd (string trim -- "$argv[1]")
+    set -l clean (string lower "$cmd")
+    if string match -qr '(?i)^(?:arka\s+)?(?:coding[-_ ]?tui|code_tui)\b.*' "$clean"
+        set -l rest (string replace -r -i '^(?:arka\s+)?(?:coding[-_ ]?tui|code_tui)\s*' '' "$cmd")
+        if test -z "$rest"
+            echo "coding-tui ."
+        else
+            echo "coding-tui $rest"
+        end
+        return
+    end
+    echo "coding-tui ."
+end
+
 function _agent_route_pr_check --description "Build pr_check invocation from NL (internal)"
     set -l py (_arka_python)
     set -l route ($py (_arka_py_script arka_pr_check.py) route "$argv[1]" 2>/dev/null | string trim)
+    echo "$route"
+end
+
+function _agent_is_design_from_screenshot_request --description "True if user wants screenshot-to-design brief conversion (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_design_from_screenshot.py) route "$argv[1]" 2>/dev/null | string trim)
+    test -n "$route"
+end
+
+function _agent_route_design_from_screenshot --description "Build design_from_screenshot invocation from NL (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_design_from_screenshot.py) route "$argv[1]" 2>/dev/null | string trim)
+    echo "$route"
+end
+
+function _agent_is_dev_tools_request --description "True if user wants CI / review / route audit / skill scaffolding (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_dev_tools.py) route "$argv[1]" 2>/dev/null | string trim)
+    test -n "$route"
+end
+
+function _agent_route_dev_tools --description "Build dev_tools invocation from NL (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_dev_tools.py) route "$argv[1]" 2>/dev/null | string trim)
     echo "$route"
 end
 
@@ -10861,6 +10951,9 @@ function _agent_is_knowledge_question --description "True if user wants a factua
         return 1
     end
     if _agent_is_self_improve_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_coding_tui_request "$argv[1]"
         return 1
     end
     if _agent_is_github_repo_request "$argv[1]"
@@ -12045,23 +12138,6 @@ end
 
 function _agent_is_compose_slides_request --description "True if user wants presentation slides (internal)"
     test -n "$(_agent_build_compose_slides_cmd "$argv[1]")"
-end
-
-function _agent_build_frontend_loop_cmd --description "Build frontend_loop args from NL (internal)"
-    set -l cmd "$argv[1]"
-    set -l name (_agent_call_name)
-    set cmd (string replace -r -i "^$name\\s+" '' "$cmd" | string trim)
-    set -l py (_arka_python)
-    set -l script (_arka_py_script arka_frontend_loop.py)
-    test -z "$script"; and return
-    set -l rest ($py "$script" parse (string escape --style=script -- $cmd) 2>/dev/null)
-    if test (count $rest) -gt 0
-        echo "frontend_loop $rest"
-    end
-end
-
-function _agent_is_frontend_loop_request --description "True if user wants frontend visual review/retry (internal)"
-    test -n "$(_agent_build_frontend_loop_cmd "$argv[1]")"
 end
 
 function _agent_build_convert_media_cmd --description "Build convert_media args from NL (internal)"
@@ -14256,7 +14332,7 @@ function _agent_skill_matches_request --description "True if skill fits the user
             string match -qr '(?i)(play\s+|movie|film|rplay)' "$cmd"
         case browse_web
             string match -qr '(?i)(browse|scrape|website|web\s*page|click|login|automate)' "$cmd"
-        case write_script run_script lint_python
+        case write_script run_script lint_python lint_project
             string match -qr '(?i)(script|python|lint|code)' "$cmd"
         case whatsapp_listen
             string match -qr '(?i)(whatsapp\s+inbox|inbox\s+whatsapp|whatsapp\s+listen|listen\s+whatsapp)' "$cmd"
@@ -14487,6 +14563,14 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         set -l sir (_agent_route_self_improve "$cmd")
         if test -n "$sir"
             echo "skill|$sir|Arka self-improvement loop"
+            return
+        end
+    end
+
+    if _agent_is_coding_tui_request "$cmd"
+        set -l ctr (_agent_route_coding_tui "$cmd")
+        if test -n "$ctr"
+            echo "skill|$ctr|Focused coding TUI workspace"
             return
         end
     end
@@ -15073,10 +15157,31 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
             return
         end
     end
+    if _agent_is_design_from_screenshot_request "$cmd"
+        set -l dsr (_agent_route_design_from_screenshot "$cmd")
+        if test -n "$dsr"
+            echo "skill|$dsr|Screenshot to design brief"
+            return
+        end
+    end
+    if _agent_is_dev_tools_request "$cmd"
+        set -l dtr (_agent_route_dev_tools "$cmd")
+        if test -n "$dtr"
+            echo "skill|$dtr|Developer tools: ci, review, route audit, skill scaffolding"
+            return
+        end
+    end
     if _agent_is_self_improve_request "$cmd"
         set -l sir (_agent_route_self_improve "$cmd")
         if test -n "$sir"
             echo "skill|$sir|Arka self-improvement loop"
+            return
+        end
+    end
+    if _agent_is_coding_tui_request "$cmd"
+        set -l ctr (_agent_route_coding_tui "$cmd")
+        if test -n "$ctr"
+            echo "skill|$ctr|Focused coding TUI workspace"
             return
         end
     end
@@ -15655,10 +15760,26 @@ function _agent_correct_interpretation --description "Fix bad LLM skill picks us
         test -n "$prr"; and echo "$prr"
         return
     end
+    if _agent_is_design_from_screenshot_request "$cmd"
+        set -l dsr (_agent_route_design_from_screenshot "$cmd")
+        test -n "$dsr"; and echo "$dsr"
+        return
+    end
+    if _agent_is_dev_tools_request "$cmd"
+        set -l dtr (_agent_route_dev_tools "$cmd")
+        test -n "$dtr"; and echo "$dtr"
+        return
+    end
 
     if _agent_is_self_improve_request "$cmd"
         set -l sir (_agent_route_self_improve "$cmd")
         test -n "$sir"; and echo "$sir"
+        return
+    end
+
+    if _agent_is_coding_tui_request "$cmd"
+        set -l ctr (_agent_route_coding_tui "$cmd")
+        test -n "$ctr"; and echo "$ctr"
         return
     end
 
@@ -18176,11 +18297,6 @@ function agent --description "Run commands safely: executes safe commands automa
         set route_source offline
     end
 
-    if test -z "$interpreted"; and _agent_is_frontend_loop_request "$cmd"
-        set interpreted (_agent_build_frontend_loop_cmd "$cmd")
-        set route_source offline
-    end
-
     if test -z "$interpreted"; and _agent_is_compose_slides_request "$cmd"
         set interpreted (_agent_build_compose_slides_cmd "$cmd")
         set route_source offline
@@ -18741,8 +18857,17 @@ function agent --description "Run commands safely: executes safe commands automa
     else if _agent_is_pr_check_request "$cmd"
         set interpreted (_agent_route_pr_check "$cmd")
         set route_source offline
+    else if _agent_is_design_from_screenshot_request "$cmd"
+        set interpreted (_agent_route_design_from_screenshot "$cmd")
+        set route_source offline
+    else if _agent_is_dev_tools_request "$cmd"
+        set interpreted (_agent_route_dev_tools "$cmd")
+        set route_source offline
     else if _agent_is_self_improve_request "$cmd"
         set interpreted (_agent_route_self_improve "$cmd")
+        set route_source offline
+    else if _agent_is_coding_tui_request "$cmd"
+        set interpreted (_agent_route_coding_tui "$cmd")
         set route_source offline
     else if _agent_is_github_repo_request "$cmd"
         set interpreted (_agent_route_github_repo "$cmd")
@@ -18907,6 +19032,9 @@ function agent --description "Run commands safely: executes safe commands automa
         set route_source offline
     else if _agent_is_self_improve_request "$cmd"
         set interpreted (_agent_route_self_improve "$cmd")
+        set route_source offline
+    else if _agent_is_coding_tui_request "$cmd"
+        set interpreted (_agent_route_coding_tui "$cmd")
         set route_source offline
     else if string match -qr '(git|branch|commit)' "$clean_cmd"
         set interpreted "git_summary"

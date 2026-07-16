@@ -89,6 +89,17 @@ def route_iterate(cmd: str) -> str | None:
     return None
 
 
+def route_loop_engineering(cmd: str) -> str | None:
+    """Route explicit engineering-loop language to the reusable planner."""
+    if not re.search(r"(?i)\b(?:loop\s+engineering|engineering\s+loop|iterative\s+engineering)\b", cmd):
+        return None
+    match = re.search(r"(?i)\b(?:for|with)\s+(\d+)\s+iterations?\b", cmd)
+    iterations = f" --iterations {match.group(1)}" if match else ""
+    task = re.sub(r"(?i)\b(?:loop\s+engineering|engineering\s+loop|iterative\s+engineering)\b", "", cmd).strip()
+    task = re.sub(r"(?i)\b(?:for|with)\s+\d+\s+iterations?\b", "", task).strip()
+    return "loop-engineering" + iterations + (f" {task}" if task else "")
+
+
 def route_ultra_fast(cmd: str) -> str | None:
     if re.search(r"(?i)\b(?:ultra\s*fast|fast\s+development|multitask).*(?:priority|iteration|iterate)|\bpriority\s+(?:0|1)\b|\bauto(?:matic)?\s+priority\b", cmd):
         suffix = " --auto-priority" if re.search(r"(?i)\b(?:auto|automatic|all)\s+priorit(?:y|ize)|prioritize\s+everything", cmd) else ""
@@ -457,7 +468,9 @@ def route_model_to_image(cmd: str) -> str | None:
     if not path:
         return None
     source = path.group(0)
-    return f"model_to_image {shlex.quote(source)} --output {shlex.quote(Path(source).stem + '-render.png')}"
+    route = f"model_to_image {shlex.quote(source)} --output {shlex.quote(Path(source).stem + '-render.png')}"
+    task = re.search(r"(?i)\b(?:for|to show|from)\s+(.+)$", cmd)
+    return route + (f" --task {shlex.quote(task.group(1))}" if task else "")
 
 
 def route_three_d(cmd: str) -> str | None:
@@ -830,6 +843,8 @@ def route_life_sciences(cmd: str) -> str | None:
 
 
 def route_model_host_setup(cmd: str) -> str | None:
+    if re.search(r"(?i)\b(?:best|recommended|optimize|strongest)\b.*\b(?:local\s+)?(?:model|llm)\b", cmd):
+        return None
     if not re.search(r"(?i)\b(?:setup|set\s+up|configure|host|serve)\b.*\b(?:ai|llm|model|ollama|vllm|lm\s*studio)\b", cmd):
         return None
     host = "ollama" if re.search(r"(?i)\bollama\b", cmd) else "vllm" if re.search(r"(?i)\bvllm\b", cmd) else "lmstudio" if re.search(r"(?i)\blm\s*studio\b", cmd) else "openai-compatible"
@@ -853,6 +868,50 @@ def route_free_models(cmd: str) -> str | None:
         return "free_models"
     return None
 
+def route_model_optimizer(cmd: str) -> str | None:
+    if re.search(r"(?i)\b(?:setup|configure)\b.*\b(?:best|recommended|local)\s+(?:model|llm)\b", cmd):
+        backend = "vllm" if re.search(r"(?i)\bvllm\b", cmd) else "lmstudio" if re.search(r"(?i)\blm\s*studio\b", cmd) else "ollama"
+        apply = " --apply" if re.search(r"(?i)\bapply|save|write\b", cmd) else ""
+        return f"model-optimizer setup --backend {backend}{apply}"
+    if re.search(r"(?i)\b(?:model\s+recommend|recommend\s+(?:a|the)?\s*model|best\s+model\s+for\s+my\s+hardware)\b", cmd):
+        return "model-optimizer recommend"
+    match = re.search(r"(?i)\b(?:switch|use)\s+(?:to\s+)?model\s+([\w./:-]+)", cmd)
+    return f"model-optimizer switch {match.group(1)}" if match else None
+
+def route_train_plan(cmd: str) -> str | None:
+    if re.search(r"(?i)\b(?:train|fine[- ]?tune|qlora|lora)\b.*\b(?:model|llm|dataset)\b", cmd):
+        return "train-plan plan " + cmd
+    return None
+
+def route_stock_analyze(cmd: str) -> str | None:
+    if re.search(r"(?i)\b(?:analy[sz]e|report|inspect)\b.*\b(?:stock|market|ohlcv|price\s+data)\b", cmd):
+        files = re.findall(r"(?:^|\s)([^\s]+\.csv)\b", cmd, re.I)
+        return "stock-analyze " + files[0] if files else "stock-analyze"
+    return None
+
+def route_code_convert(cmd: str) -> str | None:
+    if re.search(r"(?i)\b(?:convert|translate|rewrite)\b.*\b(?:code|script|python|javascript|typescript|rust|go|java)\b", cmd):
+        langs = "python javascript typescript rust go java cpp ruby"
+        target = next((lang for lang in langs.split() if re.search(rf"\b{lang}\b", cmd, re.I)), "python")
+        files = re.findall(r"(?:^|\s)([^\s]+\.(?:py|js|ts|rs|go|java|cpp|rb))\b", cmd, re.I)
+        return f"code-convert {files[0]} {target}" if files else f"code-convert . {target}"
+    return None
+
+def route_design_resources(cmd: str) -> str | None:
+    if re.search(r"(?i)\b(?:design|ui|ux|frontend)\b.*\b(?:resources?|inspiration|templates?|icons?|fonts?)\b", cmd):
+        return "design-resources show"
+    return None
+
+def route_edge(cmd: str) -> str | None:
+    if re.search(r"(?i)\b(?:edge|raspberry\s*pi|embedded|constrained\s+device|offline\s+device)\b.*\b(?:model|llm|arka|run|inference)\b", cmd):
+        return "edge recommend"
+    return None
+
+def route_judge_demo(cmd: str) -> str | None:
+    if re.search(r"(?i)\b(?:judge|reviewer|evaluator)\b.*\b(?:demo|test|sandbox|instance|without\s+rebuild)\b", cmd):
+        return "judge-demo init"
+    return None
+
 
 def route_repo_graph(cmd: str) -> str | None:
     if re.search(r"(?i)\b(?:repo|repository|codebase)\b.*\b(?:graph|dependencies|priority|priorities|centrality)\b", cmd):
@@ -862,6 +921,25 @@ def route_repo_graph(cmd: str) -> str | None:
 def route_workspace(cmd: str) -> str | None:
     if re.search(r"(?i)\b(?:workspace|microservices?|micro-frontends?|service\s+map|developer\s+workspace)\b", cmd) and re.search(r"(?i)\b(?:map|scan|discover|list|inspect|show|create)\b", cmd):
         return "workspace"
+    return None
+
+def route_structure(cmd: str) -> str | None:
+    if re.search(r"(?i)\b(?:improve|audit|clean|review|organize|fix)\b.*\b(?:file|project|repo|repository|folder)\s+structure\b", cmd):
+        return "structure"
+    return None
+
+def route_dev_workflow(cmd: str) -> str | None:
+    if re.search(r"(?i)\b(?:change\s+impact|impact\s+analysis|what\s+could.*break)\b", cmd):
+        return "dev-workflow impact"
+    if re.search(r"(?i)\b(?:test\s+gaps?|missing\s+tests?|tests?\s+missing)\b", cmd):
+        return "dev-workflow test-gaps"
+    if re.search(r"(?i)\b(?:sync|stale|update)\b.*\b(?:docs?|documentation)\b", cmd):
+        return "dev-workflow docs-sync"
+    return None
+
+def route_graphify(cmd: str) -> str | None:
+    if re.search(r"(?i)\b(?:graphify|graph|visuali[sz]e)\b.*\b(?:repo|repository|codebase|dependencies|services?)\b", cmd):
+        return "graphify"
     return None
 
 def route_spreadsheet(cmd: str) -> str | None:
@@ -1029,6 +1107,10 @@ def route_cool_build(cmd: str) -> str | None:
 
 
 def route_play(cmd: str) -> str | None:
+    if re.search(r"(?i)\b(?:agent\s+)?(?:societ(?:y|ies)|teams?)\b.*\b(?:compete|battle|race)\b", cmd):
+        return "play tournament --group society=agent-1,agent-2 --group team=agent-3,agent-4"
+    if re.search(r"(?i)\b(?:battle|fight|compete)\b.*\b(?:ai|agent|car|vehicle|game)\b|\b(?:ai|agent)\s+(?:cars?|vehicles?)\b.*\b(?:battle|fight|race)\b", cmd):
+        return "play battle " + cmd
     if not re.search(r"\b(?:play|benchmark)\b.*\bchess\b|\bchess\b.*\b(?:play|benchmark|game)\b", cmd, re.I):
         return None
     moves = re.findall(r"\b[a-h][1-8][a-h][1-8]\b", cmd.lower())
@@ -1199,6 +1281,15 @@ def route_urlkit(cmd: str) -> str | None:
     return None
 
 
+def route_hallmark(cmd: str) -> str | None:
+    if not re.search(r"(?i)\bhallmark\b|anti[- ]?ai[- ]?slop", cmd):
+        return None
+    action = "audit" if re.search(r"(?i)\baudit|review|score", cmd) else "redesign" if re.search(r"(?i)\bredesign|rebuild", cmd) else "study" if re.search(r"(?i)\bstudy|extract design", cmd) else "build"
+    target = re.sub(r"(?i)\bhallmark\b|anti[- ]?ai[- ]?slop|\b(?:audit|review|score|redesign|rebuild|study|extract\s+design|build)\b|\buse\s+to\b", "", cmd).strip() or "this interface"
+    target = re.sub(r"\s+", " ", target)
+    return f"hallmark {action} {target}"
+
+
 def route_move_file(cmd: str) -> str | None:
     if not re.search(r"(?i)\b(?:move|relocate|rename)\b.*\b(?:file|script|module|\.py|\.js|\.ts|\.tsx)\b", cmd):
         return None
@@ -1232,6 +1323,15 @@ def route_lint_project(cmd: str) -> str | None:
         return None
     route = route_command(cmd.strip())
     return route or None
+
+
+def route_coding_tui(cmd: str) -> str | None:
+    try:
+        from arka.agent.coding_tui import route_command
+    except ImportError:
+        return None
+    line = route_command(cmd.strip())
+    return line or None
 
 
 def route_self_improve(cmd: str) -> str | None:
@@ -1332,11 +1432,24 @@ def route_integration_setup(cmd: str) -> str | None:
 
 def route_offline_extras(cmd: str) -> str | None:
     """Try supplemental NL routes not always available via fish bridge."""
+    from arka.core.skill_settings import is_disabled
+
+    def allowed(route: str) -> bool:
+        return not is_disabled(route.split()[0].replace("-", "_"))
+
     for fn in (
+        route_coding_tui,
         route_hybrid_models,
         route_help,
         route_sessions,
         route_model_host_setup,
+        route_model_optimizer,
+        route_train_plan,
+        route_stock_analyze,
+        route_code_convert,
+        route_design_resources,
+        route_edge,
+        route_judge_demo,
         route_free_models,
         route_integration_setup,
         route_sandbox,
@@ -1347,6 +1460,7 @@ def route_offline_extras(cmd: str) -> str | None:
         route_cool_build,
         route_hackathon,
         route_play,
+        route_hallmark,
         route_vision_evidence,
         route_url_app,
         route_ui_copy,
@@ -1386,6 +1500,9 @@ def route_offline_extras(cmd: str) -> str | None:
         route_repo_map,
         route_repo_graph,
         route_workspace,
+        route_structure,
+        route_dev_workflow,
+        route_graphify,
         route_spreadsheet,
         route_teammate_review,
         route_society,
@@ -1397,6 +1514,7 @@ def route_offline_extras(cmd: str) -> str | None:
         route_describe_image,
         route_background_remove,
         route_iterate,
+        route_loop_engineering,
         route_ultra_fast,
         route_env_setup,
         route_research_math,
@@ -1440,8 +1558,8 @@ def route_offline_extras(cmd: str) -> str | None:
         route_fact_check,
         route_quiz_practice,
         route_council,
-        route_compose_3d,
         route_model_to_image,
+        route_compose_3d,
         route_three_d,
         route_chart,
         route_drawing,
@@ -1463,6 +1581,6 @@ def route_offline_extras(cmd: str) -> str | None:
         route_agent_skills,
     ):
         hit = fn(cmd)
-        if hit:
+        if hit and allowed(hit):
             return hit
     return None

@@ -10188,6 +10188,38 @@ function _agent_route_self_improve --description "Build self_improve invocation 
     echo "$route"
 end
 
+function _agent_is_coding_tui_request --description "True if user wants the coding TUI workspace (internal)"
+    set -l clean (string lower (string trim -- "$argv[1]"))
+    if string match -qr '(?i)^(?:arka\s+)?(?:coding[-_ ]?tui|code_tui)\b' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)\b(?:open|start|launch)\s+(?:the\s+)?coding\s+tui\b' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)^coding\s+tui\b' "$clean"
+        return 0
+    end
+    if string match -qr '(?i)\bstart\s+coding\s+workspace\b' "$clean"
+        return 0
+    end
+    return 1
+end
+
+function _agent_route_coding_tui --description "Build coding-tui invocation from NL (internal)"
+    set -l cmd (string trim -- "$argv[1]")
+    set -l clean (string lower "$cmd")
+    if string match -qr '(?i)^(?:arka\s+)?(?:coding[-_ ]?tui|code_tui)\b.*' "$clean"
+        set -l rest (string replace -r -i '^(?:arka\s+)?(?:coding[-_ ]?tui|code_tui)\s*' '' "$cmd")
+        if test -z "$rest"
+            echo "coding-tui ."
+        else
+            echo "coding-tui $rest"
+        end
+        return
+    end
+    echo "coding-tui ."
+end
+
 function _agent_route_pr_check --description "Build pr_check invocation from NL (internal)"
     set -l py (_arka_python)
     set -l route ($py (_arka_py_script arka_pr_check.py) route "$argv[1]" 2>/dev/null | string trim)
@@ -10919,6 +10951,9 @@ function _agent_is_knowledge_question --description "True if user wants a factua
         return 1
     end
     if _agent_is_self_improve_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_coding_tui_request "$argv[1]"
         return 1
     end
     if _agent_is_github_repo_request "$argv[1]"
@@ -14532,6 +14567,14 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         end
     end
 
+    if _agent_is_coding_tui_request "$cmd"
+        set -l ctr (_agent_route_coding_tui "$cmd")
+        if test -n "$ctr"
+            echo "skill|$ctr|Focused coding TUI workspace"
+            return
+        end
+    end
+
     if _agent_is_advisory_question "$cmd"
         echo "skill|agent_ask $cmd|AI gathers context via shell, then answers"
         return
@@ -15135,6 +15178,13 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
             return
         end
     end
+    if _agent_is_coding_tui_request "$cmd"
+        set -l ctr (_agent_route_coding_tui "$cmd")
+        if test -n "$ctr"
+            echo "skill|$ctr|Focused coding TUI workspace"
+            return
+        end
+    end
     if _agent_is_github_repo_request "$cmd"
         set -l gr (_agent_route_github_repo "$cmd")
         if test -n "$gr"
@@ -15724,6 +15774,12 @@ function _agent_correct_interpretation --description "Fix bad LLM skill picks us
     if _agent_is_self_improve_request "$cmd"
         set -l sir (_agent_route_self_improve "$cmd")
         test -n "$sir"; and echo "$sir"
+        return
+    end
+
+    if _agent_is_coding_tui_request "$cmd"
+        set -l ctr (_agent_route_coding_tui "$cmd")
+        test -n "$ctr"; and echo "$ctr"
         return
     end
 
@@ -18810,6 +18866,9 @@ function agent --description "Run commands safely: executes safe commands automa
     else if _agent_is_self_improve_request "$cmd"
         set interpreted (_agent_route_self_improve "$cmd")
         set route_source offline
+    else if _agent_is_coding_tui_request "$cmd"
+        set interpreted (_agent_route_coding_tui "$cmd")
+        set route_source offline
     else if _agent_is_github_repo_request "$cmd"
         set interpreted (_agent_route_github_repo "$cmd")
         set route_source offline
@@ -18973,6 +19032,9 @@ function agent --description "Run commands safely: executes safe commands automa
         set route_source offline
     else if _agent_is_self_improve_request "$cmd"
         set interpreted (_agent_route_self_improve "$cmd")
+        set route_source offline
+    else if _agent_is_coding_tui_request "$cmd"
+        set interpreted (_agent_route_coding_tui "$cmd")
         set route_source offline
     else if string match -qr '(git|branch|commit)' "$clean_cmd"
         set interpreted "git_summary"
