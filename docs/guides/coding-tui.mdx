@@ -15,6 +15,10 @@ Inside the TUI:
 ```text
 /status
 /plan add a settings page
+/test
+/test tests/test_foo.py
+/run tests
+/run tests --fix
 /ci
 /review
 /history
@@ -30,6 +34,25 @@ plan or run a goal without planning first. `/plan` calls the LLM in plan-only
 mode and prints a structured plan (summary, files, steps) without making
 changes. When the LLM is unavailable, Arka falls back to a local
 repository-aware plan.
+
+## Test commands
+
+| Command | Mode | Agent? | Writes? |
+|---------|------|--------|---------|
+| `/test [path]` | strict read-only | No — direct execution | Never |
+| `/run tests` | flexible read-only | Yes — readonly goal agent | Never |
+| `/run tests --fix` | fix mode | Yes | Allowed |
+| plain `test` or `tests` | same as `/test` | No | Never |
+| plain `run tests` | same as `/run tests` | Yes (readonly) | Never |
+
+`/test` runs the repo-appropriate test command deterministically (pytest, npm
+test, cargo test, etc., detected via repo health). Optional path scopes the run,
+e.g. `/test tests/test_foo.py`. Output ends with
+`Test run complete (read-only, no files modified)`.
+
+`/run tests` lets the readonly goal agent pick a strategy — full pytest, a
+focused module, `arka ci --changed`, or a repo_health-detected runner. Add
+`--fix` to allow the agent to edit files and repair failures.
 
 `/status` shows the current branch, dirty file count, and whether the code
 project is initialized. `/ci` runs fast changed-only gates; `/review` summarizes

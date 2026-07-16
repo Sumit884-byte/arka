@@ -672,6 +672,11 @@ Rules:
             "\n- READ-ONLY verification goal: run tests/lint/ci/review commands only. "
             "Do not edit files, redirect output, or invoke mutating skills."
         )
+        if _is_testing_goal(goal):
+            system += (
+                "\n- You may choose the best read-only test strategy: full suite, focused module, "
+                "`arka ci --changed`, or repo_health-detected runner."
+            )
         system += (
             '\n- Good first actions: {"status":"continue","cmd":"pytest -q","why":"run test suite"} '
             'or {"status":"read","file":"pyproject.toml","why":"find test config"}.'

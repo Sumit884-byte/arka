@@ -24,6 +24,7 @@ SLASH_COMMANDS = (
     "/status",
     "/plan",
     "/run",
+    "/test",
     "/history",
     "/clear",
     "/diff",
@@ -36,21 +37,24 @@ SLASH_COMMANDS = (
 )
 
 HELP = (
-    "Commands: /help, /status, /plan <goal>, /run <goal>, /history, /clear, "
+    "Commands: /help, /status, /plan <goal>, /run <goal>, /test [path], /history, /clear, "
     "/diff, /files <pattern>, /open <path>, /ci, /review, /quit. "
+    "/test runs tests read-only (no agent); /run tests picks strategy via readonly agent. "
     "Plain text is treated as a plan request; approve with y to execute immediately."
 )
 
 WELCOME_TIPS = (
     "Tip: /plan <goal> builds a reviewable plan; approve with y to execute immediately.",
     "Tip: /diff, /files <pattern>, /open <path> inspect the repo without leaving the TUI.",
+    "Tip: /test [path] runs tests read-only; /run tests lets the agent pick a strategy.",
     "Tip: /ci runs fast gates; /review summarizes staged changes.",
     "Tip: plain text is shorthand for /plan — approve with y to execute immediately.",
 )
 
 HISTORY_FILE = Path.home() / ".cache" / "arka" / "coding_tui_history"
 
-DETERMINISTIC_SHORT_GOALS = frozenset({"tests", "run tests", "test", "ci", "lint", "review", "ruff"})
+DETERMINISTIC_SHORT_GOALS = frozenset({"ci", "lint", "review", "ruff"})
+FLEXIBLE_TEST_GOALS = frozenset({"tests", "run tests", "test"})
 
 
 def _normalize_goal_text(text: str) -> str:
@@ -87,46 +91,105 @@ def _expand_short_goal(goal: str) -> str:
     return expansions.get(normalized, (goal or "").strip())
 
 
-def _is_direct_test_request(text: str) -> bool:
-    """Recognize test requests that should not enter the edit-planning flow."""
+def _is_strict_test_request(text: str) -> bool:
+    """Recognize strict read-only test requests (/test or plain 'test')."""
+    raw = (text or "").strip()
+    if raw == "/test" or raw.startswith("/test "):
+        return True
     normalized = _normalize_goal_text(text)
+    if normalized == "run tests":
+        return False
     return bool(
         re.fullmatch(
             r"(?:please\s+)?(?:run|execute|rerun)\s+(?:(?:the\s+)?(?:all\s+)?tests?(?:\s+(?:suite|for\s+arka|for\s+this\s+project))?|arka\s+tests)",
             normalized,
         )
         or normalized in {"test arka", "test arka features", "test the project", "tests", "test"}
-        or _is_deterministic_short_goal(normalized) and normalized in {"tests", "run tests", "test"}
     )
 
 
-def _is_agent_test_request(text: str) -> bool:
-    """Recognize scoped test requests that need agent-led diagnosis/iteration."""
-    normalized = " ".join((text or "").lower().split()).strip()
+def _is_flexible_test_request(text: str) -> bool:
+    """Recognize flexible test goals handled by the readonly goal agent."""
+    normalized = _normalize_goal_text(text)
+    if normalized == "run tests":
+        return True
     return bool(
         re.fullmatch(r"(?:please\s+)?(?:run\s+)?tests?\s+(?:in|for)\s+.+", normalized)
         or normalized in {"run tests in this repo", "run tests in this repository", "test this repo"}
     )
 
 
-def _run_direct_tests(repo: Path) -> int:
-    """Run the repository test suite directly, without asking an agent to plan edits."""
-    command = [sys.executable, "-m", "pytest", "-q", "--tb=line"]
+def _is_flexible_run_test_goal(text: str) -> bool:
+    """True for /run tests-style goals (including shorthand `/run tests` -> `tests`)."""
+    return _normalize_goal_text(text) in FLEXIBLE_TEST_GOALS or _is_flexible_test_request(text)
+
+
+def _parse_test_scope(text: str) -> str | None:
+    """Return optional test path from `/test` input."""
+    raw = (text or "").strip()
+    if raw == "/test":
+        return None
+    if raw.startswith("/test "):
+        scope = raw[6:].strip()
+        return scope or None
+    return None
+
+
+def _resolve_test_command(repo: Path, scope: str | None = None) -> list[str]:
+    """Return argv for strict read-only test execution using repo-appropriate runner."""
+    try:
+        from arka.agent.repo_health import detect_checks
+
+        test_checks = [check for check in detect_checks(repo) if check.category == "test"]
+    except ImportError:
+        test_checks = []
+
+    if test_checks:
+        command = list(test_checks[0].command)
+        if len(command) >= 3 and command[0] == "python" and command[1] == "-m":
+            command[0] = sys.executable
+        if "pytest" in command and "--tb=line" not in command:
+            command = [part for part in command if not part.startswith("--tb=")]
+            command.append("--tb=line")
+    else:
+        command = [sys.executable, "-m", "pytest", "-q", "--tb=line"]
+
+    if scope:
+        scope = scope.strip()
+        joined = " ".join(command).lower()
+        if "pytest" in joined:
+            command.append(scope)
+        elif joined.startswith("cargo test"):
+            command.append(scope)
+        elif "npm" in joined and "test" in joined:
+            if "--" not in command:
+                command.extend(["--", scope])
+            else:
+                command.append(scope)
+        else:
+            command.append(scope)
+    return command
+
+
+def _run_direct_tests(repo: Path, scope: str | None = None) -> int:
+    """Run tests directly without the goal agent (strict read-only /test)."""
+    command = _resolve_test_command(repo, scope)
     print(f"Running tests: {' '.join(command)}")
-    print(f"Test scope: repository at {repo}")
+    if scope:
+        print(f"Test scope: {scope} (repo {repo})")
+    else:
+        print(f"Test scope: repository at {repo}")
     try:
         proc = subprocess.run(command, cwd=repo, check=False)
     except OSError as exc:
-        print(f"Could not start pytest: {exc}")
+        print(f"Could not start test runner: {exc}")
         return 1
     if proc.returncode == 0:
         print("✓ Tests passed.")
-        print("○ Test run complete (no files modified)")
-        print("For agent-assisted fixes, use: /run tests --fix")
     else:
         print(f"✗ Tests failed (exit {proc.returncode}).")
-        print("○ Test run complete (no files modified)")
-        print("For agent-assisted diagnosis and fixes, use: /run tests --fix")
+    print("○ Test run complete (read-only, no files modified)")
+    print("For agent-assisted strategy or fixes, use: /run tests (or /run tests --fix)")
     return proc.returncode
 
 
@@ -178,8 +241,6 @@ def _run_direct_review(repo: Path) -> int:
 def _run_deterministic_goal(goal: str, repo: Path) -> int:
     """Run repository workflow goals directly without the goal agent."""
     normalized = _normalize_goal_text(goal)
-    if normalized in {"tests", "run tests", "test"}:
-        return _run_direct_tests(repo)
     if normalized == "ci":
         return _run_direct_ci(repo)
     if normalized in {"lint", "ruff"}:
@@ -189,14 +250,38 @@ def _run_deterministic_goal(goal: str, repo: Path) -> int:
     return 1
 
 
-def _run_agent_tests(goal: str, repo: Path, code_agent) -> int:
-    """Let the coding agent inspect, run, diagnose, and iterate on scoped tests."""
-    test_goal = (
+def _expand_flexible_test_goal(goal: str, *, allow_fix: bool) -> str:
+    """Expand flexible /run tests goals for the readonly (or fix) goal agent."""
+    normalized = _normalize_goal_text(goal)
+    if normalized in FLEXIBLE_TEST_GOALS:
+        base = (
+            "Run tests for this repository. Choose an appropriate read-only strategy: "
+            "full pytest suite, focused module tests, `arka ci --changed`, or a "
+            "repo_health-detected runner. Report failures clearly."
+        )
+        if allow_fix:
+            return base + " Fix justified failures and re-run the same tests to verify."
+        return base + " Do not modify any files."
+    scoped = (
         f"{goal}. Use the repository working directory already provided. "
-        "Inspect the requested test folder/repository, run the relevant tests, diagnose failures, "
-        "and make only justified fixes; verify with the same tests before finishing."
+        "Inspect the requested scope, choose an appropriate test command, run it, and report results."
     )
-    return _execute_goal(test_goal, repo, last_plan=None, code_agent=code_agent)
+    if allow_fix:
+        return scoped + " Make only justified fixes and verify with the same tests."
+    return scoped + " Do not modify any files."
+
+
+def _run_flexible_tests(goal: str, repo: Path, code_agent, *, allow_fix: bool = False) -> int:
+    """Let the coding agent pick and run an appropriate test strategy."""
+    test_goal = _expand_flexible_test_goal(goal, allow_fix=allow_fix)
+    return _execute_goal(
+        test_goal,
+        repo,
+        last_plan=None,
+        code_agent=code_agent,
+        readonly=not allow_fix,
+        original_goal=goal,
+    )
 
 
 def route_command(text: str) -> str:
@@ -495,9 +580,13 @@ def coding_tui_system_extra(root: Path, goal: str) -> str:
             "- For TUI/interface goals, prefer editing src/arka/agent/coding_tui.py first.\n"
         )
     short_goal_hint = ""
-    if normalized in {"tests", "run tests", "test"}:
+    if normalized in FLEXIBLE_TEST_GOALS or re.search(
+        r"(?i)\b(?:run\s+)?tests?\s+(?:in|for)\s+",
+        goal,
+    ):
         short_goal_hint = (
-            "- Short goal 'tests' means run pytest on this repository (e.g. `pytest -q` or `python -m pytest`).\n"
+            "- Flexible test goal: pick the best strategy (pytest, focused module, `arka ci --changed`, repo_health).\n"
+            "- Stay read-only unless the user passed --fix.\n"
             "- Do not invoke creative skills (compose_3d, generate_image, model_to_image).\n"
         )
     elif normalized == "ci":
@@ -585,8 +674,9 @@ def _execute_goal(
     last_plan: str | None,
     code_agent,
     readonly: bool = False,
+    original_goal: str | None = None,
 ) -> int:
-    original_goal = goal.strip()
+    original_goal = (original_goal or goal).strip()
     goal = _expand_short_goal(goal)
     goal, summary, changed = prepare_prompt(goal)
     if changed:
@@ -708,8 +798,15 @@ def run(root: str = ".") -> int:
                 plan_approved=plan_approved,
                 code_agent=code_agent,
             )
+        elif line == "/test" or line.startswith("/test "):
+            _run_direct_tests(repo, scope=_parse_test_scope(line))
         elif line == "/run" or line.startswith("/run "):
             requested_goal, allow_fix = _parse_run_request(line[4:].strip() or (pending_goal or ""))
+            if requested_goal and _is_flexible_run_test_goal(requested_goal):
+                if allow_fix:
+                    print(f"Executing tests with --fix: {requested_goal}")
+                _run_flexible_tests(requested_goal, repo, code_agent, allow_fix=allow_fix)
+                continue
             if requested_goal and _is_deterministic_short_goal(requested_goal, allow_fix=allow_fix):
                 _run_deterministic_goal(requested_goal, repo)
                 continue
@@ -717,11 +814,8 @@ def run(root: str = ".") -> int:
                 print(f"Executing with --fix: {requested_goal}")
                 _execute_goal(requested_goal, repo, last_plan=last_plan, code_agent=code_agent, readonly=False)
                 continue
-            if requested_goal and _is_direct_test_request(requested_goal):
+            if requested_goal and _is_strict_test_request(requested_goal):
                 _run_direct_tests(repo)
-                continue
-            if requested_goal and _is_agent_test_request(requested_goal):
-                _run_agent_tests(requested_goal, repo, code_agent)
                 continue
             if last_plan and not plan_approved:
                 print("Plan has not been approved. Run /plan <goal> and answer yes before /run.")
@@ -752,14 +846,10 @@ def run(root: str = ".") -> int:
             from arka.agent.dev_tools import review_text
 
             print(review_text(repo, staged=True))
-        elif _is_direct_test_request(line):
-            goal_part, allow_fix = _parse_run_request(line)
-            if _is_deterministic_short_goal(goal_part, allow_fix=allow_fix):
-                _run_deterministic_goal(goal_part, repo)
-            else:
-                _run_direct_tests(repo)
-        elif _is_agent_test_request(line):
-            _run_agent_tests(line, repo, code_agent)
+        elif _is_strict_test_request(line):
+            _run_direct_tests(repo)
+        elif _is_flexible_test_request(line):
+            _run_flexible_tests(line, repo, code_agent)
         elif line.startswith("/"):
             print(f"Unknown command. {HELP}")
         else:
