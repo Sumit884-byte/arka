@@ -124,3 +124,121 @@ def test_run_goal_strips_cd_prefix_before_execution(tmp_path: Path):
     assert rc == 0
     mock_run.assert_called_once()
     assert mock_run.call_args[0][0] == "echo hello"
+
+
+def test_parse_step_extracts_json_from_markdown_fence():
+    from arka.agent.goal import _parse_step
+
+    parsed = _parse_step('```json\n{"status":"continue","cmd":"ls","why":"list"}\n```')
+    assert parsed["status"] == "continue"
+    assert parsed["cmd"] == "ls"
+
+
+def test_run_goal_continues_after_skipped_git(tmp_path: Path):
+    from arka.agent.goal import run_goal
+
+    responses = [
+        '{"status":"continue","cmd":"git pull && arka reload","why":"sync"}',
+        '{"status":"continue","cmd":"ls","why":"inspect"}',
+        '{"status":"done","cmd":"","why":"done"}',
+    ]
+    stderr = io.StringIO()
+    with (
+        mock.patch("arka.agent.goal._llm", side_effect=responses),
+        mock.patch("arka.agent.goal._dir_context", return_value=("", "")),
+        mock.patch("arka.agent.goal._fish_history", return_value=""),
+        mock.patch("arka.agent.goal._skills_list", return_value="test"),
+        mock.patch(
+            "arka.agent.goal._run_cmd",
+            side_effect=[
+                (2, "[skipped: Git actions require explicit user authorization]"),
+                (0, "README.md"),
+            ],
+        ),
+        redirect_stderr(stderr),
+    ):
+        rc = run_goal("improve the tui", max_steps=5)
+    assert rc == 0
+    err = stderr.getvalue()
+    assert "skipped" in err
+    assert "Invalid action from agent" not in err
+    assert "Repeated invalid actions" not in err
+
+
+def test_run_goal_retries_malformed_json_then_continues(tmp_path: Path):
+    from arka.agent.goal import run_goal
+
+    responses = [
+        '{"status":"continue","cmd":"cd ar',
+        '{"status":"continue","cmd":"ls","why":"inspect"}',
+        '{"status":"done","cmd":"","why":"done"}',
+    ]
+    stderr = io.StringIO()
+    llm_mock = mock.Mock(side_effect=responses)
+    with (
+        mock.patch("arka.agent.goal._llm", llm_mock),
+        mock.patch("arka.agent.goal._dir_context", return_value=("", "")),
+        mock.patch("arka.agent.goal._fish_history", return_value=""),
+        mock.patch("arka.agent.goal._skills_list", return_value="test"),
+        mock.patch("arka.agent.goal._run_cmd", return_value=(0, "ok")),
+        redirect_stderr(stderr),
+    ):
+        rc = run_goal("improve tui of arka", max_steps=5)
+    assert rc == 0
+    assert llm_mock.call_count == 3
+    err = stderr.getvalue()
+    assert "stopping before shell execution" not in err
+
+
+def test_run_goal_continues_after_repeated_invalid_json(tmp_path: Path):
+    from arka.agent.goal import run_goal
+
+    responses = [
+        '{"status":"continue","cmd":"cd ar',
+        '{"status":"continue","cmd":"still bad',
+        '{"status":"continue","cmd":"ls","why":"inspect"}',
+        '{"status":"done","cmd":"","why":"done"}',
+    ]
+    stderr = io.StringIO()
+    with (
+        mock.patch("arka.agent.goal._llm", side_effect=responses),
+        mock.patch("arka.agent.goal._dir_context", return_value=("", "")),
+        mock.patch("arka.agent.goal._fish_history", return_value=""),
+        mock.patch("arka.agent.goal._skills_list", return_value="test"),
+        mock.patch("arka.agent.goal._run_cmd", return_value=(0, "ok")),
+        redirect_stderr(stderr),
+    ):
+        rc = run_goal("improve tui of arka", max_steps=5)
+    assert rc == 0
+    err = stderr.getvalue()
+    assert "Invalid action from agent; requesting" in err
+    assert "stopping before shell execution" not in err
+
+
+def test_run_goal_improve_tui_past_step_two_with_mock_llm(tmp_path: Path):
+    """Smoke: /run improve tui of arka survives git skip + malformed JSON on step 2."""
+    from arka.agent.goal import run_goal
+
+    responses = [
+        '{"status":"continue","cmd":"git pull && arka reload","why":"sync repo"}',
+        '{"status":"read","cmd":"","why":"load tui source","file":"src/arka/agent/coding_tui.py"}',
+        '{"status":"done","cmd":"","why":"planned edits"}',
+    ]
+    stderr = io.StringIO()
+    with (
+        mock.patch("arka.agent.goal._llm", side_effect=responses),
+        mock.patch("arka.agent.goal._dir_context", return_value=("src/arka/agent/coding_tui.py", "")),
+        mock.patch("arka.agent.goal._fish_history", return_value=""),
+        mock.patch("arka.agent.goal._skills_list", return_value="test"),
+        mock.patch(
+            "arka.agent.goal._run_cmd",
+            return_value=(2, "[skipped: Git actions require explicit user authorization]"),
+        ),
+        mock.patch("arka.agent.goal._read_file", return_value="# coding tui"),
+        redirect_stderr(stderr),
+    ):
+        rc = run_goal("improve tui of arka", max_steps=6, system_extra="Coding TUI context: no git.")
+    assert rc == 0
+    err = stderr.getvalue()
+    assert "Step 2/" in err
+    assert "stopping before shell execution" not in err

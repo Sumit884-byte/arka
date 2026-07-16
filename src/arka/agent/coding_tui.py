@@ -24,6 +24,9 @@ SLASH_COMMANDS = (
     "/run",
     "/history",
     "/clear",
+    "/diff",
+    "/files",
+    "/open",
     "/ci",
     "/review",
     "/quit",
@@ -32,11 +35,13 @@ SLASH_COMMANDS = (
 
 HELP = (
     "Commands: /help, /status, /plan <goal>, /run <goal>, /history, /clear, "
-    "/ci, /review, /quit. Plain text is treated as a plan request."
+    "/diff, /files <pattern>, /open <path>, /ci, /review, /quit. "
+    "Plain text is treated as a plan request."
 )
 
 WELCOME_TIPS = (
     "Tip: /plan <goal> builds a reviewable plan; /run <goal> executes it.",
+    "Tip: /diff, /files <pattern>, /open <path> inspect the repo without leaving the TUI.",
     "Tip: /ci runs fast gates; /review summarizes staged changes.",
     "Tip: plain text is shorthand for /plan — approve before /run.",
 )
@@ -267,6 +272,72 @@ def generate_plan(goal: str, root: Path) -> tuple[str, str]:
     return plan_preview(goal, root), "local"
 
 
+def _git_diff_stat(root: Path) -> str:
+    diff = _git_value(root, "diff", "--stat")
+    if not diff:
+        return "No changes (git diff --stat is empty)."
+    return diff
+
+
+def _list_files(root: Path, pattern: str) -> str:
+    pattern = (pattern or "").strip()
+    if not pattern:
+        return "Usage: /files <pattern>  (e.g. /files '*.py' or /files coding_tui)"
+    matches: list[str] = []
+    glob_pattern = pattern if any(ch in pattern for ch in "*?[]") else f"*{pattern}*"
+    for path in sorted(root.rglob(glob_pattern.lstrip("./"))):
+        if ".git" in path.parts:
+            continue
+        if path.is_file():
+            matches.append(str(path.relative_to(root)))
+        if len(matches) >= 40:
+            break
+    if not matches:
+        return f"No files match: {pattern}"
+    suffix = f"\n…({len(matches)} shown, limit 40)" if len(matches) >= 40 else ""
+    return "\n".join(matches) + suffix
+
+
+def _open_file_head(root: Path, rel_path: str, *, lines: int = 40) -> str:
+    rel_path = (rel_path or "").strip()
+    if not rel_path:
+        return "Usage: /open <path>"
+    target = (root / rel_path).resolve()
+    try:
+        target.relative_to(root.resolve())
+    except ValueError:
+        return f"Path outside repo: {rel_path}"
+    if not target.is_file():
+        return f"Not a file: {rel_path}"
+    try:
+        content = target.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError as exc:
+        return f"Error reading {rel_path}: {exc}"
+    head = content[:lines]
+    body = "\n".join(head)
+    if len(content) > lines:
+        body += f"\n…({len(content) - lines} more lines)"
+    return f"{rel_path} ({len(content)} lines)\n{body}"
+
+
+def coding_tui_system_extra(root: Path, goal: str) -> str:
+    """Goal-agent hints when /run is launched from the coding TUI."""
+    lowered = goal.lower()
+    tui_hint = ""
+    if any(word in lowered for word in ("tui", "terminal", "coding-tui", "coding tui", "interface", "ui")):
+        tui_hint = (
+            "- For TUI/interface goals, prefer editing src/arka/agent/coding_tui.py first.\n"
+        )
+    return (
+        f"Coding TUI context: working directory is already {root}. Never use cd.\n"
+        "- Do not run git pull, git commit, or other git commands unless the user explicitly asked for git.\n"
+        "- Prefer read (status read) and file edits over shell navigation.\n"
+        "- Prefer existing Arka tools (repo_health, lint_project, review, ci) over raw shell when applicable.\n"
+        f"{tui_hint}"
+        "- Make concrete file edits under src/ and tests/; verify with pytest on changed modules."
+    )
+
+
 def prepare_prompt(prompt: str) -> tuple[str, str, bool]:
     """Optimize once and return the model prompt, summary, and changed flag."""
     from arka.agent.prompt_optimize import optimize_user_prompt
@@ -408,7 +479,12 @@ def run(root: str = ".") -> int:
             goal, summary, changed = prepare_prompt(requested_goal)
             if changed:
                 print(f"Prompt improved: {summary}")
-            rc = code_agent(goal, repo=str(repo), plan_context=last_plan or "")
+            rc = code_agent(
+                goal,
+                repo=str(repo),
+                plan_context=last_plan or "",
+                system_extra=coding_tui_system_extra(repo, goal),
+            )
             if rc == 0:
                 print("Done. Next: `arka ci --changed` to verify edited files.")
             else:
@@ -419,6 +495,12 @@ def run(root: str = ".") -> int:
             else:
                 for index, command in enumerate(history, 1):
                     print(f"{index:>3}  {command}")
+        elif line == "/diff":
+            print(_git_diff_stat(repo))
+        elif line.startswith("/files "):
+            print(_list_files(repo, line[7:].strip()))
+        elif line.startswith("/open "):
+            print(_open_file_head(repo, line[6:].strip()))
         elif line == "/ci":
             from arka.agent.dev_tools import ci_text
 

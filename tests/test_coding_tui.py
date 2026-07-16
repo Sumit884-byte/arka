@@ -168,7 +168,10 @@ def test_coding_tui_requires_plan_approval(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr("arka.agent.coding_tui.generate_plan", lambda goal, root: (f"Plan for: {goal}", "local"))
     monkeypatch.setattr(
         "arka.agent.core.code_agent",
-        lambda goal, repo, plan_context: called.append((goal, repo, plan_context)) or 0,
+        lambda goal, repo, plan_context, system_extra="": called.append(
+            (goal, repo, plan_context, system_extra)
+        )
+        or 0,
     )
     assert coding_tui.run(str(tmp_path)) == 0
     output = capsys.readouterr().out
@@ -200,3 +203,28 @@ def test_coding_tui_ci_and_review(monkeypatch, tmp_path, capsys):
     output = capsys.readouterr().out
     assert "CI run: demo" in output
     assert "Review scope: staged" in output
+
+
+def test_coding_tui_diff_files_open(monkeypatch, tmp_path, capsys):
+    from arka.agent import coding_tui
+
+    (tmp_path / "src").mkdir()
+    sample = tmp_path / "src" / "coding_tui.py"
+    sample.write_text("print('hello')\nprint('world')\n")
+    commands = iter(["/diff", "/files coding_tui", "/open src/coding_tui.py", "/quit"])
+    monkeypatch.setattr("builtins.input", lambda _: next(commands))
+    monkeypatch.setattr("arka.agent.coding_tui._git_diff_stat", lambda root: " src/coding_tui.py | 2 ++")
+    assert coding_tui.run(str(tmp_path)) == 0
+    output = capsys.readouterr().out
+    assert "src/coding_tui.py | 2 ++" in output
+    assert "src/coding_tui.py" in output
+    assert "print('hello')" in output
+
+
+def test_coding_tui_system_extra_targets_tui_file(tmp_path):
+    from arka.agent.coding_tui import coding_tui_system_extra
+
+    text = coding_tui_system_extra(tmp_path, "improve tui of arka")
+    assert "coding_tui.py" in text
+    assert "Never use cd" in text
+    assert "git pull" in text

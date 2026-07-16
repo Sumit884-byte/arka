@@ -166,6 +166,13 @@ _CD_BLOCKED_HINT = (
     "Use ls, read files, pytest, or edit paths relative to CWD without cd."
 )
 
+_GIT_BLOCKED_HINT = (
+    "Git is blocked unless the user explicitly asked for git in the goal. "
+    "Continue with read/edit/test actions in the current working directory."
+)
+
+_MAX_INVALID_ACTIONS = 2
+
 
 def _strip_leading_cd_chain(cmd: str, cwd: Path) -> str:
     """Remove leading cd prefixes that cannot persist across goal-agent subprocess steps."""
@@ -195,13 +202,20 @@ def _is_standalone_cd(cmd: str) -> bool:
     return bool(re.match(r"(?i)^cd(?:\s+[^;&|]+)?\s*$", cmd))
 
 
-def _parse_step(raw: str) -> dict:
-    text = raw.strip()
-    text = re.sub(r"^```json\s*", "", text, flags=re.I)
-    text = re.sub(r"```$", "", text).strip()
+def _extract_json_object(text: str) -> str:
+    """Pull a JSON object from raw LLM text, including fenced blocks."""
+    text = (text or "").strip()
+    fence = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.S | re.I)
+    if fence:
+        return fence.group(1).strip()
     m = re.search(r"\{.*\}", text, re.S)
     if m:
-        text = m.group(0)
+        return m.group(0).strip()
+    return text
+
+
+def _parse_step(raw: str) -> dict:
+    text = _extract_json_object(raw)
     try:
         data = json.loads(text)
         if isinstance(data, dict):
@@ -211,7 +225,8 @@ def _parse_step(raw: str) -> dict:
         # to Fish as if it were a shell command.
         if text.startswith("{") or '"status"' in text or '"cmd"' in text:
             return {"status": "invalid", "cmd": "", "why": "unparsed JSON action"}
-    return {"status": "continue", "cmd": text, "why": "unparsed LLM output"}
+    shell_cmd = re.sub(r"^```[a-zA-Z0-9]*\n*|\n*```$", "", (raw or "").strip())
+    return {"status": "continue", "cmd": shell_cmd, "why": "unparsed LLM output"}
 
 
 def _security_gate(cmd: str, *, auto_yes: bool) -> bool:
@@ -421,6 +436,7 @@ def run_goal(
     recent_commands: list[str] = []
     blocked_cd_count = 0
     empty_action_count = 0
+    invalid_action_count = 0
 
     system = f"""You are an autonomous shell agent (Butterfish Goal Mode style) on fish shell.
 Each turn return ONLY valid JSON (no markdown fences):
@@ -520,6 +536,26 @@ Step {step}/{max_steps} — return the NEXT action as JSON."""
                 cmd = str(parsed.get("cmd") or "").strip()
                 why = str(parsed.get("why") or "").strip()
                 file_path = str(parsed.get("file") or "").strip()
+
+                if status == "invalid":
+                    from arka.core.mode import is_debug_mode
+
+                    if is_debug_mode():
+                        debug_msg(f"  raw LLM (truncated): {_truncate(raw, 500)}")
+                    retry_user = (
+                        user
+                        + "\n\nREMINDER: Return ONLY one complete JSON object with keys "
+                        'status, cmd, why (and file when status is read). No markdown fences.'
+                    )
+                    raw_retry = _llm(system, retry_user)
+                    if raw_retry:
+                        if is_debug_mode():
+                            debug_msg(f"  retry raw (truncated): {_truncate(raw_retry, 500)}")
+                        parsed = _parse_step(raw_retry)
+                        status = str(parsed.get("status") or "continue").lower()
+                        cmd = str(parsed.get("cmd") or "").strip()
+                        why = str(parsed.get("why") or "").strip()
+                        file_path = str(parsed.get("file") or "").strip()
                 if span is not None:
                     step_span.set_attribute("arka.agent.status", status)
                     if why:
@@ -548,11 +584,25 @@ Step {step}/{max_steps} — return the NEXT action as JSON."""
                     return 0
 
                 if status == "invalid":
-                    print("Invalid action from agent; stopping before shell execution.", file=sys.stderr)
-                    print("  Ask the agent to return one complete JSON action.", file=sys.stderr)
-                    if span is not None:
-                        mark_error(goal_span, "invalid action")
-                    return 1
+                    invalid_action_count += 1
+                    print(
+                        "Invalid action from agent; requesting a complete JSON action.",
+                        file=sys.stderr,
+                    )
+                    history += (
+                        f"\n--- step {step} (invalid) ---\n"
+                        "reason: unparsed JSON action — return one complete JSON object only\n"
+                    )
+                    if invalid_action_count >= _MAX_INVALID_ACTIONS:
+                        print(
+                            "Repeated invalid actions; stopping. "
+                            "Try /plan then /run again, or rephrase the goal.",
+                            file=sys.stderr,
+                        )
+                        if span is not None:
+                            mark_error(goal_span, "invalid action")
+                        return 1
+                    continue
 
                 if status == "read" and file_path:
                     content = _read_file(file_path, cwd)
@@ -656,7 +706,10 @@ Step {step}/{max_steps} — return the NEXT action as JSON."""
                         if len(lines) > 1:
                             user_msg(f"  ({debug_hint()})")
 
-                history += f"\n--- step {step} ---\ncmd: {cmd}\nexit: {code}\nwhy: {why}\noutput:\n{out}\n"
+                history_line = f"\n--- step {step} ---\ncmd: {cmd}\nexit: {code}\nwhy: {why}\noutput:\n{out}\n"
+                if code == 2 and "Git actions require explicit user authorization" in out:
+                    history_line += f"hint: {_GIT_BLOCKED_HINT}\n"
+                history += history_line
 
                 if not auto_continue and not auto_yes and sys.stdin.isatty():
                     try:

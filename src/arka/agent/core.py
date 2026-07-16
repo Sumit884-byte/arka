@@ -1005,6 +1005,7 @@ def code_agent(
     repo: str | None = None,
     ingest: bool = False,
     plan_context: str = "",
+    system_extra: str = "",
 ) -> int:
     from arka.core.code_project import (
         CodeProjectError,
@@ -1105,14 +1106,17 @@ def code_agent(
         # agent to navigate there, which commonly causes repeated `cd` loops.
         from arka.agent.goal import run_goal
 
+        extra_parts = [
+            f"Repository working directory is already {cwd}. "
+            "Never use cd — run commands relative to this directory.",
+        ]
+        if system_extra:
+            extra_parts.append(system_extra.strip())
         return run_goal(
             goal,
             max_steps=10,
             auto_continue=True,
-            system_extra=(
-                f"Repository working directory is already {cwd}. "
-                "Never use cd — run commands relative to this directory."
-            ),
+            system_extra="\n".join(extra_parts),
         )
 
     for i, step in enumerate(steps, 1):
