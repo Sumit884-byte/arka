@@ -17,8 +17,10 @@ Inside the TUI:
 /plan add a settings page
 /test
 /test tests/test_foo.py
+/test --no-fix
 /run tests
 /run tests --fix
+/run tests --no-fix
 /ci
 /review
 /history
@@ -39,20 +41,47 @@ repository-aware plan.
 
 | Command | Mode | Agent? | Writes? |
 |---------|------|--------|---------|
-| `/test [path]` | strict read-only | No — direct execution | Never |
-| `/run tests` | flexible read-only | Yes — readonly goal agent | Never |
-| `/run tests --fix` | fix mode | Yes | Allowed |
-| plain `test` or `tests` | same as `/test` | No | Never |
-| plain `run tests` | same as `/run tests` | Yes (readonly) | Never |
+| `/test [path]` | strict read-only, then one auto-fix on failure | Fix pass only | Fix pass only |
+| `/test --no-fix [path]` | strict read-only only | No | Never |
+| `/run tests` | flexible read-only, then one auto-fix on failure | Yes | Fix pass only |
+| `/run tests --no-fix` | flexible read-only only | Yes (readonly) | Never |
+| `/run tests --fix` | fix mode from the start | Yes | Allowed |
+| plain `test` or `tests` | same as `/test` | Fix pass only on failure | Fix pass only |
+| plain `run tests` | same as `/run tests` | Yes | Fix pass only on failure |
 
 `/test` runs the repo-appropriate test command deterministically (pytest, npm
 test, cargo test, etc., detected via repo health). Optional path scopes the run,
-e.g. `/test tests/test_foo.py`. Output ends with
-`Test run complete (read-only, no files modified)`.
+e.g. `/test tests/test_foo.py`. Output is labeled **Test run (read-only)**.
+When failures are detected, Arka prints how many failed and runs **Fix pass
+1/1** — one writable goal-agent pass — then re-runs tests read-only to show the
+result. Use `/test --no-fix` to skip the automatic repair attempt.
 
 `/run tests` lets the readonly goal agent pick a strategy — full pytest, a
-focused module, `arka ci --changed`, or a repo_health-detected runner. Add
-`--fix` to allow the agent to edit files and repair failures.
+focused module, `arka ci --changed`, or a repo_health-detected runner — with
+the same one auto-fix pass after readonly failures. Add `--no-fix` to disable
+auto-repair, or `--fix` to allow the agent to edit files from the start (for
+another explicit fix round after a failed auto-fix, or multi-pass repair).
+
+Example flow after `/test` with one failing test:
+
+```text
+○ Test run (read-only)
+Running tests: python -m pytest -q --tb=line
+1 failed, 42 passed
+○ 1 test failure(s) detected — attempting one fix pass…
+○ Fix pass 1/1
+━━━ Changed files (1) ━━━
+  M  src/arka/example.py
+○ Test run (read-only, after fix)
+Running tests: python -m pytest -q --tb=line
+✓ Tests passed (read-only run, after fix)
+```
+
+If tests still fail after the single auto-fix pass:
+
+```text
+✗ Still failing after one fix pass. Use /run tests --fix for another attempt.
+```
 
 `/status` shows the current branch, dirty file count, and whether the code
 project is initialized. `/ci` runs fast changed-only gates; `/review` summarizes

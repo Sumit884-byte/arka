@@ -39,14 +39,15 @@ SLASH_COMMANDS = (
 HELP = (
     "Commands: /help, /status, /plan <goal>, /run <goal>, /test [path], /history, /clear, "
     "/diff, /files <pattern>, /open <path>, /ci, /review, /quit. "
-    "/test runs tests read-only (no agent); /run tests picks strategy via readonly agent. "
+    "/test runs tests read-only, then one auto-fix pass on failure (--no-fix to skip). "
+    "/run tests picks strategy via readonly agent with the same auto-fix default. "
     "Plain text is treated as a plan request; approve with y to execute immediately."
 )
 
 WELCOME_TIPS = (
     "Tip: /plan <goal> builds a reviewable plan; approve with y to execute immediately.",
     "Tip: /diff, /files <pattern>, /open <path> inspect the repo without leaving the TUI.",
-    "Tip: /test [path] runs tests read-only; /run tests lets the agent pick a strategy.",
+    "Tip: /test [path] runs tests read-only and auto-fixes once on failure (--no-fix to skip).",
     "Tip: /ci runs fast gates; /review summarizes staged changes.",
     "Tip: plain text is shorthand for /plan — approve with y to execute immediately.",
 )
@@ -61,13 +62,15 @@ def _normalize_goal_text(text: str) -> str:
     return " ".join((text or "").lower().split()).strip()
 
 
-def _parse_run_request(text: str) -> tuple[str, bool]:
-    """Return (goal, allow_fix) from /run input."""
+def _parse_run_request(text: str) -> tuple[str, bool, bool]:
+    """Return (goal, allow_fix, auto_fix) from /run input."""
     raw = (text or "").strip()
     allow_fix = bool(re.search(r"(?:^|\s)--fix(?:\s|$)", raw, re.I))
-    goal = re.sub(r"(?:^|\s)--fix(?:\s|$)", " ", raw, flags=re.I).strip()
+    auto_fix = not bool(re.search(r"(?:^|\s)--no-fix(?:\s|$)", raw, re.I))
+    goal = re.sub(r"(?:^|\s)--fix(?:\s|$)", " ", raw, flags=re.I)
+    goal = re.sub(r"(?:^|\s)--no-fix(?:\s|$)", " ", goal, flags=re.I).strip()
     goal = " ".join(goal.split())
-    return goal, allow_fix
+    return goal, allow_fix, auto_fix
 
 
 def _is_deterministic_short_goal(text: str, *, allow_fix: bool = False) -> bool:
@@ -135,6 +138,31 @@ def _parse_test_scope(text: str) -> str | None:
     return None
 
 
+def _parse_test_command(text: str) -> tuple[str | None, bool]:
+    """Return (scope, auto_fix) from `/test` input."""
+    raw = (text or "").strip()
+    auto_fix = not bool(re.search(r"(?:^|\s)--no-fix(?:\s|$)", raw, re.I))
+    cleaned = re.sub(r"(?:^|\s)--no-fix(?:\s|$)", " ", raw, flags=re.I).strip()
+    return _parse_test_scope(cleaned), auto_fix
+
+
+def _parse_pytest_failures(output: str, *, exit_code: int = 0) -> int:
+    """Count pytest failures from combined stdout/stderr."""
+    if exit_code == 0:
+        return 0
+    text = output or ""
+    match = re.search(r"(\d+)\s+failed", text, re.I)
+    if match:
+        return int(match.group(1))
+    failed_lines = len(re.findall(r"^FAILED\s+", text, re.M))
+    if failed_lines:
+        return failed_lines
+    error_lines = len(re.findall(r"^ERROR\s+", text, re.M))
+    if error_lines:
+        return error_lines
+    return 1
+
+
 def _resolve_test_command(repo: Path, scope: str | None = None) -> list[str]:
     """Return argv for strict read-only test execution using repo-appropriate runner."""
     try:
@@ -171,26 +199,102 @@ def _resolve_test_command(repo: Path, scope: str | None = None) -> list[str]:
     return command
 
 
-def _run_direct_tests(repo: Path, scope: str | None = None) -> int:
+def _auto_fix_once(
+    repo: Path,
+    failure_summary: str,
+    code_agent,
+    *,
+    goal_context: str = "",
+) -> int:
+    """Run one writable goal-agent pass to repair test failures."""
+    from arka.agent.git_changes import format_changed_files, list_changed_files
+
+    print("○ Fix pass 1/1")
+    before = {row.path for row in list_changed_files(repo)}
+    fix_goal = (
+        "Fix the failing tests reported above. Run pytest to verify. "
+        "Only touch files needed for test failures."
+    )
+    if goal_context.strip():
+        fix_goal = f"Original goal: {goal_context.strip()}\n\n{fix_goal}"
+    if failure_summary.strip():
+        fix_goal += f"\n\nFailure output:\n{failure_summary.strip()[-4000:]}"
+    rc = code_agent(
+        fix_goal,
+        repo=str(repo),
+        plan_context="",
+        system_extra=coding_tui_system_extra(repo, "fix failing tests"),
+        readonly=False,
+    )
+    after = {row.path for row in list_changed_files(repo)}
+    if after != before:
+        print(format_changed_files(repo, empty_message=""))
+    if rc != 0:
+        print(f"✗ Fix pass finished with exit code {rc}.")
+    return rc
+
+
+def _run_direct_tests(
+    repo: Path,
+    scope: str | None = None,
+    *,
+    auto_fix: bool = True,
+    code_agent=None,
+    run_label: str | None = "Test run (read-only)",
+    after_fix_attempt: bool = False,
+) -> int:
     """Run tests directly without the goal agent (strict read-only /test)."""
     command = _resolve_test_command(repo, scope)
+    if run_label:
+        print(f"○ {run_label}")
     print(f"Running tests: {' '.join(command)}")
     if scope:
         print(f"Test scope: {scope} (repo {repo})")
     else:
         print(f"Test scope: repository at {repo}")
     try:
-        proc = subprocess.run(command, cwd=repo, check=False)
+        proc = subprocess.run(command, cwd=repo, check=False, capture_output=True, text=True)
     except OSError as exc:
         print(f"Could not start test runner: {exc}")
         return 1
-    if proc.returncode == 0:
-        print("✓ Tests passed.")
-    else:
-        print(f"✗ Tests failed (exit {proc.returncode}).")
-    print("○ Test run complete (read-only, no files modified)")
-    print("For agent-assisted strategy or fixes, use: /run tests (or /run tests --fix)")
-    return proc.returncode
+    output = (proc.stdout or "") + (proc.stderr or "")
+    if proc.stdout:
+        end = "" if proc.stdout.endswith("\n") else "\n"
+        print(proc.stdout, end=end)
+    if proc.stderr:
+        end = "" if proc.stderr.endswith("\n") else "\n"
+        print(proc.stderr, end=end, file=sys.stderr)
+
+    failures = _parse_pytest_failures(output, exit_code=proc.returncode)
+    if failures == 0:
+        if after_fix_attempt:
+            print("✓ Tests passed (read-only run, after fix)")
+        else:
+            print("✓ Tests passed (read-only run)")
+        return 0
+
+    if after_fix_attempt:
+        print("✗ Still failing after one fix pass. Use /run tests --fix for another attempt.")
+        return proc.returncode
+
+    if not auto_fix or code_agent is None:
+        print(f"✗ Tests failed ({failures} test failure(s)).")
+        if not auto_fix:
+            print("○ Auto-fix skipped (--no-fix).")
+        else:
+            print("For another fix attempt, use: /run tests --fix")
+        return proc.returncode
+
+    print(f"○ {failures} test failure(s) detected — attempting one fix pass…")
+    _auto_fix_once(repo, output, code_agent)
+    return _run_direct_tests(
+        repo,
+        scope=scope,
+        auto_fix=False,
+        code_agent=None,
+        run_label="Test run (read-only, after fix)",
+        after_fix_attempt=True,
+    )
 
 
 def _changed_python_files(repo: Path) -> list[str]:
@@ -271,16 +375,56 @@ def _expand_flexible_test_goal(goal: str, *, allow_fix: bool) -> str:
     return scoped + " Do not modify any files."
 
 
-def _run_flexible_tests(goal: str, repo: Path, code_agent, *, allow_fix: bool = False) -> int:
+def _run_flexible_tests(
+    goal: str,
+    repo: Path,
+    code_agent,
+    *,
+    allow_fix: bool = False,
+    auto_fix: bool = True,
+) -> int:
     """Let the coding agent pick and run an appropriate test strategy."""
-    test_goal = _expand_flexible_test_goal(goal, allow_fix=allow_fix)
-    return _execute_goal(
+    if allow_fix:
+        test_goal = _expand_flexible_test_goal(goal, allow_fix=True)
+        return _execute_goal(
+            test_goal,
+            repo,
+            last_plan=None,
+            code_agent=code_agent,
+            readonly=False,
+            original_goal=goal,
+        )
+
+    print("○ Test run (read-only)")
+    test_goal = _expand_flexible_test_goal(goal, allow_fix=False)
+    rc = _execute_goal(
         test_goal,
         repo,
         last_plan=None,
         code_agent=code_agent,
-        readonly=not allow_fix,
+        readonly=True,
         original_goal=goal,
+    )
+    if rc == 0:
+        return 0
+    if not auto_fix:
+        print("○ Auto-fix skipped (--no-fix).")
+        return rc
+
+    print("○ Test failure(s) detected — attempting one fix pass…")
+    _auto_fix_once(
+        repo,
+        f"Readonly test agent run failed with exit code {rc}.",
+        code_agent,
+        goal_context=goal,
+    )
+    return _run_direct_tests(
+        repo,
+        scope=None,
+        auto_fix=False,
+        code_agent=None,
+        run_label="Test run (read-only, after fix)",
+        after_fix_attempt=True,
     )
 
 
@@ -586,7 +730,7 @@ def coding_tui_system_extra(root: Path, goal: str) -> str:
     ):
         short_goal_hint = (
             "- Flexible test goal: pick the best strategy (pytest, focused module, `arka ci --changed`, repo_health).\n"
-            "- Stay read-only unless the user passed --fix.\n"
+            "- Stay read-only unless the user passed --fix (one auto-fix pass runs after readonly failures by default).\n"
             "- Do not invoke creative skills (compose_3d, generate_image, model_to_image).\n"
         )
     elif normalized == "ci":
@@ -799,13 +943,20 @@ def run(root: str = ".") -> int:
                 code_agent=code_agent,
             )
         elif line == "/test" or line.startswith("/test "):
-            _run_direct_tests(repo, scope=_parse_test_scope(line))
+            scope, auto_fix = _parse_test_command(line)
+            _run_direct_tests(repo, scope=scope, auto_fix=auto_fix, code_agent=code_agent)
         elif line == "/run" or line.startswith("/run "):
-            requested_goal, allow_fix = _parse_run_request(line[4:].strip() or (pending_goal or ""))
+            requested_goal, allow_fix, auto_fix = _parse_run_request(line[4:].strip() or (pending_goal or ""))
             if requested_goal and _is_flexible_run_test_goal(requested_goal):
                 if allow_fix:
                     print(f"Executing tests with --fix: {requested_goal}")
-                _run_flexible_tests(requested_goal, repo, code_agent, allow_fix=allow_fix)
+                _run_flexible_tests(
+                    requested_goal,
+                    repo,
+                    code_agent,
+                    allow_fix=allow_fix,
+                    auto_fix=auto_fix,
+                )
                 continue
             if requested_goal and _is_deterministic_short_goal(requested_goal, allow_fix=allow_fix):
                 _run_deterministic_goal(requested_goal, repo)
@@ -815,7 +966,7 @@ def run(root: str = ".") -> int:
                 _execute_goal(requested_goal, repo, last_plan=last_plan, code_agent=code_agent, readonly=False)
                 continue
             if requested_goal and _is_strict_test_request(requested_goal):
-                _run_direct_tests(repo)
+                _run_direct_tests(repo, auto_fix=auto_fix, code_agent=code_agent)
                 continue
             if last_plan and not plan_approved:
                 print("Plan has not been approved. Run /plan <goal> and answer yes before /run.")
@@ -847,9 +998,9 @@ def run(root: str = ".") -> int:
 
             print(review_text(repo, staged=True))
         elif _is_strict_test_request(line):
-            _run_direct_tests(repo)
+            _run_direct_tests(repo, auto_fix=True, code_agent=code_agent)
         elif _is_flexible_test_request(line):
-            _run_flexible_tests(line, repo, code_agent)
+            _run_flexible_tests(line, repo, code_agent, auto_fix=True)
         elif line.startswith("/"):
             print(f"Unknown command. {HELP}")
         else:

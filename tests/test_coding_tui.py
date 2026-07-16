@@ -288,7 +288,7 @@ def test_run_tests_is_flexible_and_uses_agent(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(
         coding_tui,
         "_run_flexible_tests",
-        lambda goal, repo, code_agent, allow_fix=False: calls.append((goal, repo, allow_fix)) or 0,
+        lambda goal, repo, code_agent, allow_fix=False, auto_fix=True: calls.append((goal, repo, allow_fix, auto_fix)) or 0,
     )
     monkeypatch.setattr(
         coding_tui,
@@ -298,7 +298,7 @@ def test_run_tests_is_flexible_and_uses_agent(monkeypatch, tmp_path, capsys):
         ),
     )
     assert coding_tui.run(str(tmp_path)) == 0
-    assert calls == [("run tests", tmp_path.resolve(), False)]
+    assert calls == [("run tests", tmp_path.resolve(), False, True)]
     assert "Plan for:" not in capsys.readouterr().out
 
 
@@ -311,10 +311,10 @@ def test_strict_test_plain_text_runs_direct(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(
         coding_tui,
         "_run_direct_tests",
-        lambda repo, scope=None: calls.append((repo, scope)) or 0,
+        lambda repo, scope=None, auto_fix=True, code_agent=None, **kwargs: calls.append((repo, scope, auto_fix)) or 0,
     )
     assert coding_tui.run(str(tmp_path)) == 0
-    assert calls == [(tmp_path.resolve(), None)]
+    assert calls == [(tmp_path.resolve(), None, True)]
 
 
 def test_arka_tests_request_uses_strict_test_path():
@@ -340,11 +340,12 @@ def test_scoped_tests_request_is_flexible(monkeypatch, tmp_path):
     monkeypatch.setattr(
         coding_tui,
         "_run_flexible_tests",
-        lambda goal, repo, code_agent, allow_fix=False: calls.append((goal, allow_fix)) or 0,
+        lambda goal, repo, code_agent, allow_fix=False, auto_fix=True: calls.append((goal, allow_fix, auto_fix)) or 0,
     )
     assert coding_tui._run_flexible_tests("run tests in tests/", tmp_path, object()) == 0
     assert calls and calls[0][0] == "run tests in tests/"
     assert calls[0][1] is False
+    assert calls[0][2] is True
 
 
 def test_browser_open_is_off_by_default_in_coding_session(monkeypatch, capsys):
@@ -366,18 +367,148 @@ def test_direct_tests_report_scope_and_verbose_command(monkeypatch, tmp_path, ca
 
     class Result:
         returncode = 0
+        stdout = "12 passed in 1.2s\n"
+        stderr = ""
 
     monkeypatch.setattr(
         coding_tui.subprocess,
         "run",
-        lambda command, cwd, check: seen.append((command, cwd, check)) or Result(),
+        lambda command, cwd, check, capture_output=True, text=True: seen.append((command, cwd, check)) or Result(),
     )
-    assert coding_tui._run_direct_tests(tmp_path) == 0
+    assert coding_tui._run_direct_tests(tmp_path, auto_fix=False) == 0
     output = capsys.readouterr().out
+    assert "Test run (read-only)" in output
     assert "Running tests:" in output
     assert "Test scope:" in output
-    assert "read-only, no files modified" in output
+    assert "Tests passed (read-only run)" in output
     assert seen[0][0][0] in {coding_tui.sys.executable, "pytest"}
+
+
+def test_parse_pytest_failures():
+    from arka.agent.coding_tui import _parse_pytest_failures
+
+    assert _parse_pytest_failures("12 passed in 1.2s", exit_code=0) == 0
+    assert _parse_pytest_failures("2 failed, 10 passed", exit_code=1) == 2
+    assert _parse_pytest_failures("FAILED tests/test_x.py\nFAILED tests/test_y.py", exit_code=1) == 2
+    assert _parse_pytest_failures("", exit_code=1) == 1
+
+
+def test_direct_tests_auto_fix_on_failure(monkeypatch, tmp_path, capsys):
+    from arka.agent import coding_tui
+
+    calls: list[str] = []
+
+    class FailResult:
+        returncode = 1
+        stdout = "1 failed, 11 passed\nFAILED tests/test_x.py\n"
+        stderr = ""
+
+    class PassResult:
+        returncode = 0
+        stdout = "12 passed in 1.2s\n"
+        stderr = ""
+
+    outcomes = iter([FailResult(), PassResult()])
+
+    monkeypatch.setattr(
+        coding_tui.subprocess,
+        "run",
+        lambda *args, **kwargs: next(outcomes),
+    )
+    monkeypatch.setattr(
+        coding_tui,
+        "_auto_fix_once",
+        lambda repo, summary, agent, **kwargs: calls.append("fix") or 0,
+    )
+    fake_agent = object()
+    assert coding_tui._run_direct_tests(tmp_path, auto_fix=True, code_agent=fake_agent) == 0
+    output = capsys.readouterr().out
+    assert calls == ["fix"]
+    assert "1 test failure(s) detected — attempting one fix pass" in output
+    assert "Tests passed (read-only run, after fix)" in output
+
+
+def test_direct_tests_no_fix_on_pass(monkeypatch, tmp_path, capsys):
+    from arka.agent import coding_tui
+
+    fix_calls: list[str] = []
+
+    class PassResult:
+        returncode = 0
+        stdout = "12 passed in 1.2s\n"
+        stderr = ""
+
+    monkeypatch.setattr(
+        coding_tui.subprocess,
+        "run",
+        lambda *args, **kwargs: PassResult(),
+    )
+    monkeypatch.setattr(
+        coding_tui,
+        "_auto_fix_once",
+        lambda *args, **kwargs: fix_calls.append("fix") or 0,
+    )
+    assert coding_tui._run_direct_tests(tmp_path, auto_fix=True, code_agent=object()) == 0
+    assert fix_calls == []
+    assert "Tests passed (read-only run)" in capsys.readouterr().out
+
+
+def test_test_no_fix_flag_skips_auto_fix(monkeypatch, tmp_path, capsys):
+    from arka.agent import coding_tui
+
+    fix_calls: list[str] = []
+
+    class FailResult:
+        returncode = 1
+        stdout = "1 failed, 11 passed\nFAILED tests/test_x.py\n"
+        stderr = ""
+
+    monkeypatch.setattr(
+        coding_tui.subprocess,
+        "run",
+        lambda *args, **kwargs: FailResult(),
+    )
+    monkeypatch.setattr(
+        coding_tui,
+        "_auto_fix_once",
+        lambda *args, **kwargs: fix_calls.append("fix") or 0,
+    )
+    scope, auto_fix = coding_tui._parse_test_command("/test --no-fix")
+    assert scope is None
+    assert auto_fix is False
+    assert coding_tui._run_direct_tests(tmp_path, auto_fix=auto_fix, code_agent=object()) == 1
+    assert fix_calls == []
+    output = capsys.readouterr().out
+    assert "Auto-fix skipped (--no-fix)" in output
+
+
+def test_flexible_tests_auto_fix_on_failure(monkeypatch, tmp_path, capsys):
+    from arka.agent import coding_tui
+
+    fix_calls: list[str] = []
+    direct_calls: list[bool] = []
+
+    monkeypatch.setattr(
+        coding_tui,
+        "_execute_goal",
+        lambda *args, **kwargs: 1,
+    )
+    monkeypatch.setattr(
+        coding_tui,
+        "_auto_fix_once",
+        lambda *args, **kwargs: fix_calls.append("fix") or 0,
+    )
+    monkeypatch.setattr(
+        coding_tui,
+        "_run_direct_tests",
+        lambda repo, **kwargs: direct_calls.append(kwargs.get("after_fix_attempt", False)) or 0,
+    )
+    assert coding_tui._run_flexible_tests("run tests", tmp_path, object(), auto_fix=True) == 0
+    assert fix_calls == ["fix"]
+    assert direct_calls == [True]
+    output = capsys.readouterr().out
+    assert "Test run (read-only)" in output
+    assert "attempting one fix pass" in output
 
 
 def test_coding_tui_diff_files_open(monkeypatch, tmp_path, capsys):
@@ -436,7 +567,7 @@ def test_run_tests_uses_flexible_readonly_agent(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(
         coding_tui,
         "_run_flexible_tests",
-        lambda goal, repo, code_agent, allow_fix=False: calls.append((goal, allow_fix)) or 0,
+        lambda goal, repo, code_agent, allow_fix=False, auto_fix=True: calls.append((goal, allow_fix, auto_fix)) or 0,
     )
     monkeypatch.setattr(
         coding_tui.subprocess,
@@ -448,7 +579,7 @@ def test_run_tests_uses_flexible_readonly_agent(monkeypatch, tmp_path, capsys):
         lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("must use _run_flexible_tests")),
     )
     assert coding_tui.run(str(tmp_path)) == 0
-    assert calls == [("tests", False)]
+    assert calls == [("tests", False, True)]
 
 
 def test_test_command_strict_with_scope(monkeypatch, tmp_path, capsys):
@@ -460,10 +591,10 @@ def test_test_command_strict_with_scope(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(
         coding_tui,
         "_run_direct_tests",
-        lambda repo, scope=None: calls.append((repo, scope)) or 0,
+        lambda repo, scope=None, auto_fix=True, code_agent=None, **kwargs: calls.append((repo, scope, auto_fix)) or 0,
     )
     assert coding_tui.run(str(tmp_path)) == 0
-    assert calls == [(tmp_path.resolve(), "tests/test_foo.py")]
+    assert calls == [(tmp_path.resolve(), "tests/test_foo.py", True)]
 
 
 def test_resolve_test_command_uses_repo_detection(monkeypatch, tmp_path):
@@ -487,9 +618,14 @@ def test_run_tests_short_goal_is_not_deterministic(monkeypatch, tmp_path):
     assert coding_tui._is_deterministic_short_goal("ci")
     assert not coding_tui._is_deterministic_short_goal("run tests and fix failures")
     assert not coding_tui._is_deterministic_short_goal("tests", allow_fix=True)
-    goal, allow_fix = coding_tui._parse_run_request("tests --fix")
+    goal, allow_fix, auto_fix = coding_tui._parse_run_request("tests --fix")
     assert goal == "tests"
     assert allow_fix is True
+    assert auto_fix is True
+    goal, allow_fix, auto_fix = coding_tui._parse_run_request("tests --no-fix")
+    assert goal == "tests"
+    assert allow_fix is False
+    assert auto_fix is False
 
 
 def test_run_ci_and_lint_are_deterministic(monkeypatch, tmp_path):
