@@ -104,7 +104,7 @@ def main() -> int:
         stl_path.write_text(write_stl(vertices, faces, parsed.name), encoding="utf-8")
 
         print("━━━ Answer ━━━")
-        print(f"Successfully generated offline 3D cube model:")
+        print("Successfully generated offline 3D cube model:")
         print(f"  OBJ model: {obj_path}")
         print(f"  STL model: {stl_path}")
         return 0
@@ -126,7 +126,7 @@ def main() -> int:
         stl_path.write_text(write_stl(vertices, faces, parsed.name), encoding="utf-8")
 
         print("━━━ Answer ━━━")
-        print(f"Successfully generated offline 3D sphere model:")
+        print("Successfully generated offline 3D sphere model:")
         print(f"  OBJ model: {obj_path}")
         print(f"  STL model: {stl_path}")
         return 0
@@ -148,7 +148,7 @@ def main() -> int:
         stl_path.write_text(write_stl(vertices, faces, parsed.name), encoding="utf-8")
 
         print("━━━ Answer ━━━")
-        print(f"Successfully generated offline 3D cylinder model:")
+        print("Successfully generated offline 3D cylinder model:")
         print(f"  OBJ model: {obj_path}")
         print(f"  STL model: {stl_path}")
         return 0
@@ -170,7 +170,7 @@ def main() -> int:
         stl_path.write_text(write_stl(vertices, faces, parsed.name), encoding="utf-8")
 
         print("━━━ Answer ━━━")
-        print(f"Successfully generated offline 3D cone model:")
+        print("Successfully generated offline 3D cone model:")
         print(f"  OBJ model: {obj_path}")
         print(f"  STL model: {stl_path}")
         return 0
@@ -195,17 +195,17 @@ def main() -> int:
             stl_content = write_stl(vertices, faces, prompt)
             stl_path.write_text(stl_content, encoding="utf-8")
             print("━━━ Answer ━━━")
-            print(f"Successfully generated 3D models using AI:")
+            print("Successfully generated 3D models using AI:")
             print(f"  OBJ model: {obj_path}")
             print(f"  STL model: {stl_path}")
         else:
             print("━━━ Answer ━━━")
-            print(f"Successfully generated 3D model using AI:")
+            print("Successfully generated 3D model using AI:")
             print(f"  OBJ model: {obj_path}")
             print("  (Could not generate STL format due to face parsing limitation)")
     except Exception as e:
         print("━━━ Answer ━━━")
-        print(f"Successfully generated 3D model using AI:")
+        print("Successfully generated 3D model using AI:")
         print(f"  OBJ model: {obj_path}")
         print(f"  (Failed to output STL: {e})")
 
