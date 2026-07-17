@@ -25,6 +25,7 @@ SLASH_COMMANDS = (
     "/plan",
     "/run",
     "/test",
+    "/scaffold",
     "/history",
     "/clear",
     "/diff",
@@ -37,10 +38,11 @@ SLASH_COMMANDS = (
 )
 
 HELP = (
-    "Commands: /help, /status, /plan <goal>, /run <goal>, /test [path], /history, /clear, "
+    "Commands: /help, /status, /plan <goal>, /run <goal>, /test [path], /scaffold 3d, /history, /clear, "
     "/diff, /files <pattern>, /open <path>, /ci, /review, /quit. "
     "/test runs tests read-only, then one auto-fix pass on failure (--no-fix to skip). "
     "/run tests lets a read-only agent choose repository tests; use --fix to repair failures. "
+    "/scaffold 3d writes a React + Three.js space scene in an empty project (offline). "
     "Plain text is treated as a plan request; approve with y to execute immediately."
 )
 
@@ -494,6 +496,65 @@ def _goal_mentions_python(goal: str) -> bool:
     return any(token in lowered for token in ("python", "pytest", "django", "flask", "fastapi"))
 
 
+def _goal_mentions_3d_space(goal: str) -> bool:
+    from arka.agent.scaffold_3d import goal_mentions_3d_space
+
+    return goal_mentions_3d_space(goal)
+
+
+def _is_greenfield_repo(root: Path) -> bool:
+    from arka.agent.scaffold_3d import is_greenfield_repo
+
+    return is_greenfield_repo(root)
+
+
+def _should_scaffold_3d(goal: str, root: Path) -> bool:
+    from arka.agent.scaffold_3d import should_scaffold_3d
+
+    return should_scaffold_3d(goal, root, is_arka_repo=_is_arka_repo(root))
+
+
+def _format_created_files(repo: Path, paths: list[str]) -> str:
+    from arka.agent.git_changes import ChangedFile, format_changed_files
+
+    if not paths:
+        return "○ No files changed."
+    git_report = format_changed_files(repo, empty_message="")
+    if git_report and git_report != "○ No changes.":
+        return git_report
+    rows = [ChangedFile(path=path, status="A") for path in sorted(paths)]
+    return format_changed_files(repo, files=rows, title="Created files")
+
+
+def _run_3d_scaffold(repo: Path, *, goal: str = "") -> int:
+    from arka.agent.scaffold_3d import has_meaningful_scaffold, write_scaffold
+
+    ok, message = _ensure_code_project(repo)
+    if not ok:
+        print(message)
+        print(f"Run: arka code init .  (cwd: {repo})")
+        return 1
+    if message:
+        print(message)
+    if not _is_greenfield_repo(repo) and has_meaningful_scaffold(repo):
+        print("○ 3D scaffold already present — skipping overwrite.")
+        print(_format_created_files(repo, ["src/App.jsx", "package.json"]))
+        return 0
+    label = goal.strip() or "beautiful 3D space"
+    print(f"○ Scaffolding {label} (React + Vite + Three.js)…")
+    created = write_scaffold(repo)
+    if not created:
+        print("✗ Scaffold failed — no files written.")
+        return 1
+    if not has_meaningful_scaffold(repo):
+        print("✗ Scaffold incomplete — missing Three.js scene files.")
+        return 1
+    print("✓ 3D space scaffold created.")
+    print(_format_created_files(repo, created))
+    print("Next: `npm install && npm run dev` inside the project directory.")
+    return 0
+
+
 def _ensure_code_project(repo: Path, *, auto_init: bool = True) -> tuple[bool, str]:
     """Return (ok, message). Auto-initializes the project root when allowed."""
     try:
@@ -576,6 +637,15 @@ def _format_plan_body(
         ]
     )
     return "\n".join(lines)
+
+
+def _greenfield_3d_plan(goal: str, root: Path, files: int) -> str:
+    from arka.agent.scaffold_3d import scaffold_file_manifest
+
+    proposals = scaffold_file_manifest()
+    focus = "greenfield React + Three.js space scene with stars, orbit controls, and animated Earth/Moon"
+    relevant = ["package.json", "src/App.jsx", "index.html"]
+    return _format_plan_body(goal, root, files=files, focus=focus, relevant=relevant, proposals=proposals)
 
 
 def _greenfield_react_plan(goal: str, root: Path, files: int) -> str:
@@ -719,6 +789,8 @@ def plan_preview(goal: str, root: Path) -> str:
             and not (root / "package.json").exists()
             and not (root / "pyproject.toml").exists()
         ):
+            if _goal_mentions_3d_space(goal):
+                return _greenfield_3d_plan(goal, root, files)
             if _goal_mentions_react(goal):
                 return _greenfield_react_plan(goal, root, files)
             return _greenfield_generic_plan(goal, root, files)
@@ -903,7 +975,13 @@ def coding_tui_system_extra(root: Path, goal: str) -> str:
     edit_hint = ""
     if normalized not in DETERMINISTIC_SHORT_GOALS:
         if not _is_arka_repo(root):
-            if _goal_mentions_react(lowered):
+            if _goal_mentions_3d_space(lowered):
+                edit_hint = (
+                    "- Greenfield 3D goal: scaffold React + Vite + Three.js files directly in this directory. "
+                    "Do NOT run git init. Create package.json, index.html, src/App.jsx with @react-three/fiber, "
+                    "Stars, OrbitControls, and a dark space theme. Verify with npm install && npm run dev."
+                )
+            elif _goal_mentions_react(lowered):
                 edit_hint = (
                     "- Scaffold a React app (package.json, Vite, src/components/) in this directory; "
                     "verify with npm install && npm run dev."
@@ -917,7 +995,7 @@ def coding_tui_system_extra(root: Path, goal: str) -> str:
             edit_hint = "- Make concrete file edits under src/ and tests/; verify with pytest on changed modules."
     return (
         f"Coding TUI context: working directory is already {root}. Never use cd.\n"
-        "- Do not run git pull, git commit, or other git commands unless the user explicitly asked for git.\n"
+        "- Do not run git init, git pull, git commit, or other git commands unless the user explicitly asked for git.\n"
         "- Prefer read (status read) and file edits over shell navigation.\n"
         "- Prefer existing Arka tools (repo_health, lint_project, review, ci) over raw shell when applicable.\n"
         f"{tui_hint}"
@@ -1001,6 +1079,8 @@ def _execute_goal(
     if message:
         print(message)
     original_goal = (original_goal or goal).strip()
+    if not readonly and _should_scaffold_3d(original_goal, repo):
+        return _run_3d_scaffold(repo, goal=original_goal)
     goal = _expand_short_goal(goal)
     goal, summary, changed = prepare_prompt(goal)
     if changed:
@@ -1013,8 +1093,11 @@ def _execute_goal(
         readonly=readonly,
     )
     from arka.agent.git_changes import format_changed_files
+    from arka.agent.scaffold_3d import has_meaningful_scaffold
 
     changed_files = format_changed_files(repo, empty_message="○ No files changed.")
+    needs_scaffold = _goal_mentions_3d_space(original_goal) and _is_greenfield_repo(repo)
+    meaningful = has_meaningful_scaffold(repo) or changed_files != "○ No files changed."
     if readonly:
         if rc == 0:
             print("○ Verification run complete (no files modified)")
@@ -1022,10 +1105,13 @@ def _execute_goal(
             print(f"✗ Run finished with exit code {rc}.")
         print(changed_files)
         return rc
-    if rc == 0:
+    if rc == 0 and (not needs_scaffold or meaningful):
         print("✓ Done.")
         print(changed_files)
         print("Next: `arka ci --changed` to verify edited files.")
+    elif rc == 0 and needs_scaffold and not meaningful:
+        print("✗ Run finished without meaningful project files — only navigation or empty steps ran.")
+        print(changed_files)
     elif rc == 2:
         print("○ Run finished: no commands executed.")
         print(changed_files)
@@ -1033,6 +1119,8 @@ def _execute_goal(
         print(f"✗ Run finished with exit code {rc}.")
         print(changed_files)
         print("Inspect output, then try `arka ci --changed`.")
+    if rc == 0 and needs_scaffold and not meaningful:
+        return 1
     return rc
 
 
@@ -1141,6 +1229,8 @@ def run(root: str = ".") -> int:
         elif line == "/test" or line.startswith("/test "):
             scope, auto_fix = _parse_test_command(line)
             _run_direct_tests(repo, scope=scope, auto_fix=auto_fix, code_agent=code_agent)
+        elif line == "/scaffold 3d" or line.startswith("/scaffold 3d "):
+            _run_3d_scaffold(repo, goal=line[13:].strip() or "beautiful 3D space")
         elif line == "/run" or line.startswith("/run "):
             requested_goal, allow_fix, auto_fix = _parse_run_request(line[4:].strip() or (pending_goal or ""))
             if requested_goal and _is_flexible_run_test_goal(requested_goal):

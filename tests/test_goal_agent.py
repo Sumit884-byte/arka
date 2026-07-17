@@ -479,3 +479,42 @@ def test_readonly_testing_goal_allows_pytest(tmp_path: Path):
         rc = run_goal("tests", max_steps=3, readonly=True)
     assert rc == 0
     assert calls == ["pytest -q tests/test_goal_agent.py"]
+
+
+def test_is_git_command_detects_init_and_chained_git():
+    from arka.agent.goal import _is_git_command
+
+    assert _is_git_command("git init")
+    assert _is_git_command("git add . && git commit -m test")
+    assert not _is_git_command("pytest -q")
+
+
+def test_run_goal_continues_after_repeated_blocked_git(tmp_path: Path):
+    from arka.agent.goal import run_goal
+
+    responses = [
+        '{"status":"continue","cmd":"git init","why":"init repo"}',
+        '{"status":"continue","cmd":"git init","why":"retry init"}',
+        '{"status":"continue","cmd":"git init","why":"retry again"}',
+        '{"status":"continue","cmd":"echo hello > package.json","why":"scaffold"}',
+        '{"status":"done","cmd":"","why":"done"}',
+    ]
+    stderr = io.StringIO()
+    calls: list[str] = []
+    with (
+        mock.patch("arka.agent.goal._llm", side_effect=responses),
+        mock.patch("arka.agent.goal._dir_context", return_value=("", "")),
+        mock.patch("arka.agent.goal._fish_history", return_value=""),
+        mock.patch("arka.agent.goal._skills_list", return_value="test"),
+        mock.patch(
+            "arka.agent.goal._run_cmd",
+            side_effect=lambda cmd, _cwd, **_: calls.append(cmd) or (0, "ok"),
+        ),
+        redirect_stderr(stderr),
+    ):
+        rc = run_goal("create a beautiful 3d space", max_steps=8)
+    assert rc == 0
+    err = stderr.getvalue()
+    assert err.count("skipped git") == 3
+    assert "Repeated action detected" not in err
+    assert calls == ["echo hello > package.json"]

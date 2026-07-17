@@ -168,8 +168,11 @@ _CD_BLOCKED_HINT = (
 
 _GIT_BLOCKED_HINT = (
     "Git is blocked unless the user explicitly asked for git in the goal. "
-    "Continue with read/edit/test actions in the current working directory."
+    "Skip git init/add/commit — scaffold source files directly in the current working directory."
 )
+
+_MAX_BLOCKED_GIT = 6
+_MAX_REPEATED_COMMANDS = 3
 
 _MAX_INVALID_ACTIONS = 2
 _MAX_EMPTY_ACTIONS = 4
@@ -226,6 +229,32 @@ def _is_standalone_cd(cmd: str) -> bool:
     if not cmd:
         return False
     return bool(re.match(r"(?i)^cd(?:\s+[^;&|]+)?\s*$", cmd))
+
+
+def _is_git_command(cmd: str) -> bool:
+    return bool(re.search(r"(?i)(?:^|[;&|])\s*git(?:\s|$)", (cmd or "").strip()))
+
+
+def _is_greenfield_creative_goal(goal: str) -> bool:
+    text = " ".join((goal or "").lower().split())
+    if not text:
+        return False
+    creative = (
+        "3d",
+        "react",
+        "vite",
+        "frontend",
+        "app",
+        "scaffold",
+        "simulation",
+        "space",
+        "website",
+        "ui",
+        "create",
+        "build",
+        "beautiful",
+    )
+    return any(token in text for token in creative) and not _is_testing_goal(goal)
 
 
 _PROSE_ACTION_PREFIXES = frozenset({
@@ -646,6 +675,7 @@ def run_goal(
     plat_hint = _platform_hint()
     recent_commands: list[str] = []
     blocked_cd_count = 0
+    blocked_git_count = 0
     empty_action_count = 0
     invalid_action_count = 0
     non_test_action_count = 0
@@ -696,6 +726,11 @@ Rules:
 
     if system_extra:
         system += f"\n{system_extra.strip()}"
+    if _is_greenfield_creative_goal(goal) and not git_allowed:
+        system += (
+            "\n- Greenfield creative goal: do NOT run git init, git add, git commit, or other git setup "
+            "unless the user explicitly asked for git. Create source files directly with shell writes or edits."
+        )
     try:
         from arka.agent.skill_hints import recommend_skill_hint
 
@@ -749,10 +784,13 @@ Rules:
                         f"\nREMINDER: CWD is already {cwd}. Do NOT use cd — pick ls, read, pytest, "
                         "or an edit command instead.\n"
                     )
+                git_reminder = ""
+                if blocked_git_count:
+                    git_reminder = f"\nREMINDER: {_GIT_BLOCKED_HINT}\n"
 
                 user = f"""GOAL: {goal}
 CWD: {cwd}
-{cd_reminder}
+{cd_reminder}{git_reminder}
 DIRECTORY (depth {TREE_DEPTH}):
 {tree or '(empty)'}
 
@@ -952,7 +990,26 @@ Step {step}/{max_steps} — return the NEXT action as JSON."""
                         return 1
                     continue
 
-                if recent_commands.count(cmd) >= 2:
+                if not git_allowed and _is_git_command(cmd):
+                    blocked_git_count += 1
+                    print(
+                        "  ⊘ skipped git (blocked unless user explicitly asked for git in the goal)",
+                        file=sys.stderr,
+                    )
+                    history += (
+                        f"\n--- step {step} (skipped) ---\ncmd: {cmd}\nreason: {_GIT_BLOCKED_HINT}\n"
+                    )
+                    if blocked_git_count >= _MAX_BLOCKED_GIT:
+                        print(
+                            "Repeated git actions detected; stopping so the agent can scaffold files directly.",
+                            file=sys.stderr,
+                        )
+                        if span is not None:
+                            mark_error(goal_span, "repeated git")
+                        return 1
+                    continue
+
+                if recent_commands.count(cmd) >= _MAX_REPEATED_COMMANDS:
                     print("Repeated action detected; stopping to avoid wasting steps.", file=sys.stderr)
                     if span is not None:
                         mark_error(goal_span, "repeated action")

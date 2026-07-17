@@ -721,3 +721,77 @@ def test_run_ci_and_lint_are_deterministic(monkeypatch, tmp_path):
     monkeypatch.setattr("builtins.input", lambda _: next(commands))
     assert coding_tui.run(str(tmp_path)) == 0
     assert calls == ["ci", "lint", "review"]
+
+
+def test_plan_preview_greenfield_3d_goal(tmp_path):
+    from arka.agent.coding_tui import plan_preview
+
+    text = plan_preview("create a beautiful 3d space", tmp_path)
+    assert "Three.js" in text or "Three" in text
+    assert "src/App.jsx" in text
+    assert "OrbitControls" in text or "orbit controls" in text.lower()
+    assert "RocketSimulation" not in text
+
+
+def test_scaffold_3d_writes_project_files(tmp_path):
+    from arka.agent.scaffold_3d import has_meaningful_scaffold, write_scaffold
+
+    created = write_scaffold(tmp_path)
+    assert "package.json" in created
+    assert "src/App.jsx" in created
+    assert has_meaningful_scaffold(tmp_path)
+    app = (tmp_path / "src/App.jsx").read_text(encoding="utf-8")
+    assert "@react-three/fiber" in app
+    assert "Stars" in app
+    assert "OrbitControls" in app
+
+
+def test_execute_goal_uses_deterministic_3d_scaffold(monkeypatch, tmp_path, capsys):
+    from arka.agent import coding_tui
+
+    monkeypatch.setattr(
+        "arka.agent.core.code_agent",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("must not use code_agent")),
+    )
+    rc = coding_tui._execute_goal(
+        "create a beautiful 3d space",
+        tmp_path,
+        last_plan="Plan for: create a beautiful 3d space",
+        code_agent=lambda *args, **kwargs: 0,
+    )
+    output = capsys.readouterr().out
+    assert rc == 0
+    assert "3D space scaffold created" in output
+    assert (tmp_path / "package.json").is_file()
+    assert (tmp_path / "src/App.jsx").is_file()
+
+
+def test_coding_tui_scaffold_command(monkeypatch, tmp_path, capsys):
+    from arka.agent import coding_tui
+
+    commands = iter(["/scaffold 3d", "/quit"])
+    monkeypatch.setattr("builtins.input", lambda _: next(commands))
+    assert coding_tui.run(str(tmp_path)) == 0
+    output = capsys.readouterr().out
+    assert "3D space scaffold created" in output
+    assert (tmp_path / "src/App.jsx").is_file()
+
+
+def test_coding_tui_approve_3d_plan_scaffolds_without_agent(monkeypatch, tmp_path, capsys):
+    from arka.agent import coding_tui
+
+    commands = iter(["create a beautiful 3d space", "y", "/quit"])
+    monkeypatch.setattr("builtins.input", lambda _: next(commands))
+    monkeypatch.setattr(
+        "arka.agent.coding_tui.generate_plan",
+        lambda goal, root: (coding_tui.plan_preview(goal, root), "local"),
+    )
+    monkeypatch.setattr(
+        "arka.agent.core.code_agent",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("must not use code_agent")),
+    )
+    assert coding_tui.run(str(tmp_path)) == 0
+    output = capsys.readouterr().out
+    assert "Plan approved — executing…" in output
+    assert "3D space scaffold created" in output
+    assert (tmp_path / "src/App.jsx").is_file()
