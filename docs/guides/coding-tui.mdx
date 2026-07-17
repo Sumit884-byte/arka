@@ -83,6 +83,23 @@ If tests still fail after the single auto-fix pass:
 ✗ Still failing after one fix pass. Use /run tests --fix for another attempt.
 ```
 
+## 3D scaffold
+
+`/scaffold 3d` writes a React + Vite + Three.js space scene in an empty project.
+Arka then runs `npm install` automatically for this **trusted template** only
+(pinned packages from the scaffold manifest — not arbitrary shell from the goal
+agent). Add `--run` to start the Vite dev server after install, or answer `y` when
+prompted.
+
+```text
+/scaffold 3d
+/scaffold 3d --run
+```
+
+Greenfield 3D goals approved via `/plan` use the same scaffold path and post-install
+steps. If the network is offline, scaffold files are still created and Arka prints
+an honest failure message with manual next steps.
+
 `/status` shows the current branch, dirty file count, and whether the code
 project is initialized. `/ci` runs fast changed-only gates; `/review` summarizes
 staged changes. `/history` lists commands from the current session; `/clear`

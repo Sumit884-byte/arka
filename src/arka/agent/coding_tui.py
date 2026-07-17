@@ -42,7 +42,8 @@ HELP = (
     "/diff, /files <pattern>, /open <path>, /ci, /review, /quit. "
     "/test runs tests read-only, then one auto-fix pass on failure (--no-fix to skip). "
     "/run tests lets a read-only agent choose repository tests; use --fix to repair failures. "
-    "/scaffold 3d writes a React + Three.js space scene in an empty project (offline). "
+    "/scaffold 3d writes a React + Three.js space scene and runs npm install (trusted template). "
+    "Add --run to start the Vite dev server after install. "
     "Plain text is treated as a plan request; approve with y to execute immediately."
 )
 
@@ -526,7 +527,44 @@ def _format_created_files(repo: Path, paths: list[str]) -> str:
     return format_changed_files(repo, files=rows, title="Created files")
 
 
-def _run_3d_scaffold(repo: Path, *, goal: str = "") -> int:
+def _parse_scaffold_3d_command(line: str) -> tuple[str, bool]:
+    """Return (goal label, run_dev) from `/scaffold 3d` input."""
+    rest = line[13:].strip() if line.startswith("/scaffold 3d") else line.strip()
+    run_dev = False
+    if "--run" in rest:
+        run_dev = True
+        rest = " ".join(part for part in rest.split() if part != "--run").strip()
+    return rest or "beautiful 3D space", run_dev
+
+
+def _post_scaffold_hook(
+    template: str,
+    repo: Path,
+    *,
+    created: list[str],
+    run_dev: bool = False,
+    prompt_dev: bool = True,
+) -> None:
+    from arka.agent.post_scaffold import post_scaffold_hook
+
+    post_scaffold_hook(
+        template,
+        repo,
+        created=created,
+        run_dev=run_dev,
+        prompt_dev=prompt_dev,
+        prompt_fn=_prompt_user,
+    )
+
+
+def _run_3d_scaffold(
+    repo: Path,
+    *,
+    goal: str = "",
+    run_dev: bool = False,
+    prompt_dev: bool = True,
+) -> int:
+    from arka.agent.post_scaffold import SCAFFOLD_3D_TEMPLATE
     from arka.agent.scaffold_3d import has_meaningful_scaffold, write_scaffold
 
     ok, message = _ensure_code_project(repo)
@@ -551,7 +589,13 @@ def _run_3d_scaffold(repo: Path, *, goal: str = "") -> int:
         return 1
     print("✓ 3D space scaffold created.")
     print(_format_created_files(repo, created))
-    print("Next: `npm install && npm run dev` inside the project directory.")
+    _post_scaffold_hook(
+        SCAFFOLD_3D_TEMPLATE,
+        repo,
+        created=created,
+        run_dev=run_dev,
+        prompt_dev=prompt_dev,
+    )
     return 0
 
 
@@ -1230,7 +1274,8 @@ def run(root: str = ".") -> int:
             scope, auto_fix = _parse_test_command(line)
             _run_direct_tests(repo, scope=scope, auto_fix=auto_fix, code_agent=code_agent)
         elif line == "/scaffold 3d" or line.startswith("/scaffold 3d "):
-            _run_3d_scaffold(repo, goal=line[13:].strip() or "beautiful 3D space")
+            goal, run_dev = _parse_scaffold_3d_command(line)
+            _run_3d_scaffold(repo, goal=goal, run_dev=run_dev)
         elif line == "/run" or line.startswith("/run "):
             requested_goal, allow_fix, auto_fix = _parse_run_request(line[4:].strip() or (pending_goal or ""))
             if requested_goal and _is_flexible_run_test_goal(requested_goal):

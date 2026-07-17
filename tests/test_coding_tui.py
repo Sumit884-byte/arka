@@ -749,6 +749,7 @@ def test_scaffold_3d_writes_project_files(tmp_path):
 def test_execute_goal_uses_deterministic_3d_scaffold(monkeypatch, tmp_path, capsys):
     from arka.agent import coding_tui
 
+    monkeypatch.setattr("arka.agent.coding_tui._post_scaffold_hook", lambda *args, **kwargs: None)
     monkeypatch.setattr(
         "arka.agent.core.code_agent",
         lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("must not use code_agent")),
@@ -769,6 +770,7 @@ def test_execute_goal_uses_deterministic_3d_scaffold(monkeypatch, tmp_path, caps
 def test_coding_tui_scaffold_command(monkeypatch, tmp_path, capsys):
     from arka.agent import coding_tui
 
+    monkeypatch.setattr("arka.agent.coding_tui._post_scaffold_hook", lambda *args, **kwargs: None)
     commands = iter(["/scaffold 3d", "/quit"])
     monkeypatch.setattr("builtins.input", lambda _: next(commands))
     assert coding_tui.run(str(tmp_path)) == 0
@@ -780,6 +782,7 @@ def test_coding_tui_scaffold_command(monkeypatch, tmp_path, capsys):
 def test_coding_tui_approve_3d_plan_scaffolds_without_agent(monkeypatch, tmp_path, capsys):
     from arka.agent import coding_tui
 
+    monkeypatch.setattr("arka.agent.coding_tui._post_scaffold_hook", lambda *args, **kwargs: None)
     commands = iter(["create a beautiful 3d space", "y", "/quit"])
     monkeypatch.setattr("builtins.input", lambda _: next(commands))
     monkeypatch.setattr(
