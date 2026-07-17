@@ -46,6 +46,42 @@ class CodeProjectPersistenceTests(unittest.TestCase):
         os.environ[code_project._ENV_KEY] = str(project)
         self.assertEqual(code_project.get_active_root(), project.resolve())
 
+    def test_ensure_project_auto_init_arbitrary_path(self) -> None:
+        project = Path(self.tmp.name) / "space-sim"
+        project.mkdir()
+        code_project.clear_project()
+        root, created = code_project.ensure_project(project, auto_init=True)
+        self.assertEqual(root, project.resolve())
+        self.assertTrue(created)
+        self.assertEqual(code_project.get_active_root(), project.resolve())
+
+    def test_ensure_project_repoints_when_active_differs(self) -> None:
+        first = Path(self.tmp.name) / "project-a"
+        second = Path(self.tmp.name) / "project-b"
+        first.mkdir()
+        second.mkdir()
+        code_project.init_project(first)
+        root, created = code_project.ensure_project(second, auto_init=True)
+        self.assertEqual(root, second.resolve())
+        self.assertTrue(created)
+        self.assertEqual(code_project.get_active_root(), second.resolve())
+
+    def test_ensure_project_without_auto_init_raises(self) -> None:
+        project = Path(self.tmp.name) / "needs-init"
+        project.mkdir()
+        code_project.clear_project()
+        with self.assertRaises(code_project.CodeProjectError):
+            code_project.ensure_project(project, auto_init=False)
+
+    def test_is_arka_repo(self) -> None:
+        project = Path(self.tmp.name) / "maybe-arka"
+        project.mkdir()
+        self.assertFalse(code_project.is_arka_repo(project))
+        (project / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+        (project / "llm.txt").write_text("x", encoding="utf-8")
+        (project / "src" / "arka").mkdir(parents=True)
+        self.assertTrue(code_project.is_arka_repo(project))
+
 
 class CodeProjectScopeTests(unittest.TestCase):
     def setUp(self) -> None:

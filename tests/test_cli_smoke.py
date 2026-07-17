@@ -35,6 +35,12 @@ def test_cli_route_preview_smoke(monkeypatch, capsys):
 
 def test_coding_tui_start_and_quit_smoke(monkeypatch, capsys, tmp_path):
     from arka.agent import coding_tui
+    from arka.core import code_project
+
+    config = tmp_path / "arka-config"
+    config.mkdir()
+    monkeypatch.setattr(code_project, "config_dir", lambda: config)
+    code_project.clear_project()
 
     commands = iter(["/help", "/quit"])
     monkeypatch.setattr("builtins.input", lambda _: next(commands))
@@ -52,6 +58,12 @@ def test_plugin_inspect_missing_is_clean(monkeypatch, capsys):
 
 def test_coding_tui_declined_plan_does_not_run(monkeypatch, capsys, tmp_path):
     from arka.agent import coding_tui
+    from arka.core import code_project
+
+    config = tmp_path / "arka-config"
+    config.mkdir()
+    monkeypatch.setattr(code_project, "config_dir", lambda: config)
+    code_project.clear_project()
 
     commands = iter(["/plan inspect the project", "n", "/run", "/quit"])
     called = []

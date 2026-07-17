@@ -1,6 +1,21 @@
 from arka.agent.coding_tui import status
 
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _isolated_code_project_config(tmp_path, monkeypatch):
+    from arka.core import code_project
+
+    config = tmp_path / "arka-config"
+    config.mkdir()
+    monkeypatch.setattr(code_project, "config_dir", lambda: config)
+    code_project.clear_project()
+    yield
+    code_project.clear_project()
+
+
 def test_coding_tui_route_command():
     from arka.agent.coding_tui import route_command
 
@@ -26,14 +41,37 @@ def test_coding_tui_plan_is_visible(tmp_path):
 
     text = plan_preview("improve arka", tmp_path)
     assert "Plan for: improve arka" in text
-    assert "1. Read the listed modules" in text
+    assert "1. Inspect the listed paths" in text
     assert "/run <goal>" not in text
     assert "approve with y" in text
 
 
+def test_plan_preview_greenfield_react_goal(tmp_path):
+    from arka.agent.coding_tui import plan_preview
+
+    text = plan_preview("create a rocket simulation in react that goes to moon", tmp_path)
+    assert "React" in text or "react" in text
+    assert "RocketSimulation" in text
+    assert "package.json" in text
+    assert "test_dev_tools.py" not in text
+
+
+def test_plan_preview_generic_repo_avoids_arka_paths(tmp_path):
+    (tmp_path / "package.json").write_text('{"name":"demo"}\n')
+    (tmp_path / "src").mkdir()
+    from arka.agent.coding_tui import plan_preview
+
+    text = plan_preview("add a settings page", tmp_path)
+    assert "src/arka/" not in text
+    assert "test_dev_tools.py" not in text
+    assert "package.json" in text or "src/" in text
+
+
 def test_plan_preview_tailors_devtool_focus(tmp_path):
     (tmp_path / "pyproject.toml").write_text("[project]\nname='demo'\n")
-    (tmp_path / "src").mkdir()
+    (tmp_path / "llm.txt").write_text("PROJECT SUMMARY\n")
+    (tmp_path / "src" / "arka").mkdir(parents=True)
+    (tmp_path / "src").mkdir(exist_ok=True)
     (tmp_path / "tests").mkdir()
     from arka.agent.coding_tui import plan_preview
 
@@ -173,6 +211,44 @@ def test_goal_rejects_prose_in_shell_action_slot():
     assert _looks_like_prose_action("Search web for the answer")
     assert not _looks_like_prose_action("pytest tests/test_coding_tui.py -q")
     assert not _looks_like_prose_action("python -m pytest -q")
+
+
+def test_coding_tui_auto_inits_code_project(monkeypatch, tmp_path, capsys):
+    from arka.agent import coding_tui
+    from arka.core import code_project
+
+    config = tmp_path / "config"
+    config.mkdir()
+    monkeypatch.setattr(code_project, "config_dir", lambda: config)
+    code_project.clear_project()
+
+    commands = iter(["/status", "/quit"])
+    monkeypatch.setattr("builtins.input", lambda _: next(commands))
+    assert coding_tui.run(str(tmp_path)) == 0
+    output = capsys.readouterr().out
+    assert "Code project initialized:" in output
+    assert "code project initialized: yes" in output
+    assert code_project.get_active_root() == tmp_path.resolve()
+
+
+def test_coding_tui_blocks_plan_without_code_project(monkeypatch, tmp_path, capsys):
+    from arka.agent import coding_tui
+
+    monkeypatch.setattr(
+        coding_tui,
+        "_ensure_code_project",
+        lambda repo, auto_init=True: (False, f"No code project initialized. Run: arka code init .  (cwd: {repo})"),
+    )
+    commands = iter(["/plan add logging", "/quit"])
+    monkeypatch.setattr("builtins.input", lambda _: next(commands))
+    monkeypatch.setattr(
+        "arka.agent.coding_tui.generate_plan",
+        lambda goal, root: (_ for _ in ()).throw(AssertionError("must not plan")),
+    )
+    assert coding_tui.run(str(tmp_path)) == 1
+    output = capsys.readouterr().out
+    assert "No code project initialized" in output
+    assert "Plan for:" not in output
 
 
 def test_coding_tui_history_and_clear(monkeypatch, tmp_path, capsys):

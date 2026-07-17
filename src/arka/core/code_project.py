@@ -138,6 +138,38 @@ def require_initialized() -> Path:
     return root
 
 
+def is_arka_repo(path: str | Path) -> bool:
+    """True when *path* looks like the Arka checkout (not a generic project)."""
+    root = Path(path).expanduser().resolve()
+    return (
+        root.is_dir()
+        and (root / "pyproject.toml").is_file()
+        and (root / "llm.txt").is_file()
+        and (root / "src" / "arka").is_dir()
+    )
+
+
+def ensure_project(path: str | Path = ".", *, auto_init: bool = True) -> tuple[Path, bool]:
+    """Ensure the code project is scoped to *path*. Returns (root, created)."""
+    target = _normalize_root(path)
+    active = get_active_root()
+    if active is not None and active == target:
+        apply_env()
+        return target, False
+    if active is not None and active != target:
+        if not auto_init:
+            raise CodeProjectError(
+                f"Code project is scoped to {active}, not {target}. "
+                f"Run: arka code init {target}  (or arka code clear first)"
+            )
+        init_project(target)
+        return target, True
+    if not auto_init:
+        raise CodeProjectError(not_init_message(cwd=target))
+    init_project(target)
+    return target, True
+
+
 def gate_code_write(skill_line: str) -> tuple[bool, str]:
     """Return (allowed, error_message) for code-writing skills."""
     parts = (skill_line or "").strip().split()

@@ -459,6 +459,54 @@ def _dirty_count(root: Path) -> int:
     return len(_git_value(root, "status", "--short").splitlines())
 
 
+def _repo_file_count(root: Path) -> int:
+    return sum(1 for p in root.rglob("*") if p.is_file() and ".git" not in p.parts)
+
+
+def _is_arka_repo(root: Path) -> bool:
+    try:
+        from arka.core.code_project import is_arka_repo
+
+        return is_arka_repo(root)
+    except ImportError:
+        return False
+
+
+def _goal_mentions_react(goal: str) -> bool:
+    lowered = goal.lower()
+    return any(
+        token in lowered
+        for token in (
+            "react",
+            "vite",
+            "jsx",
+            "tsx",
+            "frontend",
+            "next.js",
+            "nextjs",
+            "create-react-app",
+        )
+    )
+
+
+def _goal_mentions_python(goal: str) -> bool:
+    lowered = goal.lower()
+    return any(token in lowered for token in ("python", "pytest", "django", "flask", "fastapi"))
+
+
+def _ensure_code_project(repo: Path, *, auto_init: bool = True) -> tuple[bool, str]:
+    """Return (ok, message). Auto-initializes the project root when allowed."""
+    try:
+        from arka.core.code_project import CodeProjectError, ensure_project
+
+        _, created = ensure_project(repo, auto_init=auto_init)
+        if created:
+            return True, f"Code project initialized: {repo}"
+        return True, ""
+    except CodeProjectError as exc:
+        return False, str(exc)
+
+
 def _code_project_initialized(root: Path) -> bool:
     try:
         from arka.core.code_project import get_active_root, is_within_project
@@ -470,7 +518,7 @@ def _code_project_initialized(root: Path) -> bool:
 
 
 def status(root: Path) -> str:
-    files = sum(1 for p in root.rglob("*") if p.is_file() and ".git" not in p.parts)
+    files = _repo_file_count(root)
     branch = _git_value(root, "rev-parse", "--abbrev-ref", "HEAD") or "unknown"
     dirty = _dirty_count(root)
     code_project = "yes" if _code_project_initialized(root) else "no"
@@ -482,20 +530,134 @@ def status(root: Path) -> str:
         f"code project initialized: {code_project}",
         "Tip: /plan builds a reviewable plan; approve with y to execute immediately.",
     ]
+    if code_project == "no":
+        lines.insert(
+            -1,
+            f"Action required: run `arka code init .` in {root} before writing code.",
+        )
     return "\n".join(lines)
 
 
-def plan_preview(goal: str, root: Path) -> str:
-    """Inspect the repository and return a goal-specific local plan."""
-    goal = goal.strip()
-    files = sum(1 for p in root.rglob("*") if p.is_file() and ".git" not in p.parts)
+def _format_plan_body(
+    goal: str,
+    root: Path,
+    *,
+    files: int,
+    focus: str,
+    relevant: list[str],
+    proposals: list[tuple[str, str]],
+    changed: int | None = None,
+) -> str:
+    from arka.agent.git_changes import format_plan_files
+
+    if changed is None:
+        changed = _dirty_count(root)
+    filtered = [(path, why) for path, why in proposals if not path.startswith("tests/") or (root / path).exists()]
+    if not filtered and proposals:
+        filtered = proposals
+    plan_files = format_plan_files(filtered, title="Proposed files")
+    lines = [
+        f"Plan for: {goal}",
+        f"Repository: {root} ({files} files)",
+        f"Focus: {focus}",
+        "Relevant paths: " + (", ".join(relevant) if relevant else "project root"),
+    ]
+    if plan_files:
+        lines.extend(["", plan_files])
+    lines.extend(
+        [
+            f"Working tree: {changed} changed path(s)",
+            "1. Inspect the listed paths and confirm the project stack matches the goal.",
+            f"2. Identify the smallest end-to-end slice for {focus}.",
+            "3. Implement the core behavior first, then wire entry points and styling.",
+            "4. Add focused verification (tests, dev server, or manual checklist).",
+            "5. Run the project test/build command and inspect the diff before follow-ups.",
+            "Review this plan — approve with y to execute immediately.",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _greenfield_react_plan(goal: str, root: Path, files: int) -> str:
+    moon = "moon" in goal.lower()
+    sim_name = "RocketSimulation"
+    proposals = [
+        ("package.json", "initialize npm project with React, Vite, and simulation dependencies"),
+        ("vite.config.js", "configure Vite dev server and the React plugin"),
+        ("index.html", "HTML shell that mounts the React app"),
+        ("src/main.jsx", "create the React root and render App"),
+        ("src/App.jsx", "app layout, controls, and simulation container"),
+        (f"src/components/{sim_name}.jsx", "rocket physics, trajectory, and target visualization"),
+        ("src/App.css", "layout and canvas styling for the simulation"),
+        ("README.md", "setup steps, npm scripts, and how to run the simulation"),
+    ]
+    focus = "greenfield React rocket simulation" + (" to the Moon" if moon else "")
+    relevant = ["package.json", "src/", "index.html"]
+    return _format_plan_body(goal, root, files=files, focus=focus, relevant=relevant, proposals=proposals)
+
+
+def _greenfield_generic_plan(goal: str, root: Path, files: int) -> str:
+    stack = "Python" if _goal_mentions_python(goal) else "project"
+    entry = "src/main.py" if _goal_mentions_python(goal) else "src/index.js"
+    proposals = [
+        ("README.md", "document setup, commands, and project purpose"),
+        (entry, "minimal runnable entry point for the requested feature"),
+        ("src/", "core modules that implement the goal"),
+    ]
+    if _goal_mentions_python(goal):
+        proposals.append(("pyproject.toml", "declare dependencies and test runner"))
+        proposals.append(("tests/test_app.py", "smoke test for the primary behavior"))
+    focus = f"greenfield {stack} scaffold for the requested feature"
+    return _format_plan_body(goal, root, files=files, focus=focus, relevant=["README.md", "src/"], proposals=proposals)
+
+
+def _generic_repo_plan(goal: str, root: Path, files: int) -> str:
+    lowered = goal.lower()
+    relevant: list[str] = []
+    for candidate in ("package.json", "pyproject.toml", "Cargo.toml", "src", "app", "lib", "tests"):
+        path = root / candidate
+        if path.exists():
+            relevant.append(str(path.relative_to(root)) + ("/" if path.is_dir() else ""))
+    focus = "implement the requested feature in this repository"
+    if any(word in lowered for word in ("test", "ci", "quality")):
+        focus = "tests and verification for the requested change"
+    elif any(word in lowered for word in ("ui", "frontend", "react", "component")):
+        focus = "frontend components and user-facing behavior"
+    proposals: list[tuple[str, str]] = []
+    if (root / "package.json").is_file():
+        proposals.extend(
+            [
+                ("src/", "implement or extend components for the goal"),
+                ("package.json", "add scripts or dependencies if needed"),
+            ]
+        )
+    elif (root / "pyproject.toml").is_file():
+        proposals.extend(
+            [
+                ("src/", "implement the core behavior"),
+                ("tests/", "add regression coverage for the change"),
+            ]
+        )
+    else:
+        proposals.append(("README.md", "document the change and how to verify it"))
+        proposals.append(("src/", "implement the requested behavior"))
+    return _format_plan_body(
+        goal,
+        root,
+        files=files,
+        focus=focus,
+        relevant=relevant or ["project root"],
+        proposals=proposals,
+    )
+
+
+def _arka_repo_plan(goal: str, root: Path, files: int) -> str:
     lowered = goal.lower()
     relevant: list[str] = []
     for candidate in ("pyproject.toml", "package.json", "Cargo.toml", "src", "tests", "docs"):
         path = root / candidate
         if path.exists():
             relevant.append(str(path.relative_to(root)) + ("/" if path.is_dir() else ""))
-    changed = _dirty_count(root)
     focus = "source modules and their tests"
     if any(word in lowered for word in ("route", "routing", "nl", "command")):
         focus = "routing/dispatch code and NL routing coverage"
@@ -539,30 +701,29 @@ def plan_preview(goal: str, root: Path) -> str:
             ("tests/test_dev_tools.py", "add focused behavior and failure-mode coverage"),
             ("docs/guides/repo-health.mdx", "document the command, prerequisites, and verification"),
         ]
-    proposals = [(path, why) for path, why in proposals if (root / path).exists() or path.startswith("tests/")]
-    from arka.agent.git_changes import format_plan_files
-
-    plan_files = format_plan_files(proposals, title="Proposed files")
-    lines = [
-        f"Plan for: {goal}",
-        f"Repository: {root} ({files} files)",
-        f"Focus: {focus}",
-        "Relevant paths: " + (", ".join(relevant) if relevant else "repository source and tests"),
+    proposals = [
+        (path, why)
+        for path, why in proposals
+        if (root / path).exists() or path.startswith("tests/") or path.startswith("docs/")
     ]
-    if plan_files:
-        lines.extend(["", plan_files])
-    lines.extend(
-        [
-            f"Working tree: {changed} changed path(s)",
-            "1. Read the listed modules and project rules; map the current call path and existing extension points.",
-            f"2. Trace {focus}; identify one measurable gap (missing route, unsafe dispatch, weak gate, or test hole) before editing.",
-            "3. Implement the smallest end-to-end change across routing, dispatch, and user-facing output where applicable.",
-            "4. Add a table-driven regression test for the request and preserve unrelated behavior/configuration.",
-            "5. Run the focused suite, Ruff/lint, and inspect git diff for unrelated changes before proposing follow-ups.",
-            "Review this plan — approve with y to execute immediately.",
-        ]
-    )
-    return "\n".join(lines)
+    return _format_plan_body(goal, root, files=files, focus=focus, relevant=relevant, proposals=proposals)
+
+
+def plan_preview(goal: str, root: Path) -> str:
+    """Inspect the repository and return a goal-specific local plan."""
+    goal = goal.strip()
+    files = _repo_file_count(root)
+    if not _is_arka_repo(root):
+        if files == 0 or (
+            files < 5
+            and not (root / "package.json").exists()
+            and not (root / "pyproject.toml").exists()
+        ):
+            if _goal_mentions_react(goal):
+                return _greenfield_react_plan(goal, root, files)
+            return _greenfield_generic_plan(goal, root, files)
+        return _generic_repo_plan(goal, root, files)
+    return _arka_repo_plan(goal, root, files)
 
 
 def _format_llm_plan(goal: str, root: Path, data: dict) -> str:
@@ -741,7 +902,19 @@ def coding_tui_system_extra(root: Path, goal: str) -> str:
         short_goal_hint = "- Short goal 'review' means inspect staged changes (`arka review` or git diff).\n"
     edit_hint = ""
     if normalized not in DETERMINISTIC_SHORT_GOALS:
-        edit_hint = "- Make concrete file edits under src/ and tests/; verify with pytest on changed modules."
+        if not _is_arka_repo(root):
+            if _goal_mentions_react(lowered):
+                edit_hint = (
+                    "- Scaffold a React app (package.json, Vite, src/components/) in this directory; "
+                    "verify with npm install && npm run dev."
+                )
+            else:
+                edit_hint = (
+                    "- Create files under the project root for the goal; "
+                    "verify with the project's build or test command."
+                )
+        else:
+            edit_hint = "- Make concrete file edits under src/ and tests/; verify with pytest on changed modules."
     return (
         f"Coding TUI context: working directory is already {root}. Never use cd.\n"
         "- Do not run git pull, git commit, or other git commands unless the user explicitly asked for git.\n"
@@ -820,6 +993,13 @@ def _execute_goal(
     readonly: bool = False,
     original_goal: str | None = None,
 ) -> int:
+    ok, message = _ensure_code_project(repo)
+    if not ok:
+        print(message)
+        print(f"Run: arka code init .  (cwd: {repo})")
+        return 1
+    if message:
+        print(message)
     original_goal = (original_goal or goal).strip()
     goal = _expand_short_goal(goal)
     goal, summary, changed = prepare_prompt(goal)
@@ -870,6 +1050,14 @@ def _handle_plan(
         print("Usage: /plan <goal>")
         return last_plan, pending_goal, plan_approved
 
+    ok, message = _ensure_code_project(repo)
+    if not ok:
+        print(message)
+        print(f"Run: arka code init .  (cwd: {repo})")
+        return last_plan, pending_goal, plan_approved
+    if message:
+        print(message)
+
     _, summary, changed = prepare_prompt(goal)
     if changed:
         print(f"Prompt improved: {summary}")
@@ -895,15 +1083,23 @@ def run(root: str = ".") -> int:
     previous_session = os.environ.get("ARKA_CODING_SESSION")
     os.environ["ARKA_CODING_SESSION"] = "1"
 
-    def finish() -> int:
+    def finish(code: int = 0) -> int:
         if previous_session is None:
             os.environ.pop("ARKA_CODING_SESSION", None)
         else:
             os.environ["ARKA_CODING_SESSION"] = previous_session
-        return 0
+        return code
+
+    ok, message = _ensure_code_project(repo)
+    if not ok:
+        print(message)
+        print(f"Run: arka code init .  (cwd: {repo})")
+        return finish(1)
 
     _setup_readline()
     print_welcome(repo)
+    if message:
+        print(message)
     history: list[str] = []
     last_plan: str | None = None
     pending_goal: str | None = None
