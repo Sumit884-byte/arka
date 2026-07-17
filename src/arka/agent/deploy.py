@@ -28,12 +28,18 @@ def deployment_command(root: Path, platform: str, *, production: bool = False) -
         return ["railway", "up", "--ci"] if production else ["railway", "up", "--ci", "--detach"]
     if platform == "render":
         return ["render", "deploy"]
-    raise ValueError("platform must be vercel, netlify, railway, or render")
+    if platform == "huggingface":
+        return ["git", "push", "hf", "main"]
+    if platform == "cloudflare":
+        return ["wrangler", "deploy"]
+    if platform == "github-pages":
+        return ["git", "push", "origin", "gh-pages"]
+    raise ValueError("unsupported deployment platform")
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="Preview or run a guarded deployment")
     p.add_argument("path", nargs="?", default=".")
-    p.add_argument("--platform", choices=["vercel", "netlify", "railway", "render"])
+    p.add_argument("--platform", choices=["vercel", "netlify", "railway", "render", "huggingface", "cloudflare", "github-pages"])
     p.add_argument("--production", action="store_true")
     p.add_argument("--yes", action="store_true")
     p.add_argument("--json", action="store_true")

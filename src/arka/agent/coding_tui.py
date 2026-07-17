@@ -40,7 +40,7 @@ HELP = (
     "Commands: /help, /status, /plan <goal>, /run <goal>, /test [path], /history, /clear, "
     "/diff, /files <pattern>, /open <path>, /ci, /review, /quit. "
     "/test runs tests read-only, then one auto-fix pass on failure (--no-fix to skip). "
-    "/run tests picks strategy via readonly agent with the same auto-fix default. "
+    "/run tests lets a read-only agent choose repository tests; use --fix to repair failures. "
     "Plain text is treated as a plan request; approve with y to execute immediately."
 )
 
@@ -955,7 +955,10 @@ def run(root: str = ".") -> int:
                     repo,
                     code_agent,
                     allow_fix=allow_fix,
-                    auto_fix=auto_fix,
+                    # Test execution is read-only by default. Fixes require
+                    # the explicit --fix opt-in, so failures can be reported
+                    # back without mutating the repository unexpectedly.
+                    auto_fix=allow_fix and auto_fix,
                 )
                 continue
             if requested_goal and _is_deterministic_short_goal(requested_goal, allow_fix=allow_fix):

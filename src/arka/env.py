@@ -65,15 +65,15 @@ def load_env(extra: Path | None = None) -> None:
     paths: list[Path] = []
     if extra:
         paths.append(extra)
-    paths.append(env_file())
-    legacy = Path.home() / ".config" / "fish" / ".env"
-    if legacy.is_file():
-        paths.append(legacy)
     root = checkout_root()
     if root:
         dev_env = root / ".env"
         if dev_env.is_file():
             paths.append(dev_env)
+    paths.append(env_file())
+    legacy = Path.home() / ".config" / "fish" / ".env"
+    if legacy.is_file():
+        paths.append(legacy)
     home_env = arka_home() / ".env"
     if home_env.is_file():
         paths.append(home_env)
@@ -85,6 +85,18 @@ def load_env(extra: Path | None = None) -> None:
             continue
         seen.add(path)
         _apply_env_file(path)
+
+    # Apply only Arka-managed defaults after explicit environment files.
+    try:
+        from arka.core.default_config import read as read_defaults
+
+        defaults = read_defaults().get("defaults", {})
+        if isinstance(defaults, dict):
+            for key, value in defaults.items():
+                if isinstance(key, str) and isinstance(value, str):
+                    os.environ.setdefault(key, value)
+    except (ImportError, OSError, ValueError, TypeError):
+        pass
 
     os.environ.setdefault("CONFIG_DIR", str(config_dir()))
     os.environ.setdefault("CACHE_DIR", str(cache_dir()))

@@ -117,12 +117,16 @@ def fish_route_preview(text: str) -> FishRoute | None:
     cmd_q = shlex.quote(cmd)
     inner = f"source {cfg_q}; agent_route {cmd_q}"
     try:
+        env = _fish_env()
+        # Preview is a deterministic symbolic check; AI fallback belongs to
+        # the Python router after this call, not inside the fish probe.
+        env["ROUTE_MODE"] = "symbolic"
         proc = subprocess.run(
             [fish, "-c", inner],
             capture_output=True,
             text=True,
             timeout=90,
-            env=_fish_env(),
+            env=env,
         )
     except (OSError, subprocess.TimeoutExpired):
         return None
@@ -137,6 +141,13 @@ def fish_route_preview(text: str) -> FishRoute | None:
         elif line.startswith("Why:"):
             why = line.split(":", 1)[1].strip()
 
-    if not action:
-        return None
+    if not action or kind not in {"skill", ""} or action.lower() in {"connection error.", "connection error"}:
+        try:
+            from arka.routing.file_size import route_find_files_by_size
+            from arka.routing.symbolic import route_offline_extras
+
+            fallback = route_find_files_by_size(cmd) or route_offline_extras(cmd)
+        except ImportError:
+            fallback = None
+        return FishRoute(kind="skill", action=fallback) if fallback else None
     return FishRoute(kind=kind or "skill", action=action, why=why)

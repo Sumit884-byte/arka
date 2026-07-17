@@ -1,0 +1,35 @@
+---
+title: "Hosted mode"
+description: "Keep desktop-only Arka skills out of server deployments."
+---
+
+Arka automatically detects common hosted environments and disables skills that
+need a local desktop, audio device, or GUI. This includes music playback,
+desktop browser automation, microphone/wake-word capture, and screen controls.
+Coding, API, data, media conversion, and server-safe image skills remain
+available.
+
+Inspect the effective profile:
+
+```bash
+arka skills status
+```
+
+Force a profile with environment configuration:
+
+```bash
+ARKA_HOSTED_MODE=1 arka skills status  # hosted
+ARKA_HOSTED_MODE=0 arka skills status  # desktop
+```
+
+Or persist it for a deployment:
+
+```bash
+arka skills profile hosted --apply
+```
+
+The default is `auto`. Detection considers CI, containers, headless Linux, and
+missing audio devices. To restore one profile-disabled skill, run
+`arka skills enable <skill>`; the override is stored separately from the
+user-disabled list. This is useful for Railway, Render, Hugging Face, Docker,
+and other server deployments.

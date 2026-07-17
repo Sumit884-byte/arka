@@ -1,0 +1,19 @@
+---
+title: "Hallmark design integration"
+description: "Use Hallmark's anti-AI-slop design workflow from Arka."
+---
+
+Arka provides an optional adapter for [Nutlope/hallmark](https://github.com/Nutlope/hallmark),
+an MIT-licensed design skill for building, auditing, redesigning, and studying
+interfaces. Arka does not copy Hallmark's source; it creates a guarded request
+that can be handed to the installed Hallmark skill.
+
+```bash
+arka hallmark audit ./src
+arka hallmark redesign ./src
+arka hallmark study screenshot.png
+arka hallmark build "a distinctive developer analytics dashboard"
+```
+
+Install Hallmark when needed with `npx skills add nutlope/hallmark`. Arka keeps
+the integration optional and reports when the skill is unavailable.

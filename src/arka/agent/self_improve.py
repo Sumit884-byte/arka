@@ -929,7 +929,6 @@ def run_self_improve(
         user_msg(str(exc))
         return 1
 
-    os.chdir(root)
     target, embedded_apply = _split_improve_flags_from_text(_normalize_target(target))
     apply = apply or embedded_apply
     if fast:

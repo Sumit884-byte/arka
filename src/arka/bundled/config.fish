@@ -1693,15 +1693,11 @@ end
 function _arka_run_shell_string --description "Run a shell command string; apostrophe-safe for simple commands (internal)"
     set -l cmd (string trim -- "$argv[1]")
     test -z "$cmd"; and return 1
-    if string match -qr '[|;&<>$`()]' -- "$cmd"
-        eval $cmd
-    else
-        set -l tokens (string split " " -- "$cmd")
-        test (count $tokens) -eq 0; and return 1
-        set -l bin $tokens[1]
-        set -e tokens[1]
-        $bin $tokens
-    end
+    # Execute the complete command as one Fish program. Splitting on spaces
+    # corrupts quoted arguments and escaped placeholders (for example,
+    # ``git\ checkout\ <branch>``), producing Fish's "Expected a string"
+    # error. A child Fish preserves the command string and its quoting.
+    command fish -c "$cmd"
 end
 
 function _agent_exec_shell_cmd --description "Execute shell only; prompt if __agent_classify says dangerous"

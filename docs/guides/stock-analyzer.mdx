@@ -1,0 +1,13 @@
+---
+title: "Grounded market-data analysis"
+description: "Analyze user-provided OHLCV data without inventing prices."
+---
+
+```bash
+arka stock-analyze prices.csv
+arka stock-analyze prices.csv --json
+```
+
+The generalized analyzer reads a user-provided CSV, identifies a close/price
+column, computes a descriptive return and trend, and reports the source. It
+does not fetch or invent market data and is not financial advice.

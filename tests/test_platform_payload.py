@@ -17,3 +17,14 @@ def test_detect_payload_without_persist():
     assert payload["cached"] is False
     assert payload["platform"]
     assert "clipboard_copy" in payload["capabilities"] or payload["capabilities"] is not None
+
+
+def test_platform_detection_includes_runtime_cache_metadata():
+    from arka.core.platform import detect_platform
+
+    data = detect_platform()
+    assert data["version"] >= 2
+    assert data["architecture"] == data["machine"]
+    assert "distro" in data
+    assert "container" in data
+    assert "package_manager" in data["capabilities"]

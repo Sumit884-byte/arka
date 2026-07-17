@@ -43,7 +43,11 @@ def run_skill(skill_line: str) -> int:
         try:
             from arka.core.skill_settings import is_disabled
             if is_disabled(head):
-                print(f"Skill disabled: {head}. Enable it with: arka skills enable {head}", file=sys.stderr)
+                from arka.core.skill_settings import profile_disabled
+                if head in profile_disabled():
+                    print(f"Skill unavailable in hosted mode: {head}. Set ARKA_HOSTED_MODE=0 or run: arka skills enable {head}", file=sys.stderr)
+                else:
+                    print(f"Skill disabled: {head}. Enable it with: arka skills enable {head}", file=sys.stderr)
                 return 1
         except ImportError:
             pass
@@ -59,6 +63,12 @@ def run_skill(skill_line: str) -> int:
     if head in ("skills", "skill_settings"):
         from arka.core.skill_settings import main as skill_settings_main
         return skill_settings_main(rest)
+    if head in ("plugin", "plugins"):
+        from arka.agent.skills import main as plugins_main
+
+        # `plugin` is the universal-plugin lifecycle namespace; retain
+        # `skills` for the existing enable/disable settings commands.
+        return plugins_main(rest)
 
     allowed, reason = mode_allows_execution(skill_line)
     if not allowed:
@@ -175,7 +185,13 @@ def run_skill(skill_line: str) -> int:
         elif head in ("timezone_convert", "tz_convert", "timezone"):
             code = run_script("arka_timezone_convert.py", ["convert", *rest])
         elif head in ("open_url", "open", "browse"):
-            code = run_script("arka_open_url.py", rest)
+            # Coding sessions should not unexpectedly launch GUI/browser
+            # windows. Explicitly opt in when a workflow needs a headed tab.
+            if os.environ.get("ARKA_CODING_SESSION") == "1" and os.environ.get("ARKA_CODING_AUTO_BROWSER", "0") not in {"1", "true", "yes"}:
+                print("Browser opening disabled during coding session (set ARKA_CODING_AUTO_BROWSER=1 to enable).")
+                code = 0
+            else:
+                code = run_script("arka_open_url.py", rest)
         elif head in ("select_model", "model_select", "best_model", "model_advisor"):
             from arka.llm.model_advisor import main as model_advisor_main
 
@@ -183,6 +199,27 @@ def run_skill(skill_line: str) -> int:
         elif head in ("model", "model_host", "model-host") and rest and rest[0] in {"setup", "doctor", "list"}:
             from arka.llm.model_host_setup import main as model_setup_main
             code = model_setup_main(rest)
+        elif head in ("model_optimizer", "model-optimizer") or (head == "model" and rest and rest[0] in {"recommend", "switch"}):
+            from arka.llm.model_optimizer import main as optimizer_main
+            code = optimizer_main(rest if head != "model" else rest)
+        elif head in ("train_plan", "train-plan", "model_train") or (head == "model" and rest and rest[0] in {"train-plan", "train_plan"}):
+            from arka.llm.train_plan import main as train_plan_main
+            code = train_plan_main(rest[1:] if head == "model" else rest)
+        elif head in ("stock_analyze", "stock-analyze", "market_analyze"):
+            from arka.stock.analyzer import main as stock_main
+            code = stock_main(rest)
+        elif head in ("code_convert", "code-convert", "language_convert"):
+            from arka.agent.code_convert import main as code_convert_main
+            code = code_convert_main(rest)
+        elif head in ("design_resources", "design-resources"):
+            from arka.agent.design_resources import main as design_resources_main
+            code = design_resources_main(rest)
+        elif head in ("edge", "edge_mode", "edge-mode"):
+            from arka.llm.edge import main as edge_main
+            code = edge_main(rest)
+        elif head in ("judge_demo", "judge-demo", "demo_pack"):
+            from arka.agent.judge_demo import main as judge_demo_main
+            code = judge_demo_main(rest)
         elif head in ("free_models", "free-models", "free_models_list"):
             from arka.llm.free_models import main as free_models_main
             code = free_models_main(rest)
@@ -297,6 +334,9 @@ def run_skill(skill_line: str) -> int:
         elif head in ("play", "game_benchmark", "game-benchmark"):
             from arka.agent.play import main as play_main
             code = play_main(rest)
+        elif head in ("hallmark", "hallmark-design"):
+            from arka.agent.hallmark import main as hallmark_main
+            code = hallmark_main(rest)
         elif head in ("vision_evidence", "vision-evidence", "ocr_compare"):
             from arka.agent.vision_evidence import main as evidence_main
             code = evidence_main(rest)
@@ -309,6 +349,9 @@ def run_skill(skill_line: str) -> int:
         elif head in ("iterate", "loop"):
             from arka.agent.iterate import main as iterate_main
             code = iterate_main([head, *rest])
+        elif head in ("loop_engineering", "loop-engineering", "engineer-loop"):
+            from arka.agent.loop_engineering import main as loop_engineering_main
+            code = loop_engineering_main(rest)
         elif head in ("ultra_fast", "ultra-fast", "fast_dev", "fast-dev"):
             from arka.agent.ultra_fast import main as ultra_main
             code = ultra_main(rest)
@@ -348,6 +391,15 @@ def run_skill(skill_line: str) -> int:
         elif head in ("workspace", "workspace_map", "workspace-map"):
             from arka.agent.workspace import main as workspace_main
             code = workspace_main(rest)
+        elif head in ("structure", "structure_audit", "structure-audit"):
+            from arka.agent.structure import main as structure_main
+            code = structure_main(rest)
+        elif head in ("dev_workflow", "dev-workflow", "devtool"):
+            from arka.agent.dev_workflows import main as dev_workflow_main
+            code = dev_workflow_main(rest)
+        elif head in ("graphify", "graphify_repo", "graphify-repo"):
+            from arka.agent.graphify import main as graphify_main
+            code = graphify_main(rest)
         elif head in ("spreadsheet", "spreadsheet_create", "create_spreadsheet"):
             from arka.agent.generate_data import main as generate_data_main
             code = generate_data_main([*rest, "--format", "xlsx"] if "--format" not in rest else rest)

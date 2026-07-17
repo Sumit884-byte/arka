@@ -147,9 +147,9 @@ def _security_and_test_gap_hints(diff_text: str, files: list[str]) -> list[str]:
 def security_scan(root: Path) -> list[dict[str, str | int]]:
     """Find high-signal leaked-secret and unsafe-code patterns, including untracked files."""
     _, listing, _ = _run(["git", "ls-files", "-z"], cwd=root)
-    paths = {Path(p) for p in listing.split("\0") if p}
+    paths = {Path(p.replace("\0", "")) for p in listing.split("\0") if p and "\0" not in p}
     _, status, _ = _run(["git", "status", "--porcelain"], cwd=root)
-    paths.update(Path(line[3:].strip()) for line in status.splitlines() if len(line) > 3 and line[3:].strip())
+    paths.update(Path(line[3:].strip().replace("\0", "")) for line in status.splitlines() if len(line) > 3 and line[3:].strip())
     patterns = {
         "secret": re.compile(r"(?i)(api[_-]?key|secret|token|password)\s*[:=]\s*['\"][^'\"]{8,}['\"]"),
         "private-key": re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),

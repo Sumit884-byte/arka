@@ -51,7 +51,14 @@ def record(prompt: str, *, latency_ms: float, hosted: bool) -> None:
     data["last_latency_ms"] = round(latency_ms, 1)
     path = _path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data), encoding="utf-8")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data), encoding="utf-8")
+    except OSError:
+        # Guardrail accounting must never turn a successful model response into
+        # a failure in read-only containers; callers still have the limits in
+        # memory for this process.
+        return
 
 
 def main(argv: list[str] | None = None) -> int:

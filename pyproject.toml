@@ -108,6 +108,10 @@ Repository = "https://github.com/Sumit884-byte/arka"
 Documentation = "https://arka-agent.mintlify.site"
 Issues = "https://github.com/Sumit884-byte/arka/issues"
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 

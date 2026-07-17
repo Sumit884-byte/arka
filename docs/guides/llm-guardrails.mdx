@@ -32,3 +32,14 @@ prototyping:
 ARKA_GROUNDED_MODE=0 arka ask "..."
 arka grounding
 ```
+
+Production mode is also enabled by default (`ARKA_PRODUCTION_MODE=1`). Coding
+requests are instructed to include access control, secret-safe data handling,
+input and output validation, prompt-injection defenses, audit logging, tests,
+error handling, and observability. Disable it only for explicitly disposable
+prototypes.
+
+Data minimization defaults to schema-only mode (`ARKA_DATA_MODE=schema`). JSON
+payloads sent to models are summarized as field names/types or array counts;
+literal trade-secret values remain available to local tools but are not exposed
+to the model. Use `ARKA_DATA_MODE=full` only when the data is safe to share.

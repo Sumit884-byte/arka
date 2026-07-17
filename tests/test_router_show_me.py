@@ -32,6 +32,20 @@ class DescribeImageParseTests(unittest.TestCase):
 
 
 class RouterShowMeTests(unittest.TestCase):
+    def test_slash_dev_tool_is_not_treated_as_image(self) -> None:
+        with mock.patch.dict(os.environ, {"ROUTE_MODE": "symbolic_only"}, clear=False):
+            result = route("/dev-tool")
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.skill, "dev_tools doctor")
+
+    def test_slash_dev_tool_preserves_subcommand(self) -> None:
+        with mock.patch.dict(os.environ, {"ROUTE_MODE": "symbolic_only"}, clear=False):
+            result = route("/dev-tools ci")
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.skill, "dev_tools ci")
+
     def test_routes_kaggle_competitions_to_competitions(self) -> None:
         for query in (
             "show me competitions available on kaggle",

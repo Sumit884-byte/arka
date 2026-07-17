@@ -29,7 +29,12 @@ def find_project_root(start: Path | None = None) -> Path | None:
     if raw := os.environ.get("PROJECT_RULES_ROOT", "").strip():
         path = Path(raw).expanduser().resolve()
         return path if path.is_dir() else None
-    cur = (start or Path.cwd()).resolve()
+    try:
+        cur = (start or Path.cwd()).resolve()
+    except OSError:
+        # A previous subprocess may have removed its temporary cwd. Rules are
+        # advisory, so continue without them instead of breaking the task.
+        return None
     for candidate in [cur, *cur.parents]:
         if (candidate / ".git").exists():
             return candidate

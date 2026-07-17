@@ -602,6 +602,11 @@ def format_headlines_response(answer: str, *, web_context: str = "") -> str:
     excerpt_limit = brief_url_words_limit()
     url_excerpts = _excerpts_from_web_context(web_context, max_words=excerpt_limit)
     url_context = _context_by_url(web_context)
+    # When formatting a captured search response, use the newest publication
+    # date in that response as the reference day. This keeps replayed/cached
+    # briefs deterministic instead of comparing them with the machine's date.
+    context_dates = [headline_date_from_text(web_context)] if web_context else []
+    reference_date = max((item for item in context_dates if item), default=None)
     text = re.sub(r"^\[FROM\s+SEARCH\]\s*", "", answer.strip(), flags=re.I)
     text = re.sub(r"\s*\*\s{2,}", "\n- ", text)
     text = _MID_BULLET_RE.sub("\n- ", text)
@@ -620,7 +625,7 @@ def format_headlines_response(answer: str, *, web_context: str = "") -> str:
                 continue
             context_bits = [url_excerpts.get(url, ""), url_context.get(url, "")]
             context = "\n".join(bit for bit in context_bits if bit)
-            if headline_looks_stale(title, context=context, url=url):
+            if headline_looks_stale(title, context=context, url=url, ref_date=reference_date):
                 continue
             if url:
                 if url in seen_urls:

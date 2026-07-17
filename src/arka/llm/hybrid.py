@@ -64,11 +64,12 @@ def complete(
     temperature: float = 0.2,
 ) -> str:
     """Complete using local/hosted policy; parallel returns both independent answers."""
-    from arka.llm.grounding import guard, instruction
+    from arka.llm.grounding import guard, instruction, minimize_data
 
     grounded, reason = guard(user)
     if not grounded:
         return f"[LLM blocked by grounding policy: {reason}]"
+    user = minimize_data(user)
     system = f"{system}\n\n{instruction(user)}".strip()
     chosen = route(policy, task=task, skill=skill)
     from arka.llm.guardrails import preflight, record

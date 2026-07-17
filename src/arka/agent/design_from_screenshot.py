@@ -19,7 +19,10 @@ DESIGN_PROMPT = (
     "Then list a practical build plan: suggested stack, component hierarchy, and a "
     "task breakdown that can be used to start building the project. "
     "If the screenshot looks like a website/app, infer the likely product type and "
-    "call out any reusable design system patterns. Avoid vague praise."
+    "call out any reusable design system patterns. Avoid vague praise. "
+    "Use this default developer design-resource catalog for discovery: "
+    "https://github.com/bradtraversy/design-resources-for-developers. "
+    "Do not copy assets blindly; verify each resource's license and availability."
 )
 
 

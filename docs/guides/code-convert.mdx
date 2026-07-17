@@ -1,0 +1,13 @@
+---
+title: "Coding language converter"
+description: "Translate source code between languages with verification guidance."
+---
+
+```bash
+arka code-convert script.py javascript
+arka code-convert script.py rust --output src/main.rs --apply
+```
+
+Conversion is local-first and preview-only unless `--output` and `--apply` are
+provided. Existing files are never overwritten. Always run the target formatter,
+tests, dependency audit, and behavior comparison after conversion.

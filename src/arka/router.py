@@ -11,7 +11,9 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-from arka.paths import script_path
+from arka.paths import fish_config as _fish_config, script_path
+
+fish_config = _fish_config  # compatibility seam for routing tests/plugins
 
 
 @dataclass
@@ -56,6 +58,14 @@ def route(text: str) -> Route | None:
     if not cmd:
         return None
 
+    # Resolve explicit slash aliases before integrations and broad URL/media
+    # heuristics.  Otherwise `/dev-tool` can be normalized as a hostname and
+    # eventually reported as a missing image or opened as `dev-tool.com`.
+    slash_dev = re.match(r"^/(?:dev[-_ ]?tools?|developer[-_ ]?tools?)\b\s*(.*)$", cmd, re.I)
+    if slash_dev:
+        tail = slash_dev.group(1).strip()
+        return Route(f"dev_tools {tail}" if tail else "dev_tools doctor", source="offline")
+
     try:
         from arka.telemetry import span
     except ImportError:
@@ -91,6 +101,11 @@ def route(text: str) -> Route | None:
             pass
 
         if mode == "symbolic_only":
+            github_route = _route_github_repo(cmd)
+            if github_route:
+                if span is not None:
+                    _finish_route_span(current, github_route, decision="symbolic", start=route_start)
+                return github_route
             try:
                 from arka.routing.symbolic import route_offline_extras
 
@@ -349,6 +364,13 @@ def _route_github_repo(cmd: str) -> Route | None:
 def _route_offline(cmd: str) -> Route | None:
     clean = cmd.lower()
 
+    # Slash-prefixed developer-tool aliases are commands, not image paths or
+    # web-search prompts. Resolve them before any broad URL/media heuristics.
+    slash_dev = re.match(r"^/(?:dev[-_ ]?tools?|developer[-_ ]?tools?)\b\s*(.*)$", cmd, re.I)
+    if slash_dev:
+        tail = slash_dev.group(1).strip()
+        return Route(f"dev_tools {tail}" if tail else "dev_tools doctor", source="offline")
+
     if clean in ("help", "skills", "?"):
         return Route("help")
 
@@ -416,6 +438,12 @@ def _route_offline(cmd: str) -> Route | None:
 
     if re.search(r"(?i)\b(life[- ]sciences?|biomedical research tools|bioinformatics tools)\b", clean):
         return Route("life_sciences list")
+
+    # GitHub activity language is more specific than generic profession/data
+    # questions and must win before plugin/profile routing.
+    github_route = _route_github_repo(cmd)
+    if github_route:
+        return github_route
 
     try:
         from arka.agent.professions import route_command
@@ -537,10 +565,6 @@ def _route_offline(cmd: str) -> Route | None:
     chat_route = _route_chat_intent(cmd)
     if chat_route:
         return chat_route
-
-    github_route = _route_github_repo(cmd)
-    if github_route:
-        return github_route
 
     competitions_route = _route_competitions(cmd)
     if competitions_route:

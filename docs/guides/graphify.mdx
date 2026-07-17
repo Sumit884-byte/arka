@@ -1,0 +1,13 @@
+---
+title: "Graphify repository integration"
+description: "Export repository dependencies and service relationships as graphs."
+---
+
+```bash
+arka graphify . --format mermaid --output repo.mmd
+arka graphify . --format dot --output repo.dot --render svg
+arka graphify . --format json --output repo.json
+```
+
+Graphify uses Arka's existing repository graph, so it remains local and
+read-only. DOT rendering requires Graphviz (`dot`) to be installed.

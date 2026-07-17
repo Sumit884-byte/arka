@@ -307,7 +307,8 @@ class SelfImproveLoopTests(unittest.TestCase):
         ):
             os.environ.pop("ARKA_CODE_PROJECT", None)
             rc = self_improve.run_self_improve("fix tests", max_rounds=1, max_steps=3, apply=True)
-        self.assertEqual(rc, 0)
+        # The goal agent is mocked and makes no diff, so apply cannot pass.
+        self.assertEqual(rc, 1)
         mock_goal.assert_called_once()
         call_kwargs = mock_goal.call_args.kwargs
         self.assertIn("SELF-IMPROVEMENT MODE", call_kwargs.get("system_extra", ""))
@@ -388,7 +389,7 @@ class SelfImproveLoopTests(unittest.TestCase):
         ):
             os.environ.pop("ARKA_CODE_PROJECT", None)
             rc = self_improve.run_self_improve("memory detect --apply", max_rounds=1, max_steps=3)
-        self.assertEqual(rc, 0)
+        self.assertEqual(rc, 1)
         mock_goal.assert_called_once()
 
     def test_arka_repo_root_ignores_unrelated_git_cwd(self) -> None:

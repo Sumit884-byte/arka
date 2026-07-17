@@ -579,7 +579,7 @@ def test_run_tests_uses_flexible_readonly_agent(monkeypatch, tmp_path, capsys):
         lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("must use _run_flexible_tests")),
     )
     assert coding_tui.run(str(tmp_path)) == 0
-    assert calls == [("tests", False, True)]
+    assert calls == [("tests", False, False)]
 
 
 def test_test_command_strict_with_scope(monkeypatch, tmp_path, capsys):

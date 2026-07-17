@@ -195,7 +195,7 @@ def _python_api_available() -> bool:
         import kaggle  # noqa: F401
 
         return True
-    except ImportError:
+    except (ImportError, SystemExit, OSError):
         return False
 
 

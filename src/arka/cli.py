@@ -79,11 +79,41 @@ def main(argv: list[str] | None = None) -> int:
     if args[0] == "setup":
         return _cmd_setup(args[1:])
 
+    if args[0] == "config":
+        from arka.core.default_config import main as config_main
+
+        return config_main(args[1:])
+
     if args[0] == "platform":
         return _cmd_platform(args[1:])
 
     if args[0] == "doctor":
         return _cmd_doctor()
+
+    if args[0] == "background" and len(args) >= 2 and args[1] == "agent":
+        if len(args) >= 3 and args[2] in ("tasks", "list", "status"):
+            from arka.integrations.subagent import list_agents
+
+            rows = [r for r in list_agents(limit=200) if r.get("status") in {"pending", "running"}]
+            if not rows:
+                print("No running Arka background agents.")
+                return 0
+            print(f"Running Arka background agents ({len(rows)}):")
+            for row in rows:
+                print(f"  [{row.get('status')}] {row.get('id')} — {row.get('task', '')}")
+            return 0
+        print("Usage: arka background agent tasks", file=sys.stderr)
+        return 1
+
+    if args[0] in ("plugin", "plugins"):
+        from arka.agent.skills import main as plugin_main
+
+        try:
+            return plugin_main(args[1:])
+        except SystemExit as exc:
+            # argparse uses SystemExit for --help; keep the public CLI API
+            # integer-returning like every other Arka subcommand.
+            return int(exc.code or 0)
 
     if args[0] == "personalize":
         from arka.core.personalize import main as personalize_main
@@ -893,6 +923,8 @@ def _cmd_route_preview(text: str) -> int:
 
 def _cmd_setup(extra: list[str] | None = None) -> int:
     extra = extra or []
+    configure = "--configure" in extra
+    configure_apply = "--apply" in extra
     skip_venv = "--no-venv" in extra or "--layout-only" in extra
 
     home = ensure_layout()
@@ -905,6 +937,17 @@ def _cmd_setup(extra: list[str] | None = None) -> int:
     print(f"  Config:  {config_dir()}")
     print(f"  Cache:   {cache_dir()}")
     print(f"  Env:     {env_file()}")
+
+    if configure:
+        from arka.core.default_config import main as config_main
+
+        print("\n→ Recommended defaults")
+        config_args = ["configure"]
+        if configure_apply:
+            config_args.append("--apply")
+        if "--json" in extra:
+            config_args.append("--json")
+        config_main(config_args)
 
     if not skip_venv:
         print(f"\n→ Python venv: {venv_dir()}")

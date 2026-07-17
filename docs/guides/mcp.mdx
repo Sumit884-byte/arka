@@ -7,6 +7,11 @@ icon: "network-wired"
 
 Arka can connect to **any MCP server** from the terminal — the same [Model Context Protocol](https://modelcontextprotocol.io) used by Cursor, Claude Desktop, and other AI clients.
 
+MCP servers can also participate in Arka’s universal plugin catalog. After
+adding a server, use `arka plugin doctor` and `arka plugin inspect <name>` to
+check its normalized capabilities and permissions before routing requests to
+it. Agent Hub exports the same catalog alongside Arka’s skill manifest.
+
 Config lives at `~/.config/arka/mcp.json` in Cursor-compatible `mcpServers` format.
 
 ## Quick start
@@ -195,6 +200,60 @@ Use Arka as an MCP server inside Cursor so the editor agent can call `arka_ask`,
     ```
   </Step>
 </Steps>
+
+## IDE and agent setup
+
+Arka exposes a standard stdio MCP server, so the same generated entry works in
+most MCP-compatible IDEs. Generate a machine-specific snippet instead of
+copying a path from this page:
+
+```bash
+arka mcp install
+```
+
+Add the printed `mcpServers.arka` entry to the client’s MCP JSON file, then
+restart or reload its MCP panel. The entry is:
+
+```json
+{
+  "command": "/absolute/path/to/arka",
+  "args": ["mcp", "serve"]
+}
+```
+
+If the IDE cannot resolve your virtual environment, use an absolute Python
+executable and module invocation:
+
+```json
+{
+  "command": "/absolute/path/to/venv/bin/python",
+  "args": ["-m", "arka", "mcp", "serve"]
+}
+```
+
+| Client | Configuration location / action |
+| --- | --- |
+| **Cursor** | Settings → MCP, or project `.cursor/mcp.json` |
+| **VS Code / GitHub Copilot** | `.vscode/mcp.json` in the workspace, or the MCP server settings UI |
+| **Claude Desktop** | macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`; Linux: `~/.config/Claude/claude_desktop_config.json` |
+| **Windsurf** | MCP settings → add server, or `~/.codeium/windsurf/mcp_config.json` |
+| **Cline** | Cline MCP Servers panel → install from JSON |
+| **Continue** | Add the server in Continue’s MCP configuration (use the generated stdio entry) |
+| **Zed** | Settings → Context Servers → add an `arka` command server |
+| **Codex CLI** | `~/.codex/config.toml` MCP configuration, or run `codex mcp add arka -- arka mcp serve` |
+
+After configuring any client, verify the connection before asking the agent
+to use Arka:
+
+```bash
+arka mcp doctor
+arka mcp self-tools
+```
+
+In the IDE, explicitly say “use the Arka MCP tools” when needed. Useful first
+checks are `arka_heartbeat`, `arka_repo_map`, and `arka_skill`. Existing MCP
+servers are preserved when using `arka agent_hub sync --unify`; use
+`arka agent_hub adapters` to preview which client files will be updated.
 
 ### Quick start
 

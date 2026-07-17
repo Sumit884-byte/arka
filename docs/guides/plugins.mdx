@@ -7,13 +7,53 @@ icon: "puzzle-piece"
 
 Extend Arka with third-party skills installed to `~/.config/arka/skills/`.
 
+Arka also provides a universal plugin registry. Existing Arka manifests remain
+supported, while Claude/Codex-style folders, MCP-backed plugins, and executable
+plugin repositories are normalized into the same catalog and execution path.
+
 ## Install a plugin
 
 ```bash
 arka skills install https://github.com/user/my-skill.git
 arka skills refresh
 arka skills list
+arka plugin doctor
+arka plugin inspect my_skill
+arka plugin search browser
 ```
+
+`plugin` and `plugins` are lifecycle aliases; `skills` remains compatible with
+older installations.
+
+## Plugin compatibility
+
+| Source | Detection | Default adapter |
+| --- | --- | --- |
+| Arka `skill.json`, `manifest.json`, `plugin.json` | manifest in a plugin directory | Arka manifest |
+| Claude/Codex skill | `SKILL.md` or `README.md` | external skill |
+| Executable repository | `run.py`, `main.py`, `run.sh`, or `index.js` | executable |
+| MCP server | MCP server entry in the configured MCP catalog | MCP tool adapter |
+
+Inspect the normalized descriptor before enabling an unfamiliar plugin:
+
+```bash
+arka plugin inspect my_skill
+arka plugin doctor
+```
+
+The descriptor reports its adapter, source, entrypoint, capabilities,
+requirements, permissions, health, and any trigger conflicts. Conflicting or
+unavailable plugins are not routed.
+
+## Security defaults
+
+Third-party plugins pass Arka’s security and hosted-mode gates. Permissions can
+declare `read`, `write`, `network`, `shell`, or `install`; risky operations need
+interactive approval, and hosted/user-disabled skills remain unavailable.
+Command plugins receive structured arguments and are not evaluated through a
+shell string. Unsafe argument syntax, missing dependencies, invalid manifests,
+and failed health checks block activation. Plugin installation is always
+explicit; discovery never executes code.
 
 ## skill.json format
 

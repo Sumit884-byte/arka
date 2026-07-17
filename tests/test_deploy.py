@@ -10,3 +10,8 @@ def test_backend_detection_and_command(tmp_path) -> None:
     (tmp_path / "Dockerfile").write_text("FROM python:3.13")
     assert detect_platform(tmp_path) == "railway"
     assert deployment_command(tmp_path, "railway", production=True) == ["railway", "up", "--ci"]
+
+
+def test_free_host_commands(tmp_path) -> None:
+    assert deployment_command(tmp_path, "huggingface") == ["git", "push", "hf", "main"]
+    assert deployment_command(tmp_path, "cloudflare") == ["wrangler", "deploy"]

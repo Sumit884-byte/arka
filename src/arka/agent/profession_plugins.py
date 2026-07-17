@@ -240,10 +240,15 @@ def discover_professions(*, refresh: bool = False) -> list[dict[str, Any]]:
 
     professions = sorted(by_id.values(), key=lambda p: p["id"])
     REGISTRY_FILE.parent.mkdir(parents=True, exist_ok=True)
-    REGISTRY_FILE.write_text(
-        json.dumps({"updated": time.time(), "professions": professions}, indent=2),
-        encoding="utf-8",
-    )
+    try:
+        REGISTRY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        REGISTRY_FILE.write_text(
+            json.dumps({"updated": time.time(), "professions": professions}, indent=2),
+            encoding="utf-8",
+        )
+    except OSError:
+        # Routing must remain usable in read-only containers; the registry is only a cache.
+        pass
     _cache_version = time.time()
     return professions
 

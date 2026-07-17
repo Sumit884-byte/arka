@@ -23,4 +23,15 @@ verify every gate before deployment. Arka does not mark a scaffold production
 ready merely because it was generated.
 
 Natural language works: “show reusable login blocks” or “list available app
-blocks.”
+blocks."
+
+Web3 blocks are also available:
+
+```bash
+arka blocks show web3_wallet
+arka blocks show web3_sign_in
+arka blocks use web3_token_transfer --stack "Next.js + viem" --out web3/transfer.md
+```
+
+They include chain and contract allowlists, nonce-bound signature verification,
+transaction simulation, receipt checks, and explicit production-readiness gates.

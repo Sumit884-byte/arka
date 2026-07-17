@@ -7,6 +7,8 @@ icon: "camera"
 ```bash
 arka model_to_image chair.obj --output chair-render.png
 arka model_to_image asset.glb --output public/assets/asset.png --size 2048
+arka model_to_image asset.glb --output hero.png --task "product hero image"
+arka model_to_image asset.glb --output roof.png --angle top
 ```
 
 Arka uses Blender for cross-platform mesh rendering, produces a transparent
@@ -14,3 +16,9 @@ PNG, then runs the existing background-removal skill to remove residual pixels.
 Supported mesh inputs are OBJ, STL, GLB, and GLTF. Install Blender on PATH and
 the vision extra for background removal. Use `--keep-background` when a rendered
 transparent canvas is preferred without rembg processing.
+
+The camera defaults to a three-quarter view. Pass `--angle front|side|three-quarter|top|underside`
+when the composition is known. With a VLLM server configured (`VLLM_API_URL` and
+optionally `VLLM_MODEL`), `--task` lets the local model choose the most useful
+view for that task. If VLLM is unavailable, Arka falls back to deterministic
+keywords (for example, “roof” selects `top`) and never blocks rendering.

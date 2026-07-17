@@ -1,0 +1,31 @@
+---
+title: "Configuration"
+description: "Safe, hardware-aware Arka defaults and first-run setup."
+---
+
+Preview the recommended configuration without writing anything:
+
+```bash
+arka setup --configure --json
+```
+
+Apply it explicitly:
+
+```bash
+arka setup --configure --apply
+```
+
+The profile is local-first and hardware-aware. It prefers a runnable local
+backend, keeps symbolic routing first, enables fallback and local memory, and
+requires previews for risky writes. Missing cloud credentials are handled as a
+normal fallback condition; setup never creates or copies secrets.
+
+Inspect or reset only Arka's managed configuration:
+
+```bash
+arka config show --json
+arka config reset
+```
+
+Environment values and project `.env` values take precedence over the managed
+defaults. Existing values are preserved when applying the profile.

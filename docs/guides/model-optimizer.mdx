@@ -1,0 +1,14 @@
+---
+title: "Model optimizer"
+description: "Choose local models from hardware and cost preferences."
+---
+
+```bash
+arka model recommend
+arka model switch qwen2.5-coder:7b
+```
+
+Preferences are configured with `ARKA_MODEL_MODE`, `ARKA_QUANT`,
+`ARKA_MAX_CONTEXT`, `ARKA_PREFERRED_SMALL_MODEL`, and
+`ARKA_PREFERRED_CODING_MODEL`. Recommendations are evidence-based and
+preview-only; backend downloads and provider changes remain explicit.

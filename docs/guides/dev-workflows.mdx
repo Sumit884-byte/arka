@@ -1,0 +1,14 @@
+---
+title: "Developer workflow analyzers"
+description: "Find change impact, test gaps, and documentation follow-ups."
+---
+
+```bash
+arka dev-workflow impact
+arka dev-workflow test-gaps
+arka dev-workflow docs-sync
+```
+
+These commands analyze the current Git diff without modifying files. They are
+also available through natural language, such as “what could this change
+break?” or “find missing tests for this change.”

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import platform
 import shutil
 import sys
@@ -21,6 +22,7 @@ except ImportError:
 
 PLATFORM_JSON = "platform.json"
 PLATFORM_ENV = "platform.env"
+CACHE_VERSION = 2
 
 
 def _config_dir() -> Path:
@@ -41,6 +43,30 @@ def platform_env_path() -> Path:
     return _config_dir() / PLATFORM_ENV
 
 
+def _linux_distro() -> dict[str, str]:
+    """Read distro metadata without invoking a package manager or shell."""
+    if not sys.platform.startswith("linux"):
+        return {}
+    try:
+        values: dict[str, str] = {}
+        for line in Path("/etc/os-release").read_text(encoding="utf-8").splitlines():
+            key, sep, value = line.partition("=")
+            if sep and key in {"ID", "VERSION_ID", "PRETTY_NAME", "ID_LIKE"}:
+                values[key.lower()] = value.strip().strip('"')
+        return values
+    except OSError:
+        return {}
+
+
+def _package_manager(plat: str) -> str | None:
+    candidates = {
+        "macos": ("brew",),
+        "windows": ("winget", "choco", "scoop"),
+        "linux": ("apt-get", "dnf", "yum", "pacman", "apk", "zypper"),
+    }
+    return next((name for name in candidates.get(plat, ()) if shutil.which(name)), None)
+
+
 def detect_platform() -> dict:
     sysname = platform.system()
     if sysname == "Darwin":
@@ -53,12 +79,13 @@ def detect_platform() -> dict:
         plat = sysname.lower()
 
     caps: dict[str, str | None] = {}
+    distro = _linux_distro()
     if plat == "macos":
         caps["open"] = "open" if shutil.which("open") else None
         caps["clipboard_copy"] = "pbcopy" if shutil.which("pbcopy") else None
         caps["clipboard_paste"] = "pbpaste" if shutil.which("pbpaste") else None
         caps["stat_mtime"] = "darwin"
-        caps["package_manager"] = "brew"
+        caps["package_manager"] = _package_manager(plat)
     elif plat == "linux":
         caps["open"] = "xdg-open" if shutil.which("xdg-open") else None
         if shutil.which("wl-copy"):
@@ -74,21 +101,26 @@ def detect_platform() -> dict:
             caps["clipboard_copy"] = None
             caps["clipboard_paste"] = None
         caps["stat_mtime"] = "linux"
-        caps["package_manager"] = "apt"
+        caps["package_manager"] = _package_manager(plat)
     elif plat == "windows":
         caps["open"] = "start"
         caps["clipboard_copy"] = "clip" if shutil.which("clip") else None
         caps["clipboard_paste"] = "powershell" if shutil.which("powershell") or shutil.which("powershell.exe") else None
         caps["stat_mtime"] = "windows"
-        caps["package_manager"] = "winget"
+        caps["package_manager"] = _package_manager(plat)
     else:
         caps["stat_mtime"] = "unknown"
 
     return {
-        "version": 1,
+        "version": CACHE_VERSION,
         "platform": plat,
         "system": sysname,
         "machine": platform.machine(),
+        "architecture": platform.machine(),
+        "python": platform.python_version(),
+        "shell": os.environ.get("SHELL") or os.environ.get("ComSpec") or None,
+        "distro": distro,
+        "container": bool(os.environ.get("container") or Path("/.dockerenv").exists()),
         "detected_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "capabilities": caps,
     }
@@ -102,7 +134,7 @@ def load_platform() -> dict | None:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
-    if isinstance(data, dict) and data.get("platform"):
+    if isinstance(data, dict) and data.get("platform") and data.get("version", 0) >= CACHE_VERSION:
         return data
     return None
 

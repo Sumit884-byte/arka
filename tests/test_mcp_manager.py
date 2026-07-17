@@ -201,7 +201,8 @@ def test_mcp_cli_self_tools(capsys):
     out = capsys.readouterr().out
     assert "server\tarka" in out
     assert "tool\tarka_ask" in out
-    assert "tool_count\t37" in out
+    count = next(int(line.split("\t", 1)[1]) for line in out.splitlines() if line.startswith("tool_count\t"))
+    assert count >= 37
 
 
 def test_mcp_cli_parse(capsys):

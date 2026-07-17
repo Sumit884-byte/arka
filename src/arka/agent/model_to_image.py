@@ -2,13 +2,53 @@
 from __future__ import annotations
 
 import argparse
+import os
+import re
 import shutil
 import subprocess
 import tempfile
 from pathlib import Path
 
 
-def render_model(source: str, output: str, *, size: int = 1024, remove_bg: bool = True) -> Path:
+ANGLE_PRESETS = {
+    "front": ((0, -5, 2.8), (78, 0, 90)),
+    "side": ((4.8, -0.2, 2.2), (82, 0, 90)),
+    "three-quarter": ((4, -4, 3), (67, 0, 45)),
+    "top": ((3.2, -3.2, 6), (35, 0, 45)),
+    "underside": ((3.2, -3.2, -2.5), (115, 0, 45)),
+}
+
+
+def choose_angle(task: str = "", *, requested: str = "auto") -> str:
+    """Choose a camera preset, optionally asking a configured vLLM model."""
+    if requested in ANGLE_PRESETS:
+        return requested
+    if os.environ.get("VLLM_API_URL") or os.environ.get("VLLM_MODEL"):
+        try:
+            from arka.llm.fallback import llm_complete
+
+            raw = llm_complete(
+                "Return JSON only: {\"angle\": \"front|side|three-quarter|top|underside\"}.",
+                f"Choose the most useful 3D camera angle for this task: {task or 'show the model clearly'}",
+                temperature=0,
+                task="vision",
+                skill="model_to_image",
+                chain=[("vllm", os.environ.get("VLLM_MODEL", "default"))],
+            )
+            match = re.search(r"(?:front|side|three[- ]quarter|top|underside)", raw.lower())
+            if match:
+                return match.group(0).replace("three quarter", "three-quarter")
+        except (ImportError, OSError, RuntimeError, ValueError):
+            pass
+    lowered = task.lower()
+    if any(word in lowered for word in ("top", "roof", "layout", "assembly")):
+        return "top"
+    if any(word in lowered for word in ("profile", "side", "silhouette")):
+        return "side"
+    return "three-quarter"
+
+
+def render_model(source: str, output: str, *, size: int = 1024, remove_bg: bool = True, task: str = "", angle: str = "auto") -> Path:
     src = Path(source).expanduser().resolve()
     dest = Path(output).expanduser().resolve()
     if not src.is_file():
@@ -19,7 +59,8 @@ def render_model(source: str, output: str, *, size: int = 1024, remove_bg: bool 
     dest.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="arka-model-render-") as tmp:
         script = Path(tmp) / "render.py"
-        script.write_text(_blender_script(src, dest, size), encoding="utf-8")
+        selected_angle = choose_angle(task, requested=angle)
+        script.write_text(_blender_script(src, dest, size, angle=selected_angle), encoding="utf-8")
         proc = subprocess.run([blender, "--background", "--python", str(script)], capture_output=True, text=True, timeout=180, check=False)
         if proc.returncode != 0 or not dest.is_file():
             raise RuntimeError(f"Blender render failed: {(proc.stderr or proc.stdout)[-1000:]}")
@@ -29,8 +70,9 @@ def render_model(source: str, output: str, *, size: int = 1024, remove_bg: bool 
     return dest
 
 
-def _blender_script(src: Path, dest: Path, size: int) -> str:
+def _blender_script(src: Path, dest: Path, size: int, *, angle: str = "three-quarter") -> str:
     src_q, dest_q = repr(str(src)), repr(str(dest))
+    camera_location, camera_rotation = ANGLE_PRESETS.get(angle, ANGLE_PRESETS["three-quarter"])
     return f'''import bpy, math
 from mathutils import Vector
 bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -53,7 +95,7 @@ obj.dimensions=(2.8,2.8,2.8)
 bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
 mat=bpy.data.materials.new('ArkaMaterial'); mat.diffuse_color=(0.18,0.42,0.95,1); obj.data.materials.append(mat)
 camera_data=bpy.data.cameras.new('Camera'); camera=bpy.data.objects.new('Camera', camera_data); bpy.context.collection.objects.link(camera); bpy.context.scene.camera=camera
-camera.location=(4,-4,3); camera.rotation_euler=(math.radians(67),0,math.radians(45))
+camera.location={camera_location!r}; camera.rotation_euler=tuple(math.radians(v) for v in {camera_rotation!r})
 light_data=bpy.data.lights.new('Key','AREA'); light_data.energy=900; light_data.shape='DISK'; light_data.size=5; light=bpy.data.objects.new('Key',light_data); bpy.context.collection.objects.link(light); light.location=(3,-4,5)
 scene=bpy.context.scene; scene.render.engine='BLENDER_EEVEE_NEXT'; scene.render.resolution_x={size}; scene.render.resolution_y={size}; scene.render.resolution_percentage=100; scene.render.image_settings.file_format='PNG'; scene.render.image_settings.color_mode='RGBA'; scene.render.film_transparent=True; scene.render.filepath={dest_q}; bpy.ops.render.render(write_still=True)
 '''
@@ -65,9 +107,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output", required=True)
     parser.add_argument("--size", type=int, default=1024)
     parser.add_argument("--keep-background", action="store_true")
+    parser.add_argument("--task", default="", help="visual purpose used for camera-angle selection")
+    parser.add_argument("--angle", choices=["auto", *ANGLE_PRESETS], default="auto")
     args = parser.parse_args(argv)
     try:
-        print(render_model(args.source, args.output, size=max(128, min(args.size, 4096)), remove_bg=not args.keep_background))
+        print(render_model(args.source, args.output, size=max(128, min(args.size, 4096)), remove_bg=not args.keep_background, task=args.task, angle=args.angle))
     except (FileNotFoundError, RuntimeError, OSError) as exc:
         parser.error(str(exc))
     return 0
