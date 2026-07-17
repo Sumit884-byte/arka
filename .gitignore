@@ -32,8 +32,23 @@ pours/
 
 # Runtime cache (user machine, not repo)
 .cache/
+.arka/
 platform.json
 platform.env
+last-refetch
+code-project.json
+council-memory.json
+mcp.json
+personalize.json
+repo-index.json
+self-improve-memory.json
+message-sessions/
+quiz-memory/
+hub/agents.json
+hub/mcp.json
+hub/launch.env
+hub/memory/
+hub/skills/
 
 # Mintlify local dev (run `mint dev` from docs/)
 .mintlify/

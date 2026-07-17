@@ -56,6 +56,60 @@ def _config_dir_override() -> Path | None:
     return None
 
 
+def _platform_config_dir() -> Path:
+    user_config_dir, _ = _platformdirs()
+    return Path(user_config_dir("arka", appauthor=False))
+
+
+def checkout_state_dir() -> Path | None:
+    """Gitignored runtime state folder for editable checkouts (``<repo>/.arka``)."""
+    root = checkout_root()
+    if root is None:
+        return None
+    return root / ".arka"
+
+
+# Runtime JSON / state files that historically landed at repo root during dev.
+_RUNTIME_JSON_FILES = (
+    "code-project.json",
+    "council-memory.json",
+    "mcp.json",
+    "personalize.json",
+    "platform.json",
+    "repo-index.json",
+    "self-improve-memory.json",
+    "config.json",
+    "learned_routes.json",
+    "skills.json",
+    "benchmark-results.json",
+    "llm-skill-models.json",
+)
+
+_RUNTIME_STATE_DIRS = (
+    "message-sessions",
+    "quiz-memory",
+    "agent-memory",
+    "teams",
+    "workflows",
+    "skills",
+    "personas",
+    "backups",
+    "benchmarks",
+    "memory-scratchpad",
+)
+
+_RUNTIME_STATE_FILES = (
+    "last-refetch",
+    "platform.env",
+    "mode",
+    "thinking_level",
+)
+
+# Repo ``hub/`` ships adapter snippets; runtime hub exports live under config_dir()/hub/.
+_HUB_RUNTIME_FILES = ("agents.json", "mcp.json", "launch.env")
+_HUB_RUNTIME_DIRS = ("memory", "skills")
+
+
 def config_dir() -> Path:
     """User-writable config (.env, overrides) — not the package install dir."""
     if override := _config_dir_override():
@@ -65,8 +119,64 @@ def config_dir() -> Path:
     if (legacy / ".env").is_file():
         return legacy
 
-    user_config_dir, _ = _platformdirs()
-    return Path(user_config_dir("arka", appauthor=False))
+    if state := checkout_state_dir():
+        return state
+
+    return _platform_config_dir()
+
+
+def _move_if_missing(src: Path, dst: Path, *, moved: list[str]) -> None:
+    if not src.is_file() or dst.exists():
+        return
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(src), str(dst))
+    moved.append(str(dst))
+
+
+def _move_dir_if_missing(src: Path, dst: Path, *, moved: list[str]) -> None:
+    if not src.is_dir() or dst.exists():
+        return
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(src), str(dst))
+    moved.append(str(dst))
+
+
+def _migrate_hub_runtime(src_hub: Path, dst_hub: Path, *, moved: list[str]) -> None:
+    if not src_hub.is_dir():
+        return
+    dst_hub.mkdir(parents=True, exist_ok=True)
+    for name in _HUB_RUNTIME_FILES:
+        _move_if_missing(src_hub / name, dst_hub / name, moved=moved)
+    for name in _HUB_RUNTIME_DIRS:
+        _move_dir_if_missing(src_hub / name, dst_hub / name, moved=moved)
+
+
+def migrate_scattered_state(*, target: Path | None = None) -> list[str]:
+    """Move dev runtime state from repo root into ``config_dir()`` (``.arka/`` in checkouts)."""
+    root = checkout_root()
+    state_root = checkout_state_dir()
+    if root is None or state_root is None:
+        return []
+
+    target = (target or config_dir()).resolve()
+    if target != state_root.resolve():
+        return []
+
+    moved: list[str] = []
+    target.mkdir(parents=True, exist_ok=True)
+
+    for name in _RUNTIME_JSON_FILES:
+        _move_if_missing(root / name, target / name, moved=moved)
+
+    for name in _RUNTIME_STATE_FILES:
+        _move_if_missing(root / name, target / name, moved=moved)
+
+    for name in _RUNTIME_STATE_DIRS:
+        _move_dir_if_missing(root / name, target / name, moved=moved)
+
+    _migrate_hub_runtime(root / "hub", target / "hub", moved=moved)
+
+    return moved
 
 
 def cache_dir() -> Path:
@@ -117,6 +227,7 @@ def bundled_env_example() -> Path:
 
 def ensure_layout() -> Path:
     """Create user config/cache dirs and seed .env from package template."""
+    migrate_scattered_state()
     config_dir().mkdir(parents=True, exist_ok=True)
     cache_dir().mkdir(parents=True, exist_ok=True)
 
