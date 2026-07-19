@@ -1,0 +1,61 @@
+---
+title: "GitHub dataset repos"
+description: "Import common CSV, JSON, JSONL, TSV, YAML, XML, and Parquet files from public GitHub repositories."
+keywords: ["github dataset", "data import", "csv", "json", "open data"]
+icon: "database"
+---
+
+Arka can import data files from public GitHub repositories without needing a
+custom skill for each repo. It downloads the repository archive, extracts common
+data formats, caches them locally, and writes a manifest with file previews.
+
+```bash
+arka github-dataset import hasaneyldrm/exercises-dataset --timeout 600
+arka github-dataset status hasaneyldrm/exercises-dataset
+arka github-dataset search hasaneyldrm/exercises-dataset chest
+```
+
+Natural language routes to the same importer:
+
+```bash
+arka quickly add data from this repo https://github.com/owner/dataset-repo
+arka import csv files from github.com/owner/data-repo
+arka search github dataset owner/repo for ratings
+```
+
+## What Arka extracts
+
+The generic importer scans the repo archive for:
+
+- `.csv`
+- `.json`
+- `.jsonl` / `.ndjson`
+- `.tsv`
+- `.yaml` / `.yml`
+- `.xml`
+- `.parquet`
+
+It skips obvious build and dependency folders such as `node_modules`, `.git`,
+`venv`, `dist`, and `build`.
+
+## Cache location
+
+Imported files are stored under:
+
+```text
+~/.cache/fish-agent/datasets/github/<owner>__<repo>/files/
+~/.cache/fish-agent/datasets/github/<owner>__<repo>/manifest.json
+```
+
+The manifest includes source URL, branch, cached file paths, file sizes, and
+best-effort previews such as CSV columns or JSON keys.
+
+## Licensing
+
+Arka does not infer a repository's license or redistribution rights. Before
+using imported data in a product, dataset, demo, or public export, inspect the
+upstream repository's license and README.
+
+For heavily curated sources, Arka may still provide a named preset such as
+`arka exercises`; those presets can add domain-specific normalization on top of
+the generic GitHub dataset importer.

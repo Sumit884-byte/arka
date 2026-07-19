@@ -1,0 +1,17 @@
+{
+  "name": "github_dataset",
+  "description": "Import common data files from public GitHub dataset repositories.",
+  "triggers": [
+    "add data from github repo",
+    "import dataset repo",
+    "load data from this repo",
+    "search github dataset"
+  ],
+  "type": "python",
+  "entry": "arka.agent.github_dataset",
+  "permissions": ["read", "write", "network"],
+  "metadata": {
+    "formats": ["csv", "json", "jsonl", "ndjson", "tsv", "yaml", "xml", "parquet"],
+    "license_note": "Arka does not infer licensing; inspect upstream repository terms before redistribution."
+  }
+}

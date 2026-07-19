@@ -311,6 +311,10 @@ def run_skill(skill_line: str) -> int:
             from arka.agent.exercise_dataset import main as exercise_main
 
             code = exercise_main(rest)
+        elif head in ("github_dataset", "github-dataset", "dataset_repo", "dataset-repo"):
+            from arka.agent.github_dataset import main as github_dataset_main
+
+            code = github_dataset_main(rest)
         elif head in ("search", "search_setup", "search-setup"):
             from arka.agent.search_setup import main as search_setup_main
             code = search_setup_main(rest)

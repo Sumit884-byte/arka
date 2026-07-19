@@ -359,6 +359,11 @@ def main(argv: list[str] | None = None) -> int:
 
         return exercise_main(args[1:])
 
+    if args[0] in ("github_dataset", "github-dataset", "dataset_repo", "dataset-repo"):
+        from arka.agent.github_dataset import main as github_dataset_main
+
+        return github_dataset_main(args[1:])
+
     # Fish-only service subcommands (listen, start, serve, …)
     fish_subs = {
         "listen",
