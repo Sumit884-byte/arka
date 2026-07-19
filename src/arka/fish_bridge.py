@@ -6,6 +6,7 @@ import os
 import re
 import shlex
 import subprocess
+import sys
 from dataclasses import dataclass
 
 from arka.paths import arka_home, bundled_dir, config_dir, fish_config
@@ -28,6 +29,10 @@ def _fish_env() -> dict[str, str]:
     return env
 
 
+def _capture_stdio_enabled() -> bool:
+    return os.environ.get("ARKA_CAPTURE_STDIO", "").lower() in ("1", "true", "yes", "on")
+
+
 def delegate_to_fish(argv: list[str]) -> int | None:
     """Run `arka <request>` via fish config.fish. Returns exit code, or None if unavailable."""
     cfg = fish_config()
@@ -45,8 +50,27 @@ def delegate_to_fish(argv: list[str]) -> int | None:
     call = _agent_call_name()
     cfg_q = shlex.quote(str(cfg))
     inner = f"source {cfg_q}; {call} {request}"
+    env = _fish_env()
+    capture = _capture_stdio_enabled()
+    if capture:
+        env["NO_COLOR"] = "1"
+        env["CLICOLOR"] = "0"
+        env["TERM"] = "dumb"
     try:
-        result = subprocess.run([fish, "-c", inner], check=False, env=_fish_env())
+        if capture:
+            result = subprocess.run(
+                [fish, "-c", inner],
+                check=False,
+                env=env,
+                capture_output=True,
+                text=True,
+            )
+            if result.stdout:
+                print(result.stdout, end="")
+            if result.stderr:
+                print(result.stderr, end="", file=sys.stderr)
+            return result.returncode
+        result = subprocess.run([fish, "-c", inner], check=False, env=env)
         return result.returncode
     except OSError:
         return None

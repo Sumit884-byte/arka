@@ -1,0 +1,83 @@
+---
+title: "Compose video"
+description: "Create explainer videos with Arka, stock media, charts, TTS, and custom script APIs."
+---
+
+Arka's video composer can build videos from a topic, an explicit JSON script,
+Arka's LLM script generator, or a user-supplied script API.
+
+```bash
+arka compose_video --topic "AI infrastructure"
+arka compose_video --topic "AI infrastructure" --llm
+arka compose_video --script scenes.json
+```
+
+## Bring your own API
+
+Use a custom HTTP API when you want your own model, workflow, brand system, or
+script generator to produce the video scenes:
+
+```bash
+arka compose_video \
+  --topic "AI infrastructure" \
+  --script-provider custom \
+  --api-url https://example.com/arka/video-script
+```
+
+You can configure it once in `.env`:
+
+```bash
+VIDEO_SCRIPT_PROVIDER=custom
+VIDEO_SCRIPT_API_URL=https://example.com/arka/video-script
+VIDEO_SCRIPT_API_KEY=...
+```
+
+If your key lives under another env var:
+
+```bash
+VIDEO_SCRIPT_API_KEY_ENV=MY_COMPANY_VIDEO_API_KEY
+```
+
+Arka sends a JSON POST body with:
+
+```json
+{
+  "topic": "AI infrastructure",
+  "topic_raw": "ai infrastructure",
+  "scenes": 6,
+  "target_duration_sec": 300,
+  "schema": {
+    "type": "array"
+  }
+}
+```
+
+Your API should return either a scene array or an object with a `scenes` array:
+
+```json
+{
+  "scenes": [
+    {
+      "title": "Why AI infrastructure matters",
+      "narration": "AI infrastructure is the stack behind modern models.",
+      "body": "The stack behind AI",
+      "captions": ["Models need compute", "Data and serving matter"],
+      "image_keywords": ["gpu server", "data center"],
+      "duration": 8
+    }
+  ]
+}
+```
+
+Arka still validates and enriches the scene JSON locally, then uses the normal
+renderer, stock-media lookup, chart rendering, TTS, and ffmpeg pipeline. If the
+custom API fails, Arka falls back to the built-in template so a video command
+does not fail just because the script provider is unavailable.
+
+Useful flags:
+
+```bash
+arka compose_video --topic "AI infra" --script-provider custom --api-header "X-Team: demo"
+arka compose_video --topic "AI infra" --script-provider custom --api-key-env MY_VIDEO_KEY
+arka compose_video check
+```

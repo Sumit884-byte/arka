@@ -1,0 +1,10 @@
+{
+  "name": "word_counter",
+  "description": "Count words, characters, sentences, lines, unique words, and estimated reading time locally",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": ["word count", "count words", "count characters", "reading time", "text statistics"],
+  "permissions": ["read"]
+}

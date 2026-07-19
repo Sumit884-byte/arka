@@ -1,21 +1,24 @@
 {
-  "description": "Merge into ~/.cursor/mcp.json (Cursor Settings → MCP) or use project .cursor/mcp.json",
+  "description": "Point cursor at Arka hub MCP config",
+  "hub_mcp": "/Users/sumitmishra/dev/arka/hub/mcp.json",
   "mcpServers": {
+    "context7": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp"
+      ],
+      "env": {
+        "CONTEXT7_API_KEY": "${env:CONTEXT7_API_KEY}"
+      }
+    },
     "arka": {
       "command": "/Users/sumitmishra/dev/arka/venv-arka/bin/arka",
-      "args": ["mcp", "serve"],
-      "env": {
-        "ARKA_CONFIG_DIR": "/Users/sumitmishra/.config/arka"
-      }
+      "args": [
+        "mcp",
+        "serve"
+      ]
     }
   },
-  "install_steps": [
-    "Install Arka: cd /Users/sumitmishra/dev/arka && pip install -e .",
-    "Verify: arka mcp doctor",
-    "Merge mcpServers.arka into ~/.cursor/mcp.json",
-    "Restart Cursor (or reload MCP from Settings → MCP)",
-    "In chat, ask the agent to call arka_recall or arka_ask"
-  ],
-  "hub_mcp": "/Users/sumitmishra/dev/arka/hub/mcp.json",
-  "project_mcp": "/Users/sumitmishra/dev/arka/.cursor/mcp.json"
+  "install_hint": "Merge mcpServers into /Users/sumitmishra/.cursor/mcp.json or symlink to /Users/sumitmishra/dev/arka/hub/mcp.json"
 }

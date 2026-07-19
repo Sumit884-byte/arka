@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 import unittest
@@ -10,27 +11,33 @@ from unittest import mock
 
 from arka.router import route
 from arka.routing.symbolic import route_describe_video
-from arka.vision.video import (
-    DEFAULT_FRAME_COUNT,
-    extract_frame,
-    is_video_people_request,
-    nl_to_argv,
-    sample_timestamps,
-)
+from arka.vision.video import DEFAULT_FRAME_COUNT, extract_frame, is_video_describe_request, is_video_people_request, nl_to_argv, sample_timestamps
 
 
 class VideoParseTests(unittest.TestCase):
     def test_parses_common_phrases_with_path(self) -> None:
         cases = {
-            "who is in meeting.mp4": ["describe", "meeting.mp4"],
-            "which people are in clip.mp4 and where they are": ["describe", "clip.mp4"],
-            "who appears in ~/Videos/party.mov": ["describe", "~/Videos/party.mov"],
-            "find the people in interview.webm": ["describe", "interview.webm"],
-            "where are the people in demo.mkv": ["describe", "demo.mkv"],
+            "who is in meeting.mp4": ["describe", "meeting.mp4", "--people"],
+            "which people are in clip.mp4 and where they are": ["describe", "clip.mp4", "--people"],
+            "who appears in ~/Videos/party.mov": ["describe", "~/Videos/party.mov", "--people"],
+            "find the people in interview.webm": ["describe", "interview.webm", "--people"],
+            "where are the people in demo.mkv": ["describe", "demo.mkv", "--people"],
         }
         for query, expected in cases.items():
             with self.subTest(query=query):
                 self.assertTrue(is_video_people_request(query))
+                self.assertEqual(nl_to_argv(query), expected)
+
+    def test_parses_general_describe_video_phrases(self) -> None:
+        cases = {
+            "describe video gameplay.mp4": ["describe", "gameplay.mp4"],
+            "analyze clip.mov for visual issues": ["describe", "clip.mov", "for visual issues"],
+            "review this gameplay recording demo.webm": ["describe", "demo.webm"],
+            "inspect /tmp/session.mkv": ["describe", "/tmp/session.mkv"],
+        }
+        for query, expected in cases.items():
+            with self.subTest(query=query):
+                self.assertTrue(is_video_describe_request(query))
                 self.assertEqual(nl_to_argv(query), expected)
 
     def test_phrase_without_path_matches_intent_but_no_argv(self) -> None:
@@ -57,6 +64,18 @@ class VideoParseTests(unittest.TestCase):
         assert hit is not None
         self.assertEqual(hit.split()[0], "describe_video")
         self.assertIn("party.mp4", hit)
+
+    def test_route_general_describe_video(self) -> None:
+        hit = route_describe_video("describe video gameplay.mp4")
+        self.assertIsNotNone(hit)
+        assert hit is not None
+        self.assertEqual(hit, "describe_video describe gameplay.mp4")
+
+    def test_skill_manifest_exists(self) -> None:
+        manifest = Path(__file__).parents[1] / "src/arka/skills/describe_video/skill.json"
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+        self.assertEqual(data["name"], "describe_video")
+        self.assertIn("describe video", data["triggers"])
 
     def test_router_symbolic_only(self) -> None:
         with mock.patch.dict(os.environ, {"ROUTE_MODE": "symbolic_only"}, clear=False):

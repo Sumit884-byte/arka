@@ -7,14 +7,70 @@ icon: "cube"
 
 Create downloadable 3D models locally. Arka builds procedural meshes for common shapes and uses your configured LLM for custom objects.
 
+## Three.js model preference
+
+For web scenes, Arka can check for an existing Three.js-compatible GLTF/GLB
+asset or library before generating new geometry:
+
+```bash
+arka three_js_model guide robot scene
+arka three_js_model search satellite
+```
+
+Prefer a suitable verified asset when one exists; check its license and
+attribution, and preserve the project’s scale and performance conventions.
+Generate new geometry only when no suitable asset exists or originality is
+requested.
+
+The search workflow is native Arka logic inspired by `baryhuang/mcp-threejs`:
+Arka converts the request into a compact asset query, normalizes Sketchfab/MCP
+style results into one candidate shape, ranks downloadable GLB/GLTF assets
+first, and reports license/attribution/format metadata. If no provider is
+configured, Arka returns zero candidates and tells the agent not to invent model
+URLs.
+
+For recognizable objects such as satellites, prefer a realistic licensed
+GLTF/GLB model with material and texture maps. Do not replace it with simple
+boxes, spheres, or cylinders when an appropriate Three.js asset is available.
+Arka first applies a symbolic reality check, then gives the model a compact
+verification instruction; uncertain objects require a trusted catalog or a
+user-provided URL rather than a hallucinated asset URL.
+
 ## Quick start
 
 ```bash
 arka create a 3d model of a gear
+arka text_to_3d generate "a small robot with rounded limbs"
+arka generate a 3d model from text using hugging face
 arka make 3d vase 10cm tall
 compose 3d model of a coffee mug
 generate stl for phone stand
 compose_3d gear --teeth 16 --format stl
+```
+
+## Text-to-3D providers
+
+Use `text_to_3d` when the prompt is not a procedural shape and you want an AI
+text-to-mesh backend:
+
+```bash
+arka text_to_3d providers
+arka text_to_3d generate "a toy spaceship" --format glb
+arka text_to_3d generate "a printable chess knight" --backend hf-shap-e --format obj
+```
+
+Default `auto` provider order is free/non-trial first:
+
+1. local Shap-E (`shap-e`) when installed;
+2. Hugging Face Shap-E (`hf-shap-e`) through `gradio_client` or `HF_TOKEN`;
+3. local OpenSCAD + LLM when available;
+4. LLM OBJ fallback.
+
+Trial-credit or paid APIs such as Tripo and Meshy are still supported, but they
+are not in the default chain. Opt in explicitly with `--backend tripo`, or set:
+
+```bash
+ARKA_3D_ALLOW_TRIAL_PROVIDERS=1
 ```
 
 ## Procedural shapes (no LLM required)

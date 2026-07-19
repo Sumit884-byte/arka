@@ -1,0 +1,10 @@
+{
+  "name": "local_image_gen",
+  "description": "Generate images through a locally hosted Stable Diffusion WebUI-compatible API",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": ["generate image locally", "use local image model", "offline image generation"],
+  "permissions": ["network", "write"]
+}

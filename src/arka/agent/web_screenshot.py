@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import atexit
+import os
 import shutil
 import tempfile
 from pathlib import Path
@@ -35,12 +36,15 @@ def review(output: str = "screenshots") -> list[str]:
     return prompts
 
 
-def capture(url: str, output: str | None = None, modes: list[str] | None = None, full_page: bool = True) -> list[Path]:
+def capture(url: str, output: str | None = None, modes: list[str] | None = None, full_page: bool = True, settle_seconds: float | None = None) -> list[Path]:
     try:
         from playwright.sync_api import sync_playwright
     except ImportError as exc:
         raise RuntimeError("website screenshots require Playwright: pip install playwright && playwright install chromium") from exc
     selected = modes or list(VIEWPORTS)
+    settle = float(os.environ.get("ARKA_BROWSER_SETTLE_SECONDS", "2.5")) if settle_seconds is None else settle_seconds
+    if settle < 0 or settle > 60:
+        raise ValueError("settle_seconds must be between 0 and 60")
     unknown = sorted(set(selected) - set(VIEWPORTS))
     if unknown:
         raise ValueError(f"unknown viewport(s): {', '.join(unknown)}")
@@ -53,7 +57,8 @@ def capture(url: str, output: str | None = None, modes: list[str] | None = None,
             for mode in selected:
                 width, height = VIEWPORTS[mode]
                 page = browser.new_page(viewport={"width": width, "height": height}, device_scale_factor=1)
-                page.goto(url, wait_until="networkidle", timeout=30_000)
+                page.goto(url, wait_until="load", timeout=30_000)
+                page.wait_for_timeout(int(settle * 1000))
                 path = target / f"website-{mode}.png"
                 page.screenshot(path=str(path), full_page=full_page)
                 results.append(path)
@@ -69,6 +74,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--viewport", choices=[*VIEWPORTS, "all"], default="all")
     parser.add_argument("--output", help="persistent output directory (temporary by default)")
     parser.add_argument("--viewport-only", action="store_true", help="Capture only the visible viewport")
+    parser.add_argument("--settle", type=float, help="Seconds to wait after load (default: ARKA_BROWSER_SETTLE_SECONDS or 2.5)")
     parser.add_argument("--review", action="store_true", help="Review existing screenshots and print design-change prompts")
     args = parser.parse_args(argv)
     try:
@@ -81,7 +87,7 @@ def main(argv: list[str] | None = None) -> int:
         if not args.url:
             parser.error("url is required unless --review is used")
         modes = list(VIEWPORTS) if args.viewport == "all" else [args.viewport]
-        for path in capture(args.url, args.output, modes, full_page=not args.viewport_only):
+        for path in capture(args.url, args.output, modes, full_page=not args.viewport_only, settle_seconds=args.settle):
             print(path)
         return 0
     except (RuntimeError, ValueError, OSError) as exc:

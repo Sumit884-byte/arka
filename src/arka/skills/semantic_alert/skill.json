@@ -1,0 +1,10 @@
+{
+  "name": "semantic_alert",
+  "description": "Create source-grounded deadline alerts from natural language",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": ["alert me when", "notify me when", "deadline alert", "remind me when"],
+  "permissions": ["write"]
+}

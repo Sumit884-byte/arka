@@ -9,6 +9,7 @@ import re
 import shlex
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -131,7 +132,17 @@ class ReviewResult:
 
 
 def review_frontend(source: str, *, prompt: str = FRONTEND_REVIEW_PROMPT) -> ReviewResult:
-    text = describe_source(source, prompt)
+    last_error: Exception | None = None
+    for attempt in range(2):
+        try:
+            text = describe_source(source, prompt)
+            break
+        except Exception as exc:
+            last_error = exc
+            if attempt == 0:
+                time.sleep(0.2)
+    else:
+        return ReviewResult("retry", 0, [f"vision backend unavailable after reconnect: {last_error}"], ["retry with an available local or hosted vision backend"], "Vision inspection did not complete after a reconnect attempt.", str(last_error))
     parsed = _parse_json_block(text) or {}
     verdict = str(parsed.get("verdict") or "").strip().lower()
     score_raw = parsed.get("score", 0)
@@ -199,6 +210,8 @@ def cmd_review(args: argparse.Namespace) -> int:
         retry=args.retry,
         cwd=Path(args.cwd).expanduser() if args.cwd else None,
     )
+    if args.json:
+        print(json.dumps({"source": source, "verdict": result.verdict, "score": result.score if result.score > 0 else None, "status": "completed" if result.score > 0 or result.verdict == "good" else "vision_backend_unavailable", "reasons": result.reasons, "fixes": result.fixes, "summary": result.summary, "raw": result.raw}, indent=2))
     if result.verdict != "good":
         return 1
     return 0
@@ -222,6 +235,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_review.add_argument("--prompt", default=FRONTEND_REVIEW_PROMPT)
     p_review.add_argument("--retry", default="", help="Command to run before the next retry")
     p_review.add_argument("--cwd", default="", help="Working directory for retry commands")
+    p_review.add_argument("--json", action="store_true", help="Print a structured bug report")
     p_review.set_defaults(func=cmd_review)
 
     p_parse = sub.add_parser("parse", help="Parse natural language → frontend_loop args")

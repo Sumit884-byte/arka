@@ -18,6 +18,12 @@ Tag pushes still use the separate [Publish](https://github.com/Sumit884-byte/ark
 
 Locally you can still run the full suite with `pytest tests/`.
 
+Docs changes should also pass the local docs reliability checker:
+
+```bash
+python scripts/check_docs.py docs
+```
+
 ## Run tests
 
 From a dev checkout:
@@ -44,7 +50,7 @@ pip install -e ".[dev]"
 
 ## Test suite overview
 
-The `tests/` directory contains **24 test modules** (~270 tests). They are organized by area:
+The `tests/` directory is organized by area:
 
 ### Routing and NL parsing
 
@@ -127,6 +133,7 @@ Beyond pytest, the repo includes helper scripts:
 ```bash
 python3 scripts/verify_features.py   # live feature smoke tests
 python3 scripts/sync_bundled.py      # sync bundled/ before wheel build
+python3 scripts/check_docs.py docs   # internal docs links + frontmatter
 ```
 
 <Note>

@@ -161,6 +161,34 @@ def test_coding_agent_skips_image_skill_without_input(capsys):
     assert "image path or URL is required" in capsys.readouterr().out
 
 
+def test_coding_agent_blocks_graph_and_visual_skills(monkeypatch, capsys):
+    from arka.agent import core
+
+    calls = []
+    monkeypatch.setattr("arka.dispatch.run_skill", lambda command: calls.append(command) or 0)
+    assert core._run_arka_tool_step("chart bar bug counts") == 0
+    assert core._run_arka_tool_step("visual repo dependency graph") == 0
+    assert calls == []
+    output = capsys.readouterr().out
+    assert "coding-session unavailable skill: chart" in output
+    assert "coding-session unavailable skill: visual" in output
+
+
+def test_coding_agent_blocks_routed_graph_prompts(monkeypatch, capsys):
+    from arka.agent import core
+
+    class FakeRoute:
+        kind = "skill"
+        skill = "chart bar repo activity"
+
+    calls = []
+    monkeypatch.setattr("arka.router.route", lambda _text: FakeRoute())
+    monkeypatch.setattr("arka.dispatch.run_skill", lambda command: calls.append(command) or 0)
+    assert core._run_arka_tool_step("graphify repo activity") == 0
+    assert calls == []
+    assert "coding-session unavailable route: chart" in capsys.readouterr().out
+
+
 def test_coding_agent_rejects_unknown_skill_without_routing(monkeypatch, capsys):
     from arka.agent import core
 
@@ -190,8 +218,12 @@ def test_code_plan_sanitizes_invalid_steps():
     assert _sanitize_code_steps([
         "shell command or skill: python -m arka repo_health",
         "The image shows a directory listing",
+        "cd /Users/sumitmishra/dev/arka",
+        "cd . && python -m pytest tests/test_app.py",
+        "chart bar test failures",
+        "visual repo graph",
         "python -m pytest tests/test_app.py",
-    ]) == ["python -m pytest tests/test_app.py"]
+    ]) == ["python -m pytest tests/test_app.py", "python -m pytest tests/test_app.py"]
 
 
 def test_coding_agent_skips_placeholder_shell_and_incomplete_pr_check(capsys):
@@ -229,6 +261,19 @@ def test_coding_tui_auto_inits_code_project(monkeypatch, tmp_path, capsys):
     assert "Code project initialized:" in output
     assert "code project initialized: yes" in output
     assert code_project.get_active_root() == tmp_path.resolve()
+
+
+def test_coding_tui_queue_runs_goals_in_order(monkeypatch, tmp_path, capsys):
+    from arka.agent import coding_tui
+
+    seen = []
+    monkeypatch.setattr(coding_tui, "_execute_goal", lambda goal, *args, **kwargs: seen.append(goal))
+    commands = iter(["/queue add inspect files", "/queue add run tests", "/queue list", "/queue run", "/quit"])
+    monkeypatch.setattr("builtins.input", lambda _: next(commands))
+    assert coding_tui.run(str(tmp_path)) == 0
+    output = capsys.readouterr().out
+    assert seen == ["inspect files", "run tests"]
+    assert "Queue complete." in output
 
 
 def test_coding_tui_blocks_plan_without_code_project(monkeypatch, tmp_path, capsys):
@@ -496,7 +541,8 @@ def test_direct_tests_auto_fix_on_failure(monkeypatch, tmp_path, capsys):
         "_auto_fix_once",
         lambda repo, summary, agent, **kwargs: calls.append("fix") or 0,
     )
-    fake_agent = object()
+    def fake_agent(*args, **kwargs):
+        return 0
     assert coding_tui._run_direct_tests(tmp_path, auto_fix=True, code_agent=fake_agent) == 0
     output = capsys.readouterr().out
     assert calls == ["fix"]
@@ -633,7 +679,7 @@ def test_coding_tui_system_extra_maps_flexible_tests_goal(tmp_path):
     assert "compose_3d" in text
 
 
-def test_run_tests_uses_flexible_readonly_agent(monkeypatch, tmp_path, capsys):
+def test_run_tests_uses_direct_readonly_runner(monkeypatch, tmp_path, capsys):
     from arka.agent import coding_tui
 
     commands = iter(["/run tests", "/quit"])
@@ -642,8 +688,8 @@ def test_run_tests_uses_flexible_readonly_agent(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr("builtins.input", lambda _: next(commands))
     monkeypatch.setattr(
         coding_tui,
-        "_run_flexible_tests",
-        lambda goal, repo, code_agent, allow_fix=False, auto_fix=True: calls.append((goal, allow_fix, auto_fix)) or 0,
+        "_run_direct_tests",
+        lambda repo, scope=None, auto_fix=True, code_agent=None, **kwargs: calls.append((repo, scope, auto_fix, code_agent)) or 0,
     )
     monkeypatch.setattr(
         coding_tui.subprocess,
@@ -652,10 +698,29 @@ def test_run_tests_uses_flexible_readonly_agent(monkeypatch, tmp_path, capsys):
     )
     monkeypatch.setattr(
         "arka.agent.core.code_agent",
-        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("must use _run_flexible_tests")),
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("must use _run_direct_tests")),
     )
     assert coding_tui.run(str(tmp_path)) == 0
-    assert calls == [("tests", False, False)]
+    assert calls == [(tmp_path.resolve(), None, False, None)]
+
+
+def test_run_tests_fix_uses_direct_runner_with_agent(monkeypatch, tmp_path, capsys):
+    from arka.agent import coding_tui
+
+    commands = iter(["/run tests --fix", "/quit"])
+    calls: list[tuple] = []
+    fake_agent = object()
+
+    monkeypatch.setattr("builtins.input", lambda _: next(commands))
+    monkeypatch.setattr(
+        coding_tui,
+        "_run_direct_tests",
+        lambda repo, scope=None, auto_fix=True, code_agent=None, **kwargs: calls.append((repo, scope, auto_fix, code_agent)) or 0,
+    )
+    monkeypatch.setattr("arka.agent.core.code_agent", fake_agent)
+    assert coding_tui.run(str(tmp_path)) == 0
+    assert calls == [(tmp_path.resolve(), None, True, fake_agent)]
+    assert "Executing tests with --fix: tests" in capsys.readouterr().out
 
 
 def test_test_command_strict_with_scope(monkeypatch, tmp_path, capsys):
@@ -690,6 +755,9 @@ def test_run_tests_short_goal_is_not_deterministic(monkeypatch, tmp_path):
 
     assert not coding_tui._is_deterministic_short_goal("tests")
     assert not coding_tui._is_deterministic_short_goal("run tests")
+    assert coding_tui._is_direct_run_test_goal("tests")
+    assert coding_tui._is_direct_run_test_goal("run tests")
+    assert coding_tui._is_direct_run_test_goal("run tests in this repo")
     assert coding_tui._is_flexible_test_request("run tests")
     assert coding_tui._is_deterministic_short_goal("ci")
     assert not coding_tui._is_deterministic_short_goal("run tests and fix failures")

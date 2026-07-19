@@ -14,6 +14,8 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -1829,6 +1831,83 @@ def _llm_script(
     return _enrich_scenes(parsed)
 
 
+def _custom_script_api(
+    topic: str,
+    *,
+    scenes: int | None = None,
+    target_duration_sec: float | None = None,
+    api_url: str = "",
+    api_key_env: str = "",
+    headers: list[str] | None = None,
+) -> list[Scene]:
+    """Generate scenes through a user-supplied HTTP API.
+
+    The endpoint receives JSON and must return either a JSON scene array or an
+    object with a `scenes` array. Arka still validates the scene shape locally.
+    """
+    api_url = api_url or _env("VIDEO_SCRIPT_API_URL") or _env("ARKA_VIDEO_SCRIPT_API_URL")
+    if not api_url:
+        raise SystemExit("custom video script provider requires --api-url or VIDEO_SCRIPT_API_URL")
+    key_env = api_key_env or _env("VIDEO_SCRIPT_API_KEY_ENV", "VIDEO_SCRIPT_API_KEY")
+    api_key = _env(key_env) if key_env else ""
+    req_headers = {
+        "content-type": "application/json",
+        "accept": "application/json",
+        "user-agent": "arka-compose-video/1",
+    }
+    if api_key:
+        req_headers["authorization"] = f"Bearer {api_key}"
+    for raw in headers or []:
+        if ":" not in raw:
+            raise SystemExit(f"invalid --api-header {raw!r}; expected 'Name: value'")
+        name, _, value = raw.partition(":")
+        req_headers[name.strip().lower()] = value.strip()
+    payload = {
+        "topic": topic_label(topic),
+        "topic_raw": topic,
+        "scenes": scenes,
+        "target_duration_sec": target_duration_sec,
+        "schema": {
+            "type": "array",
+            "items": {
+                "title": "string",
+                "narration": "string",
+                "body": "string",
+                "captions": ["string"],
+                "image_keywords": ["string"],
+                "image_query": "string",
+                "duration": "number",
+                "chart": "optional object",
+            },
+        },
+    }
+    data = json.dumps(payload).encode("utf-8")
+    timeout = _env_float("VIDEO_SCRIPT_API_TIMEOUT", 60.0)
+    req = urllib.request.Request(api_url, data=data, headers=req_headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            text = resp.read().decode("utf-8", errors="replace").strip()
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:500]
+        raise SystemExit(f"custom video script API failed: HTTP {exc.code} {detail}") from exc
+    except urllib.error.URLError as exc:
+        raise SystemExit(f"custom video script API failed: {exc.reason}") from exc
+    if not text:
+        raise SystemExit("custom video script API returned an empty response")
+    try:
+        parsed = json.loads(text)
+        raw = json.dumps(parsed.get("scenes", parsed)) if isinstance(parsed, dict) else json.dumps(parsed)
+    except json.JSONDecodeError:
+        raw = text
+    try:
+        scenes_out = _parse_scenes_json(raw)
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise SystemExit(f"custom video script API returned invalid scene JSON: {exc}") from exc
+    if len(scenes_out) < 1:
+        raise SystemExit("custom video script API did not return scenes")
+    return _enrich_scenes(scenes_out)
+
+
 def _llm_summarize_script(
     topic: str,
     scenes: list[Scene],
@@ -2000,6 +2079,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_compose.add_argument("--script", help="JSON script file or inline JSON")
     p_compose.add_argument("--llm", action="store_true", help="Generate script via LLM")
     p_compose.add_argument(
+        "--script-provider",
+        choices=("auto", "builtin", "llm", "custom"),
+        default=os.environ.get("VIDEO_SCRIPT_PROVIDER", "auto"),
+        help="Script source: builtin symbolic template, Arka LLM, or custom HTTP API",
+    )
+    p_compose.add_argument("--api-url", default="", help="Custom script API URL (or VIDEO_SCRIPT_API_URL)")
+    p_compose.add_argument("--api-key-env", default="", help="Env var holding the custom API key (default VIDEO_SCRIPT_API_KEY)")
+    p_compose.add_argument("--api-header", action="append", default=[], help="Extra custom API header, e.g. 'X-Team: demo'")
+    p_compose.add_argument(
         "--scenes",
         type=int,
         default=None,
@@ -2050,6 +2138,12 @@ def cmd_check(_args: argparse.Namespace) -> int:
     if not any_source_available():
         print(f"✗ {stock_setup_hint()}", file=sys.stderr)
         ok = False
+    script_url = _env("VIDEO_SCRIPT_API_URL") or _env("ARKA_VIDEO_SCRIPT_API_URL")
+    if script_url:
+        key_env = _env("VIDEO_SCRIPT_API_KEY_ENV", "VIDEO_SCRIPT_API_KEY")
+        print(f"✓ Custom script API configured ({script_url}, key env {key_env})")
+    else:
+        print("  Custom script API not set")
     cfg = load_config()
     print(f"  Font: {cfg.font_path or 'default'}")
     print(f"  Bold: {cfg.font_bold_path or 'default'}")
@@ -2084,7 +2178,24 @@ def cmd_compose(args: argparse.Namespace) -> int:
 
     if not scenes and topic:
         mode = _script_mode(args)
-        if mode == "llm":
+        provider = (getattr(args, "script_provider", "") or "auto").lower()
+        if provider == "builtin":
+            scenes = _template_script(topic)
+        elif provider == "custom":
+            print("Writing script with custom API …", file=sys.stderr)
+            try:
+                scenes = _custom_script_api(
+                    topic,
+                    scenes=args.scenes,
+                    target_duration_sec=target_duration_sec,
+                    api_url=getattr(args, "api_url", ""),
+                    api_key_env=getattr(args, "api_key_env", ""),
+                    headers=getattr(args, "api_header", []) or [],
+                )
+            except SystemExit as exc:
+                print(f"  Custom script API failed ({exc}); using template.", file=sys.stderr)
+                scenes = _template_script(topic)
+        elif mode == "llm" or provider == "llm":
             if args.scenes is not None:
                 print(f"Writing script with LLM ({args.scenes} scenes) …", file=sys.stderr)
             elif target_duration_sec:

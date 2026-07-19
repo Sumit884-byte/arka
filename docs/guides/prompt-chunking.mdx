@@ -1,0 +1,16 @@
+---
+title: "Prompt chunking"
+description: "Split very large prompts into bounded LLM chunks and synthesize the outputs safely."
+keywords: ["prompt chunking", "long context", "llm", "synthesis"]
+icon: "scissors"
+---
+
+Arka normally sends one request per prompt. For very large inputs, chunking can be enabled explicitly:
+
+```bash
+ARKA_PROMPT_CHUNKING=1 ARKA_PROMPT_CHUNK_SIZE=12000 arka ask "..."
+```
+
+Each chunk is processed independently and the marked results are sent to one final synthesis request. The synthesis removes duplication and is instructed not to invent facts. Routing, security checks, and audit metadata still use the original prompt. Chunking is off by default and can be selected per call by passing `chunked=True` to the Python `llm_complete` API.
+
+Use a smaller size for constrained context windows; invalid sizes fall back to 12,000 characters.

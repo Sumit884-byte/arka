@@ -282,7 +282,7 @@ def _backend_ready(name: str) -> bool:
     if name == "ollama":
         return bool(_ollama_vision_model()) or bool(shutil.which("ollama"))
     if name == "vllm":
-        return bool(shutil.which("vllm") or _env("VLLM_START_CMD"))
+        return bool(shutil.which("vllm") or _env("VLLM_START_CMD") or _env("VLLM_API_URL"))
     return False
 
 
@@ -297,6 +297,8 @@ def _auto_backend_order() -> list[str]:
     if plat == "macos":
         if has_gemini:
             return ["gemini", "ollama", "vllm"]
+        if has_vllm:
+            return ["vllm", "ollama", "gemini"]
         return ["ollama", "vllm", "gemini"]
     if plat == "windows":
         order: list[str] = []
@@ -579,14 +581,14 @@ def _vllm_describe(data_url: str, prompt: str, *, max_tokens: int | None = None)
             data = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")[:800]
-        raise SystemExit(f"vLLM vision request failed ({exc.code}): {detail}") from exc
+        raise BackendError("vllm", f"vLLM vision request failed ({exc.code}): {detail}", recoverable=True) from exc
     except urllib.error.URLError as exc:
-        raise SystemExit(f"vLLM request failed: {exc}") from exc
+        raise BackendError("vllm", f"vLLM request failed: {exc}", recoverable=True) from exc
 
     try:
         return data["choices"][0]["message"]["content"].strip()
     except (KeyError, IndexError, TypeError) as exc:
-        raise SystemExit(f"Unexpected vLLM response: {data!r}") from exc
+        raise BackendError("vllm", f"Unexpected vLLM response: {data!r}", recoverable=True) from exc
 
 
 def _gemini_describe(

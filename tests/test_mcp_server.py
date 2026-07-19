@@ -9,12 +9,14 @@ from unittest.mock import patch
 
 
 
-def test_list_tool_definitions_schema():
+def test_list_tool_definitions_schema(monkeypatch):
     from arka.integrations.mcp_server import list_tool_definitions, list_tool_names
 
+    monkeypatch.delenv("ARKA_MCP_ENABLE_PERSONAL_SKILLS", raising=False)
+    monkeypatch.delenv("ARKA_MCP_ENABLED_TOOLS", raising=False)
     tools = list_tool_definitions()
     names = list_tool_names()
-    assert len(tools) == len(names) == 39
+    assert len(tools) == len(names)
     assert "arka_ask" in names
     assert "arka_recall" in names
     assert "arka_heartbeat" in names
@@ -41,7 +43,7 @@ def test_list_tool_definitions_schema():
     assert "arka_platform" in names
     assert "arka_calendar" in names
     assert "arka_textkit" in names
-    assert "arka_spotify" in names
+    assert "arka_spotify" not in names
     assert "arka_password" in names
     assert "arka_urlkit" in names
     assert "arka_timekit" in names
@@ -55,6 +57,13 @@ def test_list_tool_definitions_schema():
         schema = tool["inputSchema"]
         assert schema["type"] == "object"
         assert "properties" in schema
+
+
+def test_mcp_personal_tools_can_be_opted_in(monkeypatch):
+    from arka.integrations.mcp_server import list_tool_names
+
+    monkeypatch.setenv("ARKA_MCP_ENABLE_PERSONAL_SKILLS", "1")
+    assert "arka_spotify" in list_tool_names()
 
 
 def test_mcp_server_initialize_and_list_tools():
@@ -79,9 +88,31 @@ def test_mcp_server_initialize_and_list_tools():
 
     listed = server.handle_message({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
     assert listed is not None
-    tool_names = [t["name"] for t in listed["result"]["tools"]]
+    tools = listed["result"]["tools"]
+    tool_names = [t["name"] for t in tools]
     assert "arka_ask" in tool_names
     assert "arka_repo_map" in tool_names
+    route_tool = next(t for t in tools if t["name"] == "arka_route")
+    assert "Umbrella Arka MCP tool" in route_tool["description"]
+    assert "complete natural-language" in route_tool["inputSchema"]["properties"]["prompt"]["description"]
+
+
+def test_mcp_capabilities_names_arka_route_as_umbrella_tool():
+    from arka.integrations.mcp_server import ArkaMcpServer
+
+    server = ArkaMcpServer(stdin=io.StringIO(), stdout=io.StringIO())
+    result = server.handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 22,
+            "method": "tools/call",
+            "params": {"name": "arka_capabilities", "arguments": {}},
+        }
+    )
+    assert result is not None
+    payload = json.loads(result["result"]["content"][0]["text"])
+    assert payload["umbrella_tool"]["name"] == "arka_route"
+    assert "unsure which specific MCP tool" in payload["umbrella_tool"]["use_when"]
 
 
 def test_mcp_server_call_tool_mock_handlers():
@@ -111,6 +142,26 @@ def test_mcp_server_call_tool_mock_handlers():
     )
     assert bad is not None
     assert "error" in bad
+
+
+def test_mcp_server_writes_tool_call_logs(tmp_path, monkeypatch):
+    from arka.integrations.mcp_logs import read_mcp_logs
+    from arka.integrations.mcp_server import ArkaMcpServer
+
+    monkeypatch.setenv("ARKA_MCP_LOG_PATH", str(tmp_path / "mcp.jsonl"))
+    server = ArkaMcpServer(stdin=io.StringIO(), stdout=io.StringIO())
+    result = server.handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 5,
+            "method": "tools/call",
+            "params": {"name": "missing_tool", "arguments": {}},
+        }
+    )
+    assert result is not None
+    logs = read_mcp_logs(limit=5)
+    assert "server.tools_call" in logs
+    assert "unknown_tool" in (tmp_path / "mcp.jsonl").read_text(encoding="utf-8")
 
 
 def test_mcp_server_stdio_roundtrip():
@@ -461,6 +512,85 @@ def test_handle_arka_subagent_spawn_and_list(tmp_path, monkeypatch):
     assert resumed["id"] == payload["id"]
     assert resumed["status"] == "done"
     assert "mcp subagent done" in resumed.get("result", "")
+
+
+def test_subagent_routes_coding_task_to_run_skill(monkeypatch):
+    from arka.integrations import subagent
+
+    calls: list[str] = []
+
+    def fake_run_coding(task: str, *, skill_line: str) -> tuple[str, int]:
+        calls.append(skill_line)
+        return "patched App.jsx", 0
+
+    monkeypatch.setattr(subagent, "_run_coding_task", fake_run_coding)
+    output, code = subagent._run_agent("edit src/App.jsx fix Moon rotation")
+    assert code == 0
+    assert "patched App.jsx" in output
+    assert calls
+    assert calls[0].startswith("code write ")
+
+
+def test_run_skill_captured_strips_subprocess_output(monkeypatch):
+    from arka.integrations.mcp_server import _run_skill_captured
+
+    def fake_run_skill(skill_line: str) -> int:
+        print("\x1b[36mDownload complete\x1b[0m")
+        return 0
+
+    monkeypatch.setattr("arka.dispatch.run_skill", fake_run_skill)
+    code, output = _run_skill_captured("demo skill")
+    assert code == 0
+    assert "\x1b" not in output
+    assert "Download complete" in output
+
+
+def test_run_skill_captured_converts_system_exit_to_error(monkeypatch):
+    from arka.integrations.mcp_server import _run_skill_captured
+
+    def fake_run_skill(_skill_line: str) -> int:
+        raise SystemExit("Image not found: missing.png")
+
+    monkeypatch.setattr("arka.dispatch.run_skill", fake_run_skill)
+    code, output = _run_skill_captured("vision_evidence missing.png question")
+    assert code == 2
+    assert "Image not found" in output
+
+
+def test_mcp_handler_survives_system_exit():
+    from arka.integrations.mcp_server import ArkaMcpServer
+
+    server = ArkaMcpServer()
+    response = server.handle_message({"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {"name": "arka_skill", "arguments": {"skill": "play"}}})
+    assert response["id"] == 7
+    assert "required: game" in response["result"]["content"][0]["text"]
+
+
+def test_mcp_does_not_open_websites_without_explicit_approval():
+    from arka.integrations.mcp_server import _handle_arka_skill
+
+    blocked = _handle_arka_skill({"skill": "open_url", "args": ["https://example.com"]})
+    assert "disabled" in blocked.lower()
+    assert "headless" in blocked.lower()
+
+
+def test_mcp_disables_personal_skill_heads_by_default(monkeypatch):
+    from arka.integrations.mcp_server import _handle_arka_skill
+
+    monkeypatch.delenv("ARKA_MCP_ENABLE_PERSONAL_SKILLS", raising=False)
+    for skill in ("daily_brief", "play_spotify", "search_web", "spotify_brave_debug"):
+        blocked = _handle_arka_skill({"skill": skill})
+        assert "is disabled by default" in blocked.lower()
+        assert skill in blocked
+
+
+def test_mcp_spotify_tool_disabled_by_default(monkeypatch):
+    from arka.integrations.mcp_server import _handle_arka_spotify
+
+    monkeypatch.delenv("ARKA_MCP_ENABLE_PERSONAL_SKILLS", raising=False)
+    blocked = _handle_arka_spotify({"action": "search", "query": "Song"})
+    assert "is disabled by default" in blocked.lower()
+    assert "arka_spotify" in blocked
 
 
 def test_handle_arka_remind_add_list_cancel(tmp_path, monkeypatch):

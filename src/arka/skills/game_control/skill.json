@@ -1,0 +1,18 @@
+{
+  "name": "game_control",
+  "description": "Play a browser game headlessly, capture gameplay frames/video, and report visual or console errors",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "check my game",
+    "test gameplay",
+    "play my game",
+    "record gameplay",
+    "capture game animation",
+    "review game visuals"
+  ],
+  "voice_ack": "Playing and recording the game for visual checks.",
+  "permissions": ["read", "write"]
+}

@@ -39,9 +39,10 @@ SLASH_COMMANDS = (
 
 HELP = (
     "Commands: /help, /status, /plan <goal>, /run <goal>, /test [path], /scaffold 3d, /history, /clear, "
-    "/diff, /files <pattern>, /open <path>, /ci, /review, /quit. "
+    "/diff, /files <pattern>, /open <path>, /ci, /review, /queue, /quit. "
+    "/queue add <goal> queues work; /queue list shows it; /queue run executes sequentially; /queue clear removes it. "
     "/test runs tests read-only, then one auto-fix pass on failure (--no-fix to skip). "
-    "/run tests lets a read-only agent choose repository tests; use --fix to repair failures. "
+    "/run tests runs repository tests directly; use --fix to repair failures after the test output is known. "
     "/scaffold 3d writes a React + Three.js space scene and runs npm install (trusted template). "
     "Add --run to start the Vite dev server after install. "
     "Plain text is treated as a plan request; approve with y to execute immediately."
@@ -81,6 +82,12 @@ def _is_deterministic_short_goal(text: str, *, allow_fix: bool = False) -> bool:
     if allow_fix:
         return False
     return _normalize_goal_text(text) in DETERMINISTIC_SHORT_GOALS
+
+
+def _is_direct_run_test_goal(text: str) -> bool:
+    """Recognize /run tests goals that should execute tests immediately."""
+    normalized = _normalize_goal_text(text)
+    return normalized in FLEXIBLE_TEST_GOALS or _is_strict_test_request(text) or _is_flexible_test_request(text)
 
 
 def _expand_short_goal(goal: str) -> str:
@@ -1236,6 +1243,7 @@ def run(root: str = ".") -> int:
     last_plan: str | None = None
     pending_goal: str | None = None
     plan_approved = False
+    work_queue: list[str] = []
     while True:
         try:
             line = input(f"arka ({repo.name})> ").strip()
@@ -1250,6 +1258,7 @@ def run(root: str = ".") -> int:
             last_plan = None
             pending_goal = None
             plan_approved = False
+            work_queue.clear()
             print_welcome(repo)
             print("Session history and pending plan cleared.")
             continue
@@ -1261,6 +1270,37 @@ def run(root: str = ".") -> int:
         elif line == "/status":
             print(status(repo))
             print(f"history: {len(history)} command(s)")
+            print(f"queue: {len(work_queue)} pending")
+        elif line == "/queue" or line.startswith("/queue "):
+            queue_arg = line[6:].strip()
+            if queue_arg == "list" or not queue_arg:
+                if not work_queue:
+                    print("Queue is empty.")
+                else:
+                    for index, goal in enumerate(work_queue, 1):
+                        print(f"{index:>3}  {goal}")
+            elif queue_arg.startswith("add "):
+                goal = queue_arg[4:].strip()
+                if not goal:
+                    print("Usage: /queue add <goal>")
+                else:
+                    work_queue.append(goal)
+                    print(f"Queued ({len(work_queue)}): {goal}")
+            elif queue_arg == "clear":
+                work_queue.clear()
+                print("Queue cleared.")
+            elif queue_arg == "run":
+                if not work_queue:
+                    print("Queue is empty.")
+                else:
+                    print(f"Running {len(work_queue)} queued goal(s)…")
+                    while work_queue:
+                        goal = work_queue.pop(0)
+                        print(f"\n━━━ Queue item: {goal} ━━━")
+                        _execute_goal(goal, repo, last_plan=None, code_agent=code_agent)
+                    print("Queue complete.")
+            else:
+                print("Usage: /queue add <goal> | /queue list | /queue run | /queue clear")
         elif line.startswith("/plan "):
             last_plan, pending_goal, plan_approved = _handle_plan(
                 line[6:].strip(),
@@ -1278,18 +1318,15 @@ def run(root: str = ".") -> int:
             _run_3d_scaffold(repo, goal=goal, run_dev=run_dev)
         elif line == "/run" or line.startswith("/run "):
             requested_goal, allow_fix, auto_fix = _parse_run_request(line[4:].strip() or (pending_goal or ""))
-            if requested_goal and _is_flexible_run_test_goal(requested_goal):
+            if requested_goal and _is_direct_run_test_goal(requested_goal):
                 if allow_fix:
                     print(f"Executing tests with --fix: {requested_goal}")
-                _run_flexible_tests(
-                    requested_goal,
+                _run_direct_tests(
                     repo,
-                    code_agent,
-                    allow_fix=allow_fix,
-                    # Test execution is read-only by default. Fixes require
-                    # the explicit --fix opt-in, so failures can be reported
-                    # back without mutating the repository unexpectedly.
+                    scope=None,
                     auto_fix=allow_fix and auto_fix,
+                    code_agent=code_agent if allow_fix else None,
+                    run_label="Test run (read-only)",
                 )
                 continue
             if requested_goal and _is_deterministic_short_goal(requested_goal, allow_fix=allow_fix):

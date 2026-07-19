@@ -525,7 +525,14 @@ def _route_offline(cmd: str) -> Route | None:
     if third_party:
         return Route(third_party, source="plugin")
 
-    if re.search(r"(?i)\b(download|save|fetch|grab)\b", clean):
+    try:
+        from arka.core.code_project import looks_like_repo_edit
+
+        repo_edit = looks_like_repo_edit(cmd)
+    except ImportError:
+        repo_edit = False
+
+    if not repo_edit and re.search(r"(?i)\b(download|save|fetch|grab)\b", clean):
         url_m = re.search(r"https?://[^\s]+", cmd)
         if url_m:
             url = url_m.group(0)

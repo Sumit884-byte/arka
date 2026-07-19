@@ -85,7 +85,12 @@ def cmd_status(_args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_doctor(_args: argparse.Namespace) -> int:
+def cmd_doctor(args: argparse.Namespace) -> int:
+    if getattr(args, "fix", False):
+        # Explicit --fix authorizes merging the canonical hub MCP entries into
+        # detected client configs. Existing user servers are preserved.
+        result = sync_all(unify=True, force_adapters=False, use_symlink=False, replace=False)
+        print(f"repaired	hub artifacts synced at {result.get('synced_at', '')}")
     text, code = format_doctor()
     print(text)
     return code
@@ -169,7 +174,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     sub.add_parser("status", help="Show sync state and configured agents")
-    sub.add_parser("doctor", help="Check ollama, hub paths, and unify status")
+    doctor_p = sub.add_parser("doctor", help="Check ollama, hub paths, and unify status")
+    doctor_p.add_argument("--fix", action="store_true", help="Create missing hub artifacts with export-only sync")
     sub.add_parser("detect", help="Probe filesystem for agent config files")
     sub.add_parser("adapters", help="List per-agent MCP merge status")
     sub.add_parser("tools", help="List MCP servers exported by the hub")

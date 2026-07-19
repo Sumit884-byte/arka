@@ -33,3 +33,14 @@ def test_review_preserves_good_viewports(tmp_path):
     prompts = review(str(tmp_path))
     assert any("preserving modes" in prompt for prompt in prompts)
     assert "button order" in prompts[0]
+
+
+def test_capture_rejects_unbounded_settle_time():
+    from arka.agent.web_screenshot import capture
+
+    try:
+        capture("http://localhost:5174", settle_seconds=61)
+    except ValueError as exc:
+        assert "between 0 and 60" in str(exc)
+    else:
+        raise AssertionError("expected settle validation before browser startup")

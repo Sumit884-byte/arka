@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -138,6 +139,11 @@ def _run_agent(task: str, *, session_channel: str = "", session_chat_id: str = "
         except ImportError:
             pass
     prompt = prefix + task.strip()
+    coding = _looks_like_coding_task(prompt)
+    if coding:
+        output, code = _run_coding_task(prompt, skill_line=coding)
+        if output or code == 0:
+            return output or "(no output)", code
     try:
         from arka.agent.chat import answer_question
 
@@ -160,6 +166,49 @@ def _run_agent(task: str, *, session_channel: str = "", session_chat_id: str = "
         return "Sub-agent timed out.", 124
     out = ((proc.stdout or "") + (proc.stderr or "")).strip()
     return out or "(no output)", int(proc.returncode or 0)
+
+
+def _looks_like_coding_task(task: str) -> str | None:
+    clean = (task or "").strip()
+    if not clean:
+        return None
+    try:
+        from arka.core.code_project import looks_like_repo_edit, route_code_nl
+
+        hit = route_code_nl(clean)
+        if hit:
+            return hit
+        if looks_like_repo_edit(clean):
+            return f"code write {clean}"
+    except ImportError:
+        pass
+    if re.search(r"(?i)\b(?:edit|fix|patch|implement|refactor|write|create|delete|remove)\b", clean):
+        if re.search(r"(?i)[\w./\\-]+\.(jsx?|tsx?|py|css|html?|json|md)\b", clean):
+            return f"code write {clean}"
+        if re.search(r"(?i)\b(?:repo|project|src/|\.gitignore|npm run build)\b", clean):
+            return f"code write {clean}"
+    return None
+
+
+def _run_coding_task(task: str, *, skill_line: str) -> tuple[str, int]:
+    import contextlib
+    import io
+
+    try:
+        from arka.agent.voice import strip_ansi
+        from arka.dispatch import run_skill
+
+        os.environ["ARKA_CAPTURE_STDIO"] = "1"
+        buf = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+                code = run_skill(skill_line)
+        finally:
+            os.environ.pop("ARKA_CAPTURE_STDIO", None)
+        output = strip_ansi(buf.getvalue()).strip()
+        return output or f"Executed `{skill_line}` (exit {code})", int(code or 0)
+    except ImportError as exc:
+        return f"Coding task unavailable: {exc}", 1
 
 
 def _execute(agent_id: str) -> None:

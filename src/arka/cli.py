@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
+from pathlib import Path
 
 from arka import __version__
 from arka.dispatch import run_script, run_skill
@@ -90,20 +91,10 @@ def main(argv: list[str] | None = None) -> int:
     if args[0] == "doctor":
         return _cmd_doctor()
 
-    if args[0] == "background" and len(args) >= 2 and args[1] == "agent":
-        if len(args) >= 3 and args[2] in ("tasks", "list", "status"):
-            from arka.integrations.subagent import list_agents
+    if args[0] == "background":
+        from arka.agent.background import main as background_main
 
-            rows = [r for r in list_agents(limit=200) if r.get("status") in {"pending", "running"}]
-            if not rows:
-                print("No running Arka background agents.")
-                return 0
-            print(f"Running Arka background agents ({len(rows)}):")
-            for row in rows:
-                print(f"  [{row.get('status')}] {row.get('id')} — {row.get('task', '')}")
-            return 0
-        print("Usage: arka background agent tasks", file=sys.stderr)
-        return 1
+        return background_main(args[1:])
 
     if args[0] in ("plugin", "plugins"):
         from arka.agent.skills import main as plugin_main
@@ -113,6 +104,22 @@ def main(argv: list[str] | None = None) -> int:
         except SystemExit as exc:
             # argparse uses SystemExit for --help; keep the public CLI API
             # integer-returning like every other Arka subcommand.
+            return int(exc.code or 0)
+
+    if args[0] in ("three_js_model", "three-js-model", "threejs_model"):
+        from arka.agent.three_js_model import main as three_js_main
+
+        try:
+            return three_js_main(args[1:])
+        except SystemExit as exc:
+            return int(exc.code or 0)
+
+    if args[0] in ("text_to_3d", "text-to-3d", "text2_3d", "text23d"):
+        from arka.agent.text_to_3d import main as text_to_3d_main
+
+        try:
+            return text_to_3d_main(args[1:])
+        except SystemExit as exc:
             return int(exc.code or 0)
 
     if args[0] == "personalize":
@@ -140,10 +147,25 @@ def main(argv: list[str] | None = None) -> int:
 
         return provider_main(args[1:] or None)
 
+    if args[0] in ("free_models", "free-models", "free_models_list"):
+        from arka.llm.free_models import main as free_models_main
+
+        return free_models_main(args[1:])
+
     if args[0] == "code":
         from arka.core.code_project import main as code_main
 
         return code_main(["code", *args[1:]])
+
+    if args[0] == "batch":
+        from arka.agent.batch import main as batch_main
+
+        return batch_main(args[1:])
+
+    if args[0] in ("blocks", "block", "app_blocks", "app-blocks"):
+        from arka.agent.blocks import main as blocks_main
+
+        return blocks_main(args[1:])
 
     if args[0] == "self":
         from arka.agent.self_improve import main as self_main
@@ -1050,6 +1072,21 @@ def _cmd_doctor() -> int:
             print(f"  chat modules:   missing {', '.join(chat_missing)} — run: arka setup")
         else:
             print("  chat modules:   ok (agno, ddgs, trafilatura, …)")
+        try:
+            probe = subprocess.run(
+                [str(vpy), "-c", "from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            browser_path = (probe.stdout or "").strip().splitlines()[-1] if probe.stdout.strip() else ""
+            if probe.returncode == 0 and browser_path and Path(browser_path).is_file():
+                print(f"  Playwright:    ok ({browser_path})")
+            else:
+                print("  Playwright:    missing Chromium — run: python -m pip install playwright && python -m playwright install chromium")
+        except (OSError, subprocess.SubprocessError):
+            print("  Playwright:    unavailable — run: python -m pip install playwright && python -m playwright install chromium")
     mode = skill_mode()
     if mode == "full":
         print(f"  Skills:         full (70+) via {fish_config()}")

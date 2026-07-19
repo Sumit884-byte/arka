@@ -20,6 +20,18 @@ mint dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+## Reliability checks
+
+Before publishing docs changes, run the lightweight repository checker from the
+repo root:
+
+```bash
+python scripts/check_docs.py docs
+```
+
+The checker verifies internal Mintlify links and basic MDX frontmatter such as
+`title`. It is intentionally local-only and does not crawl external websites.
+
 ## Structure
 
 ```
@@ -53,7 +65,7 @@ The public URL stays **https://arka-agent.mintlify.site**.
 
 ## Contributing
 
-Edit MDX pages in this folder and open a PR on `Sumit884-byte/arka`. Follow existing frontmatter (`title`, `description`, `keywords`) and Mintlify components (`Card`, `Tip`, `Note`, `Warning`).
+Edit MDX pages in this folder and open a PR on `Sumit884-byte/arka`. Follow existing frontmatter (`title`, `description`, `keywords`) and Mintlify components (`Card`, `Tip`, `Note`, `Warning`). Run `python scripts/check_docs.py docs` before pushing.
 
 ## SEO checklist
 

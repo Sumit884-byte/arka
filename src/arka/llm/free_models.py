@@ -77,3 +77,7 @@ def main(argv: list[str] | None = None) -> int:
         for row in rows:
             print("\t".join(row.values()))
     return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

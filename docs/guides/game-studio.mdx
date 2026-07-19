@@ -1,0 +1,103 @@
+---
+title: "Game Studio"
+description: "Generate polished, playable browser-game starters from Arka."
+---
+
+Arka includes a dependency-free game starter for quickly prototyping attractive
+games before adding a framework or assets:
+
+```bash
+arka game create "Solar Drift" --out solar-drift
+```
+
+The generated folder contains an accessible HTML shell, responsive visual
+styling, and a small canvas game loop with keyboard controls, score tracking,
+glow effects, and responsive resizing. It is intentionally local and safe to
+edit. Open `index.html` in a browser or serve the folder with any static
+server, then ask Arka to extend the mechanics, art, sound, or Three.js scene.
+
+Natural language works too: “create an awesome browser game called Solar
+Drift.” Existing `arka play battle`, chess, and tournament commands remain
+available for simulation and model benchmarking.
+
+## Verify a running game
+
+When a local dev server is running, Arka can play a short deterministic smoke
+sequence in a headless browser:
+
+```bash
+arka game check http://localhost:5173 --output recordings/game-check --json
+```
+
+Add `--record` to capture a Playwright WebM recording of the menu transition
+and gameplay:
+
+```bash
+arka game check http://localhost:5173 --record --output recordings/game-check --json
+arka "record gameplay video at http://localhost:5173"
+arka "check my game at http://localhost:5173 and verify visuals before saying done"
+```
+
+Recording is disabled by default. The JSON response includes the `video` path
+alongside the frame screenshots so animation timing and gameplay behavior can
+be reviewed or passed to an Arka visual-fix request.
+
+When recording is enabled, Arka creates the Playwright browser context with
+recording before the page loads or any controls are clicked. It saves
+`frame-000-loaded.png` first, then captures frames after menu clicks and
+keyboard/mouse actions, then closes the page/context to finalize the WebM file.
+
+Arka auto-plans how much to play. In `--play-depth auto` mode it chooses:
+
+- `smoke` for simple demos/prototypes
+- `standard` for ordinary canvas games
+- `deep` for racing, physics, battle, level, WebGL, or 3D-heavy games
+
+Override it when needed:
+
+```bash
+arka game check http://localhost:5173 --play-depth smoke --json
+arka game check http://localhost:5173 --play-depth deep --max-actions 20 --record --json
+arka game check http://localhost:5173 --play-depth deep --duration 2m --record --json
+```
+
+The JSON response includes `play_strategy` with the chosen depth, reason, and
+edge cases covered. Standard/deep strategies try menu/start controls, canvas
+focus, arrow keys, WASD, action keys, boundary clicks, and animation settle
+waits; deep mode also probes pause/reset and repeated-input stability.
+
+For longer sessions, use `--duration` / `--session-duration` instead of manually
+chaining waits. Arka still caps each individual wait at 10 seconds for
+responsiveness, but internally composes multiple safe wait chunks and captures
+frames after each chunk so long-running animation bugs can be inspected.
+
+Add `--verify` / `--verify-visuals` when visuals matter and Arka should not say
+the check passed until it has inspected the captured pixels:
+
+```bash
+arka game check http://localhost:5173 --verify --json
+arka game check http://localhost:5173 --record --play-depth deep --duration 2m --verify --json
+```
+
+Visual verification samples the loaded/final frames plus recent gameplay frames
+and runs `visual_diagnose` on them. If the visual diagnosis reports
+`needs_fix`, medium/high severity issues, or the vision backend is unavailable,
+the game check status becomes `failed` and the JSON includes
+`visual_verification` with checked frames, issues, fixes, and verdict. This is
+the mode to use before claiming a game UI or animation is done.
+
+The check confirms the page loads, contains a canvas, sends keyboard actions,
+captures a screenshot, and reports page/console errors. It never opens a
+desktop window. Use `--actions '[{"type":"key","key":"ArrowRight"},{"type":"wait","ms":500}]'`
+to provide a custom read-only play sequence.
+
+Every action produces a numbered frame plus a final frame. The JSON response
+contains `screenshots`, `visual_errors`, `errors`, and a ready-to-use
+`fix_prompt`, so you can ask Arka to review the captured frames and correct
+only the visual problems it observes. Without `--output`, frames are kept in
+a temporary directory and can be discarded after the review.
+
+With no `--actions` argument, Arka first clicks a visible button or link whose
+label looks like Play, Start, Begin, Launch, or Continue, then focuses the
+canvas and sends movement keys. The result reports `clicked_controls` and
+`gameplay_started`, helping distinguish a menu-only capture from actual play.

@@ -102,6 +102,62 @@ arka mcp add signoz --url http://localhost:8000/mcp --header SIGNOZ-API-KEY=$SIG
 arka mcp tools signoz
 ```
 
+## MCP logs
+
+Use MCP logs when Cursor, Claude, or another MCP client reports production-like
+issues such as `Connection closed`, invalid tool arguments, unknown tools, or
+server error states:
+
+```bash
+arka mcp logs
+arka mcp logs -n 100 --json
+arka mcp logs --event server.tools_call
+```
+
+Logs are JSONL and store sanitized client/server events: timestamp, component,
+method/tool, status, duration, and a short error snippet. Secrets, tokens, and
+authorization-like fields are redacted. By default the file lives under Arka's
+config directory at `logs/mcp.jsonl`; set `ARKA_MCP_LOG_PATH` to override it for
+tests or hosted deployments.
+
+## Three.js model MCP
+
+Arka has a built-in preset for [`baryhuang/mcp-threejs`](https://github.com/baryhuang/mcp-threejs), a Sketchfab-backed MCP server for finding downloadable Three.js-compatible 3D assets. This is useful when a scene asks for real things such as satellites, spacecraft, vehicles, rooms, desks, or humans — Arka should prefer a licensed GLTF/GLB asset over rough geometric placeholders.
+
+Preview the config first:
+
+```bash
+arka mcp preset threejs
+```
+
+Apply it to Arka's MCP config:
+
+```bash
+arka mcp preset threejs --apply
+arka mcp tools threejs
+```
+
+The preset uses Docker:
+
+```json
+{
+  "mcpServers": {
+    "threejs": {
+      "command": "docker",
+      "args": ["run", "--rm", "-i", "buryhuang/mcp-server-threejs:latest"],
+      "env": {
+        "SKETCHFAB_ACCESS_TOKEN": "${env:SKETCHFAB_ACCESS_TOKEN}",
+        "SKETCHFAB_REFRESH_TOKEN": "${env:SKETCHFAB_REFRESH_TOKEN}",
+        "SKETCHFAB_CLIENT_ID": "${env:SKETCHFAB_CLIENT_ID}",
+        "SKETCHFAB_CLIENT_SECRET": "${env:SKETCHFAB_CLIENT_SECRET}"
+      }
+    }
+  }
+}
+```
+
+Set the Sketchfab OAuth variables when you want live download-link lookup. Without tokens, the server may start but model lookup/download URLs can fail depending on the upstream API.
+
 ## Commands reference
 
 | Command | Description |
@@ -110,11 +166,13 @@ arka mcp tools signoz
 | `arka mcp add <name> <command> [args...]` | Add stdio server |
 | `arka mcp add <name> --url <url>` | Add HTTP/SSE server |
 | `arka mcp add <name> --url <url> --header KEY=VAL` | Add HTTP server with auth header |
+| `arka mcp preset threejs [--apply]` | Preview/apply the Three.js model MCP server preset |
 | `arka mcp remove <name>` | Remove a server |
 | `arka mcp tools <server>` | List tools from a server |
 | `arka mcp call <server> <tool> [--args '{}']` | Call a tool |
 | `arka mcp status` | Connection health for all servers |
-| `arka mcp self-tools` | List Arka's 37 native MCP tools |
+| `arka mcp logs [-n 50] [--json]` | Show recent sanitized MCP client/server events |
+| `arka mcp self-tools` | List Arka's native MCP tools |
 | `arka mcp serve` | Start Arka as a local stdio MCP server |
 | `arka mcp install` | Print Cursor/Claude-compatible `mcp.json` snippet |
 | `arka mcp doctor` | Verify the local Arka MCP server starts |
@@ -129,7 +187,7 @@ Other agents (Cursor, Claude Desktop, OpenClaw, Codex, etc.) can call Arka skill
 
 ### Cursor setup
 
-Use Arka as an MCP server inside Cursor so the editor agent can call `arka_ask`, `arka_recall`, `arka_skill`, and 34 other tools.
+Use Arka as an MCP server inside Cursor so the editor agent can call `arka_ask`, `arka_recall`, `arka_skill`, and the rest of Arka's exported tool surface.
 
 <Steps>
   <Step title="Install Arka">
@@ -143,7 +201,7 @@ Use Arka as an MCP server inside Cursor so the editor agent can call `arka_ask`,
     arka mcp doctor
     ```
 
-    `arka mcp doctor` should end with `summary ok` and list 37 tools.
+    `arka mcp doctor` should end with `summary ok` and report the current tool count.
   </Step>
 
   <Step title="Add MCP config">
@@ -181,7 +239,7 @@ Use Arka as an MCP server inside Cursor so the editor agent can call `arka_ask`,
   </Step>
 
   <Step title="Restart Cursor">
-    Fully quit and reopen Cursor, or use **Settings → MCP → Reload**. The `arka` server should show as connected with 37 tools.
+    Fully quit and reopen Cursor, or use **Settings → MCP → Reload**. The `arka` server should show as connected with the current Arka tool count.
   </Step>
 
   <Step title="Example tool calls">
@@ -250,9 +308,11 @@ arka mcp doctor
 arka mcp self-tools
 ```
 
-In the IDE, explicitly say “use the Arka MCP tools” when needed. Useful first
-checks are `arka_heartbeat`, `arka_repo_map`, and `arka_skill`. Existing MCP
-servers are preserved when using `arka agent_hub sync --unify`; use
+In the IDE, explicitly say “use the Arka MCP tools” when needed. Treat
+`arka_route` as the umbrella Arka MCP tool: pass the user's full natural-language
+request to it when you are not certain which narrower Arka tool should run.
+Useful first checks are `arka_heartbeat`, `arka_repo_map`, and `arka_skill`.
+Existing MCP servers are preserved when using `arka agent_hub sync --unify`; use
 `arka agent_hub adapters` to preview which client files will be updated.
 
 ### Quick start
@@ -294,6 +354,7 @@ Run `arka mcp install` to print the correct command for your machine.
 | `arka_remember` | Store a fact, note, or channel turn |
 | `arka_recall` | Recall unified memory by goal |
 | `arka_skill` | Invoke a named Arka skill |
+| `arka_route` | Umbrella tool — route and execute the full natural-language request through Arka skills/MCP-backed capabilities |
 | `arka_repo_map` | Repository layout and Python symbols |
 | `arka_heartbeat` | Agent heartbeat — ping, status, or recent activity history |
 | `arka_sessions` | Channel sessions — list, status, context, resume, silence_check, push, reset |
@@ -311,7 +372,7 @@ Run `arka mcp install` to print the correct command for your machine.
 | `arka_timekit` | Time — now, timezone convert, or relative offsets |
 | `arka_urlkit` | URL helpers — parse, normalize, or slugify |
 | `arka_password` | Password — generate one-shot secret (not stored) |
-| `arka_spotify` | Spotify — search tracks (no playback) |
+| `arka_spotify` | Spotify — search tracks; hidden by default in MCP personal-skill safe mode |
 | `arka_textkit` | Textkit — UUID, hash, or base64 encode/decode |
 | `arka_calendar` | Calendar — today's events (macOS Calendar.app) |
 | `arka_platform` | Platform — show or detect OS capabilities |
@@ -327,6 +388,39 @@ Run `arka mcp install` to print the correct command for your machine.
 | `arka_repo_health` | Repo health — scan or run lint/test checks |
 | `arka_agent_hub` | Agent Hub — status, adapters, detect, doctor, or list |
 | `arka_team_run` | Run an agent team workflow |
+
+### MCP-safe defaults
+
+Arka MCP hides or blocks personal desktop/device skills by default so IDE
+agents do not unexpectedly open Brave, start Spotify, play media, or run a
+personalized daily brief. This does not change local Fish/CLI behavior.
+
+Disabled-by-default MCP examples:
+
+- `arka_spotify`
+- `play_spotify`, `spotify_control`, `spotify_brave_debug`
+- `play_song`, `play_youtube`, `play_movie`, `stop_music`
+- `open_url`, `open`, `browse`, `open_urls`
+- `search_web`, `browse_web`, `agent_browser`
+- `daily_brief`
+
+Headless/dev-safe tools such as `browser_check`, `web_screenshot`,
+`automate`, repo tools, code tools, data tools, and `arka_route` remain
+available.
+
+Opt in only when the MCP client is trusted to touch your desktop/browser/media
+state:
+
+```bash
+ARKA_MCP_ENABLE_PERSONAL_SKILLS=1 arka mcp serve
+```
+
+For a narrower override:
+
+```bash
+ARKA_MCP_ENABLED_TOOLS=arka_spotify arka mcp serve
+ARKA_MCP_ENABLED_SKILLS=daily_brief,open_url arka mcp serve
+```
 
 ### Agent Hub
 
@@ -370,3 +464,10 @@ When a tool exists on the MCP server but lacks natural-language routing (for exa
 4. Tests in `tests/test_*_routing.py` and `tests/test_nl_routing_coverage.py`
 
 This keeps Cursor MCP, terminal NL, and `ROUTE_MODE=symbolic_only` in sync.
+## Browser safety
+
+MCP requests do not open websites or desktop browser windows implicitly. Use
+headless skills such as `browser_check`, `web_screenshot`, or `automate` for
+inspection. If a workflow genuinely needs a headed tab, call the `arka_skill`
+tool with `allow_browser: true` after obtaining user approval. This prevents a
+model-generated URL from unexpectedly launching a browser.

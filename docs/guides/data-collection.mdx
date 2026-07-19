@@ -21,3 +21,18 @@ collector still has a DuckDuckGo fallback.
 
 Natural language also works: “auto collect data about battery recycling for
 10 minutes.”
+
+## Category catalogs
+
+For requests such as “collect all Indian aeroplanes,” use the catalog mode:
+
+```bash
+arka data catalog "Indian aeroplanes" --for 10m --limit 500 --format json --output aircraft.json
+```
+
+Arka first issues bounded catalog/count searches, then paginates until the
+time or row limit is reached and deduplicates source URLs. The JSON report
+includes `pages`, `rows`, `truncated`, and `reported_total`. A total is left
+`null` unless an authoritative source explicitly reports one; Arka never
+guesses that it collected every item. Treat `coverage: partial` as a prompt to
+continue with a longer `--for` window or a more authoritative source.

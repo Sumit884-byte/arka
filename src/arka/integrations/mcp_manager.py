@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import queue
 import re
 import shlex
 import subprocess
@@ -27,6 +28,18 @@ MCP_SDK_INSTALL_HINT = (
     "  pip install mcp\n"
     "Arka uses built-in JSON-RPC over stdio/HTTP without it."
 )
+
+THREEJS_MCP_SERVER_NAME = "threejs"
+THREEJS_MCP_IMAGE = "buryhuang/mcp-server-threejs:latest"
+THREEJS_MCP_ALIASES = frozenset({
+    "threejs",
+    "three.js",
+    "three-js",
+    "mcp-threejs",
+    "mcp-server-threejs",
+    "baryhuang/mcp-threejs",
+    "buryhuang/mcp-server-threejs",
+})
 
 
 @dataclass
@@ -185,6 +198,57 @@ def add_server(
     return config
 
 
+def threejs_mcp_config() -> McpServerConfig:
+    """Return the recommended local stdio config for Bury/Bary Huang's Three.js MCP server."""
+    return McpServerConfig(
+        name=THREEJS_MCP_SERVER_NAME,
+        command="docker",
+        args=["run", "--rm", "-i", THREEJS_MCP_IMAGE],
+        env={
+            "SKETCHFAB_ACCESS_TOKEN": "${env:SKETCHFAB_ACCESS_TOKEN}",
+            "SKETCHFAB_REFRESH_TOKEN": "${env:SKETCHFAB_REFRESH_TOKEN}",
+            "SKETCHFAB_CLIENT_ID": "${env:SKETCHFAB_CLIENT_ID}",
+            "SKETCHFAB_CLIENT_SECRET": "${env:SKETCHFAB_CLIENT_SECRET}",
+        },
+    )
+
+
+def configure_preset(name: str, *, apply: bool = False) -> tuple[McpServerConfig, Path | None]:
+    """Preview or install a built-in MCP server preset."""
+    key = " ".join((name or "").lower().split()).strip()
+    if key not in THREEJS_MCP_ALIASES:
+        raise KeyError(f"Unknown MCP preset: {name}")
+    cfg = threejs_mcp_config()
+    if not apply:
+        return cfg, None
+    installed = add_server(
+        cfg.name,
+        command=cfg.command,
+        args=cfg.args,
+        env=cfg.env,
+    )
+    return installed, mcp_config_path()
+
+
+def format_preset(name: str, *, apply: bool = False) -> str:
+    cfg, path = configure_preset(name, apply=apply)
+    payload = {cfg.name: cfg.to_entry()}
+    lines = [
+        f"preset\t{cfg.name}",
+        "source\thttps://github.com/baryhuang/mcp-threejs",
+        f"image\t{THREEJS_MCP_IMAGE}",
+        f"mode\t{'applied' if apply else 'preview'}",
+        "requires\tdocker",
+        "optional_env\tSKETCHFAB_ACCESS_TOKEN, SKETCHFAB_REFRESH_TOKEN, SKETCHFAB_CLIENT_ID, SKETCHFAB_CLIENT_SECRET",
+        "json\t" + json.dumps({"mcpServers": payload}, sort_keys=True),
+    ]
+    if path:
+        lines.append(f"config\t{path}")
+    else:
+        lines.append("next\tarka mcp preset threejs --apply")
+    return "\n".join(lines)
+
+
 def remove_server(name: str) -> bool:
     key = name.strip()
     data = load_mcp_config()
@@ -205,6 +269,24 @@ def _resolve_env_values(values: dict[str, str]) -> dict[str, str]:
             text = os.environ.get(m.group(1), "")
         resolved[str(key)] = text
     return resolved
+
+
+def _infer_library_from_repo() -> str | None:
+    """Infer a likely documentation library from local project manifests."""
+    root = Path.cwd()
+    package = root / "package.json"
+    if package.is_file():
+        try:
+            data = json.loads(package.read_text(encoding="utf-8"))
+            deps = {**(data.get("dependencies") or {}), **(data.get("devDependencies") or {})}
+            for preferred in ("react", "next", "three", "@react-three/fiber", "vue", "svelte"):
+                if preferred in deps:
+                    return preferred
+            if deps:
+                return next(iter(deps))
+        except (OSError, json.JSONDecodeError):
+            pass
+    return None
 
 
 class McpStdioClient:
@@ -258,6 +340,16 @@ class McpStdioClient:
         proc = self._ensure_proc()
         assert proc.stdout is not None
         deadline = time.monotonic() + self.timeout
+        lines: queue.Queue[str | BaseException] = queue.Queue(maxsize=1)
+
+        def read_line() -> None:
+            try:
+                lines.put(proc.stdout.readline())
+            except BaseException as exc:  # surface reader failures to caller
+                lines.put(exc)
+
+        reader = threading.Thread(target=read_line, daemon=True)
+        reader.start()
         while time.monotonic() < deadline:
             if proc.poll() is not None:
                 err = ""
@@ -266,9 +358,15 @@ class McpStdioClient:
                 raise RuntimeError(
                     f"MCP stdio process exited ({proc.returncode}): {err.strip()[:300]}"
                 )
-            line = proc.stdout.readline()
+            try:
+                line = lines.get(timeout=max(0.01, min(0.1, deadline - time.monotonic())))
+            except queue.Empty:
+                continue
+            if isinstance(line, BaseException):
+                raise RuntimeError(f"MCP stdio read failed: {line}") from line
             if not line:
-                time.sleep(0.02)
+                if proc.poll() is not None:
+                    raise RuntimeError(f"MCP stdio process exited ({proc.returncode})")
                 continue
             line = line.strip()
             if not line:
@@ -286,7 +384,13 @@ class McpStdioClient:
                     raise RuntimeError(message)
                 result = body.get("result")
                 return result if isinstance(result, dict) else {"value": result}
-        raise TimeoutError(f"MCP stdio timed out waiting for response id={request_id}")
+        # Do not leave a wedged child behind; the next request will reconnect
+        # cleanly instead of surfacing a misleading "connection closed".
+        self.close()
+        raise TimeoutError(
+            f"MCP stdio timed out after {self.timeout:.1f}s waiting for response id={request_id}; "
+            "the server may be busy or disconnected"
+        )
 
     def _rpc(
         self,
@@ -379,18 +483,79 @@ def list_tools(server: str) -> list[McpTool]:
 
 
 def call_tool(server: str, tool_name: str, arguments: dict[str, Any] | None = None) -> str:
+    started = time.monotonic()
     try:
         from arka.integrations.context7_mcp import notify_context7_tool_call
 
         notify_context7_tool_call(server, tool_name, arguments)
     except ImportError:
         pass
-    client = connect_client(server)
-    try:
-        result = client.call_tool(tool_name, arguments)
-        return _tool_result_text(result)
-    finally:
-        client.close()
+    arguments = dict(arguments or {})
+    # Context7 requires a string `query`; normalize common aliases before the
+    # remote schema validator sees the request.
+    if server.strip().lower() in {"context7", "context-7"} and tool_name.strip() == "resolve-library-id":
+        query = arguments.get("query") or arguments.get("libraryName") or arguments.get("library") or arguments.get("text")
+        if not isinstance(query, str) or not query.strip():
+            query = _infer_library_from_repo()
+        if not isinstance(query, str) or not query.strip():
+            raise ValueError("context7 resolve-library-id requires query/libraryName, or a recognizable project dependency")
+        arguments["query"] = query.strip()
+        # Older Context7 deployments validate `libraryName` instead. Sending
+        # both fields is backward-compatible and avoids schema-version drift.
+        arguments["libraryName"] = query.strip()
+    last_error: Exception | None = None
+    for attempt in range(2):
+        client = connect_client(server)
+        try:
+            result = client.call_tool(tool_name, arguments)
+            try:
+                from arka.integrations.mcp_logs import log_mcp_event
+
+                log_mcp_event(
+                    "client.call_tool",
+                    server=server,
+                    tool=tool_name,
+                    status="ok",
+                    attempt=attempt + 1,
+                    duration_ms=int((time.monotonic() - started) * 1000),
+                )
+            except ImportError:
+                pass
+            return _tool_result_text(result)
+        except (RuntimeError, ConnectionError, BrokenPipeError) as exc:
+            last_error = exc
+            message = str(exc).lower()
+            if attempt == 0 and any(token in message for token in ("connection closed", "not connected", "broken pipe", "eof")):
+                try:
+                    from arka.integrations.mcp_logs import log_mcp_event
+
+                    log_mcp_event(
+                        "client.reconnect",
+                        server=server,
+                        tool=tool_name,
+                        status="retry",
+                        error=str(exc),
+                    )
+                except ImportError:
+                    pass
+                continue
+            try:
+                from arka.integrations.mcp_logs import log_mcp_event
+
+                log_mcp_event(
+                    "client.call_tool",
+                    server=server,
+                    tool=tool_name,
+                    status="error",
+                    error=str(exc),
+                    duration_ms=int((time.monotonic() - started) * 1000),
+                )
+            except ImportError:
+                pass
+            raise
+        finally:
+            client.close()
+    raise RuntimeError(f"MCP server {server!r} disconnected; reconnect retry failed: {last_error}") from last_error
 
 
 def server_status(name: str) -> dict[str, Any]:
@@ -438,6 +603,13 @@ def nl_to_argv(cmd: str) -> list[str] | None:
     if not clean:
         return None
     lower = clean.lower()
+
+    if re.search(r"(?i)\b(?:use|add|install|configure|setup|set\s+up|enable)\b.*\b(?:mcp[- ]?threejs|three\.js\s+mcp|threejs\s+mcp|mcp-server-threejs|baryhuang/mcp-threejs|buryhuang/mcp-server-threejs)\b", clean):
+        apply = bool(re.search(r"(?i)\b(?:apply|install|enable|configure|setup|set\s+up)\b", clean))
+        return ["preset", "threejs", "--apply"] if apply else ["preset", "threejs"]
+
+    if re.search(r"(?i)\bmcp\b.*\blogs?\b|\blogs?\b.*\bmcp\b", clean):
+        return ["logs"]
 
     if re.search(r"(?i)\b(?:mcp|model\s+context\s+protocol)\b.*\b(?:status|health|connections?)\b", clean):
         return ["status"]
@@ -510,8 +682,10 @@ __all__ = [
     "add_server",
     "all_status",
     "call_tool",
+    "configure_preset",
     "connect_client",
     "format_server_list",
+    "format_preset",
     "get_server_config",
     "list_server_names",
     "list_tools",
@@ -522,4 +696,5 @@ __all__ = [
     "remove_server",
     "save_mcp_config",
     "server_status",
+    "threejs_mcp_config",
 ]

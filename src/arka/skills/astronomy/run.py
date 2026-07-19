@@ -13,6 +13,7 @@ if str(_ROOT) not in sys.path:
 from lib import (  # noqa: E402
     format_iss_report,
     format_moon_report,
+    format_catalog,
     lookup_object,
 )
 
@@ -26,6 +27,7 @@ def main() -> int:
         print("  arka astronomy moon [tonight]    — current lunar phase")
         print("  arka astronomy iss [city|lat,lon] — ISS position and pass times")
         print("  arka astronomy lookup <name>")
+        print("  arka astronomy list [planets|galaxies|all]")
         print("")
         print("NL examples:")
         print("  arka what is Betelgeuse")
@@ -35,6 +37,14 @@ def main() -> int:
 
     cmd = args[0].lower()
     rest = args[1:]
+
+    if cmd in ("list", "catalog", "planets", "galaxies"):
+        kind = cmd if cmd in ("planets", "galaxies") else (rest[0].lower() if rest else "all")
+        if kind not in {"all", "planets", "galaxies"}:
+            print("Usage: arka astronomy list [planets|galaxies|all]", file=sys.stderr)
+            return 1
+        print(format_catalog(kind))
+        return 0
 
     if cmd in ("what", "lookup", "object", "star", "planet"):
         query = " ".join(rest).strip()

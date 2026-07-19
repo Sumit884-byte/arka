@@ -1007,6 +1007,37 @@ def _coding_summary(cwd: Path, goal: str, total: int, *, completed: int, failed_
     return "\n".join(lines)
 
 
+CODING_SESSION_DENIED_SKILLS = {
+    "ascii_art",
+    "chart",
+    "compose_3d",
+    "flow",
+    "generate_image",
+    "generate_thumbnail",
+    "generate_video",
+    "model_to_image",
+    "parallax_2d",
+    "scene_3d",
+    "text_to_3d",
+    "three_js_model",
+    "visual",
+}
+
+
+def _skill_head(command: str) -> str:
+    clean = " ".join((command or "").split()).strip()
+    if clean.startswith("arka "):
+        clean = clean[5:].strip()
+    parts = clean.split()
+    if parts and parts[0] == "skill" and len(parts) > 1:
+        return parts[1]
+    return parts[0] if parts else ""
+
+
+def _is_denied_coding_session_skill(command: str) -> bool:
+    return _skill_head(command) in CODING_SESSION_DENIED_SKILLS
+
+
 def code_agent(
     goal: str,
     *,
@@ -1065,7 +1096,9 @@ def code_agent(
         "Examples include repo_health, lint_project, pr_check, review, route_audit, "
         "self_improve, design_from_screenshot, compose_slides, urlkit, mcp, agent_hub, "
         "frontend_loop, and skill scaffolding. "
-        "If a step names one of those tools directly, emit the skill call instead of a raw shell command."
+        "If a step names one of those tools directly, emit the skill call instead of a raw shell command. "
+        "Coding sessions are repo-scoped: do not generate charts, graphs, images, videos, 3D scenes, "
+        "ASCII art, or other creative visualization artifacts unless the user explicitly exits coding mode."
     )
 
     ctx = ""
@@ -1105,6 +1138,16 @@ def code_agent(
         hint = recommend_skill_hint(goal)
         if hint:
             plan_user += hint + "\n"
+    except ImportError:
+        pass
+    try:
+        from arka.agent.three_js_model import dimension_research_instruction, model_selection_instruction
+
+        if re.search(r"(?i)\b(?:3d|three\.js|model|mesh|scene|satellite|spacecraft)\b", goal):
+            plan_user += model_selection_instruction(goal) + "\n"
+            dimensions = dimension_research_instruction(goal)
+            if dimensions:
+                plan_user += dimensions + "\n"
     except ImportError:
         pass
     try:
@@ -1229,6 +1272,10 @@ def _run_arka_tool_step(step: str) -> int | None:
         print("Skipped design_from_screenshot: an image path or URL is required.")
         print("Add it explicitly, for example: design_from_screenshot ~/Pictures/design.png")
         return 0
+    if _is_denied_coding_session_skill(clean):
+        print(f"Skipped coding-session unavailable skill: {_skill_head(clean)}")
+        print("Coding sessions only expose repo/code inspection, editing, tests, CI, review, and dev-tool skills.")
+        return 0
     if first in known_tools:
         from arka.dispatch import run_skill
 
@@ -1243,6 +1290,10 @@ def _run_arka_tool_step(step: str) -> int | None:
         except Exception:
             routed = None
         if routed and routed.kind != "shell":
+            if _is_denied_coding_session_skill(routed.skill):
+                print(f"Skipped coding-session unavailable route: {_skill_head(routed.skill)}")
+                print("Coding sessions only expose repo/code inspection, editing, tests, CI, review, and dev-tool skills.")
+                return 0
             from arka.dispatch import run_skill
 
             return run_skill(routed.skill)
@@ -1259,16 +1310,36 @@ def _is_planner_placeholder(step: str) -> bool:
     return text in {"shell command", "shell command or skill", "skill"} or text.startswith("shell command or skill:")
 
 
+def _strip_code_step_cd(step: str) -> str:
+    """Remove cwd-navigation prefixes from planned code-agent steps."""
+    text = " ".join((step or "").split()).strip()
+    if not text:
+        return ""
+    if re.match(r"(?i)^cd(?:\s+[^;&|]+)?\s*$", text):
+        return ""
+    patterns = (
+        r"(?i)^cd\s+\.\s*&&\s*",
+        r"(?i)^cd\s+[\w./~\"' -]+\s*&&\s*",
+    )
+    for pattern in patterns:
+        stripped = re.sub(pattern, "", text).strip()
+        if stripped != text:
+            return stripped
+    return text
+
+
 def _sanitize_code_steps(raw_steps: list[object]) -> list[str]:
     """Keep only complete, actionable plan steps before displaying/executing."""
     out: list[str] = []
     for raw in raw_steps:
-        step = " ".join(str(raw).split()).strip()
+        step = _strip_code_step_cd(str(raw))
         if not step or _is_planner_placeholder(step):
             continue
         if step.lower().startswith(("the image shows", "overall,", "here is", "i will ")):
             continue
         if step.startswith("{") or step.endswith("}"):
+            continue
+        if _is_denied_coding_session_skill(step):
             continue
         out.append(step)
     return out

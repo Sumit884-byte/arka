@@ -1,0 +1,10 @@
+{
+  "name": "rig_3d",
+  "description": "Inspect and preview GLB/GLTF character rigs, skeletons, and animation clips in Three.js",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": ["rig 3d model", "rig a character", "inspect skeleton", "pose 3d model", "skinned model"],
+  "permissions": ["write", "network"]
+}

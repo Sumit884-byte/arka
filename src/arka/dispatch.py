@@ -26,6 +26,13 @@ def run_script(script: str, args: list[str] | None = None) -> int:
         print("Reinstall arka-agent or run: python scripts/sync_bundled.py", file=sys.stderr)
         return 1
     cmd = [python_executable(), str(path), *(args or [])]
+    if os.environ.get("ARKA_CAPTURE_STDIO", "").lower() in ("1", "true", "yes", "on"):
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.stdout:
+            print(result.stdout, end="")
+        if result.stderr:
+            print(result.stderr, end="", file=sys.stderr)
+        return result.returncode
     return subprocess.call(cmd)
 
 
@@ -121,6 +128,10 @@ def run_skill(skill_line: str) -> int:
     with skill_ctx as current:
         if head in ("generate_password", "password", "pass"):
             code = run_password(rest)
+        elif head == "config":
+            from arka.core.default_config import main as config_main
+
+            code = config_main(rest)
         elif head == "platform_howto":
             from arka.agent.platform_howto import answer_platform_howto
 
@@ -293,9 +304,9 @@ def run_skill(skill_line: str) -> int:
             from arka.core.code_project import main as code_main
 
             code = code_main(["code", *rest])
-        elif head in ("data", "data_collect", "collect_data", "data-collect") and rest and rest[0] == "collect":
+        elif head in ("data", "data_collect", "collect_data", "data-collect") and rest and rest[0] in {"collect", "catalog"}:
             from arka.agent.data_collect import main as collect_main
-            code = collect_main(rest[1:])
+            code = collect_main([*rest[1:], "--catalog"] if rest[0] == "catalog" else rest[1:])
         elif head in ("search", "search_setup", "search-setup"):
             from arka.agent.search_setup import main as search_setup_main
             code = search_setup_main(rest)
@@ -306,6 +317,14 @@ def run_skill(skill_line: str) -> int:
             from arka.agent.core import code_agent
 
             code = code_agent(" ".join(rest))
+        elif head == "batch":
+            from arka.agent.batch import main as batch_main
+
+            code = batch_main(rest)
+        elif head in ("background", "background_processes", "background-processes"):
+            from arka.agent.background import main as background_main
+
+            code = background_main(rest or ["processes"])
         elif head in ("sandbox", "sandboxes"):
             from arka.agent.sandbox import main as sandbox_main
 
@@ -319,6 +338,9 @@ def run_skill(skill_line: str) -> int:
         elif head in ("text", "text_edit", "text-edit"):
             from arka.agent.text_edit import main as text_main
             code = text_main(rest)
+        elif head in ("word_counter", "word-counter", "wordcount", "word_count"):
+            from arka.agent.word_counter import main as word_counter_main
+            code = word_counter_main(rest)
         elif head in ("move_file", "move-file", "move"):
             from arka.agent.move_file import main as move_main
             code = move_main(rest)
@@ -331,6 +353,13 @@ def run_skill(skill_line: str) -> int:
         elif head in ("build_something_cool", "build-something-cool", "build_cool_feature", "build-cool-feature", "cool_build"):
             from arka.agent.cool_build import main as cool_main
             code = cool_main(rest)
+        elif head in ("game", "game_studio", "game-studio"):
+            if rest and rest[0] == "check":
+                from arka.agent.game_control import main as game_check_main
+                code = game_check_main(rest[1:])
+            else:
+                from arka.agent.game_studio import main as game_main
+                code = game_main(rest)
         elif head in ("play", "game_benchmark", "game-benchmark"):
             from arka.agent.play import main as play_main
             code = play_main(rest)
@@ -340,6 +369,9 @@ def run_skill(skill_line: str) -> int:
         elif head in ("vision_evidence", "vision-evidence", "ocr_compare"):
             from arka.agent.vision_evidence import main as evidence_main
             code = evidence_main(rest)
+        elif head in ("describe_video", "describe-video", "video_describe", "video-description"):
+            from arka.vision.video import main as video_main
+            code = video_main(rest)
         elif head in ("url_app", "url-app", "app_design_review"):
             from arka.agent.url_app_analyzer import main as url_app_main
             code = url_app_main(rest)
@@ -416,12 +448,16 @@ def run_skill(skill_line: str) -> int:
             from arka.agent.automation import main as automation_main
             code = automation_main(rest)
         elif head in ("usage", "skill_usage"):
-            from arka.core.skill_usage import report
-            payload = report()
-            print(f"Arka usage: {payload['total']} skill invocations")
-            for skill, count in payload["skills"][:20]:
-                print(f"  {skill}: {count}")
-            code = 0
+            if rest and rest[0] in ("dashboard", "dash"):
+                from arka.agent.usage_dashboard import main as usage_dashboard_main
+                code = usage_dashboard_main(rest[1:])
+            else:
+                from arka.core.skill_usage import report
+                payload = report()
+                print(f"Arka usage: {payload['total']} skill invocations")
+                for skill, count in payload["skills"][:20]:
+                    print(f"  {skill}: {count}")
+                code = 0
         elif head in ("design", "design_flow"):
             from arka.agent.design_flow import main as design_main
             code = design_main(rest)
@@ -479,6 +515,39 @@ def run_skill(skill_line: str) -> int:
         elif head in ("spline", "spline_guide", "spline-guide"):
             from arka.agent.spline_guide import main as spline_main
             code = spline_main(rest)
+        elif head in ("three_js_model", "three-js-model", "threejs_model"):
+            from arka.agent.three_js_model import main as three_main
+            code = three_main(rest)
+        elif head in ("text_to_3d", "text-to-3d", "text2_3d", "text23d"):
+            from arka.agent.text_to_3d import main as text_to_3d_main
+            code = text_to_3d_main(rest)
+        elif head in ("scene_3d", "scene-3d", "3d_scene"):
+            from arka.agent.scene_3d import main as scene_main
+            code = scene_main(rest)
+        elif head in ("rig_3d", "rig-3d", "3d_rig"):
+            from arka.agent.rig_3d import main as rig_main
+            code = rig_main(rest)
+        elif head in ("parallax_2d", "parallax-2d", "2.5d", "parallax"):
+            from arka.agent.parallax_2d import main as parallax_main
+            code = parallax_main(rest)
+        elif head in ("visual_diagnose", "visual-diagnose", "visual_qa"):
+            from arka.agent.visual_diagnose import main as visual_main
+            code = visual_main(rest)
+        elif head in ("semantic_alert", "semantic-alert", "alert"):
+            from arka.agent.semantic_alert import main as alert_main
+            code = alert_main(rest)
+        elif head in ("symbolic_image", "symbolic-image", "image_compose"):
+            from arka.agent.symbolic_image import main as symbolic_image_main
+            code = symbolic_image_main(rest)
+        elif head in ("image", "image_generate", "image-generate") and rest and rest[0] == "doctor":
+            from arka.agent.local_image_gen import main as local_image_main
+            code = local_image_main(rest)
+        elif head in ("image", "image_generate", "image-generate") and rest and rest[0] in ("generate", "create"):
+            from arka.agent.local_image_gen import main as local_image_main
+            code = local_image_main(rest[1:])
+        elif head in ("visual", "visuals") and rest and rest[0] in ("space-tech", "space_tech"):
+            from arka.agent.space_visual import main as space_visual_main
+            code = space_visual_main(rest[1:])
         elif head in ("multi_llm", "multi-llm", "llm_variants"):
             from arka.agent.multi_llm import main as multi_main
             code = multi_main(rest)

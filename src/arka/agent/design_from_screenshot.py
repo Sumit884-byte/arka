@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import shlex
 import sys
@@ -90,8 +91,18 @@ def route_command(text: str) -> str:
 
 
 def cmd_analyze(args: argparse.Namespace) -> int:
+    if re.match(r"(?i)^design_from_screenshot$", str(args.source).strip()):
+        print("design_from_screenshot requires an image path, for example: design_from_screenshot analyze recordings/design.png", file=sys.stderr)
+        return 2
     prompt = " ".join(args.prompt).strip() if args.prompt else DESIGN_PROMPT
-    print(describe_source(args.source, prompt))
+    try:
+        brief = describe_source(args.source, prompt)
+    except Exception as exc:
+        payload = {"source": args.source, "status": "failed", "error": str(exc), "next_step": "install/configure a local vision backend and retry"}
+        print(json.dumps(payload, indent=2) if getattr(args, "json", False) else f"design screenshot analysis failed: {exc}")
+        return 2
+    payload = {"source": args.source, "status": "completed", "brief": brief}
+    print(json.dumps(payload, indent=2) if getattr(args, "json", False) else brief)
     return 0
 
 
@@ -110,6 +121,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_an = sub.add_parser("analyze", help="Analyze a screenshot and print an implementation brief")
     p_an.add_argument("source", help="Image file or URL")
     p_an.add_argument("prompt", nargs="*", help="Optional focused prompt")
+    p_an.add_argument("--json", action="store_true", help="Print a structured analysis report")
     p_an.set_defaults(func=cmd_analyze)
 
     p_parse = sub.add_parser("parse", help="Parse natural language → design_from_screenshot args")

@@ -117,6 +117,19 @@ Legacy `HERMES_SUBAGENT*` variables remain supported as aliases.
 
 Sub-agents can attach to a message session via `--session-channel` and `--session-chat-id`.
 
+## Background process status
+
+Use `arka background processes` when you want one place to see what Arka currently has active:
+
+```bash
+arka background processes
+arka background processes --json
+```
+
+The report includes active sub-agent tasks, enabled routines, webhook status, configured MCP servers, and live OS processes that look Arka-owned such as `arka mcp serve`. The legacy command `arka background agent tasks` still works as an alias.
+
+This command is read-only. It does not stop or restart agents, routines, or servers.
+
 ## Skill manifest gates
 
 Plugin gates use `metadata.openclaw`, `metadata.arka`, or `metadata.hermes` — all merged the same way. See [OpenClaw-inspired gates](/guides/openclaw-features) for details.

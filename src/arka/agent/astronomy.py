@@ -47,6 +47,7 @@ def _is_astronomy_request(text: str) -> bool:
         r"planet\s+position|"
         r"constellation\s+\w+|"
         r"look\s+up\s+(?:star|planet)|"
+        r"(?:list|show)\s+(?:all\s+)?(?:planets?|galax(?:y|ies)|planets?\s+and\s+galax(?:y|ies))|"
         r"astronomy\b"
         r")\b",
         t,
@@ -83,6 +84,13 @@ def nl_to_argv(text: str) -> list[str]:
 
     if re.search(r"(?i)\b(?:moon\s+phase|phase\s+of\s+the\s+moon|lunar\s+phase)\b", t):
         return ["moon"]
+
+    if re.search(r"(?i)\b(?:list|show)\b.*\bplanets?\b.*\bgalax(?:y|ies)\b|\b(?:list|show)\s+all\s+(?:planets?|galax(?:y|ies))", t):
+        return ["list", "all"]
+    if re.search(r"(?i)\b(?:list|show)\s+(?:planets?|planetary)", t):
+        return ["list", "planets"]
+    if re.search(r"(?i)\b(?:list|show)\s+galax(?:y|ies)", t):
+        return ["list", "galaxies"]
 
     if re.search(r"(?i)\b(?:iss|international\s+space\s+station)\b", t):
         m = re.search(

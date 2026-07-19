@@ -5,9 +5,11 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import os
 import shutil
 import sys
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, TextIO
@@ -19,6 +21,90 @@ SERVER_NAME = "arka"
 ARKA_MCP_SERVER_KEY = "arka"
 
 ToolHandler = Callable[[dict[str, Any]], str]
+
+MCP_DEFAULT_DISABLED_TOOLS = {
+    "arka_spotify",
+}
+
+MCP_DEFAULT_DISABLED_SKILL_HEADS = {
+    "agent_browser",
+    "browse",
+    "browse_web",
+    "daily_brief",
+    "open",
+    "open_url",
+    "open_urls",
+    "play_movie",
+    "play_song",
+    "play_spotify",
+    "play_youtube",
+    "search_web",
+    "spotify_brave_debug",
+    "spotify_control",
+    "stop_music",
+}
+
+
+def _csv_env(name: str) -> set[str]:
+    return {part.strip().lower() for part in os.environ.get(name, "").split(",") if part.strip()}
+
+
+def _mcp_personal_skills_enabled() -> bool:
+    return os.environ.get("ARKA_MCP_ENABLE_PERSONAL_SKILLS", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _mcp_disabled_tools() -> set[str]:
+    if _mcp_personal_skills_enabled():
+        disabled: set[str] = set()
+    else:
+        disabled = set(MCP_DEFAULT_DISABLED_TOOLS)
+    disabled |= _csv_env("ARKA_MCP_DISABLED_TOOLS")
+    disabled -= _csv_env("ARKA_MCP_ENABLED_TOOLS")
+    return disabled
+
+
+def _mcp_disabled_skill_heads() -> set[str]:
+    if _mcp_personal_skills_enabled():
+        disabled: set[str] = set()
+    else:
+        disabled = set(MCP_DEFAULT_DISABLED_SKILL_HEADS)
+    disabled |= _csv_env("ARKA_MCP_DISABLED_SKILLS")
+    disabled -= _csv_env("ARKA_MCP_ENABLED_SKILLS")
+    return disabled
+
+
+def _mcp_disabled_message(name: str) -> str:
+    return (
+        f"Arka MCP skill {name!r} is disabled by default because it can touch personal desktop/browser/media state. "
+        "Use a headless/dev-safe skill instead, or opt in with ARKA_MCP_ENABLE_PERSONAL_SKILLS=1 "
+        f"or ARKA_MCP_ENABLED_SKILLS={name} / ARKA_MCP_ENABLED_TOOLS={name}."
+    )
+
+
+def _run_skill_captured(skill_line: str, *, allow_browser: bool = False) -> tuple[int, str]:
+    """Run a skill while capturing subprocess stdout/stderr for MCP-safe responses."""
+    from arka.agent.voice import strip_ansi
+    from arka.dispatch import run_skill
+
+    command = skill_line.split(None, 1)[0].lower() if skill_line.strip() else ""
+    if command in _mcp_disabled_skill_heads():
+        return 2, _mcp_disabled_message(command)
+    if command in {"open", "open_url", "browse"} and not (allow_browser or os.environ.get("ARKA_MCP_ALLOW_BROWSER") == "1"):
+        return 2, "Website opening is disabled for MCP requests; use a headless browser skill or explicitly approve with allow_browser=true."
+    buf = io.StringIO()
+    os.environ["ARKA_CAPTURE_STDIO"] = "1"
+    try:
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+            code = run_skill(skill_line)
+    except SystemExit as exc:
+        # argparse and several legacy skills use SystemExit for user input or
+        # backend errors. Never let that terminate the MCP stdio process.
+        code = int(exc.code) if isinstance(exc.code, int) else 2
+        if not buf.getvalue().strip() and exc.code not in (None, 0):
+            buf.write(str(exc.code))
+    finally:
+        os.environ.pop("ARKA_CAPTURE_STDIO", None)
+    return int(code or 0), strip_ansi(buf.getvalue()).strip()
 
 
 @dataclass(frozen=True)
@@ -107,12 +193,7 @@ def _handle_arka_skill(arguments: dict[str, Any]) -> str:
         raise ValueError("args must be a string or list")
     skill_line = " ".join([skill, *extra]).strip()
     try:
-        from arka.dispatch import run_skill
-
-        buf = io.StringIO()
-        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
-            code = run_skill(skill_line)
-        output = buf.getvalue().strip()
+        code, output = _run_skill_captured(skill_line, allow_browser=bool(arguments.get("allow_browser", False)))
         if code != 0 and not output:
             raise RuntimeError(f"skill exited {code}")
         if output:
@@ -128,8 +209,19 @@ def _handle_arka_capabilities(arguments: dict[str, Any]) -> str:
     try:
         skill_dir = Path(__file__).resolve().parents[1] / "agent"
         names = sorted(path.stem for path in skill_dir.glob("*.py") if path.stem != "__init__")
-        tools = sorted(tool.name for tool in _build_tools())
-        payload = {"mcp_tools": tools, "dispatch_skills": names}
+        tools = sorted(tool.name for tool in _build_tools() if tool.name not in _mcp_disabled_tools())
+        payload = {
+            "mcp_tools": tools,
+            "dispatch_skills": names,
+            "mcp_disabled_by_default": {
+                "tools": sorted(_mcp_disabled_tools()),
+                "skill_heads": sorted(_mcp_disabled_skill_heads()),
+            },
+            "umbrella_tool": {
+                "name": "arka_route",
+                "use_when": "The user gives a natural-language Arka request or you are unsure which specific MCP tool/skill to call.",
+            },
+        }
         if not include_internal:
             payload["dispatch_skills"] = [name for name in names if not name.startswith("_")]
         return json.dumps(payload, indent=2)
@@ -144,19 +236,12 @@ def _handle_arka_route(arguments: dict[str, Any]) -> str:
         raise ValueError("prompt is required")
     try:
         from arka.router import route
-        from arka.dispatch import run_skill
 
         decision = route(prompt)
         skill = getattr(decision, "skill", "") or ""
         if not skill:
             return "No Arka route found; use arka_ask for general questions."
-        import contextlib
-        import io
-
-        buf = io.StringIO()
-        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
-            code = run_skill(skill)
-        output = buf.getvalue().strip()
+        code, output = _run_skill_captured(skill)
         return output or f"Routed `{skill}` (exit {code})"
     except ImportError as exc:
         raise RuntimeError(f"routing unavailable: {exc}") from exc
@@ -738,6 +823,8 @@ def _handle_arka_password(arguments: dict[str, Any]) -> str:
 
 
 def _handle_arka_spotify(arguments: dict[str, Any]) -> str:
+    if "arka_spotify" in _mcp_disabled_tools():
+        return _mcp_disabled_message("arka_spotify")
     action = str(arguments.get("action") or "search").strip().lower()
     try:
         from arka.integrations import spotify as spotify_mod
@@ -1224,10 +1311,20 @@ def _build_tools() -> list[ArkaMcpTool]:
         ),
         ArkaMcpTool(
             name="arka_route",
-            description="Route and execute any natural-language Arka request across all skills; use this for coding, CI/CD, research, MCP, sandbox, text editing, or design tasks.",
+            description=(
+                "Umbrella Arka MCP tool: route and execute the user's complete natural-language request "
+                "across Arka's CLI skills and MCP-backed capabilities. Prefer this when no narrower "
+                "Arka MCP tool exactly matches, or for coding, CI/CD, research, data, media, browser QA, "
+                "3D, sandbox, text editing, plugin, and skill workflows."
+            ),
             input_schema={
                 "type": "object",
-                "properties": {"prompt": {"type": "string", "description": "The complete natural-language Arka request"}},
+                "properties": {
+                    "prompt": {
+                        "type": "string",
+                        "description": "The user's complete natural-language Arka request; do not reduce it to a single guessed skill name.",
+                    }
+                },
                 "required": ["prompt"],
             },
             handler=_handle_arka_route,
@@ -2278,11 +2375,12 @@ def list_tool_definitions() -> list[dict[str, Any]]:
             "inputSchema": tool.input_schema,
         }
         for tool in _build_tools()
+        if tool.name not in _mcp_disabled_tools()
     ]
 
 
 def list_tool_names() -> list[str]:
-    return [tool.name for tool in _build_tools()]
+    return [tool.name for tool in _build_tools() if tool.name not in _mcp_disabled_tools()]
 
 
 def mcp_server_launch_spec() -> dict[str, Any]:
@@ -2353,6 +2451,7 @@ class ArkaMcpServer:
         }
 
     def handle_message(self, body: dict[str, Any]) -> dict[str, Any] | None:
+        started = time.monotonic()
         method = str(body.get("method", "")).strip()
         request_id = body.get("id")
         params = body.get("params") or {}
@@ -2364,6 +2463,12 @@ class ArkaMcpServer:
 
         if method == "initialize":
             self._initialized = True
+            try:
+                from arka.integrations.mcp_logs import log_mcp_event
+
+                log_mcp_event("server.initialize", method=method, status="ok")
+            except ImportError:
+                pass
             return {
                 "jsonrpc": "2.0",
                 "id": request_id,
@@ -2375,6 +2480,12 @@ class ArkaMcpServer:
             }
 
         if method == "tools/list":
+            try:
+                from arka.integrations.mcp_logs import log_mcp_event
+
+                log_mcp_event("server.tools_list", method=method, status="ok", tools=len(self._tools))
+            except ImportError:
+                pass
             return {
                 "jsonrpc": "2.0",
                 "id": request_id,
@@ -2388,15 +2499,46 @@ class ArkaMcpServer:
                 arguments = {}
             tool = self._tools.get(name)
             if not tool:
+                try:
+                    from arka.integrations.mcp_logs import log_mcp_event
+
+                    log_mcp_event("server.tools_call", method=method, tool=name, status="unknown_tool")
+                except ImportError:
+                    pass
                 return self._error_response(request_id, -32602, f"Unknown tool: {name}")
             try:
                 text = tool.handler(arguments)
+                try:
+                    from arka.integrations.mcp_logs import log_mcp_event
+
+                    log_mcp_event(
+                        "server.tools_call",
+                        method=method,
+                        tool=name,
+                        status="ok",
+                        duration_ms=int((time.monotonic() - started) * 1000),
+                    )
+                except ImportError:
+                    pass
                 return {
                     "jsonrpc": "2.0",
                     "id": request_id,
                     "result": _text_result(text),
                 }
-            except Exception as exc:
+            except (Exception, SystemExit) as exc:
+                try:
+                    from arka.integrations.mcp_logs import log_mcp_event
+
+                    log_mcp_event(
+                        "server.tools_call",
+                        method=method,
+                        tool=name,
+                        status="error",
+                        error=str(exc),
+                        duration_ms=int((time.monotonic() - started) * 1000),
+                    )
+                except ImportError:
+                    pass
                 return {
                     "jsonrpc": "2.0",
                     "id": request_id,
@@ -2405,6 +2547,12 @@ class ArkaMcpServer:
 
         if request_id is None:
             return None
+        try:
+            from arka.integrations.mcp_logs import log_mcp_event
+
+            log_mcp_event("server.method_missing", method=method, status="error")
+        except ImportError:
+            pass
         return self._error_response(request_id, -32601, f"Method not found: {method}")
 
     def process_line(self, line: str) -> dict[str, Any] | None:
@@ -2414,6 +2562,12 @@ class ArkaMcpServer:
         try:
             body = json.loads(line)
         except json.JSONDecodeError:
+            try:
+                from arka.integrations.mcp_logs import log_mcp_event
+
+                log_mcp_event("server.parse_error", status="error", error="invalid json")
+            except ImportError:
+                pass
             return None
         if not isinstance(body, dict):
             return None

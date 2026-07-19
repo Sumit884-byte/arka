@@ -48,6 +48,15 @@ Run these once per machine (or per repo) before your daily workflow.
     The goal agent, `self improve --apply`, and other write skills stay inside this folder until you `arka code clear` or init another path.
   </Step>
 
+  <Step title="Paths with spaces">
+    Quote project paths once when initializing from another directory; Arka
+    preserves the path internally for later CLI and MCP calls:
+
+    ```bash
+    arka code init "/Users/sumitmishra/dev/3d space simulation"
+    ```
+  </Step>
+
   <Step title="Optional: fish shell">
     Fish unlocks the full 70+ skill router and natural-language aliases (`agent "…"`, `pr_check babysit`, etc.). From bash/zsh, use explicit `arka` subcommands — they work the same.
 

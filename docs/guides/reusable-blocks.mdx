@@ -9,6 +9,7 @@ arka blocks list
 arka blocks show auth_login
 arka blocks show payments_stripe
 arka blocks use auth_signup --stack "Next.js + Auth.js" --out components/signup.tsx
+arka blocks create "create a crypto wallet page and save it as a block"
 ```
 
 Available blocks include login, sign-up, password reset, OAuth, email
@@ -23,7 +24,8 @@ verify every gate before deployment. Arka does not mark a scaffold production
 ready merely because it was generated.
 
 Natural language works: “show reusable login blocks” or “list available app
-blocks."
+blocks." Arka can also turn a requested page/component into a reusable block
+spec, for example: “create a crypto wallet page and save it as a block.”
 
 Web3 blocks are also available:
 

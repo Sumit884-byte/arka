@@ -9,13 +9,26 @@ arka browser_check http://127.0.0.1:3000 --json
 arka "check the frontend in a browser"
 ```
 
-Arka loads the page headlessly, waits for network idle, captures a full-page
+Arka loads the page headlessly with `wait_until="load"`, then waits for a
+configurable settle delay (safe for WebGL/Canvas apps), captures a full-page
 screenshot, records page errors, and reports the HTTP status and title. Install
 the optional browser runtime with:
 
 ```bash
 pip install playwright
 playwright install chromium
+```
+
+For a Vite/WebGL app, use a longer settle delay when needed:
+
+```bash
+arka browser_check http://localhost:5174 --settle 4 --json
+# or: ARKA_BROWSER_SETTLE_SECONDS=4 arka browser_check http://localhost:5174 --json
+```
+
+If Playwright is missing, Arka prints the exact install commands above. A
+browser check is read-only; console/WebGL errors are reported so they can be
+fixed in the app.
 
 ## Declarative cross-platform app tests
 

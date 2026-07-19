@@ -23,6 +23,11 @@ class TestAstronomyNlToArgv(unittest.TestCase):
     def test_astronomy_direct(self) -> None:
         self.assertEqual(nl_to_argv("astronomy what Mars"), ["what", "Mars"])
 
+    def test_batch_catalog_routes(self) -> None:
+        self.assertEqual(nl_to_argv("list all planets and galaxies"), ["list", "all"])
+        self.assertEqual(nl_to_argv("show planets"), ["list", "planets"])
+        self.assertEqual(nl_to_argv("list galaxies"), ["list", "galaxies"])
+
     def test_what_star_is_sirius(self) -> None:
         self.assertEqual(nl_to_argv("what star is Sirius"), ["what", "Sirius"])
 

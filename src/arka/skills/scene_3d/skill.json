@@ -1,0 +1,10 @@
+{
+  "name": "scene_3d",
+  "description": "Compose Three.js scenes from real GLB/GLTF model assets with lighting, camera, placement, and animation",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": ["create 3d scene", "build three js scene", "place 3d models", "create human 3d scene"],
+  "permissions": ["write", "network"]
+}

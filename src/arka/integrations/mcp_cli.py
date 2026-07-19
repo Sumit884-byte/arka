@@ -11,6 +11,7 @@ from arka.integrations.mcp_manager import (
     MCP_SDK_INSTALL_HINT,
     add_server,
     call_tool,
+    format_preset,
     format_server_list,
     list_server_names,
     list_tools,
@@ -151,6 +152,15 @@ def cmd_status(_args: argparse.Namespace) -> int:
     return 0 if healthy == len(names) else 1
 
 
+def cmd_preset(args: argparse.Namespace) -> int:
+    try:
+        print(format_preset(args.name, apply=bool(args.apply)))
+        return 0
+    except KeyError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
+
 def cmd_parse(args: argparse.Namespace) -> int:
     from arka.integrations.mcp_manager import nl_to_argv
 
@@ -210,6 +220,13 @@ def cmd_context7_label(_args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_logs(args: argparse.Namespace) -> int:
+    from arka.integrations.mcp_logs import read_mcp_logs
+
+    print(read_mcp_logs(limit=int(args.limit), event=str(args.event or ""), json_output=bool(args.json)))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="arka mcp",
@@ -244,6 +261,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("status", help="Connection health for all servers")
 
+    preset_p = sub.add_parser("preset", help="Preview/apply a built-in MCP server preset")
+    preset_p.add_argument("name", help="Preset name, e.g. threejs")
+    preset_p.add_argument("--apply", action="store_true", help="Write this preset to Arka's MCP config")
+
     sub.add_parser("self-tools", help="List Arka's native MCP tools (when serving as MCP server)")
 
     sub.add_parser("serve", help="Start Arka as a stdio MCP server")
@@ -264,6 +285,11 @@ def build_parser() -> argparse.ArgumentParser:
     doctor_p.add_argument("--timeout", type=float, default=8.0, help="RPC timeout seconds")
 
     sub.add_parser("context7-label", help="Show Context7 docs footer for current session")
+
+    logs_p = sub.add_parser("logs", help="Show recent Arka MCP client/server logs")
+    logs_p.add_argument("-n", "--limit", type=int, default=50, help="Number of recent log rows")
+    logs_p.add_argument("--event", default="", help="Filter by exact event name")
+    logs_p.add_argument("--json", action="store_true", help="Emit structured JSON")
 
     parse_p = sub.add_parser("parse", help=argparse.SUPPRESS)
     parse_p.add_argument("text", help="Natural language request")
@@ -292,11 +318,13 @@ def main(argv: list[str] | None = None) -> int:
         "tools": cmd_tools,
         "call": cmd_call,
         "status": cmd_status,
+        "preset": cmd_preset,
         "self-tools": cmd_self_tools,
         "serve": cmd_serve,
         "install": cmd_install,
         "doctor": cmd_doctor,
         "context7-label": cmd_context7_label,
+        "logs": cmd_logs,
         "parse": cmd_parse,
     }
     return handlers[args.command](args)
@@ -315,6 +343,8 @@ Usage:
   arka mcp tools <server>                    List tools from a server
   arka mcp call <server> <tool> [--args '{}']
   arka mcp status                            Connection health
+  arka mcp logs [-n 50] [--json]             Show recent MCP client/server events
+  arka mcp preset threejs [--apply]          Configure baryhuang/mcp-threejs
   arka mcp self-tools                        List Arka's 37 native MCP tools
   arka mcp serve                             Start Arka as stdio MCP server
   arka mcp install [--agent cursor|claude]   Print client mcp.json snippet
@@ -328,6 +358,7 @@ Examples:
   arka mcp add signoz --url http://localhost:8000/mcp --header SIGNOZ-API-KEY=$SIGNOZ_API_KEY
   arka mcp tools signoz
   arka mcp call signoz signoz_ask --args '{"question":"error rate last hour"}'
+  arka mcp preset threejs --apply
 
 Fish / NL:
   mcp list

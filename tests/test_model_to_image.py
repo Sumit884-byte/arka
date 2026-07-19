@@ -18,6 +18,7 @@ def test_angle_selection_has_deterministic_fallback(monkeypatch):
     monkeypatch.delenv("VLLM_MODEL", raising=False)
     assert choose_angle("show the roof and top assembly") == "top"
     assert choose_angle("show side profile") == "side"
+    assert choose_angle("render a racing car for a third person driving game") == "rear-three-quarter"
 
 
 def test_vllm_angle_selection(monkeypatch):

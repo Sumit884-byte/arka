@@ -177,6 +177,19 @@ class CodeProjectRoutingTests(unittest.TestCase):
         hit = code_project.route_code_nl("code status")
         self.assertEqual(hit, "code status")
 
+    def test_looks_like_repo_edit_file_and_verb(self) -> None:
+        prompt = (
+            "Edit files in the repo at /tmp/app. Add Inter font from "
+            "https://fonts.googleapis.com and patch src/App.jsx"
+        )
+        self.assertTrue(code_project.looks_like_repo_edit(prompt))
+
+    def test_route_edit_prompt_not_bookmark(self) -> None:
+        prompt = "edit src/App.jsx add meta description and fonts.googleapis.com link in index.html"
+        hit = code_project.route_code_nl(prompt)
+        self.assertIsNotNone(hit)
+        self.assertTrue(hit.startswith("code write "))
+
 
 class CodeAgentToolStepTests(unittest.TestCase):
     def test_arka_tool_step_dispatches_via_run_skill(self) -> None:

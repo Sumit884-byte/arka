@@ -410,6 +410,23 @@ def test_goal_done_without_execution_is_honest_failure(tmp_path: Path):
     assert "✓ Goal complete." not in err
 
 
+def test_goal_done_without_execution_can_be_clean_noop(tmp_path: Path):
+    from arka.agent.goal import run_goal
+
+    stderr = io.StringIO()
+    with (
+        mock.patch("arka.agent.goal._llm", return_value='{"status":"done","cmd":"","why":"already complete"}'),
+        mock.patch("arka.agent.goal._dir_context", return_value=("", "")),
+        mock.patch("arka.agent.goal._fish_history", return_value=""),
+        mock.patch("arka.agent.goal._skills_list", return_value="test"),
+        redirect_stderr(stderr),
+    ):
+        rc = run_goal("summarize status", max_steps=1)
+    assert rc == 0
+    err = stderr.getvalue()
+    assert "Goal finished — no commands executed" in err
+
+
 def test_command_reported_success_rejects_invalid_output():
     from arka.agent.goal import _command_reported_success
 

@@ -1,0 +1,18 @@
+{
+  "name": "describe_video",
+  "description": "Sample video frames and describe visible subjects, actions, setting, people, positions, and visual issues using Arka's vision stack",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "describe video",
+    "analyze video",
+    "inspect video",
+    "review gameplay recording",
+    "who is in video",
+    "which people are in clip",
+    "where are people in video"
+  ],
+  "permissions": ["read"]
+}

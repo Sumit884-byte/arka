@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">Space technology versus engineering</title>
+  <desc id="desc">A split comparison showing space technology as exploration and systems, and engineering as reliable constraints and execution.</desc>
+  <defs>
+    <linearGradient id="bg" x2="0" y2="1"><stop stop-color="#071226"/><stop offset="1" stop-color="#10294a"/></linearGradient>
+    <linearGradient id="space" x2="1" y2="1"><stop stop-color="#173c73"/><stop offset="1" stop-color="#246b86"/></linearGradient>
+    <linearGradient id="eng" x2="1" y2="1"><stop stop-color="#6a3b1d"/><stop offset="1" stop-color="#a86b2f"/></linearGradient>
+    <filter id="shadow"><feDropShadow dx="0" dy="12" stdDeviation="12" flood-opacity=".35"/></filter>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bg)"/>
+  <g fill="#cfe8ff" opacity=".7"><circle cx="90" cy="110" r="2"/><circle cx="260" cy="190" r="3"/><circle cx="1420" cy="110" r="2"/><circle cx="1290" cy="220" r="3"/><circle cx="1510" cy="410" r="2"/></g>
+  <text x="800" y="86" fill="#fff" text-anchor="middle" font-family="Arial,sans-serif" font-size="44" font-weight="700">SPACE TECH × ENGINEERING</text>
+  <text x="800" y="130" fill="#a9c4e8" text-anchor="middle" font-family="Arial,sans-serif" font-size="20">Different emphasis · same mission: make ambitious systems work</text>
+  <rect x="70" y="180" width="700" height="610" rx="28" fill="url(#space)" filter="url(#shadow)"/>
+  <rect x="830" y="180" width="700" height="610" rx="28" fill="url(#eng)" filter="url(#shadow)"/>
+  <text x="420" y="255" fill="#fff" text-anchor="middle" font-family="Arial,sans-serif" font-size="38" font-weight="700">SPACE TECHNOLOGY</text>
+  <text x="1180" y="255" fill="#fff" text-anchor="middle" font-family="Arial,sans-serif" font-size="38" font-weight="700">ENGINEERING</text>
+  <g font-family="Arial,sans-serif" fill="#eaf5ff" font-size="25">
+    <text x="125" y="360">✦ Explore the unknown</text><text x="125" y="420">✦ Extreme environments</text><text x="125" y="480">✦ New capabilities</text><text x="125" y="540">✦ Long-horizon systems</text><text x="125" y="600">✦ Science + mission design</text>
+    <text x="885" y="360">▣ Make it reliable</text><text x="885" y="420">▣ Constraints and trade-offs</text><text x="885" y="480">▣ Repeatable execution</text><text x="885" y="540">▣ Safety and verification</text><text x="885" y="600">▣ Cost + maintainability</text>
+  </g>
+  <g stroke="#d8efff" stroke-width="5" fill="none" opacity=".9"><path d="M365 690c40-80 100-80 140 0"/><path d="M410 690l-25 42m75-42 25 42"/><circle cx="435" cy="640" r="25"/><path d="M435 615v-55m-30 20 30-20 30 20"/></g>
+  <g stroke="#ffd49b" stroke-width="7" fill="none" opacity=".9"><path d="M1080 700h210m-180-60h150m-125-60h100"/><path d="M1120 700v-120m130 120V580"/><path d="M1090 700l-25 35m230-35 25 35"/></g>
+  <rect x="560" y="760" width="480" height="64" rx="32" fill="#fff" opacity=".12"/>
+  <text x="800" y="802" fill="#fff" text-anchor="middle" font-family="Arial,sans-serif" font-size="22" font-weight="700">VISION → DESIGN → VERIFY → OPERATE</text>
+</svg>

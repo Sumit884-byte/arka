@@ -62,6 +62,34 @@ def match_object(query: str) -> dict[str, Any] | None:
     return best[1] if best else None
 
 
+def list_catalog(kind: str = "all") -> list[dict[str, Any]]:
+    """List bundled planets/galaxies together without an LLM call."""
+    key = (kind or "all").lower().strip()
+    if key not in {"all", "planets", "galaxies"}:
+        raise ValueError("kind must be all, planets, or galaxies")
+    rows = []
+    for entry in load_objects_index().get("objects") or []:
+        typ = str(entry.get("type") or "").lower()
+        if key == "planets" and "planet" not in typ:
+            continue
+        if key == "galaxies" and "galaxy" not in typ:
+            continue
+        if key == "all" and "planet" not in typ and "galaxy" not in typ:
+            continue
+        rows.append(entry)
+    return rows
+
+
+def format_catalog(kind: str = "all") -> str:
+    rows = list_catalog(kind)
+    title = {"all": "Planets and galaxies", "planets": "Planets", "galaxies": "Galaxies"}[kind]
+    lines = [f"{title} ({len(rows)}):"]
+    for row in rows:
+        lines.append(f"- {row.get('name', row.get('id', 'unknown'))} — {row.get('type', 'object')}")
+    lines.append("Source: Arka astronomy catalog (use astronomy what <name> for details)")
+    return "\n".join(lines)
+
+
 def julian_date(dt: datetime) -> float:
     dt = dt.astimezone(timezone.utc)
     y = dt.year

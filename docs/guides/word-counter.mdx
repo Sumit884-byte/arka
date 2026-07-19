@@ -1,0 +1,17 @@
+---
+title: "Word counter"
+description: "Count text statistics locally without sending content to an LLM."
+---
+
+```bash
+arka word-counter --file README.md --json
+arka word-counter --text "Paste text here"
+cat draft.md | arka word-counter --stdin --json
+```
+
+The skill reports words, unique words, characters, characters without spaces,
+lines, sentences, and an estimated reading time at 200 words per minute. It
+counts sentence boundaries first and includes a transparent rough estimate of
+15 words per sentence (`sentence_word_estimate`) before reporting the exact
+word count; this is useful for quickly checking whether a draft is in the
+expected range.

@@ -1,0 +1,10 @@
+{
+  "name": "visual_diagnose",
+  "description": "Use local vLLM/vision to describe a rendered image first, then return concrete visual defects and fixes",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": ["describe image and find issues", "diagnose visual issues", "review screenshot for bugs", "find visual fixes"],
+  "permissions": ["read"]
+}

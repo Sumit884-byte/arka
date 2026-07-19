@@ -58,6 +58,14 @@ class RepoHealthTests(unittest.TestCase):
         assert result is not None
         self.assertEqual(result.skill.split()[0], "repo_health")
 
+    def test_fish_route_does_not_classify_repo_health_as_routine(self) -> None:
+        from arka.fish_bridge import fish_route_preview
+
+        preview = fish_route_preview("check repo health")
+        if preview is not None:
+            self.assertIn("repo_health", preview.action)
+            self.assertNotIn("routines", preview.action)
+
 
 if __name__ == "__main__":
     unittest.main()

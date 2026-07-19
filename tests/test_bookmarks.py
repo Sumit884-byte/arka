@@ -28,6 +28,11 @@ class BookmarksTests(unittest.TestCase):
         self.assertTrue(bm.wants_bookmarks("list my bookmarks"))
         self.assertFalse(bm.wants_bookmarks("what is python"))
 
+    def test_repo_edit_with_url_is_not_bookmark(self) -> None:
+        prompt = "edit index.html add https://fonts.googleapis.com link in head"
+        self.assertFalse(bm.wants_bookmarks(prompt))
+        self.assertEqual(bm.route_command(prompt), "")
+
     def test_save_and_list(self) -> None:
         self._patch_store()
         args = argparse_namespace(url="https://example.com", title="Example", tags="docs,dev", note="")

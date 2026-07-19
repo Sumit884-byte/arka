@@ -31,6 +31,8 @@ _MESHY_BASE = "https://api.meshy.ai/openapi/v2/text-to-3d"
 _DEFAULT_HF_SPACE = "hysts/Shap-E"
 _POLL_INTERVAL = 3.0
 _MAX_POLL_SECONDS = 600.0
+FREE_DEFAULT_BACKENDS = ("shap-e", "hf-shap-e", "openscad", "llm")
+TRIAL_OR_PAID_BACKENDS = ("tripo", "meshy")
 
 
 def _env(name: str, default: str = "") -> str:
@@ -47,6 +49,10 @@ def _tripo_key() -> str:
 
 def _meshy_key() -> str:
     return _env("MESHY_API_KEY")
+
+
+def _allow_trial_providers() -> bool:
+    return _env("ARKA_3D_ALLOW_TRIAL_PROVIDERS", "0").lower() in {"1", "true", "yes", "on"}
 
 
 def _http_json(
@@ -85,6 +91,21 @@ def _download_url(url: str, dest: Path, *, headers: dict[str, str] | None = None
     except urllib.error.URLError as exc:
         raise RuntimeError(f"Failed to download {url}: {exc.reason}") from exc
     return dest
+
+
+def _download_first_available(urls: list[str], dest: Path, *, headers: dict[str, str] | None = None) -> Path:
+    """Download the first valid artifact, tolerating stale optional texture URLs."""
+    errors: list[str] = []
+    for url in urls:
+        if not url:
+            continue
+        try:
+            return _download_url(url, dest, headers=headers)
+        except RuntimeError as exc:
+            errors.append(str(exc))
+            if "404" not in str(exc):
+                raise
+    raise RuntimeError("All model artifact URLs were unavailable: " + " | ".join(errors)[-600:])
 
 
 def _space_subdomain(space_id: str) -> str:
@@ -163,8 +184,10 @@ def backend_catalog() -> list[BackendInfo]:
         BackendInfo(
             "tripo",
             "Tripo AI API",
-            tripo_ok,
-            "300 free credits on signup" if tripo_ok else "set TRIPO_API_KEY (free tier at platform.tripo3d.ai)",
+            tripo_ok and _allow_trial_providers(),
+            "trial/free-credit provider enabled by ARKA_3D_ALLOW_TRIAL_PROVIDERS=1"
+            if tripo_ok and _allow_trial_providers()
+            else "trial/free-credit provider; set ARKA_3D_ALLOW_TRIAL_PROVIDERS=1 and TRIPO_API_KEY to opt in",
             ("TRIPO_API_KEY",),
         ),
         BackendInfo(
@@ -202,14 +225,15 @@ def auto_backend_order(*, prefer_procedural: bool = False) -> list[str]:
     order: list[str] = []
     if _has_local_shap_e():
         order.append("shap-e")
-    if _tripo_key():
-        order.append("tripo")
     if _has_gradio_client() or _hf_token():
         order.append("hf-shap-e")
-    if _meshy_key():
-        order.append("meshy")
     if _openscad_available():
         order.append("openscad")
+    if _allow_trial_providers():
+        if _tripo_key():
+            order.append("tripo")
+        if _meshy_key():
+            order.append("meshy")
     order.append("llm")
     return order
 
@@ -387,16 +411,18 @@ def _generate_tripo(prompt: str, out_dir: Path) -> GeneratedMesh:
         raise RuntimeError(f"Tripo did not return task_id: {create}")
     result = _poll_tripo_task(task_id)
     output = result.get("output") or {}
-    model_url = output.get("model") or output.get("pbr_model") or output.get("base_model")
-    if not model_url:
+    model_urls = [output.get(key) for key in ("model", "base_model", "pbr_model")]
+    model_urls = [str(url) for url in model_urls if url]
+    if not model_urls:
         raise RuntimeError(f"Tripo success but no model URL in output: {output}")
+    model_url = model_urls[0]
     ext = ".glb"
     for candidate in (".obj", ".glb", ".fbx"):
         if candidate in model_url.lower():
             ext = candidate
             break
     dest = out_dir / f"tripo{ext}"
-    _download_url(model_url, dest)
+    _download_first_available(model_urls, dest)
     vertices, faces = _load_mesh_file(dest)
     return GeneratedMesh(vertices, faces, "Tripo AI API", dest)
 
@@ -455,7 +481,12 @@ def _generate_meshy(prompt: str, out_dir: Path) -> GeneratedMesh:
     url = _meshy_model_url(task)
     ext = ".obj" if url.lower().endswith(".obj") else ".glb"
     dest = out_dir / f"meshy{ext}"
-    _download_url(url, dest)
+    candidates = [str(url)]
+    for key in ("glb", "obj", "stl"):
+        alt = (task.get("model_urls") or {}).get(key)
+        if alt and str(alt) not in candidates:
+            candidates.append(str(alt))
+    _download_first_available(candidates, dest)
     vertices, faces = _load_mesh_file(dest)
     return GeneratedMesh(vertices, faces, "Meshy API", dest)
 

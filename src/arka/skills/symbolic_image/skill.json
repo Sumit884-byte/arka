@@ -1,0 +1,10 @@
+{
+  "name": "symbolic_image",
+  "description": "Compose reusable comparison and explainer graphics from pre-made image assets without an image-generation call",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": ["comparison image", "split panel graphic", "before and after image", "compose visual explainer"],
+  "permissions": ["read", "write"]
+}

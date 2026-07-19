@@ -1,0 +1,14 @@
+---
+title: "Usage dashboard"
+description: "Inspect Arka skill usage locally."
+---
+
+Generate a browser-viewable dashboard:
+
+```bash
+arka usage dashboard --output arka-usage-dashboard.html
+```
+
+The dashboard shows total invocations, tracking state, and per-skill counts.
+It reads Arka's local usage counters; prompts, arguments, and secrets are not
+stored. Disable tracking with `ARKA_USAGE_TRACKING=0`.

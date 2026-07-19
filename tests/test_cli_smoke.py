@@ -11,7 +11,7 @@ import pytest
         (("--version",), "arka "),
         (("help",), "Cross-platform AI agent"),
         (("plugin", "doctor"), "Plugins checked:"),
-        (("background", "agent", "tasks"), "Arka background agents"),
+        (("background", "agent", "tasks"), "Arka background processes"),
     ],
 )
 def test_cli_offline_smoke(monkeypatch, capsys, argv, expected):
@@ -31,6 +31,16 @@ def test_cli_route_preview_smoke(monkeypatch, capsys):
     assert cli.main(["route", "check repo health"]) == 0
     output = capsys.readouterr().out
     assert "repo_health" in output
+
+
+def test_cli_three_js_model_search_is_portable(monkeypatch, capsys):
+    from arka import cli
+
+    monkeypatch.setenv("ARKA_AUTO_REFETCH", "0")
+    assert cli.main(["three_js_model", "search", "satellite", "--no-mcp"]) == 0
+    output = capsys.readouterr().out
+    assert "Three.js asset search" in output
+    assert "Do not invent model URLs" in output
 
 
 def test_coding_tui_start_and_quit_smoke(monkeypatch, capsys, tmp_path):
@@ -84,7 +94,7 @@ def test_plugin_and_background_smoke_across_route_modes(monkeypatch, capsys, rou
     assert cli.main(["background", "agent", "tasks"]) == 0
     output = capsys.readouterr().out
     assert "Plugins checked:" in output
-    assert "background agents" in output.lower()
+    assert "background processes" in output.lower()
 
 
 @pytest.mark.parametrize("hosted", ["0", "1"])
@@ -149,7 +159,7 @@ def test_module_entrypoint_subprocess_smoke(tmp_path):
         check=False,
     )
     assert proc.returncode == 0
-    assert "background agents" in proc.stdout.lower()
+    assert "background processes" in proc.stdout.lower()
 
 
 def test_module_entrypoint_expected_failure_smoke(tmp_path):

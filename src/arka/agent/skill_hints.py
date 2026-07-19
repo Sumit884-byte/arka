@@ -15,6 +15,7 @@ _HINTS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("route_audit", ("route audit", "routing parity", "nl routing")),
     ("design_from_screenshot", ("from screenshot", "screenshot to", "design screenshot")),
     ("frontend_loop", ("frontend", "ui review", "visual regression")),
+    ("three_js_model", ("satellite", "spacecraft", "realistic 3d model", "realistic 3d asset", "real world model")),
     ("compose_slides", ("pitch deck", "slides", "presentation")),
     ("urlkit", ("broken links", "repair links", "url validation")),
     ("self_improve", ("self improve", "improve arka", "improve routing")),

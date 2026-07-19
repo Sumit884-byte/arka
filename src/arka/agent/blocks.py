@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
+import shlex
 from pathlib import Path
 
 BLOCKS = {
@@ -22,6 +24,59 @@ BLOCKS = {
 }
 
 
+def infer_block_name(prompt: str) -> str:
+    text = prompt.lower()
+    if re.search(r"\b(?:crypto|web3|blockchain)\b", text) and re.search(r"\bwallet\b", text):
+        return "web3_wallet"
+    if re.search(r"\b(?:sign\s*in|login)\b", text):
+        return "auth_login"
+    if re.search(r"\b(?:sign\s*up|signup|register)\b", text):
+        return "auth_signup"
+    if re.search(r"\b(?:stripe|checkout|payment)\b", text):
+        return "payments_stripe"
+    if re.search(r"\bsubscription\b", text):
+        return "payments_subscription"
+    if re.search(r"\bwebhook\b", text):
+        return "webhook_receiver"
+    return "profile_settings"
+
+
+def block_slug(prompt: str, fallback: str) -> str:
+    text = re.sub(r"(?i)\b(?:create|build|make|generate|save|as|block|component|page|starter)\b", " ", prompt)
+    text = re.sub(r"[^a-zA-Z0-9]+", "-", text.lower()).strip("-")
+    return text or fallback
+
+
+def default_block_out(prompt: str, block_name: str) -> str:
+    slug = block_slug(prompt, block_name)
+    return f"blocks/{slug}.md"
+
+
+def create_block(prompt: str, *, stack: str = "", out: str = "", force: bool = False) -> Path:
+    block_name = infer_block_name(prompt)
+    target = Path(out or default_block_out(prompt, block_name)).expanduser()
+    if target.exists() and not force:
+        raise FileExistsError(f"refusing to overwrite existing file: {target}; use --force")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    text = render(block_name, stack)
+    text += "\n\n## Source prompt\n\n"
+    text += prompt.strip() + "\n"
+    text += "\n## Reuse instructions\n\n"
+    text += "Use this as a reusable Arka block spec. Adapt styling and framework details to the target project, but keep the production-readiness gates unless the user explicitly removes them.\n"
+    target.write_text(text + "\n", encoding="utf-8")
+    return target
+
+
+def route_command(cmd: str) -> str | None:
+    if not re.search(r"(?i)\b(?:create|build|make|generate)\b", cmd):
+        return None
+    if not re.search(r"(?i)\b(?:save|store|turn)\b.*\bblocks?\b|\bblocks?\b.*\b(?:save|store)\b", cmd):
+        return None
+    if not re.search(r"(?i)\b(?:page|component|starter|ui|block|wallet|login|payment|webhook|subscription)\b", cmd):
+        return None
+    return "blocks create " + shlex.quote(cmd)
+
+
 def render(name: str, stack: str = "") -> str:
     block = BLOCKS[name]
     if stack and stack not in block["stacks"]:
@@ -39,6 +94,11 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("list")
     show = sub.add_parser("show")
     show.add_argument("name", choices=sorted(BLOCKS))
+    create = sub.add_parser("create")
+    create.add_argument("prompt", nargs="+")
+    create.add_argument("--stack", default="")
+    create.add_argument("--out", default="")
+    create.add_argument("--force", action="store_true")
     use = sub.add_parser("use")
     use.add_argument("name", choices=sorted(BLOCKS))
     use.add_argument("--stack", default="")
@@ -51,6 +111,13 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "show":
         print(json.dumps({"name": args.name, **BLOCKS[args.name]}, indent=2))
+        return 0
+    if args.command == "create":
+        try:
+            target = create_block(" ".join(args.prompt), stack=args.stack, out=args.out, force=args.force)
+        except (FileExistsError, ValueError) as exc:
+            parser.error(str(exc))
+        print(f"created {target}")
         return 0
     target = Path(args.out).expanduser()
     if target.exists() and not args.force:

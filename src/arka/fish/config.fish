@@ -1984,7 +1984,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         create_desktop_app fix_graphics_driver install_app install_apt install_brew install_flatpak \
         install_snap install_package install_uv install_stt stock_analysis stock macro emotion \
         auto_click auto_copy decrypt_pdf classify_files cleanup_downloads watch_zip monitor_x post_x \
-        generate_image generate_thumbnail generate_video compose_video compose_slides compose_3d convert_media pdf_tools chart ascii_art flow fact_check quiz quiz_practice council astronomy metallurgy youtube_transcript youtube_download yt_download media_transcript transcribe_media summarize_url daily_brief wifi_info \
+        generate_image generate_thumbnail generate_video compose_video compose_slides compose_3d text_to_3d convert_media visual pdf_tools chart ascii_art flow fact_check quiz quiz_practice council astronomy metallurgy youtube_transcript youtube_download yt_download media_transcript transcribe_media summarize_url daily_brief wifi_info \
         folder_summarize playlist_summarize youtube_research yt_research find_videos codebase_ingest \
         agent_remember agent_recall agent_memory agent_trace agent_why agent_last \
         agent_resume agent_research agent_nudge agent_watch agent_routine agent_fanout \
@@ -1995,9 +1995,9 @@ function _agent_all_skills --description "Canonical registered agent skill names
         rag_setup rag_status voice_agent wake_control \
         agent_ask web_answer deep_web_answer web_essay platform_howto interesting_fact calc chat_reset set_location files_preference_help google \
         select_model model_select best_model model_advisor \
-        free_credits \
+        free_credits free_models free-models free_models_list \
         personalize \
-        nearby_places map_download error_helper deep_queue app_usage internet_enhance aie \
+        nearby_places map_download error_helper deep_queue batch app_usage internet_enhance aie \
         youtube_bulk yt_bulk
 end
 
@@ -2565,6 +2565,8 @@ function skills --description "Show what commands the agent can auto-run"
                 echo (set_color green)"  compose_slides  "(set_color normal)"compose|convert — deck build/export (pptx|pdf|html|md|json|all)"
             case compose_3d
                 echo (set_color green)"  compose_3d     "(set_color normal)"gear|vase|cube|sphere|… — local OBJ/STL 3D models"
+            case text_to_3d
+                echo (set_color green)"  text_to_3d    "(set_color normal)"generate <prompt> — text-to-3D with free/non-trial providers first"
             case convert_media
                 echo (set_color green)"  convert_media   "(set_color normal)"<file> --to <format> | --format all — image/video/slide conversion"
             case pdf_tools
@@ -6482,6 +6484,11 @@ function compose_3d --description "Compose 3D models — procedural meshes and A
     $py (_arka_py_script arka_compose_3d.py) $argv
 end
 
+function text_to_3d --description "Generate 3D models from text — free/non-trial providers first"
+    set -l py (_arka_python)
+    $py (_arka_py_script arka_text_to_3d.py) $argv
+end
+
 function compose_slides --description "Compose presentation slide decks — stock photos, charts, LLM scripts"
     if test (count $argv) -gt 0
         set -l first $argv[1]
@@ -6532,6 +6539,20 @@ function convert_media --description "Convert images, video/audio, and slide dec
     end
     set -l py (_arka_python)
     $py (_arka_py_script arka_convert_media.py) $argv
+end
+
+function visual --description "Generate deterministic Arka visuals"
+    if test (count $argv) -eq 0
+        echo "Usage: visual space-tech [--output path]"
+        return 1
+    end
+    set -l py (_arka_python)
+    if test "$argv[1]" = space-tech; or test "$argv[1]" = space_tech
+        $py -m arka.agent.space_visual $argv[2..-1]
+        return $status
+    end
+    echo "Unknown visual preset: $argv[1]" >&2
+    return 2
 end
 
 function pdf_tools --description "PDF toolkit — merge, split, compress, OCR, protect, convert, …"
@@ -7250,6 +7271,19 @@ function free_credits --description "Guide to maximize free AI provider credits 
     set -l py (_arka_python)
     set -l script (_arka_py_script arka_free_credits.py)
     $py $script show $argv
+end
+
+function free_models --description "List and select free or no-token-cost LLMs"
+    set -l py (_arka_python)
+    $py -m arka.llm.free_models $argv
+end
+
+function free-models --description "Alias for free_models"
+    free_models $argv
+end
+
+function free_models_list --description "Alias for free_models"
+    free_models $argv
 end
 
 function repo_context --description "Read llm.txt repo context — optimized codebase Q&A"
@@ -11479,6 +11513,11 @@ function _agent_build_gmail_cmd --description "Build google gmail args from NL (
 end
 
 function _agent_is_routines_request --description "True if user wants a daily/hourly routine (internal)"
+    # Repository-health phrases contain words such as "check" and must win
+    # over the generic routine parser (e.g. "check repo health").
+    if _agent_is_repo_health_request "$argv[1]"
+        return 1
+    end
     test -n "$(_agent_build_routines_cmd "$argv[1]")"
 end
 
@@ -11731,6 +11770,10 @@ function _agent_offline_route_cmd --description "Full symbolic NL to skill comma
     end
     if _agent_is_generate_image_request "$cmd"
         echo (_agent_build_generate_image_cmd "$cmd")
+        return 0
+    end
+    if _agent_is_text_to_3d_request "$cmd"
+        echo (_agent_build_text_to_3d_cmd "$cmd")
         return 0
     end
     if _agent_is_compose_3d_request "$cmd"
@@ -12111,6 +12154,23 @@ function _agent_build_compose_3d_cmd --description "Build compose_3d args from N
     if test -n "$rest"
         echo "compose_3d $rest"
     end
+end
+
+function _agent_build_text_to_3d_cmd --description "Build text_to_3d args from NL (internal)"
+    set -l cmd $argv[1]
+    set -l lower (string lower -- "$cmd")
+    if not string match -q '*text to 3d*' -- "$lower"; and not string match -q '*text-to-3d*' -- "$lower"; and not string match -q '*model from text*' -- "$lower"; and not string match -q '*from text*' -- "$lower"; and not string match -q '*hugging face*' -- "$lower"; and not string match -q '*huggingface*' -- "$lower"; and not string match -q '*free provider*' -- "$lower"
+        return 1
+    end
+    set -l py (_arka_python)
+    set -l rest ($py -c 'import sys; from arka.agent.text_to_3d import route_command; print(route_command(" ".join(sys.argv[1:])))' $cmd 2>/dev/null)
+    if test -n "$rest"
+        echo $rest
+    end
+end
+
+function _agent_is_text_to_3d_request --description "True if user wants text-to-3D generation (internal)"
+    test -n "$(_agent_build_text_to_3d_cmd "$argv[1]")"
 end
 
 function _agent_is_compose_3d_request --description "True if user wants 3D model generation (internal)"
@@ -12893,6 +12953,11 @@ function deep_queue --description "Background deep-search queue (add/list/run/re
             echo "Usage: deep_queue add|list|run|results"
             return 1
     end
+end
+
+function batch --description "Collect prompts until a time, then implement them together"
+    set -l py (_arka_python)
+    $py -m arka.agent.batch $argv
 end
 
 function _arka_agent --description "Run arka_agent.py subcommand (internal)"
@@ -14408,6 +14473,8 @@ function _agent_skill_matches_request --description "True if skill fits the user
             _agent_is_describe_video_request "$cmd"
         case describe_image
             _agent_is_describe_image_request "$cmd"
+        case text_to_3d
+            _agent_is_text_to_3d_request "$cmd"
         case compose_3d
             _agent_is_compose_3d_request "$cmd"
         case compose_slides
@@ -14550,6 +14617,10 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         end
     end
 
+    if _agent_is_text_to_3d_request "$cmd"
+        echo "skill|"(_agent_build_text_to_3d_cmd "$cmd")"|Text-to-3D models — free/non-trial providers first"
+        return
+    end
     if _agent_is_compose_3d_request "$cmd"
         echo "skill|"(_agent_build_compose_3d_cmd "$cmd")"|3D models — OBJ/STL local generation"
         return
@@ -14921,6 +14992,10 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         test -n "$loc"; and echo "skill|set_location $loc|Save location for weather/nearby"
         test -n "$loc"; and return
         echo "skill|set_location|Save location"
+        return
+    end
+    if _agent_is_text_to_3d_request "$cmd"
+        echo "skill|"(_agent_build_text_to_3d_cmd "$cmd")"|Text-to-3D models — free/non-trial providers first"
         return
     end
     if _agent_is_compose_3d_request "$cmd"
@@ -15844,6 +15919,10 @@ function _agent_correct_interpretation --description "Fix bad LLM skill picks us
         return
     end
 
+    if _agent_is_text_to_3d_request "$cmd"
+        echo (_agent_build_text_to_3d_cmd "$cmd")
+        return 0
+    end
     if _agent_is_compose_3d_request "$cmd"
         echo (_agent_build_compose_3d_cmd "$cmd")
         return 0
@@ -18716,6 +18795,9 @@ function agent --description "Run commands safely: executes safe commands automa
         set route_source offline
     else if _agent_is_generate_image_request "$clean_cmd"
         set interpreted (_agent_build_generate_image_cmd "$cmd")
+        set route_source offline
+    else if _agent_is_text_to_3d_request "$clean_cmd"
+        set interpreted (_agent_build_text_to_3d_cmd "$cmd")
         set route_source offline
     else if _agent_is_compose_3d_request "$clean_cmd"
         set interpreted (_agent_build_compose_3d_cmd "$cmd")

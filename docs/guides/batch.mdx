@@ -1,0 +1,33 @@
+---
+title: "Prompt batches"
+description: "Collect several prompts until a deadline, then run them as one coherent Arka coding request."
+keywords: ["batch", "prompts", "coding agent", "queue"]
+icon: "layer-group"
+---
+
+Use `arka batch` when you want Arka to collect several prompts until a deadline, then send them to the coding agent as one coherent implementation request.
+
+```bash
+arka batch start --until "6pm"
+arka batch add "fix routing drift"
+arka batch add "add regression tests"
+arka batch list
+arka batch run
+```
+
+Natural language routes are supported:
+
+```bash
+arka collect all prompts until 6pm
+arka batch add improve the coding TUI
+arka run batch
+```
+
+`arka batch run` executes immediately through `agent_code`. `arka batch due` only executes if the batch deadline has arrived. Use `--print` to inspect the combined model prompt without running it:
+
+```bash
+arka batch run --print
+arka batch due --print
+```
+
+By default, a successful run clears the batch. Pass `--keep` if you want to preserve the collected prompts.

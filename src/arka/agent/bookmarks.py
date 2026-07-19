@@ -99,9 +99,20 @@ def _title_from_url(url: str) -> str:
         return url
 
 
+def _is_repo_edit_context(text: str) -> bool:
+    try:
+        from arka.core.code_project import looks_like_repo_edit
+
+        return looks_like_repo_edit(text)
+    except ImportError:
+        return False
+
+
 def wants_bookmarks(text: str) -> bool:
     clean = (text or "").strip()
     if not clean:
+        return False
+    if _is_repo_edit_context(clean):
         return False
     if _TRIGGER_RE.search(clean):
         return True

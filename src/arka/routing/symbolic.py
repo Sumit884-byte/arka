@@ -29,6 +29,41 @@ def route_routines(cmd: str) -> str | None:
     return "routines " + " ".join(shlex.quote(a) for a in argv)
 
 
+def route_batch(cmd: str) -> str | None:
+    try:
+        from arka.agent.batch import route_command
+    except ImportError:
+        return None
+    return route_command(cmd)
+
+
+def route_config_share(cmd: str) -> str | None:
+    if not re.search(r"(?i)\b(?:share|export|send|copy)\b", cmd):
+        return None
+    if not re.search(r"(?i)\b(?:arka\s+)?config(?:uration)?s?\b", cmd):
+        return None
+    return "config share export"
+
+
+def route_semantic_alert(cmd: str) -> str | None:
+    if not re.search(r"(?i)\b(?:alert|notify|remind)\s+me\b", cmd) or not re.search(r"(?i)\b(?:when|whenever|once|after)\b", cmd):
+        return None
+    event = re.sub(r"(?i)^.*?\b(?:when|once|after)\b\s+", "", cmd).strip() or "deadline"
+    return "semantic_alert " + shlex.quote(event)
+
+
+def route_usage_dashboard(cmd: str) -> str | None:
+    if re.search(r"(?i)\b(?:usage|skill\s+usage)\b", cmd) and re.search(r"(?i)\b(?:dashboard|visuali[sz]e|report)\b", cmd):
+        return "usage dashboard"
+    return None
+
+
+def route_symbolic_image(cmd: str) -> str | None:
+    if not re.search(r"(?i)\b(?:comparison|split[- ]panel|before\s+and\s+after|compose)\b", cmd) or not re.search(r"(?i)\b(?:image|visual|graphic|illustration)\b", cmd):
+        return None
+    return "symbolic_image comparison"
+
+
 def route_chart(cmd: str) -> str | None:
     try:
         from arka.charts.plot import nl_to_argv
@@ -138,11 +173,19 @@ def route_templates(cmd: str) -> str | None:
 
 
 def route_blocks(cmd: str) -> str | None:
-    if not re.search(r"(?i)\b(?:reusable|app|ui|code)\s+blocks?\b|\b(?:login|sign\s*up|payment|password\s+reset|oauth|webhook|subscription)\s+(?:block|component|starter)", cmd):
+    try:
+        from arka.agent.blocks import route_command
+    except ImportError:
+        route_command = None
+    if route_command:
+        create_route = route_command(cmd)
+        if create_route:
+            return create_route
+    if not re.search(r"(?i)\b(?:reusable|app|ui|code)\s+blocks?\b|\b(?:login|sign\s*up|payment|password\s+reset|oauth|webhook|subscription|crypto\s+wallet|web3\s+wallet)\s+(?:block|component|starter|page)", cmd):
         return None
     if re.search(r"(?i)\b(?:list|available)\b", cmd):
         return "blocks list"
-    for name, words in (("auth_login", r"login|sign\s*in"), ("auth_signup", r"sign\s*up|signup|register"), ("auth_password_reset", r"password\s+reset|forgot\s+password"), ("auth_oauth", r"oauth|social\s+login"), ("auth_email_verification", r"email\s+verification|verify\s+email"), ("payments_subscription", r"subscription|recurring\s+payment"), ("payments_paypal", r"paypal"), ("webhook_receiver", r"webhook"), ("payments_stripe", r"payment|stripe|checkout")):
+    for name, words in (("auth_login", r"login|sign\s*in"), ("auth_signup", r"sign\s*up|signup|register"), ("auth_password_reset", r"password\s+reset|forgot\s+password"), ("auth_oauth", r"oauth|social\s+login"), ("auth_email_verification", r"email\s+verification|verify\s+email"), ("payments_subscription", r"subscription|recurring\s+payment"), ("payments_paypal", r"paypal"), ("webhook_receiver", r"webhook"), ("web3_wallet", r"(?:crypto|web3|blockchain)\s+wallet|wallet"), ("payments_stripe", r"payment|stripe|checkout")):
         if re.search(rf"(?i)\b(?:{words})\b", cmd):
             return f"blocks show {name}"
     return "blocks list"
@@ -206,6 +249,13 @@ def route_describe_video(cmd: str) -> str | None:
 
 
 def route_download(cmd: str) -> str | None:
+    try:
+        from arka.core.code_project import looks_like_repo_edit
+
+        if looks_like_repo_edit(cmd):
+            return None
+    except ImportError:
+        pass
     clean = cmd.lower()
     if re.search(r"(?i)download\s+and\s+install", clean):
         return None
@@ -257,6 +307,22 @@ def route_search_web(cmd: str) -> str | None:
         if rest and not re.search(r"\bfiles?\b", rest, re.I):
             return f"search_web {shlex.quote(rest)}"
     return None
+
+
+def route_visual_inspection(cmd: str) -> str | None:
+    """Prefer local pixel inspection over web research for captured visuals."""
+    if not re.search(r"(?i)\b(?:analy[sz]e|inspect|review|diagnos|find|fix|check)\b", cmd):
+        return None
+    if not re.search(r"(?i)\b(?:visual|pixel|screenshot|frame|gameplay|animation|render(?:ing)?|ui|frontend)\b", cmd):
+        return None
+    source = re.search(r"(?:~|/|\./|\.\./)?[^\s'\"]+\.(?:png|jpe?g|webp|gif|mp4|webm)\b", cmd, re.I)
+    if source:
+        return "frontend_loop review " + shlex.quote(source.group(0))
+    directory = re.search(r"(?:frames?|screenshots?|recordings?)\s+(?:in|at|from)\s+([^\s]+)", cmd, re.I)
+    if directory:
+        return "frontend_loop review " + shlex.quote(directory.group(1))
+    # Do not manufacture a URL or send the request to web search.
+    return "frontend_loop review screenshots"
 
 
 def route_price_check(cmd: str) -> str | None:
@@ -478,6 +544,14 @@ def route_three_d(cmd: str) -> str | None:
     return route_compose_3d(cmd)
 
 
+def route_text_to_3d(cmd: str) -> str | None:
+    try:
+        from arka.agent.text_to_3d import route_command
+    except ImportError:
+        return None
+    return route_command(cmd)
+
+
 def route_metallurgy(cmd: str) -> str | None:
     try:
         from arka.agent.metallurgy import nl_to_argv
@@ -629,6 +703,44 @@ def route_competitions(cmd: str) -> str | None:
     return route or None
 
 
+def route_scene_3d(cmd: str) -> str | None:
+    if not re.search(r"(?i)\b(?:scene|environment|world)\b", cmd) or not re.search(r"(?i)\b(?:3d|three\.js|model|human|character|asset)\b", cmd):
+        return None
+    if not re.search(r"(?i)\b(?:create|build|generate|compose|use|place)\b", cmd):
+        return None
+    models = re.findall(r"(?:https?://[^\s]+|[^\s]+\.(?:glb|gltf))", cmd, re.I)
+    if not models:
+        return None
+    return "scene_3d " + shlex.quote(cmd) + (" --model " + " --model ".join(shlex.quote(m) for m in models) if models else "")
+
+
+def route_rig_3d(cmd: str) -> str | None:
+    if not re.search(r"(?i)\b(?:rig|rigging|skeleton|pose|skinned)\b", cmd) or not re.search(r"(?i)\b(?:3d|model|character|human|avatar)\b", cmd):
+        return None
+    model = re.search(r"(?:https?://[^\s]+|[^\s]+\.(?:glb|gltf))", cmd, re.I)
+    if not model:
+        return None
+    return "rig_3d " + shlex.quote("Rig inspection") + " --model " + shlex.quote(model.group(0))
+
+
+def route_parallax_2d(cmd: str) -> str | None:
+    if not re.search(r"(?i)\b(?:parallax|2\.5d|2d\s+to\s+3d|2d\s+depth)\b", cmd):
+        return None
+    layers = re.findall(r"(?:https?://[^\s]+|[^\s]+\.(?:png|jpe?g|webp|svg))", cmd, re.I)
+    if not layers:
+        return None
+    return "parallax_2d " + shlex.quote("Parallax scene") + " " + " ".join("--layer " + shlex.quote(layer) for layer in layers)
+
+
+def route_visual_diagnose(cmd: str) -> str | None:
+    if not re.search(r"(?i)\b(?:describe|diagnos|find|fix|review|analy[sz]e)\b", cmd) or not re.search(r"(?i)\b(?:visual|image|screenshot|frame|ui|gameplay)\b", cmd):
+        return None
+    image = re.search(r"(?:~|/|\./|\.\./)?[^\s]+\.(?:png|jpe?g|webp|gif)\b", cmd, re.I)
+    if not image:
+        return None
+    return "visual_diagnose " + shlex.quote(image.group(0))
+
+
 def route_bookmarks(cmd: str) -> str | None:
     try:
         from arka.agent.bookmarks import route_command
@@ -729,6 +841,15 @@ def route_docker_status(cmd: str) -> str | None:
 def route_heartbeat(cmd: str) -> str | None:
     try:
         from arka.integrations.heartbeat import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
+
+
+def route_background_processes(cmd: str) -> str | None:
+    try:
+        from arka.agent.background import route_command
     except ImportError:
         return None
     route = route_command(cmd)
@@ -854,8 +975,16 @@ def route_model_host_setup(cmd: str) -> str | None:
 
 
 def route_free_models(cmd: str) -> str | None:
-    if re.search(r"(?i)\b(?:free|no[- ]cost|zero[- ]cost)\b.*\b(?:models?|llms?|providers?)\b", cmd) or re.search(r"(?i)\b(?:models?|llms?|gpt)\b.*\bfree\b", cmd) or re.search(r"(?i)\baccess\b.*\b(?:gpt|chatgpt|model)\b.*\bfree\b", cmd):
-        if re.search(r"(?i)\b(?:chatgpt|openai|gpt)\b", cmd):
+    free_model_query = re.search(
+        r"(?i)\b(?:free|no[- ]cost|zero[- ]cost)\b.*\b(?:models?|llms?|providers?)\b",
+        cmd,
+    ) or re.search(r"(?i)\b(?:models?|llms?)\b.*\b(?:free|no[- ]cost|zero[- ]cost)\b", cmd)
+    exact_access_query = re.search(
+        r"(?i)\b(?:can\s+i\s+)?access\b.*\b(?:gpt|chatgpt|codex|model)\b.*\bfree\b",
+        cmd,
+    ) or re.search(r"(?i)\b(?:gpt|chatgpt|codex)\b.*\bfree\b", cmd)
+    if free_model_query or exact_access_query:
+        if re.search(r"(?i)\b(?:chatgpt|openai|gpt|codex)\b", cmd):
             model = re.search(r"(?i)\b(gpt[- ]?[0-9]+(?:\.[0-9]+)?(?:\s+luna)?)\b", cmd)
             if model:
                 from arka.llm.free_models import normalize_model_name
@@ -963,6 +1092,9 @@ def route_data_collect(cmd: str) -> str | None:
     if not re.search(r"(?i)\b(?:collect|gather|scrape)\b.*\bdata\b|\bdata\b.*\b(?:collect|gather|scrape)\b", cmd):
         return None
     clean = re.sub(r"(?i)\b(?:arka\s+)?(?:auto\s+)?(?:collect|gather|scrape)\s+(?:data\s+)?", "", cmd).strip()
+    if re.search(r"(?i)\b(?:all|every|total|how\s+many)\b", cmd):
+        clean = re.sub(r"(?i)^\s*(?:all|every)\s+(?:the\s+)?data\s+(?:about|on|for)\s+", "", clean).strip()
+        return "data catalog about " + (clean or "research topic")
     return "data collect " + (clean or "research topic")
 
 
@@ -1117,6 +1249,27 @@ def route_play(cmd: str) -> str | None:
     return "play chess --moves " + " ".join(moves) if moves else "play chess --moves e2e4"
 
 
+def route_game_studio(cmd: str) -> str | None:
+    if not re.search(r"(?i)\b(?:create|build|make|scaffold|generate)\b", cmd) or not re.search(r"(?i)\b(?:awesome|polished|beautiful|browser|video|2d|3d)?\s*game\b", cmd):
+        return None
+    if re.search(r"(?i)\b(?:battle|chess|benchmark|play)\b", cmd):
+        return None
+    title = re.sub(r"(?i)\b(?:arka\s+)?(?:create|build|make|scaffold|generate)\b", "", cmd).strip() or "Neon Core"
+    return "game create " + title
+
+
+def route_game_control(cmd: str) -> str | None:
+    if not re.search(r"(?i)\b(?:check|test|play|record|capture)\b", cmd) or not re.search(r"(?i)\b(?:game|gameplay|video\s+game)\b", cmd) or not re.search(r"https?://|localhost|127\.0\.0\.1", cmd):
+        return None
+    url = re.search(r"https?://[^\s]+|(?:localhost|127\.0\.0\.1):\d+", cmd, re.I)
+    command = "game check " + (url.group(0) if url else "")
+    if re.search(r"(?i)\b(?:record|capture)\b.*\b(?:video|gameplay|animation|session)\b|\bgameplay\s+recording\b", cmd):
+        command += " --record"
+    if re.search(r"(?i)\b(?:verify|check|inspect|review)\b.*\b(?:visuals?|graphics?|frames?|screenshots?|before\s+(?:done|saying\s+done))\b|\bbefore\s+saying\s+done\b", cmd):
+        command += " --verify"
+    return command
+
+
 def route_vision_evidence(cmd: str) -> str | None:
     if not re.search(r"\b(?:ocr|text\s+in\s+image|image\s+evidence)\b", cmd, re.I) or not re.search(r"\b(?:vllm|model|compare|combine|answer)\b", cmd, re.I):
         return None
@@ -1167,6 +1320,15 @@ def route_spline(cmd: str) -> str | None:
             topic = key
             break
     return "spline " + topic
+
+
+def route_three_js_model(cmd: str) -> str | None:
+    try:
+        from arka.agent.three_js_model import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
 
 
 def route_multi_llm(cmd: str) -> str | None:
@@ -1279,6 +1441,16 @@ def route_urlkit(cmd: str) -> str | None:
     if re.search(r"(?i)\b(?:repair|remove|prune|clean|fix)\s+(?:broken\s+)?(?:links?|urls?)\b", low):
         return f"urlkit repair-links {shlex.quote(clean)}"
     return None
+
+
+def route_word_counter(cmd: str) -> str | None:
+    if not re.search(r"(?i)\b(?:count|calculate|measure)\b", cmd) or not re.search(r"(?i)\b(?:words?|characters?|sentences?|reading\s+time|text)\b", cmd):
+        return None
+    path = re.search(r"(?:~|/|\./|\.\./)?[^\s]+\.(?:txt|md|rst|html?|json|csv)\b", cmd, re.I)
+    if path:
+        return "word_counter --file " + shlex.quote(path.group(0))
+    quoted = re.search(r"['\"]([^'\"]+)['\"]", cmd)
+    return "word_counter --text " + shlex.quote(quoted.group(1) if quoted else cmd)
 
 
 def route_hallmark(cmd: str) -> str | None:
@@ -1439,6 +1611,11 @@ def route_offline_extras(cmd: str) -> str | None:
 
     for fn in (
         route_coding_tui,
+        route_scene_3d,
+        route_rig_3d,
+        route_parallax_2d,
+        route_text_to_3d,
+        route_three_js_model,
         route_hybrid_models,
         route_help,
         route_sessions,
@@ -1456,22 +1633,29 @@ def route_offline_extras(cmd: str) -> str | None:
         route_text_edit,
         route_move_file,
         route_surgical_edit,
+        route_word_counter,
         route_ideate,
         route_cool_build,
         route_hackathon,
+        route_game_studio,
+        route_game_control,
         route_play,
         route_hallmark,
         route_vision_evidence,
         route_url_app,
+        route_visual_inspection,
+        route_visual_diagnose,
         route_ui_copy,
         route_web_screenshot,
         route_app_automation,
         route_spline,
+        route_three_js_model,
         route_multi_llm,
         route_agent_race,
         # Specific intent must precede the broad "build/check this app" route.
         route_frontend_loop,
         route_design_from_screenshot,
+        route_code_project,
         route_repo_health,
         route_observability,
         route_telemetry_connector,
@@ -1486,8 +1670,8 @@ def route_offline_extras(cmd: str) -> str | None:
         route_mode,
         route_urlkit,
         route_lint_project,
-        route_code_project,
         route_heartbeat,
+        route_background_processes,
         route_jsonkit,
         route_agent_hub,
         route_mcp,
@@ -1554,12 +1738,19 @@ def route_offline_extras(cmd: str) -> str | None:
         route_kalshi,
         route_kaggle,
         route_remind,
+        route_batch,
+        route_config_share,
+        route_semantic_alert,
+        route_usage_dashboard,
+        route_symbolic_image,
         route_routines,
         route_fact_check,
         route_quiz_practice,
         route_council,
         route_model_to_image,
+        route_text_to_3d,
         route_compose_3d,
+        route_scene_3d,
         route_three_d,
         route_chart,
         route_drawing,
@@ -1575,6 +1766,7 @@ def route_offline_extras(cmd: str) -> str | None:
         route_compose_video,
         route_timer,
         route_open_url,
+        route_visual_inspection,
         route_search_web,
         route_price_check,
         route_product_reviewer,

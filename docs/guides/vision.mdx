@@ -57,3 +57,26 @@ describe_screen
 arka describe my screen
 describe_screen what app is in focus
 ```
+
+## Describe videos
+
+`describe_video` samples frames with ffmpeg and sends those frames through the
+configured vision backend. Use it for gameplay recordings, UI animation checks,
+demos, and people-location questions.
+
+```bash
+arka describe_video demo.mp4
+arka describe_video demo.mp4 "find visual glitches and confusing UI states"
+arka "describe video gameplay.mp4"
+arka "who is in meeting.mp4 and where are they"
+```
+
+For people-focused prompts, Arka asks the vision model to identify visible
+people and approximate their screen positions. For general describe/analyze
+prompts, it describes subjects, actions, setting, text, framing, and visual
+issues.
+
+```bash
+brew install ffmpeg
+pip install "arka-agent[vision]"
+```

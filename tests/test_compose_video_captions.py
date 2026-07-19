@@ -6,6 +6,7 @@ from pathlib import Path
 
 from arka.media.compose_video import (
     Scene,
+    _custom_script_api,
     _default_output,
     _estimate_caption_beats,
     _llm_script,
@@ -109,6 +110,46 @@ def test_llm_script_reports_invalid_json(monkeypatch):
 
 def test_nl_to_argv_accepts_arka_video_request():
     assert nl_to_argv("arka make an video on ai") == ["compose", "--topic", "ai"]
+
+
+def test_custom_script_api_accepts_scenes_object(monkeypatch):
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return b'{"scenes":[{"title":"Intro","narration":"Hello","captions":["Hello"],"image_keywords":["robot lab"]}]}'
+
+    seen = {}
+
+    def fake_urlopen(req, timeout):
+        seen["url"] = req.full_url
+        seen["body"] = req.data.decode()
+        seen["auth"] = req.headers.get("Authorization")
+        seen["timeout"] = timeout
+        return FakeResponse()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setenv("VIDEO_SCRIPT_API_KEY", "demo-key")
+    scenes = _custom_script_api("ai", api_url="https://example.test/video-script")
+    assert scenes[0].title == "Intro"
+    assert scenes[0].image_keywords == ["robot lab"]
+    assert seen["url"] == "https://example.test/video-script"
+    assert seen["auth"] == "Bearer demo-key"
+    assert '"topic": "Artificial Intelligence"' in seen["body"]
+
+
+def test_custom_script_api_requires_url(monkeypatch):
+    monkeypatch.delenv("VIDEO_SCRIPT_API_URL", raising=False)
+    monkeypatch.delenv("ARKA_VIDEO_SCRIPT_API_URL", raising=False)
+    try:
+        _custom_script_api("ai", api_url="")
+        raise AssertionError("Expected SystemExit")
+    except SystemExit as exc:
+        assert "requires --api-url" in str(exc)
 
 
 if __name__ == "__main__":

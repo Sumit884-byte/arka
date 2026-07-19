@@ -29,3 +29,25 @@ arka config reset
 
 Environment values and project `.env` values take precedence over the managed
 defaults. Existing values are preserved when applying the profile.
+
+## Share a configuration
+
+Export a portable, safe-to-share bundle:
+
+```bash
+arka config share export --out arka-config-share.json
+```
+
+The bundle includes managed defaults, model/provider preferences, and selected
+non-secret environment values. API keys, tokens, passwords, cookies, webhook
+secrets, and other credentials are never exported; they are listed under
+`required_env` so the recipient knows what to fill locally.
+
+Import is preview-only unless `--apply` is passed:
+
+```bash
+arka config share import arka-config-share.json --json
+arka config share import arka-config-share.json --apply
+```
+
+Natural language also works: “share my Arka config” routes to a share export.

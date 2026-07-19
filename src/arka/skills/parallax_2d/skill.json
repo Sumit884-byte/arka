@@ -1,0 +1,10 @@
+{
+  "name": "parallax_2d",
+  "description": "Create 2.5D depth scenes from layered 2D artwork using parallax motion",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": ["parallax effect", "2.5d scene", "make 2d look 3d", "2d depth effect"],
+  "permissions": ["write"]
+}

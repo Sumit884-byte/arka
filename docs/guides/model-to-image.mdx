@@ -17,8 +17,11 @@ Supported mesh inputs are OBJ, STL, GLB, and GLTF. Install Blender on PATH and
 the vision extra for background removal. Use `--keep-background` when a rendered
 transparent canvas is preferred without rembg processing.
 
-The camera defaults to a three-quarter view. Pass `--angle front|side|three-quarter|top|underside`
+The camera defaults are semantic, not random. Pass
+`--angle front|front-three-quarter|rear|rear-three-quarter|side|three-quarter|top|underside`
 when the composition is known. With a VLLM server configured (`VLLM_API_URL` and
 optionally `VLLM_MODEL`), `--task` lets the local model choose the most useful
 view for that task. If VLLM is unavailable, Arka falls back to deterministic
-keywords (for example, “roof” selects `top`) and never blocks rendering.
+symbolic rules: “roof” selects `top`, “side profile” selects `side`, and racing
+game vehicle tasks select `rear-three-quarter` so the car is viewed from behind
+like a normal third-person racing game.

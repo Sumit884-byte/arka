@@ -362,6 +362,21 @@ def test_doctor_checks(hub_paths, monkeypatch):
     assert any(c["name"] == "hub_dir_writable" and c["ok"] for c in checks)
 
 
+def test_cli_doctor_fix_runs_safe_export_sync(monkeypatch, capsys):
+    from arka.integrations.agent_hub_cli import main
+
+    monkeypatch.setattr(
+        "arka.integrations.agent_hub_cli.sync_all",
+        lambda **kwargs: {"synced_at": "now"},
+    )
+    monkeypatch.setattr(
+        "arka.integrations.agent_hub_cli.format_doctor",
+        lambda: ("summary\t21/21 checks passed", 0),
+    )
+    assert main(["doctor", "--fix"]) == 0
+    assert "repaired\thub artifacts synced at now" in capsys.readouterr().out
+
+
 def test_format_list_and_status(hub_paths):
     from arka.integrations.agent_hub import AGENTS, format_agent_list, format_status
 

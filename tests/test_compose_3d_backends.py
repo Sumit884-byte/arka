@@ -17,6 +17,24 @@ from arka.media.compose_3d_backends import (
 )
 
 
+def test_download_first_available_skips_stale_texture_url(monkeypatch, tmp_path):
+    from arka.media import compose_3d_backends as backends
+
+    calls = []
+
+    def fake_download(url, dest, **kwargs):
+        calls.append(url)
+        if "texture" in url:
+            raise RuntimeError("HTTP 404 from texture URL")
+        dest.write_bytes(b"model")
+        return dest
+
+    monkeypatch.setattr(backends, "_download_url", fake_download)
+    dest = tmp_path / "model.glb"
+    assert backends._download_first_available(["https://x/texture", "https://x/base.glb"], dest) == dest
+    assert calls == ["https://x/texture", "https://x/base.glb"]
+
+
 def test_backend_catalog_includes_tripo(monkeypatch):
     monkeypatch.delenv("TRIPO_API_KEY", raising=False)
     slugs = {b.slug for b in backend_catalog()}
@@ -25,8 +43,18 @@ def test_backend_catalog_includes_tripo(monkeypatch):
     assert "procedural" in slugs
 
 
-def test_auto_backend_order_prefers_tripo_when_key_set(monkeypatch):
+def test_auto_backend_order_skips_trial_providers_by_default(monkeypatch):
     monkeypatch.setenv("TRIPO_API_KEY", "tsk_test")
+    monkeypatch.delenv("ARKA_3D_ALLOW_TRIAL_PROVIDERS", raising=False)
+    monkeypatch.delenv("MESHY_API_KEY", raising=False)
+    order = auto_backend_order()
+    assert "tripo" not in order
+    assert order[-1] == "llm"
+
+
+def test_auto_backend_order_can_opt_into_trial_providers(monkeypatch):
+    monkeypatch.setenv("TRIPO_API_KEY", "tsk_test")
+    monkeypatch.setenv("ARKA_3D_ALLOW_TRIAL_PROVIDERS", "1")
     monkeypatch.delenv("MESHY_API_KEY", raising=False)
     order = auto_backend_order()
     assert "tripo" in order

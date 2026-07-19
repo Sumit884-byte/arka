@@ -22,6 +22,39 @@ def not_init_message(*, cwd: Path | None = None) -> str:
 
 CODE_WRITE_SKILLS = frozenset({"agent_code", "write_script", "goal", "code", "self_improve"})
 
+_SOURCE_FILE_RE = re.compile(
+    r"(?i)\b[\w./\\-]+\.(?:jsx?|tsx?|py|css|html?|json|md|rs|go|java|kt|swift|vue|svelte|toml|yaml|yml)\b"
+)
+_EDIT_VERB_RE = re.compile(
+    r"(?i)\b(?:edit|update|modify|change|patch|fix|refactor|rewrite|create|add|remove|delete|write|implement|build|apply)\b"
+)
+_REPO_CONTEXT_RE = re.compile(
+    r"(?i)\b(?:repo(?:sitory)?|project|file|files|folder|directory|src/|\.gitignore|package\.json|index\.html|npm run)\b"
+)
+
+
+def looks_like_repo_edit(cmd: str) -> bool:
+    """True when NL looks like a scoped repo/file edit, not bookmark/download intent."""
+    clean = (cmd or "").strip()
+    if not clean:
+        return False
+    if re.search(
+        r"(?i)\b(?:screenshot|mockup|wireframe|figma|from image|from png|from jpg|from jpeg)\b",
+        clean,
+    ):
+        return False
+    has_file = bool(_SOURCE_FILE_RE.search(clean))
+    has_edit = bool(_EDIT_VERB_RE.search(clean))
+    if has_file and has_edit:
+        return True
+    if re.search(r"(?i)\b(?:repo(?:sitory)?\s+at|at)\s+/[^\s]+", clean) and has_edit:
+        return True
+    if re.search(r"(?i)\b(?:create|write|patch|fix|delete|remove)\s+[\w./\\-]+\.", clean):
+        return True
+    if has_edit and re.search(r"(?i)\b(?:src/|\.gitignore|package\.json|index\.html)\b", clean):
+        return True
+    return False
+
 
 class CodeProjectError(Exception):
     """Raised when code project scope is violated."""
@@ -283,6 +316,18 @@ def route_code_nl(cmd: str) -> str | None:
     m = re.match(r"(?i)^(?:code|implement|build)\s+(?:in\s+)?(?P<goal>.+)$", clean)
     if m and is_scoped():
         return f"code write {m.group('goal').strip()}"
+
+    m = re.search(
+        r"(?i)\b(?:in\s+(?:the\s+)?(?:repo(?:sitory)?\s+)?at|repo\s+at)\s+"
+        r"(?P<path>/[^\n]+?)(?:\s*[\.:]\s|\s+(?:make|apply|create|edit|fix|patch|run)\b|\n|$)",
+        clean,
+    )
+    if m and looks_like_repo_edit(clean):
+        path = m.group("path").strip().rstrip(".")
+        return f"code in {shlex.quote(path)} {shlex.quote(clean)}"
+
+    if looks_like_repo_edit(clean):
+        return f"code write {clean}"
 
     return None
 

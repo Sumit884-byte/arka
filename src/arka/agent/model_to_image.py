@@ -12,6 +12,9 @@ from pathlib import Path
 
 ANGLE_PRESETS = {
     "front": ((0, -5, 2.8), (78, 0, 90)),
+    "front-three-quarter": ((-4, -4, 3), (67, 0, -45)),
+    "rear": ((0, 5, 2.8), (78, 0, -90)),
+    "rear-three-quarter": ((4, 4, 3), (67, 0, 135)),
     "side": ((4.8, -0.2, 2.2), (82, 0, 90)),
     "three-quarter": ((4, -4, 3), (67, 0, 45)),
     "top": ((3.2, -3.2, 6), (35, 0, 45)),
@@ -28,24 +31,21 @@ def choose_angle(task: str = "", *, requested: str = "auto") -> str:
             from arka.llm.fallback import llm_complete
 
             raw = llm_complete(
-                "Return JSON only: {\"angle\": \"front|side|three-quarter|top|underside\"}.",
+                "Return JSON only: {\"angle\": \"front|front-three-quarter|rear|rear-three-quarter|side|three-quarter|top|underside\"}.",
                 f"Choose the most useful 3D camera angle for this task: {task or 'show the model clearly'}",
                 temperature=0,
                 task="vision",
                 skill="model_to_image",
                 chain=[("vllm", os.environ.get("VLLM_MODEL", "default"))],
             )
-            match = re.search(r"(?:front|side|three[- ]quarter|top|underside)", raw.lower())
+            match = re.search(r"(?:front[- ]three[- ]quarter|rear[- ]three[- ]quarter|front|rear|side|three[- ]quarter|top|underside)", raw.lower())
             if match:
-                return match.group(0).replace("three quarter", "three-quarter")
+                return match.group(0).replace("front three quarter", "front-three-quarter").replace("rear three quarter", "rear-three-quarter").replace("three quarter", "three-quarter")
         except (ImportError, OSError, RuntimeError, ValueError):
             pass
-    lowered = task.lower()
-    if any(word in lowered for word in ("top", "roof", "layout", "assembly")):
-        return "top"
-    if any(word in lowered for word in ("profile", "side", "silhouette")):
-        return "side"
-    return "three-quarter"
+    from arka.core.object_orientation import default_view
+
+    return default_view(task)
 
 
 def render_model(source: str, output: str, *, size: int = 1024, remove_bg: bool = True, task: str = "", angle: str = "auto") -> Path:

@@ -11,12 +11,15 @@ def ocr(path: str) -> str:
         import pytesseract
         from PIL import Image
         return pytesseract.image_to_string(Image.open(Path(path).expanduser())).strip()
-    except ImportError as exc:
-        raise RuntimeError("OCR requires pytesseract and Pillow") from exc
+    except ImportError:
+        return "[OCR unavailable: install Pillow and pytesseract for text extraction]"
 
 
 def answer(path: str, question: str, *, model_view: str = "") -> dict[str, str]:
-    extracted = ocr(path)
+    image = Path(path).expanduser()
+    if not image.is_file():
+        raise ValueError(f"image file not found: {image}; provide a PNG/JPG path (URLs need browser_check first)")
+    extracted = ocr(str(image))
     if not model_view:
         model_view = "Visual model unavailable; rely on OCR and image metadata."
     prompt = (

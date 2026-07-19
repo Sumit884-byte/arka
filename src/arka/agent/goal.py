@@ -856,9 +856,20 @@ Step {step}/{max_steps} — return the NEXT action as JSON."""
                 if status == "done":
                     if executed_commands == 0 and read_actions == 0:
                         print("○ Goal finished — no commands executed.", file=sys.stderr)
+                        had_blocked_or_invalid = bool(
+                            blocked_cd_count
+                            or blocked_git_count
+                            or empty_action_count
+                            or invalid_action_count
+                            or non_test_action_count
+                        )
+                        if readonly_mode or had_blocked_or_invalid:
+                            if span is not None:
+                                mark_error(goal_span, "no commands executed")
+                            return 2
                         if span is not None:
-                            mark_error(goal_span, "no commands executed")
-                        return 2
+                            mark_ok(goal_span)
+                        return 0
                     print("✓ Goal complete.", file=sys.stderr)
                     if why:
                         print(f"  {why}", file=sys.stderr)

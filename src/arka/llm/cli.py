@@ -51,7 +51,7 @@ def _model_exhausted(provider: str, model_id: str) -> bool:
     return EXHAUSTION.exhausted(provider, model_id)
 
 
-def llm_complete(
+def _llm_complete_once(
     system: str,
     user: str,
     temperature: float = 0.2,
@@ -122,6 +122,49 @@ def llm_complete(
                 set_http_span_attributes(current, method="POST", status_code=200)
             mark_ok(current)
         return text
+
+
+def llm_complete(
+    system: str,
+    user: str,
+    temperature: float = 0.2,
+    *,
+    task: str | None = None,
+    skill: str | None = None,
+    skip_security: bool = False,
+    chunked: bool | None = None,
+) -> str:
+    """Complete a prompt, optionally chunking large input and merging results."""
+    if chunked is None:
+        import os
+
+        chunked = os.environ.get("ARKA_PROMPT_CHUNKING", "0").lower() in {"1", "true", "yes", "on"}
+    if not chunked:
+        return _llm_complete_once(system, user, temperature, task=task, skill=skill, skip_security=skip_security)
+    import os
+    from arka.llm.chunking import complete_chunked
+
+    try:
+        limit = int(os.environ.get("ARKA_PROMPT_CHUNK_SIZE", "12000"))
+    except ValueError:
+        limit = 12000
+    # Apply security to the original request once; chunk calls use the already checked text.
+    if not skip_security:
+        try:
+            from arka.core.security import apply_llm_security
+
+            blocked, system, user = apply_llm_security(system, user, task=task)
+            if blocked:
+                return blocked
+            skip_security = True
+        except ImportError:
+            pass
+    return complete_chunked(
+        lambda s, u: _llm_complete_once(s, u, temperature, task=task, skill=skill, skip_security=skip_security),
+        system,
+        user,
+        max_chars=limit,
+    )
 
 
 def _host_platform() -> str:

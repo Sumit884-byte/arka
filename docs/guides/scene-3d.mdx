@@ -1,0 +1,38 @@
+---
+title: "3D scene composition"
+description: "Compose Three.js scenes from real model assets."
+---
+
+Use real GLB/GLTF assets instead of primitive geometry:
+
+```bash
+arka scene-3d "Museum visitors" \
+  --model https://example.com/human.glb \
+  --model https://example.com/robot.glb \
+  --out museum-scene
+```
+
+The generated scene includes OrbitControls, responsive lighting, model
+placement, and animation playback when clips are present. Arka does not invent
+asset URLs: provide a verified local path or URL and check its license.
+
+Plan contextual scenes before generation:
+
+```bash
+arka scene-3d "Person typing" --intent "working at a desk" \
+  --model ./models/person.glb --model ./models/desk.glb --plan
+```
+
+The plan identifies the setting and required model roles (for example, a desk,
+keyboard, monitor, and chair) and includes approximate real-world dimensions
+in meters for proportional placement. It also includes placement rules such as
+putting a keyboard on the desk, a chair in front of it, and aligning a seated
+character with the keyboard. To describe a rendered model preview with the
+configured vLLM/vision backend, add `--describe-model preview.png`. A missing
+vision backend produces a structured warning; it does not invent a description.
+
+Arka also chooses semantic orientation defaults before generation. For example,
+vehicle racing/game prompts such as “Cybertruck vs Ferrari racing game” use a
+rear three-quarter chase-camera view by default, because racing games usually
+show the back of the player car. Explicit user wording still wins: “front view,”
+“side profile,” “top layout,” or “show the back” override the default.

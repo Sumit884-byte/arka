@@ -23,6 +23,12 @@ except ImportError:
 
 DEFAULT_FRAME_COUNT = 5
 DEFAULT_PROMPT = (
+    "Describe this video frame. Include visible subjects, action, setting, text, "
+    "camera/framing, notable visual issues, and anything changing over time if apparent. "
+    "Be concise and structured."
+)
+
+PEOPLE_PROMPT = (
     "List each visible person in this video frame. For each person give: "
     "(1) brief description (clothing, role if apparent), "
     "(2) approximate center position as x%, y% (0=left/top, 100=right/bottom), "
@@ -37,6 +43,15 @@ _VIDEO_EXT_RE = "|".join(ext.lstrip(".") for ext in sorted(VIDEO_EXTS))
 _REJECT = re.compile(
     r"(?i)\b(?:summarize|summary|transcript|transcribe|villain|protagonist|narrator|"
     r"who\s+said|who\s+did|plot|story|happens|ending|compose|generate|create|make)\b"
+)
+
+_GENERAL_DESCRIBE_PATTERNS = (
+    re.compile(rf"(?i)\b(?:describe|analyze|inspect|review)\b.*\.(?:{_VIDEO_EXT_RE})\b"),
+    re.compile(rf"(?i)\.(?:{_VIDEO_EXT_RE})\b.*\b(?:describe|analyze|inspect|review)\b"),
+    re.compile(
+        r"(?i)\b(?:describe|analyze|inspect|review)\s+(?:this|the|my)?\s*"
+        r"(?:video|clip|footage|recording|gameplay|animation)\b"
+    ),
 )
 
 _VIDEO_PEOPLE_PATTERNS = (
@@ -110,6 +125,20 @@ def is_video_people_request(text: str) -> bool:
     return False
 
 
+def is_video_describe_request(text: str) -> bool:
+    t = _normalize(text)
+    if not t or _REJECT.search(t):
+        return False
+    if is_video_people_request(t):
+        return True
+    if any(pat.search(t) for pat in _GENERAL_DESCRIBE_PATTERNS):
+        return True
+    source = _extract_video_source(t)
+    if source and _looks_like_video_source(source):
+        return bool(re.search(r"(?i)\b(?:describe|analyze|inspect|review|what\s+is\s+in|what's\s+in)\b", t))
+    return False
+
+
 def _extract_video_source(text: str) -> str | None:
     t = _normalize(text)
     url_m = re.search(r"(https?://[^\s\"']+)", t, re.I)
@@ -153,6 +182,26 @@ def _strip_video_words(text: str, source: str) -> str:
     t = re.sub(r"(?i)\b(?:who|which)\s+(?:people|persons?)\s+(?:are\s+)?(?:in|appear(?:s|ing)?\s+in)\b", " ", t)
     t = re.sub(r"(?i)\b(?:this|the|my|an?)\s+(?:video|clip|footage|recording|movie)\b", " ", t)
     t = re.sub(r"(?i)\b(?:video|clip|footage|recording|movie)\b", " ", t)
+    t = re.sub(r"\s+", " ", t).strip(" .,-")
+    return t
+
+
+def _strip_describe_words(text: str, source: str) -> str:
+    t = text.strip()
+    t = re.sub(re.escape(source), " ", t, count=1, flags=re.I)
+    t = re.sub(
+        r"(?i)^(?:please\s+)?(?:describe|analyze|inspect|review)\s+(?:this|the|my|an?)?\s*"
+        r"(?:video|clip|footage|recording|gameplay|animation)?\s*",
+        "",
+        t,
+    )
+    t = re.sub(
+        r"(?i)\b(?:describe|analyze|inspect|review)\s+(?:this|the|my|an?)?\s*"
+        r"(?:video|clip|footage|recording|gameplay|animation)?\b",
+        " ",
+        t,
+    )
+    t = re.sub(r"(?i)\b(?:video|clip|footage|recording|gameplay|animation)\b", " ", t)
     t = re.sub(r"\s+", " ", t).strip(" .,-")
     return t
 
@@ -275,20 +324,24 @@ def describe_video(source: str, question: str | None = None, *, frame_count: int
 
 
 def nl_to_argv(text: str) -> list[str]:
-    if not is_video_people_request(text):
+    if not is_video_describe_request(text):
         return []
     t = _normalize(text)
     source = _extract_video_source(t)
     if not source:
         return []
-    question = _strip_video_words(t, source)
+    people_focused = is_video_people_request(t)
+    question = _strip_video_words(t, source) if people_focused else _strip_describe_words(t, source)
+    suffix = ["--people"] if people_focused else []
     if question and question.lower() not in {"in", "and where they are", "where they are"}:
-        return ["describe", source, question]
-    return ["describe", source]
+        return ["describe", source, question, *suffix]
+    return ["describe", source, *suffix]
 
 
 def cmd_describe(args: argparse.Namespace) -> int:
     question = " ".join(args.question).strip() if args.question else None
+    if args.people:
+        question = PEOPLE_PROMPT if not question else f"{PEOPLE_PROMPT}\nFocus: {question}"
     print(describe_video(args.source, question, frame_count=args.frames))
     return 0
 
@@ -308,6 +361,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_desc = sub.add_parser("describe", help="Sample video frames and describe visible people")
     p_desc.add_argument("source", help="Video path or http(s) URL")
     p_desc.add_argument("question", nargs="*", help="Optional focus question")
+    p_desc.add_argument("--people", action="store_true", help="Use people + screen-position prompt")
     p_desc.add_argument(
         "--frames",
         type=int,

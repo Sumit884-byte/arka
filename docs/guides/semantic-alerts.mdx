@@ -1,0 +1,26 @@
+---
+title: "Semantic deadline alerts"
+description: "Create local alerts from natural-language deadline requests."
+---
+
+Arka understands requests such as:
+
+```text
+alert me when OpenAI Build Week deadline arrives
+```
+
+Because event dates change, Arka will not guess a deadline. Supply a verified
+date or source:
+
+```bash
+arka semantic-alert "OpenAI Build Week deadline" \
+  --at 2026-08-01T17:00:00 \
+  --source https://example.com/official-deadline
+```
+
+The alert is stored locally and uses Arka's reminder daemon for notification.
+
+For future opportunities, Arka recognizes requests such as “alert me whenever
+a new OpenAI hackathon or program comes.” This becomes a recurring program
+watch, but requires an official listing/search source and an interval before
+activation; Arka will not invent event dates or silently poll the web.

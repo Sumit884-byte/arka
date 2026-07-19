@@ -1,0 +1,15 @@
+---
+title: "2.5D parallax scenes"
+description: "Create depth-like motion from layered 2D artwork."
+---
+
+```bash
+arka parallax-2d "Forest depth" \
+  --layer background.png --layer trees.png --layer character.png \
+  --out forest-parallax
+```
+
+Layers are moved at different speeds based on depth when the pointer moves.
+This is useful for game menus, animated illustrations, and camera-like pans
+without requiring a full 3D model pipeline. Provide layers back-to-front and
+keep foreground subjects separate from the background for the best effect.

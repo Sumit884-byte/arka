@@ -72,6 +72,40 @@ def test_nl_to_argv_routes():
     assert nl_to_argv("hello world") is None
     assert nl_to_argv("invoke tool search on github") == ["call", "github", "search"]
     assert nl_to_argv("what MCP tools are available from signoz") == ["tools", "signoz"]
+    assert nl_to_argv("show mcp logs") == ["logs"]
+    assert nl_to_argv("use baryhuang/mcp-threejs") == ["preset", "threejs"]
+    assert nl_to_argv("configure mcp-server-threejs") == ["preset", "threejs", "--apply"]
+
+
+def test_mcp_logs_write_read_and_redact(tmp_path, monkeypatch):
+    from arka.integrations.mcp_logs import log_mcp_event, read_mcp_logs
+
+    monkeypatch.setenv("ARKA_MCP_LOG_PATH", str(tmp_path / "mcp.jsonl"))
+    log_mcp_event("client.call_tool", server="demo", tool="search", status="error", api_key="secret")
+    text = read_mcp_logs(limit=5)
+    assert "client.call_tool" in text
+    assert "search" in text
+    data = json.loads(read_mcp_logs(limit=5, json_output=True))
+    assert data["count"] == 1
+    assert data["events"][0]["api_key"] == "[redacted]"
+
+
+def test_threejs_mcp_preset_preview_and_apply(mcp_config):
+    from arka.integrations.mcp_manager import format_preset, get_server_config, list_server_names
+
+    preview = format_preset("baryhuang/mcp-threejs", apply=False)
+    assert "mode\tpreview" in preview
+    assert "buryhuang/mcp-server-threejs:latest" in preview
+    assert list_server_names() == []
+
+    applied = format_preset("threejs", apply=True)
+    assert "mode\tapplied" in applied
+    assert list_server_names() == ["threejs"]
+    cfg = get_server_config("threejs")
+    assert cfg.command == "docker"
+    assert "buryhuang/mcp-server-threejs:latest" in cfg.args
+    assert cfg.env["SKETCHFAB_ACCESS_TOKEN"] == "${env:SKETCHFAB_ACCESS_TOKEN}"
+    assert cfg.env["SKETCHFAB_CLIENT_ID"] == "${env:SKETCHFAB_CLIENT_ID}"
 
 
 def test_stdio_client_rpc_mock():
@@ -98,6 +132,49 @@ def test_stdio_client_rpc_mock():
 
     result = client.call_tool("ping")
     assert result["content"][0]["text"] == "pong"
+
+
+def test_call_tool_reconnects_once_after_connection_closed(monkeypatch):
+    from arka.integrations import mcp_manager
+
+    first = MagicMock()
+    first.call_tool.side_effect = RuntimeError("MCP error -32000: Connection closed")
+    second = MagicMock()
+    second.call_tool.return_value = {"content": [{"type": "text", "text": "recovered"}]}
+    clients = iter((first, second))
+    monkeypatch.setattr(mcp_manager, "connect_client", lambda _name: next(clients))
+    assert mcp_manager.call_tool("demo", "ping") == "recovered"
+    first.close.assert_called_once()
+    second.close.assert_called_once()
+
+
+def test_context7_resolve_requires_query_before_remote_call(monkeypatch):
+    from arka.integrations import mcp_manager
+
+    with pytest.raises(ValueError, match="requires query/libraryName"):
+        mcp_manager.call_tool("context7", "resolve-library-id", {})
+
+
+def test_context7_resolve_sends_both_schema_field_names(monkeypatch):
+    from arka.integrations import mcp_manager
+
+    client = MagicMock()
+    client.call_tool.return_value = {"content": [{"type": "text", "text": "ok"}]}
+    monkeypatch.setattr(mcp_manager, "connect_client", lambda _name: client)
+    assert mcp_manager.call_tool("context7", "resolve-library-id", {"query": "react"}) == "ok"
+    assert client.call_tool.call_args.args[1]["libraryName"] == "react"
+
+
+def test_context7_resolve_infers_dependency_from_package_json(tmp_path, monkeypatch):
+    from arka.integrations import mcp_manager
+
+    (tmp_path / "package.json").write_text(json.dumps({"dependencies": {"react": "^18"}}))
+    monkeypatch.chdir(tmp_path)
+    client = MagicMock()
+    client.call_tool.return_value = {"content": [{"type": "text", "text": "ok"}]}
+    monkeypatch.setattr(mcp_manager, "connect_client", lambda _name: client)
+    assert mcp_manager.call_tool("context7", "resolve-library-id", {}) == "ok"
+    assert client.call_tool.call_args.args[1]["query"] == "react"
 
 
 def _mock_http_resp(body: dict | None = None, *, session: str = "", status: int = 200):
