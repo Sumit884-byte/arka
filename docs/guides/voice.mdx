@@ -73,6 +73,108 @@ Use `arka serve` to run a remote STT/TTS server for phone-based interaction with
 arka serve
 ```
 
+### Use Arka backend with an API key
+
+Arka's remote backend can also be called from your own app, script, or local
+frontend. The access token is the API key: set `REMOTE_TOKEN`, start the server,
+then pass the token as a bearer token.
+
+```bash
+# ~/.config/arka/.env
+REMOTE_TOKEN=replace-with-a-long-random-token
+REMOTE_HOST=127.0.0.1
+REMOTE_PORT=8765
+
+arka serve
+```
+
+Check that the backend is reachable:
+
+```bash
+curl -s http://127.0.0.1:8765/v1/health
+```
+
+Call the agent endpoint:
+
+```bash
+curl -s http://127.0.0.1:8765/v1/agent \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $REMOTE_TOKEN" \
+  -d '{"text":"check repo health","remote_speak":false}'
+```
+
+Response shape:
+
+```json
+{
+  "ok": true,
+  "exit_code": 0,
+  "output": "...",
+  "speak_text": ""
+}
+```
+
+From JavaScript:
+
+```js
+const response = await fetch("http://127.0.0.1:8765/v1/agent", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${process.env.REMOTE_TOKEN}`,
+  },
+  body: JSON.stringify({
+    text: "summarize this repo",
+    remote_speak: false,
+  }),
+});
+
+const data = await response.json();
+console.log(data.output);
+```
+
+Useful endpoints:
+
+| Endpoint | Method | Purpose |
+| --- | --- | --- |
+| `/v1/health` | `GET` | Health check without running the agent |
+| `/v1/agent` | `POST` | Run an Arka request from API clients |
+| `/v1/transcribe` | `POST` | Transcribe uploaded WAV audio when local STT is configured |
+| `/v1/handoff` | `GET`/`POST` | List or add handoff items |
+
+Configuration:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `REMOTE_TOKEN` | generated on first `arka serve` run | API key for `Authorization: Bearer ...` or `X-Arka-Token` |
+| `REMOTE_HOST` | `0.0.0.0` | Bind address; use `127.0.0.1` for local-only access |
+| `REMOTE_PORT` | `8765` | HTTP port |
+| `REMOTE_TIMEOUT` | `600` | Max seconds for one agent request |
+| `AGENT_SPEAK` | forced to `0` server-side | Prevents local TTS from playing on API requests |
+
+For a stricter inbound automation surface, use the webhook server instead:
+
+```bash
+WEBHOOK_ENABLED=1 WEBHOOK_TOKEN=$REMOTE_TOKEN arka webhook serve
+curl -s http://127.0.0.1:8767/v1/inbox \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $REMOTE_TOKEN" \
+  -d '{"text":"summarize this deployment event","source":"ci","chat_id":"deploy-42"}'
+```
+
+Keep the backend bound to `127.0.0.1` unless you are behind a trusted reverse
+proxy with HTTPS, rate limits, and logs. Do not put provider keys in request
+bodies; configure them in Arka's `.env` on the server.
+
+Troubleshooting:
+
+| Symptom | Fix |
+| --- | --- |
+| `401 unauthorized` | Confirm the request uses `Authorization: Bearer $REMOTE_TOKEN` and that Arka loaded the same `.env` file |
+| `missing text` | Send JSON with a non-empty `text` field |
+| request hangs | Lower `REMOTE_TIMEOUT`, check `arka background processes`, and inspect the shell command Arka is running |
+| works locally but not remotely | Keep `REMOTE_HOST=127.0.0.1` and expose it through a reverse proxy/tunnel that adds HTTPS and rate limits |
+
 ## Multi-turn conversation
 
 Voice sessions maintain context across turns. Say "hey arka" followed by your request, then continue the conversation without repeating the wake word until the session times out.
