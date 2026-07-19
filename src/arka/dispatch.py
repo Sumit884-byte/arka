@@ -307,6 +307,10 @@ def run_skill(skill_line: str) -> int:
         elif head in ("data", "data_collect", "collect_data", "data-collect") and rest and rest[0] in {"collect", "catalog"}:
             from arka.agent.data_collect import main as collect_main
             code = collect_main([*rest[1:], "--catalog"] if rest[0] == "catalog" else rest[1:])
+        elif head in ("exercise_dataset", "exercise-dataset", "exercises", "fitness_dataset"):
+            from arka.agent.exercise_dataset import main as exercise_main
+
+            code = exercise_main(rest)
         elif head in ("search", "search_setup", "search-setup"):
             from arka.agent.search_setup import main as search_setup_main
             code = search_setup_main(rest)

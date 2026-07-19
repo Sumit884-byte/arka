@@ -354,6 +354,11 @@ def main(argv: list[str] | None = None) -> int:
 
         return run_chat_ask(q, deep=args[0] == "web" and "--deep" in args)
 
+    if args[0] in ("exercise_dataset", "exercise-dataset", "exercises", "fitness_dataset"):
+        from arka.agent.exercise_dataset import main as exercise_main
+
+        return exercise_main(args[1:])
+
     # Fish-only service subcommands (listen, start, serve, …)
     fish_subs = {
         "listen",

@@ -1098,6 +1098,15 @@ def route_data_collect(cmd: str) -> str | None:
     return "data collect " + (clean or "research topic")
 
 
+def route_exercise_dataset(cmd: str) -> str | None:
+    try:
+        from arka.agent.exercise_dataset import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
+
+
 def route_platform_howto(cmd: str) -> str | None:
     try:
         from arka.routing.platform_howto import is_platform_howto_question
@@ -1691,6 +1700,7 @@ def route_offline_extras(cmd: str) -> str | None:
         route_teammate_review,
         route_society,
         route_generate_data,
+        route_exercise_dataset,
         route_data_collect,
         route_view_data,
         route_describe_screen,

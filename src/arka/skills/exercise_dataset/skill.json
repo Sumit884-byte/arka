@@ -1,0 +1,17 @@
+{
+  "name": "exercise_dataset",
+  "description": "Import and query hasaneyldrm/exercises-dataset exercise metadata.",
+  "triggers": [
+    "add exercise dataset",
+    "import exercises dataset",
+    "load fitness exercise data",
+    "search exercises dataset"
+  ],
+  "type": "python",
+  "entry": "arka.agent.exercise_dataset",
+  "permissions": ["read", "write", "network"],
+  "metadata": {
+    "source": "https://github.com/hasaneyldrm/exercises-dataset",
+    "license_note": "Educational / non-commercial use only per upstream README; media copyright belongs to respective owners."
+  }
+}
