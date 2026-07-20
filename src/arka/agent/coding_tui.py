@@ -222,7 +222,13 @@ def _is_scripts_scope(scope: str | None) -> bool:
     return normalized in {"scripts", "scripts/"}
 
 
-def _run_discovered_script_checks(repo: Path) -> int:
+def _run_discovered_script_checks(
+    repo: Path,
+    *,
+    auto_fix: bool = True,
+    code_agent=None,
+    after_fix_attempt: bool = False,
+) -> int:
     """Run verification scripts discovered under scripts/ (read-only)."""
     from arka.agent.script_discovery import discover_script_checks
 
@@ -231,13 +237,22 @@ def _run_discovered_script_checks(repo: Path) -> int:
         print("No verification scripts discovered under scripts/.")
         return 1
 
-    print(f"○ Verification scripts ({len(checks)} discovered)")
+    label = f"Verification scripts ({len(checks)} discovered"
+    if after_fix_attempt:
+        label += ", after fix"
+    print(f"○ {label})")
     worst = 0
+    failure_count = 0
+    combined_output: list[str] = []
     for check in checks:
         detail = f" ({'; '.join(check.reasons[:2])})" if check.reasons else ""
-        print(f"\n▶ {check.name}{detail}")
-        print(f"  {' '.join(check.command)}")
+        header = f"\n▶ {check.name}{detail}\n  {' '.join(check.command)}"
+        print(header)
+        combined_output.append(header.strip())
         proc = subprocess.run(check.command, cwd=repo, check=False, capture_output=True, text=True)
+        output = (proc.stdout or "") + (proc.stderr or "")
+        if output.strip():
+            combined_output.append(output.rstrip())
         if proc.stdout:
             end = "" if proc.stdout.endswith("\n") else "\n"
             print(proc.stdout, end=end)
@@ -249,11 +264,48 @@ def _run_discovered_script_checks(repo: Path) -> int:
         else:
             print(f"  ✗ failed (exit {proc.returncode})")
             worst = proc.returncode or 1
+            failure_count += 1
+    failure_summary = "\n\n".join(combined_output)
     if worst == 0:
-        print("\n✓ All discovered verification scripts passed")
-    else:
+        if after_fix_attempt:
+            print("\n✓ All discovered verification scripts passed (read-only run, after fix)")
+        else:
+            print("\n✓ All discovered verification scripts passed")
+        return 0
+
+    if after_fix_attempt:
+        print("\n✗ Still failing after one fix pass. Use /run tests --fix for another attempt.")
+        return worst
+
+    if not auto_fix or code_agent is None:
         print("\n✗ One or more verification scripts failed")
-    return worst
+        if failure_count:
+            print(f"✗ {failure_count} verification script failure(s).")
+        if not auto_fix:
+            print("○ Auto-fix skipped (--no-fix).")
+        else:
+            print("For another fix attempt, use: /run tests --fix")
+        return worst
+
+    print(f"○ {failure_count} verification script failure(s) detected — attempting one fix pass…")
+    _auto_fix_once(
+        repo,
+        failure_summary,
+        code_agent,
+        goal_context="Verification scripts under scripts/ failed.",
+        fix_instruction=(
+            "Fix the failing verification scripts reported above. "
+            "Re-run the scripts under scripts/ to verify. "
+            "Only touch files needed for those failures."
+        ),
+        system_extra_goal="fix failing verification scripts",
+    )
+    return _run_discovered_script_checks(
+        repo,
+        auto_fix=False,
+        code_agent=None,
+        after_fix_attempt=True,
+    )
 
 
 def _auto_fix_once(
@@ -262,13 +314,15 @@ def _auto_fix_once(
     code_agent,
     *,
     goal_context: str = "",
+    fix_instruction: str = "",
+    system_extra_goal: str = "fix failing tests",
 ) -> int:
     """Run one writable goal-agent pass to repair test failures."""
     from arka.agent.git_changes import format_changed_files, list_changed_files
 
     print("○ Fix pass 1/1")
     before = {row.path for row in list_changed_files(repo)}
-    fix_goal = (
+    fix_goal = fix_instruction.strip() or (
         "Fix the failing tests reported above. Run pytest to verify. "
         "Only touch files needed for test failures."
     )
@@ -280,7 +334,7 @@ def _auto_fix_once(
         fix_goal,
         repo=str(repo),
         plan_context="",
-        system_extra=coding_tui_system_extra(repo, "fix failing tests"),
+        system_extra=coding_tui_system_extra(repo, system_extra_goal),
         readonly=False,
     )
     after = {row.path for row in list_changed_files(repo)}
@@ -302,7 +356,12 @@ def _run_direct_tests(
 ) -> int:
     """Run tests directly without the goal agent (strict read-only /test)."""
     if _is_scripts_scope(scope):
-        return _run_discovered_script_checks(repo)
+        return _run_discovered_script_checks(
+            repo,
+            auto_fix=auto_fix,
+            code_agent=code_agent,
+            after_fix_attempt=after_fix_attempt,
+        )
 
     command = _resolve_test_command(repo, scope)
     if run_label:

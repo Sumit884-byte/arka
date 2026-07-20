@@ -114,3 +114,47 @@ def test_coding_tui_runs_discovered_scripts_scope(monkeypatch, tmp_path, capsys)
     output = capsys.readouterr().out
     assert "Verification scripts (1 discovered)" in output
     assert "verify_widget.py" in output
+
+
+def test_coding_tui_scripts_auto_fix_on_failure(monkeypatch, tmp_path, capsys) -> None:
+    from arka.agent import coding_tui
+
+    fix_calls: list[str] = []
+    run_calls: list[int] = []
+
+    class FailResult:
+        returncode = 1
+        stdout = "verify failed\n"
+        stderr = ""
+
+    class PassResult:
+        returncode = 0
+        stdout = "ok\n"
+        stderr = ""
+
+    outcomes = iter([FailResult(), PassResult()])
+
+    script = tmp_path / "scripts" / "verify_widget.py"
+    script.parent.mkdir()
+    script.write_text("assert True\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        coding_tui.subprocess,
+        "run",
+        lambda *args, **kwargs: run_calls.append(1) or next(outcomes),
+    )
+    monkeypatch.setattr(
+        coding_tui,
+        "_auto_fix_once",
+        lambda *args, **kwargs: fix_calls.append("fix") or 0,
+    )
+    monkeypatch.setattr("arka.agent.core.code_agent", object())
+
+    commands = iter(["/test scripts", "/quit"])
+    monkeypatch.setattr("builtins.input", lambda _: next(commands))
+    assert coding_tui.run(str(tmp_path)) == 0
+    output = capsys.readouterr().out
+    assert fix_calls == ["fix"]
+    assert len(run_calls) == 2
+    assert "attempting one fix pass" in output
+    assert "passed (read-only run, after fix)" in output
