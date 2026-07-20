@@ -265,6 +265,27 @@ SOURCE_REGISTRY: dict[str, DomainSources] = {
         ),
         search_bias="culinary technique recipe food safety site:fda.gov OR site:usda.gov OR site:seriouseats.com",
     ),
+    "product": DomainSources(
+        "product",
+        rss=(
+            RssSource(
+                "fda-cosmetics",
+                "FDA Cosmetics",
+                "https://www.fda.gov/about-fda/contact-fda/stay-informed/rss-feeds/cosmetics/rss.xml",
+                limit=4,
+            ),
+            RssSource(
+                "fda-food",
+                "FDA Food Safety",
+                "https://www.fda.gov/about-fda/contact-fda/stay-informed/rss-feeds/food-safety/rss.xml",
+                limit=4,
+            ),
+        ),
+        search_bias=(
+            "product ingredients safety review allergens vegan cruelty-free "
+            "site:incidecoder.com OR site:ewg.org OR site:paulaschoice.com OR site:fda.gov"
+        ),
+    ),
 }
 
 
