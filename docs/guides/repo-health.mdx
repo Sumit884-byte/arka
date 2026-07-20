@@ -46,10 +46,42 @@ arka scan what checks are available
 | `arka hooks status` | Inspect Arka's pre-commit hook |
 | `arka hooks restore` | Restore the pre-Arka hook backup |
 | `arka dev-doctor` | Preflight repository, workflow, and developer-tool setup |
+| `arka dev-tools list` | Show supported API testing, browser debugging, and DevOps tools |
+| `arka dev-tools list --json` | Emit the external developer-tool catalog for scripts |
 
 Arka runs Ruff and Pytest through the active Python interpreter, so the local
 gate uses the same virtual environment as the `arka` installation. Use
 `--full` before a release or merge to run the complete test suite.
+
+## External developer-tool catalog
+
+Arka recognizes the common tools engineers already use around the terminal:
+
+| Area | Tools | Why Arka tracks them |
+| --- | --- | --- |
+| API testing | Postman, Insomnia | API request collections, environments, GraphQL/REST checks, and manual reproduction notes |
+| Debugging / browser tools | Chrome DevTools, Firefox Developer Edition | Console/network/performance evidence and cross-browser debugging guidance |
+| DevOps overlap | Docker, Kubernetes, GitHub Actions, Terraform, Prometheus, Jenkins | Local services, CI/CD, infrastructure, observability, and deployment checks |
+
+Use:
+
+```bash
+arka dev-tools list
+arka dev-tools list --json
+arka dev-doctor
+```
+
+Natural language examples:
+
+```bash
+arka show API testing tools like Postman and Insomnia
+arka check Docker Kubernetes Terraform tools
+arka what browser debugging tools can Arka use
+```
+
+These checks are intentionally read-only. Missing optional tools are reported
+as setup hints, not hard failures, so `arka dev-doctor` still focuses on the
+repository gates that matter for the current project.
 
 ## Detected tools
 

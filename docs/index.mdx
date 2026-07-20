@@ -9,9 +9,28 @@ Arka is a **cross-platform AI agent** for your terminal. Say what you want in pl
 
 Commands run locally. LLM calls go through a **fallback orchestrator** across **24 providers** — no Docker required for daily use.
 
+## Install without building from source
+
+You do **not** need to clone or compile Arka to use it from your terminal. Install the published package with pipx or pip:
+
+```bash
+pipx install "arka-agent[chat]"
+arka setup
+arka doctor
+arka ask "what is Rust?"
+```
+
+If PyPI is not live yet, install directly from GitHub (still no local build):
+
+```bash
+pipx install "arka-agent[chat] @ git+https://github.com/Sumit884-byte/arka.git"
+```
+
+See the [Quickstart](/quickstart) for API keys, fish shell, and optional extras.
+
 <CardGroup cols={2}>
   <Card title="Quickstart" icon="rocket" href="/quickstart">
-    Install and run your first command in under five minutes.
+    Install with pipx — no git clone — and run your first command in under five minutes.
   </Card>
 
   <Card title="Skills catalog" icon="puzzle-piece" href="/guides/skills">

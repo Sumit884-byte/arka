@@ -32,18 +32,26 @@ Config paths: `~/.config/arka/` (Linux), `~/Library/Application Support/arka/` (
 
 PyPI package name is **`arka-agent`**. Publishing is in progress — if `pipx install` returns 404, use the git install paths below.
 
-**Recommended (standalone, no clone):**
+**Recommended (standalone, no clone, no build):**
 
 ```bash
-pip install "arka-agent[chat] @ git+https://github.com/Sumit884-byte/arka.git"
+pipx install "arka-agent[chat]"
 arka setup
 arka doctor
 ```
 
-Or with [pipx](https://pipx.pypa.io):
+If PyPI returns 404, install from GitHub without cloning or building locally:
 
 ```bash
-pipx install --spec "arka-agent[chat] @ git+https://github.com/Sumit884-byte/arka.git" arka-agent
+pipx install "arka-agent[chat] @ git+https://github.com/Sumit884-byte/arka.git"
+arka setup
+arka doctor
+```
+
+Or with pip in a venv:
+
+```bash
+pip install "arka-agent[chat]"
 arka setup
 arka doctor
 ```

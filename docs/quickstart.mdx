@@ -4,15 +4,16 @@ description: "Install Arka on macOS, Linux, or Windows, configure API keys, and 
 icon: "play"
 ---
 
-Get Arka running on macOS, Linux, or Windows. After you complete this guide, you will have installed the agent, configured API keys, and run your first natural-language command.
+Get Arka running on macOS, Linux, or Windows — **no git clone or local build required**. Install the published Python package, run `arka setup`, add an API key, and use `arka` from any terminal.
 
 <Tip>
-  **First-run flow** — install, verify, ask. Run these three commands after installation:
+  **Recommended path** — pipx (or pip) install, then verify and ask:
 </Tip>
 
 <CodeGroup>
 
 ```bash 1. Install
+pipx install "arka-agent[chat]"
 arka setup
 ```
 
@@ -34,32 +35,56 @@ Arka uses a docs-as-code approach — this site is built on [Mintlify](https://m
 - At least one LLM API key (Gemini or Groq recommended for free tiers)
 - [**fish shell**](https://fishshell.com) for the full 70\+ skill router (optional but recommended)
 
-## Install
+## Install (no build from source)
+
+Most users should install the **`arka-agent`** package directly. You do not need to clone the repo, run `./scripts/refetch.sh`, or compile anything — `pip` / `pipx` downloads a ready-to-run CLI.
 
 <Tabs>
-  <Tab title="Git clone">
-    Best for development or staying on the latest `main` branch.
+  <Tab title="pipx (recommended)">
+    Isolated install — best for daily terminal use. Requires [pipx](https://pipx.pypa.io).
+
+    ```bash
+    pipx install "arka-agent[chat]"
+    arka setup
+    arka doctor
+    ```
+
+    If PyPI returns 404 (publish in progress), install the latest release straight from GitHub — still **no local build**:
+
+    ```bash
+    pipx install "arka-agent[chat] @ git+https://github.com/Sumit884-byte/arka.git"
+    arka setup
+    arka doctor
+    ```
+  </Tab>
+  <Tab title="pip / venv">
+    Install into an existing virtual environment or user site-packages.
+
+    ```bash
+    python3 -m pip install "arka-agent[chat]"
+    arka setup
+    arka doctor
+    ```
+
+    GitHub fallback (no clone):
+
+    ```bash
+    python3 -m pip install "arka-agent[chat] @ git+https://github.com/Sumit884-byte/arka.git"
+    arka setup
+    ```
+  </Tab>
+  <Tab title="Git clone (contributors)">
+    Only needed if you are **developing Arka itself** or patching the repo.
 
     ```bash
     git clone https://github.com/Sumit884-byte/arka.git
     cd arka
     ./scripts/refetch.sh --install
-    ```
-  </Tab>
-  <Tab title="PyPI / pipx">
-    Best for a standalone install without cloning the repo.
-
-    ```bash
-    pipx install "arka-agent[chat]"
     arka setup
     ```
-
-    <Note>
-      PyPI publish is coming soon. If `pipx install` returns 404, use the **Git clone** tab instead.
-    </Note>
   </Tab>
   <Tab title="Editable dev">
-    For contributors working inside the repo.
+    For contributors working inside the repo with live code changes.
 
     ```bash
     git clone https://github.com/Sumit884-byte/arka.git && cd arka
@@ -69,6 +94,30 @@ Arka uses a docs-as-code approach — this site is built on [Mintlify](https://m
     ```
   </Tab>
 </Tabs>
+
+<Check>
+  After install, `which arka` should print a path under pipx’s venv or your active Python environment. Run `arka doctor` — you should see **Skills: full (70+)** when fish is installed, or **portable** mode otherwise.
+</Check>
+
+### Use Arka from any terminal
+
+Once installed, open a **new** terminal tab (so PATH picks up pipx) and run:
+
+```bash
+arka ask "what is Rust?"
+arka "convert 100 USD to INR"
+arka route "summarize this repo"
+arka help
+```
+
+Optional — unlock the full 70+ skill router with [fish shell](https://fishshell.com):
+
+```bash
+brew install fish          # macOS
+arka reload                # loads bundled config.fish
+```
+
+Without fish, Arka still works in **portable** mode: `arka ask`, calc, weather, plugins, and MCP.
 
 ## Get started
 

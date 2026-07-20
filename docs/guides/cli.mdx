@@ -7,6 +7,26 @@ icon: "terminal"
 
 The `arka` command is the main entry point. `agent` is an alias for the same router.
 
+## Install the CLI (no build from source)
+
+You do not need to clone the repo to use `arka` from your terminal. Install the **`arka-agent`** package:
+
+```bash
+# Recommended — isolated CLI on PATH
+pipx install "arka-agent[chat]"
+arka setup
+arka doctor
+
+# PyPI not available yet? Install from GitHub without cloning:
+pipx install "arka-agent[chat] @ git+https://github.com/Sumit884-byte/arka.git"
+```
+
+Then open a new terminal and run `arka help`. Only clone the repo if you are [contributing to Arka](https://github.com/Sumit884-byte/arka) or need editable installs (`pip install -e ".[chat]"`).
+
+<Note>
+  Config and cache live outside the install directory — typically `~/.config/arka/` (Linux), `~/Library/Application Support/arka/` (macOS), or `%APPDATA%\arka\` (Windows). Upgrading with `pipx upgrade arka-agent` keeps your keys and learned routes.
+</Note>
+
 ## Primary commands
 
 | Command | Description |
@@ -79,8 +99,31 @@ See the full [Stock intelligence guide](/guides/stocks).
 | `arka listen` | Wake-word listener ("hey arka, …") |
 | `arka start` / `arka stop` | Background services |
 | `arka serve` | Remote server for phone STT/TTS |
+| `arka backend status` | Check a local or hosted Arka backend |
+| `arka backend ask "<prompt>"` | Call `/v1/agent` directly from the terminal |
+| `arka backend media <file>` | Upload media to `/v1/media` |
+| `arka site_summary <url>` | Summarize a bounded whole-site crawl while skipping social/offsite links |
 | `arka speak-lang hi-IN` | Set voice language |
 | `arka reload --listen` | Reload config and restart listener |
+
+Use `ARKA_BACKEND_URL` plus `ARKA_BACKEND_TOKEN` or `REMOTE_TOKEN` for hosted
+backends:
+
+```bash
+export ARKA_BACKEND_URL="https://your-arka.up.railway.app"
+export ARKA_BACKEND_TOKEN="$REMOTE_TOKEN"
+arka backend ask "init https://github.com/org/repo as a workspace"
+```
+
+Whole-site summary examples:
+
+```bash
+arka site_summary https://example.com --max-pages 12 --depth 1
+arka "summarize entire site https://example.com"
+```
+
+`site_summary` follows same-site links only and skips common social platforms
+such as X/Twitter, LinkedIn, Instagram, YouTube, Reddit, Discord, and TikTok.
 
 ## LLM management
 

@@ -12,6 +12,7 @@ from pathlib import Path
 LINK_RE = re.compile(r"\[[^\]]+\]\((/[^)\s#]+)(?:#[^)]+)?\)")
 HREF_RE = re.compile(r'href="(/[^"#]+)(?:#[^"]+)?"')
 TITLE_RE = re.compile(r"^title:\s*[\"']?(.+?)[\"']?\s*$", re.MULTILINE)
+ICON_RE = re.compile(r"^icon:\s*[\"']?.+[\"']?\s*$", re.MULTILINE)
 
 
 def _route_for(path: Path, root: Path) -> str:
@@ -38,6 +39,10 @@ def check_docs(root: Path) -> list[str]:
         text = file.read_text(encoding="utf-8", errors="replace")
         if file.suffix == ".mdx" and not TITLE_RE.search(text):
             problems.append(f"{file}: missing frontmatter title")
+        if file.suffix == ".mdx":
+            fm = text.split("---", 2)[1] if text.startswith("---") else ""
+            if not ICON_RE.search(fm):
+                problems.append(f"{file}: missing frontmatter icon")
         for regex in (LINK_RE, HREF_RE):
             for match in regex.finditer(text):
                 href = match.group(1)

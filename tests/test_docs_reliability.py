@@ -13,7 +13,7 @@ def test_docs_reliability_checker_catches_broken_internal_link(tmp_path):
     docs = tmp_path / "docs"
     docs.mkdir()
     (docs / "index.mdx").write_text(
-        "---\ntitle: Home\n---\n\nSee [missing](/guides/missing).\n",
+        "---\ntitle: Home\nicon: \"house\"\n---\n\nSee [missing](/guides/missing).\n",
         encoding="utf-8",
     )
 

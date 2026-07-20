@@ -1,0 +1,115 @@
+---
+title: "Deploy coding skills to Railway"
+description: "Host Arka's coding/devtool skills on Railway with a safe hosted profile."
+keywords: ["Railway", "deploy", "coding skills", "hosted", "API", "MCP"]
+icon: "train"
+---
+
+Arka can run a hosted, coding-only API on Railway. This profile is meant for
+repo/devtool workflows such as repo health, CI, PR context, route audit, review,
+repo maps, and GitHub Actions checks. Desktop/media/personal skills stay
+disabled.
+
+## What gets deployed
+
+The Railway profile uses:
+
+- `Dockerfile`
+- `railway.toml`
+- `ARKA_REMOTE_PROFILE=coding`
+- `ARKA_HOSTED_MODE=1`
+- `ARKA_MCP_ENABLE_PERSONAL_SKILLS=0`
+
+The HTTP API exposes:
+
+| Endpoint | Use |
+| --- | --- |
+| `GET /v1/health` | health check |
+| `POST /v1/agent` | run a hosted-safe coding/devtool request |
+
+## Deploy
+
+Install and authenticate the Railway CLI:
+
+```bash
+npm i -g @railway/cli
+railway login
+```
+
+Create a Railway project from this repo:
+
+```bash
+railway init
+railway up
+```
+
+Or preview through Arka:
+
+```bash
+arka deploy --platform railway --json
+arka deploy --platform railway --yes
+```
+
+## Required variables
+
+Set these in Railway Variables:
+
+```bash
+ARKA_HOSTED_MODE=1
+ARKA_REMOTE_PROFILE=coding
+ARKA_MCP_ENABLE_PERSONAL_SKILLS=0
+REMOTE_HOST=0.0.0.0
+REMOTE_TOKEN=<long-random-token>
+```
+
+Generate a token locally:
+
+```bash
+python - <<'PY'
+import secrets
+print(secrets.token_urlsafe(32))
+PY
+```
+
+Optional provider/integration keys:
+
+```bash
+OPENAI_API_KEY=...
+OPENROUTER_API_KEY=...
+GITHUB_TOKEN=...
+```
+
+## Call the hosted API
+
+```bash
+curl -sS "$RAILWAY_URL/v1/health"
+
+curl -sS "$RAILWAY_URL/v1/agent" \
+  -H "Authorization: Bearer $REMOTE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"text":"check repo health","remote_speak":false}'
+```
+
+Or use Arka's terminal client:
+
+```bash
+export ARKA_BACKEND_URL="$RAILWAY_URL"
+export ARKA_BACKEND_TOKEN="$REMOTE_TOKEN"
+
+arka backend status
+arka backend ask "hi"
+arka backend ask "init https://github.com/org/repo as a workspace"
+arka backend ask "check repo health"
+arka backend media ./recordings/bug.png
+```
+
+For private GitHub repos, set `GH_TOKEN` or `GITHUB_TOKEN` on Railway and
+redeploy. Local terminal users can authenticate GitHub with `gh auth login`.
+
+The coding profile only allows developer-safe skill heads such as `repo_health`,
+`lint_project`, `pr_check`, `review`, `route_audit`, `ci`, `github_actions`,
+`repo_context`, `repo_map`, `repo_graph`, `workspace`, `structure`, `security`,
+and plugin/skill inspection commands.
+
+If a request routes to a desktop/media/personal skill, the server blocks it and
+returns the allowed capability list.

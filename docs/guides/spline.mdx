@@ -7,6 +7,7 @@ icon: "shapes"
 Ask Arka for Spline integration help:
 
 ```bash
+arka mcp preset spline --apply
 arka spline web
 arka spline react
 arka spline responsive
@@ -19,3 +20,31 @@ are routed automatically. Guidance covers public scene embeds, React/Next.js,
 responsive viewports, performance budgets, and accessible HTML fallbacks. Keep
 important text and controls outside the canvas so the experience remains usable
 when WebGL is unavailable.
+
+## MCP default
+
+Spline MCP is Arka's preferred provider for Spline-specific work. When a
+`spline` MCP server is configured, `arka spline ...` asks that server first and
+then includes local fallback guidance. If the server is missing or unhealthy,
+Arka stays useful and prints the setup command instead of inventing Spline API
+behavior.
+
+```bash
+arka mcp preset spline
+arka mcp preset spline --apply
+arka mcp tools spline
+```
+
+The preset uses a local `spline-mcp` executable if it is on `PATH` and passes
+`SPLINE_API_KEY` / `SPLINE_WORKSPACE_ID` through the MCP environment when those
+values are set.
+
+If `arka mcp tools spline` reports `MCP stdio process exited (1)`, run the
+underlying command directly:
+
+```bash
+$(python -c 'import sys; from pathlib import Path; print(Path(sys.executable).with_name("spline-mcp"))') --help
+```
+
+If that prints `ModuleNotFoundError: spline_mcp`, reinstall the Spline MCP
+package inside the same virtual environment that runs Arka.

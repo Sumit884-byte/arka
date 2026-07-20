@@ -8,6 +8,9 @@
     "dark": "#4F46E5"
   },
   "favicon": "/favicon.svg",
+  "icons": {
+    "library": "fontawesome"
+  },
   "navigation": {
     "languages": [
       {
@@ -97,6 +100,7 @@
                   "guides/coding-tui",
                   "guides/github-actions",
                   "guides/testing",
+                  "guides/video-evidence",
                   "guides/structure",
                   "guides/workspace",
                   "guides/project-structure-prompt",
@@ -105,6 +109,7 @@
                   "guides/iterate-loop",
                   "guides/loop-engineering",
                   "guides/deploy",
+                  "guides/railway-coding-skills",
                   "guides/browser-check",
                   "guides/observability",
                   "guides/local-models",

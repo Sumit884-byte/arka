@@ -1,6 +1,7 @@
 ---
 title: "Prompt optimization"
-description: "Iteratively make prompts clearer, safer, and more reproducible."
+description: "Make prompts clearer, compact verbose input before LLM calls, and preserve exact user intent."
+keywords: ["prompt optimization", "prompt compaction", "llm", "token efficiency"]
 icon: "sliders"
 ---
 
@@ -14,3 +15,42 @@ missing-information behavior, verification, and output structure. It is an
 original implementation inspired by the evaluation-oriented workflow described
 by [Prompt Optimizer](https://github.com/linshenkx/prompt-optimizer), whose
 repository is licensed AGPL-3.0-only. No source code is copied or bundled.
+
+## Compact intermediate form
+
+For verbose natural-language inputs, Arka also converts the user text into a
+compact intermediate representation before sending it to the LLM. The original
+text is still used for symbolic routing, security checks, exact-command
+detection, and audit metadata.
+
+The compact form keeps:
+
+- high-signal requirements
+- a small amount of context
+- literal URLs, file paths, code blocks, JSON, and shell commands
+- anti-hallucination constraints
+
+It removes or compresses:
+
+- repeated sentences
+- low-signal filler
+- excess whitespace
+
+Configuration:
+
+```env
+ARKA_PROMPT_OPTIMIZE=1
+ARKA_PROMPT_COMPACT=1
+ARKA_PROMPT_COMPACT_MIN_CHARS=900
+ARKA_PROMPT_COMPACT_MAX_ITEMS=24
+```
+
+Opt out when exact wording must reach the model:
+
+```bash
+ARKA_PROMPT_COMPACT=0 arka ask "..."
+arka llm complete --system "You are Arka" --user "..." --no-compact
+```
+
+Compaction is skipped for routing prompts and already-compact `Task IR:` prompts
+to avoid recursive rewriting.
