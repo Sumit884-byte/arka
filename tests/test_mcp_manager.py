@@ -75,6 +75,22 @@ def test_nl_to_argv_routes():
     assert nl_to_argv("show mcp logs") == ["logs"]
     assert nl_to_argv("use baryhuang/mcp-threejs") == ["preset", "threejs"]
     assert nl_to_argv("configure mcp-server-threejs") == ["preset", "threejs", "--apply"]
+    assert nl_to_argv("make it use spline mcp by default") == ["preset", "spline", "--apply"]
+
+
+def test_spline_mcp_preset(mcp_config):
+    from arka.integrations.mcp_manager import configure_preset, format_preset, get_server_config
+
+    cfg, path = configure_preset("spline", apply=False)
+    assert cfg.name == "spline"
+    assert cfg.command.endswith("spline-mcp")
+    assert path is None
+    assert "arka mcp preset spline --apply" in format_preset("spline")
+
+    installed, path = configure_preset("spline", apply=True)
+    assert installed.name == "spline"
+    assert path == mcp_config
+    assert get_server_config("spline").command.endswith("spline-mcp")
 
 
 def test_mcp_logs_write_read_and_redact(tmp_path, monkeypatch):

@@ -7,6 +7,14 @@ import shlex
 from pathlib import Path
 
 
+def route_greeting(cmd: str) -> str | None:
+    try:
+        from arka.integrations.greeting import route_greeting as route_command
+    except ImportError:
+        return None
+    return route_command(cmd)
+
+
 def route_remind(cmd: str) -> str | None:
     try:
         from arka.integrations.remind import nl_to_argv
@@ -248,6 +256,15 @@ def route_describe_video(cmd: str) -> str | None:
     return "describe_video " + " ".join(shlex.quote(a) for a in argv)
 
 
+def route_video_evidence(cmd: str) -> str | None:
+    try:
+        from arka.agent.video_evidence import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd.strip())
+    return route or None
+
+
 def route_download(cmd: str) -> str | None:
     try:
         from arka.core.code_project import looks_like_repo_edit
@@ -291,6 +308,14 @@ def route_open_url(cmd: str) -> str | None:
         return None
     route = route_command(cmd.strip())
     return route or None
+
+
+def route_site_summary(cmd: str) -> str | None:
+    try:
+        from arka.integrations.site_summary import route_site_summary as route_command
+    except ImportError:
+        return None
+    return route_command(cmd.strip())
 
 
 def route_search_web(cmd: str) -> str | None:
@@ -1628,6 +1653,7 @@ def route_offline_extras(cmd: str) -> str | None:
         return not is_disabled(route.split()[0].replace("-", "_"))
 
     for fn in (
+        route_greeting,
         route_coding_tui,
         route_scene_3d,
         route_rig_3d,
@@ -1660,6 +1686,7 @@ def route_offline_extras(cmd: str) -> str | None:
         route_play,
         route_hallmark,
         route_vision_evidence,
+        route_video_evidence,
         route_url_app,
         route_visual_inspection,
         route_visual_diagnose,
@@ -1785,6 +1812,7 @@ def route_offline_extras(cmd: str) -> str | None:
         route_compose_slides,
         route_compose_video,
         route_timer,
+        route_site_summary,
         route_open_url,
         route_visual_inspection,
         route_search_web,

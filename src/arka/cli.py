@@ -114,6 +114,22 @@ def main(argv: list[str] | None = None) -> int:
         except SystemExit as exc:
             return int(exc.code or 0)
 
+    if args[0] in ("spline", "spline_guide", "spline-guide"):
+        from arka.agent.spline_guide import main as spline_main
+
+        try:
+            return spline_main(args[1:])
+        except SystemExit as exc:
+            return int(exc.code or 0)
+
+    if args[0] in ("video_evidence", "video-evidence", "video_bug", "video-bug"):
+        from arka.agent.video_evidence import main as video_evidence_main
+
+        try:
+            return video_evidence_main(args[1:])
+        except SystemExit as exc:
+            return int(exc.code or 0)
+
     if args[0] in ("text_to_3d", "text-to-3d", "text2_3d", "text23d"):
         from arka.agent.text_to_3d import main as text_to_3d_main
 
@@ -167,6 +183,21 @@ def main(argv: list[str] | None = None) -> int:
 
         return blocks_main(args[1:])
 
+    if args[0] in ("deploy", "deployment"):
+        from arka.agent.deploy import main as deploy_main
+
+        return deploy_main(args[1:])
+
+    if args[0] in ("backend", "remote"):
+        from arka.integrations.backend_client import main as backend_main
+
+        return backend_main(args[1:])
+
+    if args[0] in ("greeting", "hello", "hi"):
+        from arka.integrations.greeting import main as greeting_main
+
+        return greeting_main(args[1:] or [args[0]])
+
     if args[0] == "self":
         from arka.agent.self_improve import main as self_main
 
@@ -182,11 +213,16 @@ def main(argv: list[str] | None = None) -> int:
 
         return dev_tools_main(["ci", *args[1:]])
 
-    if args[0] in ("review", "route-audit", "route_audit", "skill"):
+    if args[0] in ("review", "route-audit", "route_audit", "skill", "dev-tools", "dev_tools"):
         from arka.agent.dev_tools import main as dev_tools_main
 
         if args[0] == "route-audit" or args[0] == "route_audit":
             return dev_tools_main(["route-audit", *args[1:]])
+        if args[0] in ("dev-tools", "dev_tools"):
+            rest = args[1:]
+            if rest and rest[0] in ("list", "tools"):
+                rest = rest[1:]
+            return dev_tools_main(["tools", *rest])
         return dev_tools_main([args[0], *args[1:]])
 
     if args[0] in ("design_from_screenshot", "design-screenshot", "designshot"):
@@ -198,6 +234,11 @@ def main(argv: list[str] | None = None) -> int:
         from arka.core.urlkit import main as urlkit_main
 
         return urlkit_main(args[1:])
+
+    if args[0] in ("site_summary", "site-summary", "website_summary", "website-summary"):
+        from arka.integrations.site_summary import main as site_summary_main
+
+        return site_summary_main(args[1:])
 
     if args[0] in ("lint_project", "lint-project", "lint_all"):
         from arka.agent.lint_project import main as lint_main

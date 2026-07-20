@@ -64,6 +64,7 @@ class Check:
     name: str
     command: list[str]
     category: str
+    detail: str = ""
 
 
 def _project_root(explicit: str | None = None) -> Path:
@@ -127,6 +128,15 @@ def detect_checks(root: Path) -> list[Check]:
         if code == 0 and "test" in out.lower():
             checks.append(Check("make test", ["make", "test"], "test"))
 
+    try:
+        from arka.agent.script_discovery import discover_script_checks as discover_scripts
+
+        for item in discover_scripts(root):
+            detail = "; ".join(item.reasons[:2]) if item.reasons else ""
+            checks.append(Check(item.name, list(item.command), item.category, detail))
+    except ImportError:
+        pass
+
     return checks
 
 
@@ -166,7 +176,11 @@ def scan_text(root: Path) -> str:
             continue
         lines.append(f"\n{cat.title()}:")
         for chk in group:
-            lines.append(f"  - {chk.name}: {' '.join(chk.command)}")
+            line = f"  - {chk.name}: {' '.join(chk.command)}"
+            if chk.detail:
+                line += f"  ({chk.detail})"
+            lines.append(line)
+
     lines.append("\nRun checks: repo_health run")
     return "\n".join(lines)
 
@@ -184,6 +198,7 @@ def scan_payload(root: Path | str | None = None) -> dict:
                 "name": chk.name,
                 "command": list(chk.command),
                 "category": chk.category,
+                **({"detail": chk.detail} if chk.detail else {}),
             }
             for chk in checks
         ],

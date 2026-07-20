@@ -4,7 +4,7 @@
 
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
-[![PyPI](https://img.shields.io/badge/PyPI-coming%20soon-lightgrey)](https://pypi.org/project/arka-agent/)
+[![PyPI](https://img.shields.io/pypi/v/arka-agent.svg)](https://pypi.org/project/arka-agent/)
 [![Docs](https://img.shields.io/badge/docs-Mintlify-6366F1)](https://arka-agent.mintlify.site)
 
 **Documentation:** [arka-agent.mintlify.site](https://arka-agent.mintlify.site)
@@ -30,7 +30,7 @@ Config paths: `~/.config/arka/` (Linux), `~/Library/Application Support/arka/` (
 
 ## Installation
 
-PyPI package name is **`arka-agent`**. Publishing is in progress — if `pipx install` returns 404, use the git install paths below.
+PyPI package name is **`arka-agent`** — published at [pypi.org/project/arka-agent](https://pypi.org/project/arka-agent/).
 
 **Recommended (standalone, no clone, no build):**
 
@@ -40,26 +40,18 @@ arka setup
 arka doctor
 ```
 
-If PyPI returns 404, install from GitHub without cloning or building locally:
-
-```bash
-pipx install "arka-agent[chat] @ git+https://github.com/Sumit884-byte/arka.git"
-arka setup
-arka doctor
-```
-
 Or with pip in a venv:
 
 ```bash
-pip install "arka-agent[chat]"
+python3 -m pip install "arka-agent[chat]"
 arka setup
 arka doctor
 ```
 
-When PyPI is live:
+**GitHub fallback** (if you need the latest commit before the next PyPI release):
 
 ```bash
-pipx install "arka-agent[chat]"
+pipx install "arka-agent[chat] @ git+https://github.com/Sumit884-byte/arka.git"
 arka setup
 arka doctor
 ```
@@ -112,7 +104,10 @@ There is no hosted demo instance or shared test account. The fastest path to eva
    arka council "should I learn Rust?"
    arka quiz python
    arka coding-tui .
+   arka repo_health scan
    ```
+
+   Inside the coding TUI, `/test scripts` runs verification scripts discovered under `scripts/` (no hardcoded list — Arka inspects filenames, docstrings, argparse, and `test_*` functions). Use `/test` for pytest and `repo_health scan` to see why each script matched.
 
 5. **Try MCP in Cursor** — after install, `arka mcp doctor` then `arka mcp install`; merge the printed snippet into **Cursor Settings → MCP** and restart Cursor.
 

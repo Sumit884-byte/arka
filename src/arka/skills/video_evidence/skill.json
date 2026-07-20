@@ -1,0 +1,19 @@
+{
+  "name": "video_evidence",
+  "description": "Convert developer video recordings into architecture docs, PR reproduction context, or Jira-ready bug tickets.",
+  "triggers": [
+    "video bug report to jira ticket",
+    "screen recording reproduction steps",
+    "architecture meeting video to docs",
+    "whiteboard recording to code stubs",
+    "loom bug report summary",
+    "jam video bug ticket"
+  ],
+  "type": "python",
+  "entry": "arka.agent.video_evidence",
+  "permissions": ["read", "write"],
+  "metadata": {
+    "outputs": ["markdown", "json"],
+    "uses": ["describe_video", "ffmpeg", "vision backend when available"]
+  }
+}

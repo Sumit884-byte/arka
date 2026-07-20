@@ -65,6 +65,10 @@ class OpenUrlParseTests(unittest.TestCase):
         self.assertIsNone(parse_open("open finance"))
         self.assertIsNone(parse_open("help"))
         self.assertIsNone(parse_open("open help"))
+        self.assertIsNone(parse_open("hi"))
+        self.assertIsNone(parse_open("hello"))
+        self.assertIsNone(parse_open("good morning"))
+        self.assertIsNone(parse_open("thanks"))
 
     def test_open_full_url(self) -> None:
         self.assertTrue(wants_open_url("open https://news.ycombinator.com"))
@@ -81,6 +85,8 @@ class OpenUrlRoutingTests(unittest.TestCase):
     def test_wants_open_url(self) -> None:
         self.assertTrue(wants_open_url("open youtube"))
         self.assertTrue(wants_open_url("open google in browser"))
+        self.assertFalse(wants_open_url("hi"))
+        self.assertFalse(wants_open_url("hello"))
         self.assertFalse(wants_open_url("play lofi on youtube"))
 
     def test_route_command(self) -> None:
@@ -111,6 +117,11 @@ class OpenUrlRoutingTests(unittest.TestCase):
 
     def test_play_still_not_open(self) -> None:
         self.assertIsNone(route_open_url("play lofi on youtube"))
+
+    def test_greetings_are_not_open_url(self) -> None:
+        self.assertIsNone(route_open_url("hi"))
+        self.assertIsNone(route_open_url("hello"))
+        self.assertFalse((route_offline_extras("hi") or "").startswith("open_url "))
 
     def test_router_symbolic_only(self) -> None:
         phrase = "open github.com"

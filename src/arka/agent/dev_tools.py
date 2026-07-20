@@ -41,6 +41,65 @@ class Gate:
     command: list[str]
 
 
+@dataclass(frozen=True)
+class DeveloperTool:
+    name: str
+    category: str
+    commands: tuple[str, ...]
+    why: str
+    trigger: str
+
+
+DEVELOPER_TOOLS: tuple[DeveloperTool, ...] = (
+    DeveloperTool("Postman", "API Testing", ("postman",), "Build, organize, and run API requests/collections.", "arka api tools"),
+    DeveloperTool("Insomnia", "API Testing", ("insomnia",), "Lightweight API client for REST, GraphQL, and environments.", "arka api tools"),
+    DeveloperTool("Chrome DevTools", "Debugging/Browser Tools", ("google-chrome", "chrome", "chromium"), "Inspect browser runtime, network, console, Lighthouse, and performance traces.", "arka browser debug tools"),
+    DeveloperTool("Firefox Developer Edition", "Debugging/Browser Tools", ("firefox", "firefox-developer-edition"), "Cross-browser debugging with strong CSS/layout tooling.", "arka browser debug tools"),
+    DeveloperTool("Docker", "DevOps Tools", ("docker",), "Run services, local dependencies, containers, and reproducible dev environments.", "arka devops tools"),
+    DeveloperTool("Kubernetes", "DevOps Tools", ("kubectl",), "Inspect and operate cloud-native deployments and clusters.", "arka devops tools"),
+    DeveloperTool("GitHub Actions", "DevOps Tools", ("gh",), "Inspect CI runs and workflow failures from the terminal.", "arka github actions"),
+    DeveloperTool("Terraform", "DevOps Tools", ("terraform",), "Plan and manage infrastructure-as-code changes.", "arka devops tools"),
+    DeveloperTool("Prometheus", "DevOps Tools", ("prometheus", "promtool"), "Validate and reason about metrics, rules, and monitoring setup.", "arka observability tools"),
+    DeveloperTool("Jenkins", "DevOps Tools", ("jenkins",), "Interact with legacy or enterprise CI/CD pipelines when configured.", "arka devops tools"),
+)
+
+
+def developer_tool_catalog() -> list[dict[str, str | bool | list[str]]]:
+    rows: list[dict[str, str | bool | list[str]]] = []
+    for tool in DEVELOPER_TOOLS:
+        found = next((cmd for cmd in tool.commands if shutil.which(cmd)), "")
+        rows.append(
+            {
+                "name": tool.name,
+                "category": tool.category,
+                "commands": list(tool.commands),
+                "installed": bool(found),
+                "detected_command": found,
+                "why": tool.why,
+                "trigger": tool.trigger,
+            }
+        )
+    return rows
+
+
+def developer_tools_text() -> str:
+    rows = developer_tool_catalog()
+    lines = ["Arka developer-tool catalog", ""]
+    current_category = ""
+    for row in rows:
+        category = str(row["category"])
+        if category != current_category:
+            current_category = category
+            lines.extend([category, "-" * len(category)])
+        mark = "✓" if row["installed"] else "○"
+        detected = f" via `{row['detected_command']}`" if row["detected_command"] else ""
+        lines.append(f"{mark} {row['name']}{detected} — {row['why']}")
+        lines.append(f"  Trigger: {row['trigger']}")
+    lines.append("")
+    lines.append("Tip: use `arka dev-tools doctor --json` for scripts or dashboards.")
+    return "\n".join(lines)
+
+
 def ci_gates(*, full: bool = False, changed: list[str] | None = None) -> list[Gate]:
     py = _python()
     changed = [path for path in (changed or []) if path.endswith(".py")]
@@ -360,6 +419,8 @@ def route_command(text: str) -> str:
         return "security"
     if re.search(r"(?i)\b(?:developer|dev|repo|project)\s+(?:doctor|preflight|setup\s+check)\b|\b(?:check|run)\s+(?:the\s+)?(?:developer|dev)\s+setup\b|\bdoctor\s+(?:this\s+)?repo\b", low):
         return "dev_doctor"
+    if re.search(r"(?i)\b(?:api\s+testing|postman|insomnia|browser\s+debug|chrome\s+devtools|firefox\s+developer|devops\s+tools?|docker|kubernetes|kubectl|terraform|prometheus|jenkins)\b", low):
+        return "dev_tools list"
     if re.search(r"(?i)\b(?:install|setup|enable)\b.*\b(?:arka\s+)?(?:pre[- ]commit|git\s+hooks?)\b", low):
         return "hooks install"
     if re.search(r"(?i)\b(?:restore|undo|remove)\b.*\b(?:arka\s+)?(?:pre[- ]commit|git\s+hooks?)\b", low):
@@ -419,12 +480,17 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         "pytest": shutil.which("pytest") is not None or importlib.util.find_spec("pytest") is not None,
         "route_parity": "missing" not in parity.lower() and "gap" not in parity.lower(),
     }
+    tool_catalog = developer_tool_catalog()
+    optional_tools = {str(row["name"]): bool(row["installed"]) for row in tool_catalog}
     if args.json:
-        print(json.dumps({"path": str(root), "checks": checks, "ok": all(checks.values())}, indent=2))
+        print(json.dumps({"path": str(root), "checks": checks, "developer_tools": tool_catalog, "ok": all(checks.values())}, indent=2))
     else:
         print(f"Arka developer doctor: {root}")
         for name, ok in checks.items():
             print(f"{'✓' if ok else '✗'} {name}")
+        print("\nOptional developer tools:")
+        for name, ok in optional_tools.items():
+            print(f"{'✓' if ok else '○'} {name}")
         if not checks["ci_workflow"]:
             print("Next: arka github-actions new .")
         if checks["ci_workflow"]:
@@ -432,6 +498,15 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         if not checks["route_parity"]:
             print("Next: arka route audit")
     return 0 if all(checks.values()) else 1
+
+
+def cmd_tools(args: argparse.Namespace) -> int:
+    rows = developer_tool_catalog()
+    if getattr(args, "json", False):
+        print(json.dumps({"tools": rows}, indent=2))
+    else:
+        print(developer_tools_text())
+    return 0
 
 
 def cmd_skill_new(args: argparse.Namespace) -> int:
@@ -555,6 +630,10 @@ def main(argv: list[str] | None = None) -> int:
     p_doctor.add_argument("--json", action="store_true")
     p_doctor.add_argument("path", nargs="?", default=None)
     p_doctor.set_defaults(func=cmd_doctor)
+
+    p_tools = sub.add_parser("tools", help="List supported external developer tools")
+    p_tools.add_argument("--json", action="store_true")
+    p_tools.set_defaults(func=cmd_tools)
 
     p_skill = sub.add_parser("skill", help="Skill scaffolding commands")
     skill_sub = p_skill.add_subparsers(dest="skill_cmd")

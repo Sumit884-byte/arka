@@ -133,22 +133,17 @@ def llm_complete(
     skill: str | None = None,
     skip_security: bool = False,
     chunked: bool | None = None,
+    compact: bool | None = None,
 ) -> str:
     """Complete a prompt, optionally chunking large input and merging results."""
+    if compact is None:
+        import os
+
+        compact = os.environ.get("ARKA_PROMPT_COMPACT", "1").lower() in {"1", "true", "yes", "on"}
     if chunked is None:
         import os
 
         chunked = os.environ.get("ARKA_PROMPT_CHUNKING", "0").lower() in {"1", "true", "yes", "on"}
-    if not chunked:
-        return _llm_complete_once(system, user, temperature, task=task, skill=skill, skip_security=skip_security)
-    import os
-    from arka.llm.chunking import complete_chunked
-
-    try:
-        limit = int(os.environ.get("ARKA_PROMPT_CHUNK_SIZE", "12000"))
-    except ValueError:
-        limit = 12000
-    # Apply security to the original request once; chunk calls use the already checked text.
     if not skip_security:
         try:
             from arka.core.security import apply_llm_security
@@ -159,6 +154,42 @@ def llm_complete(
             skip_security = True
         except ImportError:
             pass
+    if compact:
+        try:
+            from arka.llm.prompt_compact import compact_user_prompt
+
+            result = compact_user_prompt(user, task=task)
+            if result.changed:
+                user = result.compact
+                try:
+                    from arka.telemetry import span
+
+                    with span(
+                        "arka.llm.prompt_compact",
+                        attributes={
+                            "arka.task": task or "default",
+                            "arka.skill": skill or "",
+                            "arka.prompt.original_chars": len(result.original),
+                            "arka.prompt.compact_chars": len(result.compact),
+                            "arka.prompt.compact_transformations": ",".join(result.transformations),
+                        },
+                    ):
+                        pass
+                except ImportError:
+                    pass
+        except ImportError:
+            pass
+    if not chunked:
+        return _llm_complete_once(system, user, temperature, task=task, skill=skill, skip_security=skip_security)
+    import os
+    from arka.llm.chunking import complete_chunked
+
+    try:
+        limit = int(os.environ.get("ARKA_PROMPT_CHUNK_SIZE", "12000"))
+    except ValueError:
+        limit = 12000
+    # Security has already run on the original request; chunk calls use the
+    # checked and optionally compacted intermediate form.
     return complete_chunked(
         lambda s, u: _llm_complete_once(s, u, temperature, task=task, skill=skill, skip_security=skip_security),
         system,
@@ -361,6 +392,7 @@ def cmd_complete(args: argparse.Namespace) -> int:
         args.temperature,
         task=args.task or None,
         skill=getattr(args, "skill", None) or None,
+        compact=not getattr(args, "no_compact", False),
     )
     if not text:
         err = llm_last_error()
@@ -381,6 +413,15 @@ def cmd_stream(args: argparse.Namespace) -> int:
                 print(blocked, end="", flush=True)
                 return 0
             args.system, args.user = system, user
+        except ImportError:
+            pass
+    if not getattr(args, "no_compact", False):
+        try:
+            from arka.llm.prompt_compact import compact_user_prompt
+
+            compacted = compact_user_prompt(args.user, task=args.task or None)
+            if compacted.changed:
+                args.user = compacted.compact
         except ImportError:
             pass
     got = False
@@ -622,6 +663,7 @@ def main() -> int:
     p_complete.add_argument("--temperature", "-t", type=float, default=0.2)
     p_complete.add_argument("--task", help="Task profile: summarize|route|chat|research|agent|pdf|predictions")
     p_complete.add_argument("--skill", help="Skill name for per-skill model selection (e.g. web_answer)")
+    p_complete.add_argument("--no-compact", action="store_true", help="send the exact user prompt to the LLM")
     p_complete.set_defaults(func=cmd_complete)
 
     p_stream = sub.add_parser("stream", help="Stream system + user completion (stdout deltas)")
@@ -630,6 +672,7 @@ def main() -> int:
     p_stream.add_argument("--temperature", "-t", type=float, default=0.2)
     p_stream.add_argument("--task", help="Task profile: summarize|route|chat|research|agent|pdf|predictions")
     p_stream.add_argument("--skill", help="Skill name for per-skill model selection")
+    p_stream.add_argument("--no-compact", action="store_true", help="send the exact user prompt to the LLM")
     p_stream.add_argument("--skip-security", action="store_true", help=argparse.SUPPRESS)
     p_stream.set_defaults(func=cmd_stream, skip_security=False)
 

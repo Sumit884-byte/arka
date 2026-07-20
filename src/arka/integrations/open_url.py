@@ -45,7 +45,23 @@ _BROWSER_SUFFIX = re.compile(r"(?i)\s+in\s+(?:the\s+|my\s+)?(?:default\s+)?brows
 _KNOWN_CMDS = frozenset({"parse", "open"})
 
 # Bare tokens that are CLI/meta commands, not site names (avoid help.com).
-_RESERVED_OPEN_TARGETS = frozenset({"help", "skills", "?"})
+_RESERVED_OPEN_TARGETS = frozenset(
+    {
+        "help",
+        "skills",
+        "?",
+        "hi",
+        "hello",
+        "hey",
+        "yo",
+        "namaste",
+        "thanks",
+        "thankyou",
+    }
+)
+_GREETING_RE = re.compile(
+    r"(?i)^(?:hi|hello|hey|yo|namaste|thanks|thank\s+you|good\s+(?:morning|afternoon|evening|night))[!.\\s]*$"
+)
 
 # Reserved for other skills — not browser URL opens (first token after open only).
 _RESERVED_OPEN_FIRST = re.compile(
@@ -147,6 +163,8 @@ def wants_open_url(text: str) -> bool:
     clean = (text or "").strip()
     if not clean:
         return False
+    if _GREETING_RE.match(clean):
+        return False
     if is_play_youtube_intent(clean):
         return False
     if _OPEN_URL_PREFIX.search(clean):
@@ -169,6 +187,8 @@ def parse_open(text: str) -> str | None:
         return None
 
     lower = t.lower()
+    if _GREETING_RE.match(t):
+        return None
     if is_play_youtube_intent(t):
         return None
 
@@ -203,13 +223,16 @@ def parse_open(text: str) -> str | None:
 
     # Positional after open_url/open/browse command.
     parts = shlex.split(t, posix=True)
+    had_open_command = False
     while parts and parts[0].lower() in _KNOWN_CMDS | {"open_url", "open_urls", "browse"}:
+        had_open_command = True
         parts = parts[1:]
     if len(parts) == 1:
         target = parts[0]
         if _looks_like_urlish_target(target):
             return build_url(target)
-        return build_url(target)
+        if had_open_command and _normalize_token(target) in SITE_ALIASES:
+            return build_url(target)
 
     return None
 

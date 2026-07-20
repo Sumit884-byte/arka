@@ -15,3 +15,10 @@ def test_backend_detection_and_command(tmp_path) -> None:
 def test_free_host_commands(tmp_path) -> None:
     assert deployment_command(tmp_path, "huggingface") == ["git", "push", "hf", "main"]
     assert deployment_command(tmp_path, "cloudflare") == ["wrangler", "deploy"]
+
+
+def test_cli_deploy_direct_command_does_not_fall_through_to_fish(capsys) -> None:
+    from arka import cli
+
+    assert cli.main(["deploy", "--platform", "railway", "--json"]) == 0
+    assert '"platform": "railway"' in capsys.readouterr().out

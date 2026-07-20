@@ -1993,7 +1993,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         bookmarks repo_health repo_context repo_map generate_data data_gen data_ask ask_data query_data analyze_data view_data view_csv show_csv docker_status clipboard_history jsonkit heartbeat mcp agent_hub gemini_cli harvard_ark persona elon talk_to_elon elon_chat \
         arka_ask semantic_memory supermemory speak_research voice_session handoff_notify remind routines predictions stock \
         rag_setup rag_status voice_agent wake_control \
-        agent_ask web_answer deep_web_answer web_essay platform_howto interesting_fact calc chat_reset set_location files_preference_help google \
+        greeting agent_ask web_answer deep_web_answer web_essay platform_howto interesting_fact calc chat_reset set_location files_preference_help google \
         select_model model_select best_model model_advisor \
         free_credits free_models free-models free_models_list \
         personalize \
@@ -11414,6 +11414,10 @@ end
 
 function _agent_route_general_chat --description "Pick web_answer vs agent_ask for conversational input (internal)"
     set -l cmd "$argv[1]"
+    if string match -qr '(?i)^(hi|hello|hey|yo|namaste|thanks|thank you|good morning|good afternoon|good evening|good night)[!.\s]*$' "$cmd"
+        echo "greeting $cmd"
+        return
+    end
     if _agent_is_interesting_fact_request "$cmd"
         echo "interesting_fact $cmd"
         return
@@ -11430,6 +11434,16 @@ function _agent_route_general_chat --description "Pick web_answer vs agent_ask f
         echo "agent_ask $cmd"
     else
         echo "web_answer $cmd"
+    end
+end
+
+function greeting --description "Reply to short greetings without an LLM call"
+    set -l text (string join " " -- $argv)
+    set -l lower (string lower (string trim -- "$text"))
+    if string match -qr '^(thanks|thank you)' "$lower"
+        echo "You’re welcome — what should Arka help with next?"
+    else
+        echo "Hi — I’m Arka. Ask me to inspect a repo, run tests, summarize a site, or use any Arka skill."
     end
 end
 
@@ -18033,6 +18047,11 @@ function agent --description "Run commands safely: executes safe commands automa
     end
     
     set -l clean_cmd (string lower "$cmd")
+
+    if string match -qr '(?i)^(hi|hello|hey|yo|namaste|thanks|thank you|good morning|good afternoon|good evening|good night)[!.\s]*$' "$cmd"
+        greeting $cmd
+        return $status
+    end
 
     if string match -qr '(?i)^speak\s+' "$clean_cmd"
         set cmd (string replace -r -i '^speak\s+' '' "$cmd")

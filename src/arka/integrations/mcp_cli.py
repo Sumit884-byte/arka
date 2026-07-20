@@ -262,7 +262,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("status", help="Connection health for all servers")
 
     preset_p = sub.add_parser("preset", help="Preview/apply a built-in MCP server preset")
-    preset_p.add_argument("name", help="Preset name, e.g. threejs")
+    preset_p.add_argument("name", help="Preset name, e.g. threejs or spline")
     preset_p.add_argument("--apply", action="store_true", help="Write this preset to Arka's MCP config")
 
     sub.add_parser("self-tools", help="List Arka's native MCP tools (when serving as MCP server)")
@@ -345,6 +345,7 @@ Usage:
   arka mcp status                            Connection health
   arka mcp logs [-n 50] [--json]             Show recent MCP client/server events
   arka mcp preset threejs [--apply]          Configure baryhuang/mcp-threejs
+  arka mcp preset spline [--apply]           Configure Spline MCP as default Spline provider
   arka mcp self-tools                        List Arka's 37 native MCP tools
   arka mcp serve                             Start Arka as stdio MCP server
   arka mcp install [--agent cursor|claude]   Print client mcp.json snippet
@@ -359,6 +360,7 @@ Examples:
   arka mcp tools signoz
   arka mcp call signoz signoz_ask --args '{"question":"error rate last hour"}'
   arka mcp preset threejs --apply
+  arka mcp preset spline --apply
 
 Fish / NL:
   mcp list

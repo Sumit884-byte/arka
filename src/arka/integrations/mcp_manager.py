@@ -7,7 +7,9 @@ import os
 import queue
 import re
 import shlex
+import shutil
 import subprocess
+import sys
 import threading
 import time
 from dataclasses import dataclass, field
@@ -39,6 +41,14 @@ THREEJS_MCP_ALIASES = frozenset({
     "mcp-server-threejs",
     "baryhuang/mcp-threejs",
     "buryhuang/mcp-server-threejs",
+})
+SPLINE_MCP_SERVER_NAME = "spline"
+SPLINE_MCP_ALIASES = frozenset({
+    "spline",
+    "spline-mcp",
+    "spline mcp",
+    "splinetool",
+    "spline-tool",
 })
 
 
@@ -213,12 +223,32 @@ def threejs_mcp_config() -> McpServerConfig:
     )
 
 
+def spline_mcp_config() -> McpServerConfig:
+    """Return the recommended local stdio config for a Spline MCP server."""
+    command = shutil.which("spline-mcp")
+    if not command:
+        candidate = Path(sys.executable).with_name("spline-mcp")
+        command = str(candidate) if candidate.exists() else "spline-mcp"
+    return McpServerConfig(
+        name=SPLINE_MCP_SERVER_NAME,
+        command=command,
+        args=[],
+        env={
+            "SPLINE_API_KEY": "${env:SPLINE_API_KEY}",
+            "SPLINE_WORKSPACE_ID": "${env:SPLINE_WORKSPACE_ID}",
+        },
+    )
+
+
 def configure_preset(name: str, *, apply: bool = False) -> tuple[McpServerConfig, Path | None]:
     """Preview or install a built-in MCP server preset."""
     key = " ".join((name or "").lower().split()).strip()
-    if key not in THREEJS_MCP_ALIASES:
+    if key in THREEJS_MCP_ALIASES:
+        cfg = threejs_mcp_config()
+    elif key in SPLINE_MCP_ALIASES:
+        cfg = spline_mcp_config()
+    else:
         raise KeyError(f"Unknown MCP preset: {name}")
-    cfg = threejs_mcp_config()
     if not apply:
         return cfg, None
     installed = add_server(
@@ -233,19 +263,31 @@ def configure_preset(name: str, *, apply: bool = False) -> tuple[McpServerConfig
 def format_preset(name: str, *, apply: bool = False) -> str:
     cfg, path = configure_preset(name, apply=apply)
     payload = {cfg.name: cfg.to_entry()}
+    if cfg.name == THREEJS_MCP_SERVER_NAME:
+        source = "https://github.com/baryhuang/mcp-threejs"
+        requires = "docker"
+        extra = [f"image\t{THREEJS_MCP_IMAGE}", "optional_env\tSKETCHFAB_ACCESS_TOKEN, SKETCHFAB_REFRESH_TOKEN, SKETCHFAB_CLIENT_ID, SKETCHFAB_CLIENT_SECRET"]
+        next_cmd = "arka mcp preset threejs --apply"
+    else:
+        source = "local spline-mcp executable or compatible Spline MCP server"
+        requires = "spline-mcp on PATH"
+        extra = [
+            "optional_env\tSPLINE_API_KEY, SPLINE_WORKSPACE_ID",
+            "install_hint\tIf the wrapper exists but fails with ModuleNotFoundError, reinstall the Spline MCP package in the same venv.",
+        ]
+        next_cmd = "arka mcp preset spline --apply"
     lines = [
         f"preset\t{cfg.name}",
-        "source\thttps://github.com/baryhuang/mcp-threejs",
-        f"image\t{THREEJS_MCP_IMAGE}",
+        f"source\t{source}",
         f"mode\t{'applied' if apply else 'preview'}",
-        "requires\tdocker",
-        "optional_env\tSKETCHFAB_ACCESS_TOKEN, SKETCHFAB_REFRESH_TOKEN, SKETCHFAB_CLIENT_ID, SKETCHFAB_CLIENT_SECRET",
+        f"requires\t{requires}",
+        *extra,
         "json\t" + json.dumps({"mcpServers": payload}, sort_keys=True),
     ]
     if path:
         lines.append(f"config\t{path}")
     else:
-        lines.append("next\tarka mcp preset threejs --apply")
+        lines.append(f"next\t{next_cmd}")
     return "\n".join(lines)
 
 
@@ -607,6 +649,10 @@ def nl_to_argv(cmd: str) -> list[str] | None:
     if re.search(r"(?i)\b(?:use|add|install|configure|setup|set\s+up|enable)\b.*\b(?:mcp[- ]?threejs|three\.js\s+mcp|threejs\s+mcp|mcp-server-threejs|baryhuang/mcp-threejs|buryhuang/mcp-server-threejs)\b", clean):
         apply = bool(re.search(r"(?i)\b(?:apply|install|enable|configure|setup|set\s+up)\b", clean))
         return ["preset", "threejs", "--apply"] if apply else ["preset", "threejs"]
+
+    if re.search(r"(?i)\b(?:use|add|install|configure|setup|set\s+up|enable|default)\b.*\b(?:spline[- ]?mcp|spline\s+mcp|spline)\b", clean):
+        apply = bool(re.search(r"(?i)\b(?:apply|install|enable|configure|setup|set\s+up|default)\b", clean))
+        return ["preset", "spline", "--apply"] if apply else ["preset", "spline"]
 
     if re.search(r"(?i)\bmcp\b.*\blogs?\b|\blogs?\b.*\bmcp\b", clean):
         return ["logs"]

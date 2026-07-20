@@ -156,6 +156,10 @@ def run_skill(skill_line: str) -> int:
             code = run_chat_ask(" ".join(rest))
         elif head == "deep_web_answer":
             code = run_chat_ask(" ".join(rest), deep=True)
+        elif head in ("greeting", "hello", "hi"):
+            from arka.integrations.greeting import main as greeting_main
+
+            code = greeting_main(rest or [head])
         elif head == "calc":
             code = run_chat_calc(" ".join(rest))
         elif head in ("observability", "observability_doctor", "signoz_doctor"):
@@ -203,6 +207,10 @@ def run_skill(skill_line: str) -> int:
                 code = 0
             else:
                 code = run_script("arka_open_url.py", rest)
+        elif head in ("site_summary", "site-summary", "website_summary", "website-summary"):
+            from arka.integrations.site_summary import main as site_summary_main
+
+            code = site_summary_main(rest)
         elif head in ("select_model", "model_select", "best_model", "model_advisor"):
             from arka.llm.model_advisor import main as model_advisor_main
 
@@ -380,6 +388,10 @@ def run_skill(skill_line: str) -> int:
         elif head in ("describe_video", "describe-video", "video_describe", "video-description"):
             from arka.vision.video import main as video_main
             code = video_main(rest)
+        elif head in ("video_evidence", "video-evidence", "video_bug", "video-bug"):
+            from arka.agent.video_evidence import main as video_evidence_main
+
+            code = video_evidence_main(rest)
         elif head in ("url_app", "url-app", "app_design_review"):
             from arka.agent.url_app_analyzer import main as url_app_main
             code = url_app_main(rest)
@@ -494,10 +506,13 @@ def run_skill(skill_line: str) -> int:
                     yes=yes,
                     apply=apply,
                 )
-        elif head in ("ci", "review", "route_audit", "route-audit", "skill", "security", "doctor", "dev_doctor", "dev-doctor", "hooks"):
+        elif head in ("ci", "review", "route_audit", "route-audit", "skill", "security", "doctor", "dev_doctor", "dev-doctor", "dev_tools", "dev-tools", "hooks"):
             from arka.agent.dev_tools import main as dev_tools_main
 
             sub_argv = ["doctor" if head in ("dev_doctor", "dev-doctor") else head, *rest]
+            if head in ("dev_tools", "dev-tools"):
+                dev_rest = rest[1:] if rest and rest[0] in ("list", "tools") else rest
+                sub_argv = ["tools", *dev_rest]
             if head == "route-audit":
                 sub_argv[0] = "route-audit"
             code = dev_tools_main(sub_argv)

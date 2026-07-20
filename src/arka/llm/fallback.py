@@ -2249,6 +2249,14 @@ def llm_complete(
     from arka.llm.thinking import instruction
     system = f"{system}\n\nThinking preference: {instruction()}"
     resolved_task, resolved_skill = resolve_llm_context(task=task, skill=skill)
+    try:
+        from arka.llm.prompt_compact import compact_user_prompt
+
+        compacted = compact_user_prompt(user, task=resolved_task)
+        if compacted.changed:
+            user = compacted.compact
+    except ImportError:
+        pass
     if task or skill or chain:
         engine = LlmFallbackEngine(
             task=resolved_task,
@@ -2271,6 +2279,14 @@ def llm_stream_complete(
     chain: list[tuple[str, str]] | None = None,
 ) -> Iterator[str]:
     resolved_task, resolved_skill = resolve_llm_context(task=task, skill=skill)
+    try:
+        from arka.llm.prompt_compact import compact_user_prompt
+
+        compacted = compact_user_prompt(user, task=resolved_task)
+        if compacted.changed:
+            user = compacted.compact
+    except ImportError:
+        pass
     if task or skill or chain:
         engine = LlmFallbackEngine(
             task=resolved_task,

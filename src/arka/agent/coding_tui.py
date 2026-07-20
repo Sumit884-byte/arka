@@ -182,8 +182,14 @@ def _resolve_test_command(repo: Path, scope: str | None = None) -> list[str]:
     except ImportError:
         test_checks = []
 
-    if test_checks:
-        command = list(test_checks[0].command)
+    preferred = [
+        check
+        for check in test_checks
+        if not check.name.startswith("script:")
+    ] or test_checks
+
+    if preferred:
+        command = list(preferred[0].command)
         if len(command) >= 3 and command[0] == "python" and command[1] == "-m":
             command[0] = sys.executable
         if "pytest" in command and "--tb=line" not in command:
@@ -207,6 +213,48 @@ def _resolve_test_command(repo: Path, scope: str | None = None) -> list[str]:
         else:
             command.append(scope)
     return command
+
+
+def _is_scripts_scope(scope: str | None) -> bool:
+    if not scope:
+        return False
+    normalized = scope.strip().replace("\\", "/").rstrip("/").lower()
+    return normalized in {"scripts", "scripts/"}
+
+
+def _run_discovered_script_checks(repo: Path) -> int:
+    """Run verification scripts discovered under scripts/ (read-only)."""
+    from arka.agent.script_discovery import discover_script_checks
+
+    checks = discover_script_checks(repo)
+    if not checks:
+        print("No verification scripts discovered under scripts/.")
+        return 1
+
+    print(f"○ Verification scripts ({len(checks)} discovered)")
+    worst = 0
+    for check in checks:
+        detail = f" ({'; '.join(check.reasons[:2])})" if check.reasons else ""
+        print(f"\n▶ {check.name}{detail}")
+        print(f"  {' '.join(check.command)}")
+        proc = subprocess.run(check.command, cwd=repo, check=False, capture_output=True, text=True)
+        output = (proc.stdout or "") + (proc.stderr or "")
+        if proc.stdout:
+            end = "" if proc.stdout.endswith("\n") else "\n"
+            print(proc.stdout, end=end)
+        if proc.stderr:
+            end = "" if proc.stderr.endswith("\n") else "\n"
+            print(proc.stderr, end=end, file=sys.stderr)
+        if proc.returncode == 0:
+            print("  ✓ passed")
+        else:
+            print(f"  ✗ failed (exit {proc.returncode})")
+            worst = proc.returncode or 1
+    if worst == 0:
+        print("\n✓ All discovered verification scripts passed")
+    else:
+        print("\n✗ One or more verification scripts failed")
+    return worst
 
 
 def _auto_fix_once(
@@ -254,6 +302,9 @@ def _run_direct_tests(
     after_fix_attempt: bool = False,
 ) -> int:
     """Run tests directly without the goal agent (strict read-only /test)."""
+    if _is_scripts_scope(scope):
+        return _run_discovered_script_checks(repo)
+
     command = _resolve_test_command(repo, scope)
     if run_label:
         print(f"○ {run_label}")
@@ -370,7 +421,8 @@ def _expand_flexible_test_goal(goal: str, *, allow_fix: bool) -> str:
     if normalized in FLEXIBLE_TEST_GOALS:
         base = (
             "Run tests for this repository. Choose an appropriate read-only strategy: "
-            "full pytest suite, focused module tests, `arka ci --changed`, or a "
+            "full pytest suite, focused module tests, discovered scripts/ verification runners "
+            "(repo_health scan lists them with reasons), `arka ci --changed`, or a "
             "repo_health-detected runner. Report failures clearly."
         )
         if allow_fix:
@@ -1013,10 +1065,19 @@ def coding_tui_system_extra(root: Path, goal: str) -> str:
         goal,
     ):
         short_goal_hint = (
-            "- Flexible test goal: pick the best strategy (pytest, focused module, `arka ci --changed`, repo_health).\n"
+            "- Flexible test goal: pick the best strategy (pytest, focused module, "
+            "discovered scripts/ verification runners, `arka ci --changed`, repo_health).\n"
             "- Stay read-only unless the user passed --fix (one auto-fix pass runs after readonly failures by default).\n"
             "- Do not invoke creative skills (compose_3d, generate_image, model_to_image).\n"
         )
+        try:
+            from arka.agent.script_discovery import discovery_hint
+
+            script_hint = discovery_hint(root)
+            if script_hint:
+                short_goal_hint += script_hint + "\n"
+        except ImportError:
+            pass
     elif normalized == "ci":
         short_goal_hint = "- Short goal 'ci' means run `arka ci --changed` (read-only unless --fix).\n"
     elif normalized == "lint":
