@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+# No-op hook target.
+#
+# The Git hook symlink in .git/hooks points here. Keeping this file present
+# avoids archive/index tooling failures while preserving default Git behavior.
+exit 0

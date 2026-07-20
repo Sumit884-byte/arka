@@ -1,0 +1,16 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "python -m arka.integrations.remote_server serve"
+healthcheckPath = "/v1/health"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
+
+[variables]
+ARKA_HOSTED_MODE = "1"
+ARKA_REMOTE_PROFILE = "coding"
+ARKA_MCP_ENABLE_PERSONAL_SKILLS = "0"
+REMOTE_HOST = "0.0.0.0"
