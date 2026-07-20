@@ -62,9 +62,11 @@ The package name on PyPI is **`arka-agent`**. Publishing is handled by GitHub Ac
 ### First-time PyPI setup (maintainers)
 
 1. Register the project on [pypi.org](https://pypi.org/) (or claim `arka-agent` if reserved).
-2. Configure **trusted publishing** for this repository:
-   - PyPI → Account settings → Publishing → Add a new pending publisher
-   - Owner: `Sumit884-byte`, repository: `arka`, workflow: `publish.yml`, environment: `pypi`
+2. Configure **trusted publishing** on the PyPI project (after the first upload):
+   - Open [arka-agent → Publishing](https://pypi.org/manage/project/arka-agent/settings/publishing/)
+   - **Add a new publisher** → **GitHub**
+   - Owner: `Sumit884-byte`, repository name: `arka`, workflow name: `publish.yml`, environment name: `pypi`
+   - (Use *Pending publishers* under account settings only before the project exists on PyPI.)
 3. In GitHub: Settings → Environments → create **`pypi`** (no secrets required when using trusted publishing).
 
 ### Release checklist
