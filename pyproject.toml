@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arka-agent"
-version = "0.1.0"
+version = "0.1.1"
 description = "Cross-platform AI agent — chat, web answers, password vault, and skill routing"
 readme = "README.md"
 license = { text = "GPL-2.0-only" }
