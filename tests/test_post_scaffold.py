@@ -3,8 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import pytest
-
 from arka.agent import coding_tui
 from arka.agent.post_scaffold import (
     SCAFFOLD_3D_TEMPLATE,

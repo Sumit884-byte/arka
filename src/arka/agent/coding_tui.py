@@ -238,7 +238,6 @@ def _run_discovered_script_checks(repo: Path) -> int:
         print(f"\n▶ {check.name}{detail}")
         print(f"  {' '.join(check.command)}")
         proc = subprocess.run(check.command, cwd=repo, check=False, capture_output=True, text=True)
-        output = (proc.stdout or "") + (proc.stderr or "")
         if proc.stdout:
             end = "" if proc.stdout.endswith("\n") else "\n"
             print(proc.stdout, end=end)

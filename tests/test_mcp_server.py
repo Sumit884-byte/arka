@@ -182,7 +182,7 @@ def test_mcp_server_stdio_roundtrip():
     server = ArkaMcpServer(stdin=inp, stdout=out)
     response = server.process_line(inp.getvalue().strip())
     assert response is not None
-    assert len(response["result"]["tools"]) == 39
+    assert len(response["result"]["tools"]) == 38
 
 
 def test_install_config_snippet():
@@ -868,6 +868,7 @@ def test_handle_arka_spotify_search(monkeypatch):
     from arka.integrations import spotify as spotify_mod
     from arka.integrations.mcp_server import _handle_arka_spotify
 
+    monkeypatch.setenv("ARKA_MCP_ENABLE_PERSONAL_SKILLS", "1")
     monkeypatch.setattr(
         spotify_mod,
         "search_payload",
