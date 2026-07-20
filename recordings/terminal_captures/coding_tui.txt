@@ -1,0 +1,9 @@
+→ coding-tui .
+Arka coding TUI — ~/dev/arka
+Tip: /plan <goal> builds a reviewable plan; approve with y to execute immediately.
+Tip: /diff, /files <pattern>, /open <path> inspect the repo without leaving the TUI.
+Tip: /test [path] runs tests read-only and auto-fixes once on failure (--no-fix to skip).
+Tip: /ci runs fast gates; /review summarizes staged changes.
+Tip: plain text is shorthand for /plan — approve with y to execute immediately.
+Commands: /help, /status, /plan <goal>, /run <goal>, /test [path], /scaffold 3d, /history, /clear, /diff, /files <pattern>, /open <path>, /ci, /review, /queue, /quit. /queue add <goal> queues work; /queue list shows it; /queue run executes sequentially; /queue clear removes it. /test runs tests read-only, then one auto-fix pass on failure (--no-fix to skip). /run tests runs repository tests directly; use --fix to repair failures after the test output is known. /scaffold 3d writes a React + Three.js space scene and runs npm install (trusted template). Add --run to start the Vite dev server after install. Plain text is treated as a plan request; approve with y to execute immediately.
+arka (arka)>

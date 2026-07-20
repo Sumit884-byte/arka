@@ -207,7 +207,7 @@ class ModeExecuteTests(unittest.TestCase):
         from arka.router import Route
 
         set_mode("plan")
-        with mock.patch("arka.cli.route", return_value=Route("calc 2+2", source="offline")):
+        with mock.patch("arka.router.route", return_value=Route("calc 2+2", source="offline")):
             with mock.patch("arka.dispatch.run_skill") as run_skill:
                 code = _execute_request("calc 2+2")
         self.assertEqual(code, 0)
@@ -218,7 +218,7 @@ class ModeExecuteTests(unittest.TestCase):
 
         set_mode("plan")
         with mock.patch("arka.cli.has_full_fish_agent", return_value=True):
-            with mock.patch("arka.cli.delegate_to_fish") as delegate:
+            with mock.patch("arka.fish_bridge.delegate_to_fish") as delegate:
                 with mock.patch("arka.cli._execute_request", return_value=0) as execute:
                     code = main(["compose slides about kubernetes"])
         self.assertEqual(code, 0)

@@ -70,6 +70,14 @@ def run_skill(skill_line: str) -> int:
     if head in ("skills", "skill_settings"):
         from arka.core.skill_settings import main as skill_settings_main
         return skill_settings_main(rest)
+    if head == "help":
+        from arka.output import show_help
+
+        return show_help()
+    if head == "capabilities":
+        from arka.output import show_capabilities
+
+        return show_capabilities()
     if head in ("plugin", "plugins"):
         from arka.agent.skills import main as plugins_main
 

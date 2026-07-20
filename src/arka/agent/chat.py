@@ -834,6 +834,12 @@ def should_ground_location(query: str) -> bool:
 
 def ground_search_query(query: str) -> str:
     query = normalize_question(query)
+    try:
+        from arka.integrations.supermemory import enhance_definitional_search_query
+
+        query = enhance_definitional_search_query(query)
+    except ImportError:
+        pass
     if not should_ground_location(query):
         return query
     ctx = load_context()
@@ -1139,6 +1145,13 @@ def get_intent(prompt: str) -> tuple[str, str]:
         return "SEARCH", prompt
     if should_auto_search(prompt):
         return "SEARCH", prompt
+    try:
+        from arka.integrations.supermemory import is_definitional_query
+
+        if is_definitional_query(prompt):
+            return "SEARCH", prompt
+    except ImportError:
+        pass
     # Plain conversational phrases — skip LLM intent (avoids bogus CALC/SEARCH)
     if len(prompt.split()) >= 3:
         return "ANSWER", prompt
@@ -1427,8 +1440,15 @@ def scrape_search_results(
 
 
 def snippet_lookup(question: str) -> str:
+    lookup_q = question
+    try:
+        from arka.integrations.supermemory import enhance_definitional_search_query
+
+        lookup_q = enhance_definitional_search_query(question)
+    except ImportError:
+        pass
     params = urllib.parse.urlencode({
-        "q": question,
+        "q": lookup_q,
         "format": "json",
         "no_redirect": "1",
         "no_html": "1",
@@ -2155,7 +2175,15 @@ def answer_question(
             task="chat",
         )
     if not answer:
-        answer = "Could not generate an answer (check GEMINI_API_KEY, GROQ_API_KEY, or ollama serve)."
+        try:
+            from arka.llm.fallback import format_llm_failure, llm_last_error
+
+            err = llm_last_error()
+            answer = format_llm_failure(last_error=err) if err else (
+                "Could not generate an answer. Run `arka doctor` to check API keys and providers."
+            )
+        except ImportError:
+            answer = "Could not generate an answer. Run `arka doctor` to check API keys and providers."
 
     if list_n and answer:
         answer = re.sub(r"\s+Sources:\s*[-–].*$", "", answer, flags=re.I | re.S).strip()

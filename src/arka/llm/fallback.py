@@ -100,6 +100,7 @@ GEMINI_LIST_SKIP_RE = re.compile(
 GROQ_LIST_SKIP_RE = re.compile(r"(whisper|distil|guard|prompt)", re.I)
 
 OLLAMA_LIST_SKIP_RE = re.compile(r"(embed|bge-|nomic-embed|mxbai-embed)", re.I)
+OLLAMA_VISION_SKIP_RE = re.compile(r"(?i)(llava|moondream|bakllava|minicpm-v|\bvision\b)")
 
 DEFAULT_CHAIN: list[tuple[str, str]] = [
     *(( "gemini", mid) for mid in DEFAULT_GEMINI_MODELS),
@@ -196,6 +197,7 @@ class CompletionResult:
     model_id: str = ""
     error: str = ""
     attempts: int = 0
+    tried: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -338,6 +340,10 @@ def is_retryable_error(msg: str) -> bool:
             "invalid_api_key",
             "api_key_invalid",
             "connection refused",
+            "connection error",
+            "network error",
+            "failed to connect",
+            "connect timeout",
             "timed out",
             "timeout",
             "503",
@@ -1528,7 +1534,11 @@ def build_default_chain(*, task: str = "default", skill: str | None = None) -> l
     if _has_groq():
         for model_id in groq_model_ids():
             add("groq", model_id)
-    for model_id in ollama_model_ids():
+    ollama_models = ollama_model_ids()
+    if not non_text_task:
+        text_models = [m for m in ollama_models if not OLLAMA_VISION_SKIP_RE.search(m)]
+        ollama_models = text_models
+    for model_id in ollama_models:
         add("ollama", model_id)
 
     for spec in provider_specs():
@@ -1773,6 +1783,10 @@ def _looks_like_error(text: str) -> bool:
         x in low
         for x in (
             "could not generate",
+            "connection error",
+            "network error",
+            "failed to connect",
+            "connection refused",
             "resource_exhausted",
             "unauthorized",
             "permission denied",
@@ -1791,12 +1805,35 @@ def _looks_like_error(text: str) -> bool:
             "insufficient credits",
             "can only afford",
             "fewer max_tokens",
+            "empty response",
         )
     ):
         return True
     if re.search(r"\b401\b", stripped) or re.search(r"\b403\b", stripped):
         return True
     return False
+
+
+def format_llm_failure(*, tried: list[str] | None = None, last_error: str = "", attempts: int = 0) -> str:
+    """User-facing message when every provider/model in the chain failed."""
+    providers: list[str] = []
+    seen: set[str] = set()
+    for label in tried or []:
+        prov = label.split("/", 1)[0].split(" ", 1)[0].strip().lower()
+        if prov and prov not in seen:
+            seen.add(prov)
+            providers.append(prov)
+
+    lines = ["All configured LLM providers failed."]
+    if providers:
+        attempt_note = f" ({attempts} model attempt(s))" if attempts else ""
+        lines.append(f"Tried providers: {', '.join(providers)}{attempt_note}.")
+    elif attempts:
+        lines.append(f"Tried {attempts} model(s) with no successful response.")
+    if last_error:
+        lines.append(f"Last error: {last_error[:240]}")
+    lines.append("Run `arka doctor` to verify API keys and provider reachability.")
+    return "\n".join(lines)
 
 
 @contextmanager
@@ -2138,7 +2175,8 @@ class LlmFallbackEngine:
             _notify_total_exhaustion("All configured models/providers are exhausted. Check quotas or reset the fallback chain.")
         if last_error and verbose:
             _log_exhaustion_once(last_error, verbose=verbose)
-        return CompletionResult(error=last_error, attempts=attempts)
+        failure = format_llm_failure(tried=tried, last_error=last_error, attempts=attempts)
+        return CompletionResult(error=failure, attempts=attempts, tried=list(tried))
 
     def stream_complete(
         self, system: str, user: str, *, temperature: float = 0.2
@@ -2266,7 +2304,11 @@ def llm_complete(
     else:
         engine = _DEFAULT_ENGINE
     result = engine.complete(system, user, temperature=temperature)
-    return result.text
+    if result.text:
+        return result.text
+    if result.error:
+        return result.error
+    return ""
 
 
 def llm_stream_complete(

@@ -1,0 +1,44 @@
+command	~/dev/arka/venv-arka/bin/arka
+args	mcp serve
+tools_expected	38
+initialize	ok	{'name': 'arka', 'version': '0.1.0'}
+tools_list	ok	count=38
+tool	arka_ask
+tool	arka_remember
+tool	arka_recall
+tool	arka_skill
+tool	arka_capabilities
+tool	arka_route
+tool	arka_repo_map
+tool	arka_heartbeat
+tool	arka_sessions
+tool	arka_routines
+tool	arka_session_memory
+tool	arka_subagent
+tool	arka_project_rules
+tool	arka_webhook
+tool	arka_view_data
+tool	arka_clipboard
+tool	arka_remind
+tool	arka_bookmarks
+tool	arka_docker
+tool	arka_jsonkit
+tool	arka_timekit
+tool	arka_urlkit
+tool	arka_password
+tool	arka_textkit
+tool	arka_calendar
+tool	arka_platform
+tool	arka_personalize
+tool	arka_persona
+tool	arka_github
+tool	arka_price
+tool	arka_config
+tool	arka_sports
+tool	arka_qr
+tool	arka_currency
+tool	arka_disk
+tool	arka_repo_health
+tool	arka_agent_hub
+tool	arka_team_run
+summary	ok

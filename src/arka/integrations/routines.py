@@ -21,10 +21,26 @@ except ImportError:
     cache_dir = lambda: Path.home() / ".cache" / "fish-agent"  # noqa: E731
     fish_config = lambda: Path.home() / ".config" / "fish"  # noqa: E731
 
-CACHE = cache_dir()
-ROUTINE_FILE = CACHE / "routines.json"
-FISH_DIR = fish_config()
-LOG_FILE = CACHE / "arka_routines.log"
+_CACHE: Path | None = None
+
+
+def _cache_root() -> Path:
+    global _CACHE
+    if _CACHE is None:
+        _CACHE = cache_dir()
+    return _CACHE
+
+
+def _routine_file() -> Path:
+    return _cache_root() / "routines.json"
+
+
+def _log_file() -> Path:
+    return _cache_root() / "arka_routines.log"
+
+
+def _fish_dir() -> Path:
+    return fish_config()
 
 _KNOWN_CMDS = frozenset({"add", "list", "install", "remove", "run", "parse", "help", "enable", "disable"})
 _INTERVAL_RE = re.compile(r"(?i)\bevery\s+(\d+)\s+(minute|minutes|hour|hours|day|days)\b")
@@ -235,7 +251,7 @@ def nl_to_argv(text: str) -> list[str]:
 
 
 def routine_add(schedule: str, action: str, *, name: str = "", auto_install: bool = False) -> str:
-    routines = _load_json(ROUTINE_FILE, [])
+    routines = _load_json(_routine_file(), [])
     if not isinstance(routines, list):
         routines = []
     rid = name.strip() or hashlib.sha256(f"{schedule}{action}".encode()).hexdigest()[:8]
@@ -248,7 +264,7 @@ def routine_add(schedule: str, action: str, *, name: str = "", auto_install: boo
     }
     routines = [r for r in routines if r.get("id") != rid]
     routines.append(entry)
-    _save_json(ROUTINE_FILE, routines)
+    _save_json(_routine_file(), routines)
     print(f"Routine {rid}: {schedule} → {action}")
     if auto_install or os.environ.get("ROUTINES_AUTO_INSTALL", "").strip().lower() in {
         "1",
@@ -263,7 +279,7 @@ def routine_add(schedule: str, action: str, *, name: str = "", auto_install: boo
 
 def list_routines(*, enabled_only: bool = False) -> list[dict]:
     """Return scheduled routines as structured rows (OpenClaw always-on layer)."""
-    routines = _load_json(ROUTINE_FILE, [])
+    routines = _load_json(_routine_file(), [])
     if not isinstance(routines, list):
         return []
     out: list[dict] = []
@@ -298,10 +314,10 @@ def routine_list() -> None:
 
 
 def routine_remove(rid: str) -> None:
-    routines = _load_json(ROUTINE_FILE, [])
+    routines = _load_json(_routine_file(), [])
     if isinstance(routines, list):
         kept = [r for r in routines if r.get("id") != rid]
-        _save_json(ROUTINE_FILE, kept)
+        _save_json(_routine_file(), kept)
         if len(kept) < len(routines):
             _uninstall_one(rid)
             print(f"Removed routine {rid}.")
@@ -311,7 +327,7 @@ def routine_remove(rid: str) -> None:
 
 def routine_set_enabled(rid: str, enabled: bool) -> dict | None:
     """Pause or resume a routine without deleting it (OpenClaw always-on toggle)."""
-    routines = _load_json(ROUTINE_FILE, [])
+    routines = _load_json(_routine_file(), [])
     if not isinstance(routines, list):
         return None
     match: dict | None = None
@@ -322,7 +338,7 @@ def routine_set_enabled(rid: str, enabled: bool) -> dict | None:
             break
     if match is None:
         return None
-    _save_json(ROUTINE_FILE, routines)
+    _save_json(_routine_file(), routines)
     if enabled:
         try:
             _install_one(match)
@@ -343,7 +359,7 @@ def routine_set_enabled(rid: str, enabled: bool) -> dict | None:
 
 
 def routine_run(rid: str) -> int:
-    routines = _load_json(ROUTINE_FILE, [])
+    routines = _load_json(_routine_file(), [])
     if not isinstance(routines, list):
         print(f"No routine {rid}.", file=sys.stderr)
         return 1
@@ -358,15 +374,15 @@ def routine_run(rid: str) -> int:
 
 def _run_action(action: str) -> int:
     if not _security_gate_action(action):
-        LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-        with LOG_FILE.open("a", encoding="utf-8") as fh:
+        _log_file().parent.mkdir(parents=True, exist_ok=True)
+        with _log_file().open("a", encoding="utf-8") as fh:
             fh.write(
                 f"{time.strftime('%Y-%m-%d %H:%M:%S')} skipped {action!r} (security gate)\n"
             )
         return 2
     fish = _fish()
     env = os.environ.copy()
-    env.setdefault("FISH_DIR", str(FISH_DIR))
+    env.setdefault("FISH_DIR", str(_fish_dir()))
     proc = subprocess.run(
         [fish, "-ic", action],
         env=env,
@@ -378,8 +394,8 @@ def _run_action(action: str) -> int:
         ping("routine.run", source="routines")
     except ImportError:
         pass
-    LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with LOG_FILE.open("a", encoding="utf-8") as fh:
+    _log_file().parent.mkdir(parents=True, exist_ok=True)
+    with _log_file().open("a", encoding="utf-8") as fh:
         fh.write(
             f"{time.strftime('%Y-%m-%d %H:%M:%S')} run {action!r} exit={proc.returncode}\n"
         )
@@ -432,7 +448,7 @@ def _install_systemd(entry: dict) -> None:
         f"[Unit]\nDescription=Arka routine {rid}\n\n"
         f"[Service]\nType=oneshot\n"
         f"ExecStart={fish} -ic {shlex.quote(action)}\n"
-        f"Environment=FISH_DIR={FISH_DIR}\n",
+        f"Environment=FISH_DIR={_fish_dir()}\n",
         encoding="utf-8",
     )
     on_calendar = _calendar_spec(sched)
@@ -480,8 +496,8 @@ def _install_launchd(entry: dict) -> None:
     lines.extend(
         [
             "  </array>",
-            f"  <key>StandardOutPath</key><string>{LOG_FILE}</string>",
-            f"  <key>StandardErrorPath</key><string>{LOG_FILE}</string>",
+            f"  <key>StandardOutPath</key><string>{_log_file()}</string>",
+            f"  <key>StandardErrorPath</key><string>{_log_file()}</string>",
         ]
     )
     if sched == "hourly":
@@ -543,7 +559,7 @@ def _uninstall_one(rid: str) -> None:
 
 
 def routine_install() -> None:
-    routines = _load_json(ROUTINE_FILE, [])
+    routines = _load_json(_routine_file(), [])
     if not isinstance(routines, list) or not routines:
         print("No routines to install.")
         return

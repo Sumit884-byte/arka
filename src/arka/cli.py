@@ -10,7 +10,6 @@ from pathlib import Path
 from arka import __version__
 from arka.dispatch import run_script, run_skill
 from arka.env import load_env
-from arka.fish_bridge import delegate_fish_function, delegate_subcommand, delegate_to_fish
 from arka.paths import (
     arka_home,
     bundled_dir,
@@ -23,7 +22,6 @@ from arka.paths import (
     fish_config,
 )
 from arka.platform_info import fish_install_hint, has_full_fish_agent, skill_mode, system
-from arka.router import route
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -63,6 +61,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args[0] in ("-h", "--help", "help"):
         return _cmd_help()
+
+    if args[0] == "capabilities":
+        return _cmd_capabilities()
 
     if args[0] in ("-V", "--version", "version"):
         print(f"arka {__version__} ({system()})")
@@ -257,6 +258,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_goal(args[1:])
 
     if args[0] in ("reload", "refresh") and has_full_fish_agent():
+        from arka.fish_bridge import delegate_subcommand
+
         code = delegate_subcommand(args[0], args[1:])
         return code if code is not None else 1
 
@@ -267,6 +270,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_ai_models(args[1:])
 
     if args[0] in ("ai-pref", "ai-status") and has_full_fish_agent():
+        from arka.fish_bridge import delegate_fish_function
+
         code = delegate_fish_function(args[0], args[1:])
         return code if code is not None else 1
 
@@ -426,6 +431,8 @@ def main(argv: list[str] | None = None) -> int:
         "phone-env",
     }
     if args[0] in fish_subs and has_full_fish_agent():
+        from arka.fish_bridge import delegate_subcommand
+
         code = delegate_subcommand(args[0], args[1:])
         return code if code is not None else 1
 
@@ -447,6 +454,13 @@ def main(argv: list[str] | None = None) -> int:
     if get_mode() in ("plan", "ask"):
         return _run_portable(text)
     if has_full_fish_agent():
+        from arka.router import route_preview
+
+        preview = route_preview(text)
+        if preview is not None:
+            return _run_portable(text, preview)
+        from arka.fish_bridge import delegate_to_fish
+
         code = delegate_to_fish(args)
         if code is not None:
             return code
@@ -505,7 +519,7 @@ def _try_mode_nl(text: str) -> int | None:
     return mode_main(["mode", *parts[1:]])
 
 
-def _run_portable(text: str) -> int:
+def _run_portable(text: str, routed=None) -> int:
     try:
         from arka.telemetry import mark_error, mark_ok, request_span
     except ImportError:
@@ -517,7 +531,7 @@ def _run_portable(text: str) -> int:
         else _cli_null_context()
     )
     with ctx as current:
-        code = _execute_request(text)
+        code = _execute_request(text, routed)
         if request_span is not None:
             current.set_attribute("arka.exit_code", code)
             if code == 0:
@@ -527,7 +541,7 @@ def _run_portable(text: str) -> int:
         return code
 
 
-def _execute_request(text: str) -> int:
+def _execute_request(text: str, routed=None) -> int:
     from arka.core.mode import (
         ask_mode_skill,
         get_mode,
@@ -537,8 +551,9 @@ def _execute_request(text: str) -> int:
         try_multitask_delegate,
     )
     from arka.dispatch import run_shell
+    from arka.router import route
 
-    r = route(text)
+    r = routed if routed is not None else route(text)
     if get_mode() == "debug":
         print_debug_route(text, r)
 
@@ -557,6 +572,8 @@ def _execute_request(text: str) -> int:
             return _try_code_nl(r.skill) or 0
         if r.skill == "help":
             return _cmd_help()
+        if r.skill == "capabilities":
+            return _cmd_capabilities()
         skill_line = r.skill
         if get_mode() == "ask":
             skill_line = ask_mode_skill(r.skill, text)
@@ -734,6 +751,8 @@ def _cmd_download(rest: list[str]) -> int:
         )
 
     if has_full_fish_agent():
+        from arka.fish_bridge import delegate_to_fish
+
         code = delegate_to_fish(["download_file", url])
         if code is not None:
             return code
@@ -830,6 +849,8 @@ def _cmd_summarize(rest: list[str]) -> int:
         return run_script("arka_batch_summarize.py", ["folder", *rest[1:]])
 
     if has_full_fish_agent():
+        from arka.fish_bridge import delegate_to_fish
+
         code = delegate_to_fish(["summarize", *rest])
         if code is not None:
             return code
@@ -881,6 +902,8 @@ def _cmd_goal(rest: list[str]) -> int:
         return 0
 
     if has_full_fish_agent() and "--python" not in rest:
+        from arka.fish_bridge import delegate_fish_function
+
         code = delegate_fish_function("goal", rest)
         if code is not None:
             return code
@@ -930,6 +953,8 @@ def _cmd_youtube(rest: list[str]) -> int:
         return run_script("arka_youtube_research.py", argv)
 
     if has_full_fish_agent():
+        from arka.fish_bridge import delegate_subcommand
+
         code = delegate_subcommand("youtube", rest)
         if code is not None:
             return code
@@ -971,6 +996,8 @@ def _cmd_orchestrate(rest: list[str]) -> int:
             label = ", ".join(f"{p}/{m}" for p, m in winners[:3])
             print(f"benchmark route ({task}): {label}")
     if has_full_fish_agent():
+        from arka.fish_bridge import delegate_to_fish
+
         code = delegate_to_fish(filtered)
         if code is not None:
             return code
@@ -979,8 +1006,9 @@ def _cmd_orchestrate(rest: list[str]) -> int:
 
 def _cmd_route_preview(text: str) -> int:
     from arka.core.mode import get_mode, print_debug_route
+    from arka.router import route_preview
 
-    r = route(text)
+    r = route_preview(text)
     if get_mode() == "debug":
         print_debug_route(text, r)
     if r:
@@ -1125,17 +1153,22 @@ def _cmd_doctor() -> int:
             print("  chat modules:   ok (agno, ddgs, trafilatura, …)")
         try:
             probe = subprocess.run(
-                [str(vpy), "-c", "from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()"],
+                [
+                    str(vpy),
+                    "-c",
+                    "from importlib.util import find_spec; "
+                    "import sys; "
+                    "sys.exit(0 if find_spec('playwright') else 1)",
+                ],
                 capture_output=True,
                 text=True,
-                timeout=10,
+                timeout=5,
                 check=False,
             )
-            browser_path = (probe.stdout or "").strip().splitlines()[-1] if probe.stdout.strip() else ""
-            if probe.returncode == 0 and browser_path and Path(browser_path).is_file():
-                print(f"  Playwright:    ok ({browser_path})")
+            if probe.returncode == 0:
+                print("  Playwright:    ok (package installed — run playwright install chromium if browser missing)")
             else:
-                print("  Playwright:    missing Chromium — run: python -m pip install playwright && python -m playwright install chromium")
+                print("  Playwright:    missing — run: python -m pip install playwright && python -m playwright install chromium")
         except (OSError, subprocess.SubprocessError):
             print("  Playwright:    unavailable — run: python -m pip install playwright && python -m playwright install chromium")
     mode = skill_mode()
@@ -1166,6 +1199,8 @@ def _cmd_ai_models(rest: list[str] | None = None) -> int:
     if rest and "--all" in rest:
         script_args.append("--all")
     if has_full_fish_agent() and not rest:
+        from arka.fish_bridge import delegate_fish_function
+
         code = delegate_fish_function("ai-models", [])
         if code is not None:
             return code
@@ -1201,70 +1236,13 @@ def _cmd_ai_skill_model(rest: list[str]) -> int:
     return run_script("arka_llm.py", script_args)
 
 
+def _cmd_capabilities() -> int:
+    from arka.output import show_capabilities
+
+    return show_capabilities()
+
+
 def _cmd_help() -> int:
-    from arka.output import print_section
+    from arka.output import show_help
 
-    print_section("Arka Help")
-    print("Cross-platform AI agent — route plain English to 70+ local skills.")
-    print()
-    print_section("Install & setup")
-    print(
-        """  pip install 'arka-agent[chat]'  # web answers, calc, weather
-  arka setup                      # config dirs + venv-arka + chat deps
-  arka doctor                     # verify install + API keys
-  arka refetch [--install]        # git pull + sync bundled (dev checkout)
-  arka platform [detect|show]     # cache OS profile (~/.config/arka/platform.json)
-  arka reload [--listen] [--dev]  # re-source fish config; --listen restarts mic"""
-    )
-    print()
-    print_section("Everyday usage")
-    print(
-        """  arka <request>                  # natural language → best skill
-  arka ask <question>             # web + AI answer
-  arka goal <goal>                # autonomous multi-step agent
-  arka council "should I learn Rust?"  # multi-persona deliberation
-  arka route <request>            # preview routing (no run)
-  arka mode [ask|plan|agent|debug]  # operation mode (default: agent)
-  arka remind in 30m stretch      # reminder at time"""
-    )
-    print()
-    print_section("LLM & routing")
-    print(
-        """  arka provider list              # providers with keys configured
-  arka provider set openrouter    # set preferred provider + model
-  arka ai-models                  # list LLM providers and models
-  arka ai-skill-model profiles    # per-skill model choices
-  arka route learn "phrase" "skill"  # teach NL → CLI mapping
-  arka self improve [target] [--apply]  # analyze + plan codebase fixes"""
-    )
-    print()
-    print_section("Integrations")
-    print(
-        """  arka google setup | login | gmail --unread | calendar --today
-  arka gemini <prompt>            # Google Gemini CLI
-  arka fugu <prompt>              # Sakana Fugu multi-agent orchestrator
-  arka youtube research <query>   # YouTube search + transcript digest
-  arka download <id-or-url>       # YouTube playlist or video
-  arka password save|get|set <name>
-  arka integration list|status       # show configured providers
-  arka hybrid status                 # inspect local + hosted model routes
-  arka hybrid run "prompt" --policy parallel
-  arka hybrid config local-first      # persist the default policy
-  arka integration setup <provider>  # securely configure an integration
-  arka connect <provider> --key ...  # short setup alias
-  arka integration doctor [--fix]    # diagnose credentials, CLIs, permissions
-  arka integration init --config-dir .  # generate project .env.example
-  arka code init <folder>         # scoped coding workspace
-  arka benchmark run|show|apply   # compare models on sample tasks"""
-    )
-    print()
-    print_section("Platforms")
-    print(
-        """  With fish       70+ skills via bundled config.fish (recommended)
-  Without fish    Portable Python subset (chat, web, calc, weather, …)
-  Install fish:   macOS brew install fish | Linux apt install fish | Windows scoop install fish
-
-  Docs: https://arka-agent.mintlify.site
-  Full command list: README.md in ARKA_HOME"""
-    )
-    return 0
+    return show_help()

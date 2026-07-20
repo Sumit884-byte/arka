@@ -1,0 +1,5 @@
+━━━ Arka Skills ━━━
+
+  I'm arka. You can ask without looking at the screen. Try: what's the weather, play a song on Spotify, set a timer for five minutes, search the web, ask about your documents, open an app, check the news, translate text, live sports scores, or ask me anything. Third-party plugins work too — say their trigger phrase or run arka skills list. Say end conversation to start fresh.
+
+  Full list: arka help

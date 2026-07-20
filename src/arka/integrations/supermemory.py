@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -29,6 +30,96 @@ except ImportError:
 MEMORY_FILE = cache_dir() / "memory.json"
 API_BASE = "https://api.supermemory.ai"
 TIMEOUT = 25
+
+_RECALL_STOP_WORDS = frozenset({
+    "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
+    "what", "who", "how", "when", "where", "why", "which", "whom", "whose",
+    "do", "does", "did", "can", "could", "would", "should", "will", "shall",
+    "to", "of", "in", "on", "at", "by", "for", "with", "from", "as", "into",
+    "and", "or", "but", "if", "then", "than", "that", "this", "these", "those",
+    "it", "its", "me", "my", "you", "your", "we", "our", "they", "their",
+    "about", "tell", "explain", "describe", "define", "give", "show", "list",
+})
+
+# Terms that collide with non-tech meanings in "what is X?" recall/search.
+_AMBIGUOUS_TECH_TERMS: dict[str, str] = {
+    "rust": "Rust programming language",
+    "go": "Go Golang programming language",
+    "swift": "Swift programming language",
+    "d": "D programming language",
+    "r": "R programming language",
+    "c": "C programming language",
+    "c++": "C++ programming language",
+    "c#": "C# programming language",
+}
+
+_DEFINITIONAL_QUERY_RE = re.compile(
+    r"(?i)^(?:what|who|where|when|why|how|explain|describe|tell\s+me\s+about)\s+"
+    r"(?:is|are|was|were|does|do|did|me|us)?\s*(?:a|an|the)?\s*(.+?)\??$"
+)
+
+
+def recall_query_terms(query: str) -> list[str]:
+    """Return significant recall terms; drop NL stop words and 'what is X' boilerplate."""
+    q = (query or "").strip().lower()
+    if not q:
+        return []
+    subject = _DEFINITIONAL_QUERY_RE.match(q)
+    if subject:
+        q = subject.group(1).strip().rstrip("?")
+    terms = [
+        w
+        for w in re.findall(r"[a-z0-9+#]+(?:'[a-z0-9]+)?", q)
+        if len(w) >= 1 and w not in _RECALL_STOP_WORDS
+    ]
+    return terms
+
+
+def is_definitional_query(query: str) -> bool:
+    """True for 'what is X?', 'explain Y', etc."""
+    q = (query or "").strip()
+    if not q:
+        return False
+    if _DEFINITIONAL_QUERY_RE.match(q):
+        return True
+    return bool(re.match(r"(?i)^tell\s+me\s+about\s+.+\??$", q))
+
+
+def is_ambiguous_definitional_query(query: str) -> bool:
+    """True when a definitional question targets a single ambiguous tech/homograph term."""
+    if not is_definitional_query(query):
+        return False
+    terms = recall_query_terms(query)
+    if len(terms) != 1:
+        return False
+    return terms[0] in _AMBIGUOUS_TECH_TERMS
+
+
+def should_skip_memory_recall(query: str) -> bool:
+    """Skip injecting personal memory for ambiguous definitional questions."""
+    return is_ambiguous_definitional_query(query)
+
+
+def enhance_definitional_search_query(query: str) -> str:
+    """Disambiguate 'what is Rust?' → programming language, not iron oxide."""
+    q = (query or "").strip()
+    if not q:
+        return q
+    m = re.match(r"(?i)what\s+is\s+(?:a|an|the)?\s*(.+?)\??$", q)
+    if not m:
+        return q
+    subject = m.group(1).strip().rstrip("?")
+    hint = _AMBIGUOUS_TECH_TERMS.get(subject.lower())
+    if hint:
+        return f"what is {hint}"
+    return q
+
+
+def _term_matches(term: str, hay: str) -> bool:
+    """Whole-word / token match — avoid substring hits like 'rust' in unrelated text."""
+    if not term or not hay:
+        return False
+    return bool(re.search(rf"(?<![a-z0-9+#]){re.escape(term)}(?![a-z0-9+#])", hay))
 
 
 def _mode() -> str:
@@ -205,25 +296,28 @@ def _local_recall(query: str, *, limit: int = 5) -> list[str]:
     items = load_json(MEMORY_FILE, [])
     if not isinstance(items, list) or not items:
         return []
-    q = query.lower()
+    terms = recall_query_terms(query)
+    if not terms:
+        return []
     scored: list[tuple[float, str]] = []
     for row in items:
         text = (row.get("text") or "").lower()
         tag_s = " ".join(row.get("tags") or []).lower()
         score = 0.0
-        for word in q.split():
-            if len(word) < 2:
-                continue
-            if word in text:
+        matched = 0
+        for word in terms:
+            if _term_matches(word, text):
                 score += 2.0
-            if word in tag_s:
+                matched += 1
+            if _term_matches(word, tag_s):
                 score += 1.5
-        if score > 0:
-            # Prefer recent memories slightly, without overwhelming relevance.
-            age_days = max(0.0, (time.time() - float(row.get("ts") or 0)) / 86400)
-            score += 1.0 / (1.0 + age_days / 30.0)
-        if score > 0:
-            scored.append((score, row.get("text") or ""))
+                matched += 1
+        if matched == 0:
+            continue
+        # Prefer recent memories slightly, without overwhelming relevance.
+        age_days = max(0.0, (time.time() - float(row.get("ts") or 0)) / 86400)
+        score += 1.0 / (1.0 + age_days / 30.0)
+        scored.append((score, row.get("text") or ""))
     scored.sort(key=lambda x: x[0], reverse=True)
     return [t for _, t in scored[:limit] if t.strip()]
 
@@ -588,6 +682,8 @@ def context_for(goal: str, *, limit_chars: int = 3500) -> str:
     """Context string for agent prompts — API profile, semantic index, local."""
     goal = goal.strip()
     if not goal:
+        return ""
+    if should_skip_memory_recall(goal):
         return ""
 
     try:

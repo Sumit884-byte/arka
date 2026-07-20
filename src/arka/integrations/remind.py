@@ -21,11 +21,30 @@ try:
 except ImportError:
     cache_dir = lambda: Path.home() / ".cache" / "fish-agent"  # noqa: E731
 
-CACHE = cache_dir()
-REMINDERS_FILE = CACHE / "reminders.json"
-STATE_FILE = CACHE / "reminders_state.json"
-PID_FILE = CACHE / "arka_remind.pid"
-LOG_FILE = CACHE / "arka_remind.log"
+_CACHE: Path | None = None
+
+
+def _cache_root() -> Path:
+    global _CACHE
+    if _CACHE is None:
+        _CACHE = cache_dir()
+    return _CACHE
+
+
+def _reminders_file() -> Path:
+    return _cache_root() / "reminders.json"
+
+
+def _state_file() -> Path:
+    return _cache_root() / "reminders_state.json"
+
+
+def _pid_file() -> Path:
+    return _cache_root() / "arka_remind.pid"
+
+
+def _log_file() -> Path:
+    return _cache_root() / "arka_remind.log"
 
 TICK_SEC = float(os.environ.get("REMIND_TICK_SEC", "30"))
 GAP_SEC = float(os.environ.get("REMIND_GAP_SEC", "120"))
@@ -79,21 +98,21 @@ def _save_json(path: Path, data: object) -> None:
 
 
 def _load_reminders() -> list[dict]:
-    data = _load_json(REMINDERS_FILE, [])
+    data = _load_json(_reminders_file(), [])
     return data if isinstance(data, list) else []
 
 
 def _save_reminders(items: list[dict]) -> None:
-    _save_json(REMINDERS_FILE, items)
+    _save_json(_reminders_file(), items)
 
 
 def _load_state() -> dict:
-    data = _load_json(STATE_FILE, {})
+    data = _load_json(_state_file(), {})
     return data if isinstance(data, dict) else {}
 
 
 def _save_state(state: dict) -> None:
-    _save_json(STATE_FILE, state)
+    _save_json(_state_file(), state)
 
 
 def _user_idle_seconds() -> float | None:
@@ -171,7 +190,7 @@ def _notify(title: str, body: str) -> None:
 def _fire(rem: dict, *, kind: str) -> None:
     label = "Reminder" if kind == "at_time" else "Reminder (you're back)"
     _notify(label, str(rem.get("text") or ""))
-    log = LOG_FILE
+    log = _log_file()
     log.parent.mkdir(parents=True, exist_ok=True)
     with log.open("a", encoding="utf-8") as fh:
         fh.write(f"{datetime.now().isoformat(timespec='seconds')} [{kind}] {rem.get('id')} {rem.get('text')!r}\n")
@@ -482,12 +501,12 @@ def tick(*, quiet: bool = False) -> int:
 
 
 def _write_pid() -> None:
-    PID_FILE.parent.mkdir(parents=True, exist_ok=True)
-    PID_FILE.write_text(str(os.getpid()), encoding="utf-8")
+    _pid_file().parent.mkdir(parents=True, exist_ok=True)
+    _pid_file().write_text(str(os.getpid()), encoding="utf-8")
 
 
 def _remove_pid() -> None:
-    PID_FILE.unlink(missing_ok=True)
+    _pid_file().unlink(missing_ok=True)
 
 
 def daemon_loop() -> None:
@@ -503,17 +522,17 @@ def daemon_loop() -> None:
 
 
 def start_daemon() -> int:
-    if PID_FILE.exists():
+    if _pid_file().exists():
         try:
-            pid = int(PID_FILE.read_text().strip())
+            pid = int(_pid_file().read_text().strip())
             os.kill(pid, 0)
             print(f"Reminder daemon already running (pid {pid}).", file=sys.stderr)
             return 0
         except (OSError, ValueError):
-            PID_FILE.unlink(missing_ok=True)
+            _pid_file().unlink(missing_ok=True)
 
-    CACHE.mkdir(parents=True, exist_ok=True)
-    with LOG_FILE.open("ab") as fh:
+    _cache_root().mkdir(parents=True, exist_ok=True)
+    with _log_file().open("ab") as fh:
         subprocess.Popen(
             [sys.executable, str(Path(__file__).resolve()), "daemon"],
             stdout=fh,
@@ -521,23 +540,23 @@ def start_daemon() -> int:
             start_new_session=True,
         )
     time.sleep(0.3)
-    if PID_FILE.exists():
-        print(f"Reminder daemon started (pid {PID_FILE.read_text().strip()}).", file=sys.stderr)
+    if _pid_file().exists():
+        print(f"Reminder daemon started (pid {_pid_file().read_text().strip()}).", file=sys.stderr)
     else:
         print("Reminder daemon started.", file=sys.stderr)
     return 0
 
 
 def stop_daemon() -> int:
-    if not PID_FILE.exists():
+    if not _pid_file().exists():
         print("Reminder daemon not running.", file=sys.stderr)
         return 0
     try:
-        pid = int(PID_FILE.read_text().strip())
+        pid = int(_pid_file().read_text().strip())
         os.kill(pid, signal.SIGTERM)
     except (OSError, ValueError):
         pass
-    PID_FILE.unlink(missing_ok=True)
+    _pid_file().unlink(missing_ok=True)
     print("Reminder daemon stopped.", file=sys.stderr)
     return 0
 
@@ -545,19 +564,19 @@ def stop_daemon() -> int:
 def cmd_status(_args: argparse.Namespace) -> int:
     running = False
     pid = None
-    if PID_FILE.exists():
+    if _pid_file().exists():
         try:
-            pid = int(PID_FILE.read_text().strip())
+            pid = int(_pid_file().read_text().strip())
             os.kill(pid, 0)
             running = True
         except (OSError, ValueError):
-            PID_FILE.unlink(missing_ok=True)
+            _pid_file().unlink(missing_ok=True)
     items = _load_reminders()
     pending = [r for r in items if not _is_done(r)]
     print("Arka remind")
     print(f"  Daemon:   {'running (pid ' + str(pid) + ')' if running else 'stopped'}")
     print(f"  Pending:  {len(pending)}")
-    print(f"  Store:    {REMINDERS_FILE}")
+    print(f"  Store:    {_reminders_file()}")
     if pending:
         print("")
         for rem in pending[:10]:

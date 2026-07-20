@@ -129,6 +129,22 @@ def semantic_remember(text: str, *, tags: list[str] | None = None) -> None:
         print("Indexed in TurboQuant for semantic recall.", file=sys.stderr)
 
 
+def _should_use_chat_answer(question: str, *, deep: bool, youtube: bool, doc: str | None) -> bool:
+    if deep or youtube or doc:
+        return False
+    try:
+        from arka.router import _is_knowledge_question
+
+        return _is_knowledge_question(question)
+    except ImportError:
+        return bool(
+            re.match(
+                r"(?i)^(?:what|who|where|when|how|why|explain|describe|tell me about)\s+",
+                question,
+            )
+        )
+
+
 def unified_ask(
     question: str,
     *,
@@ -140,6 +156,31 @@ def unified_ask(
     question = question.strip()
     if not question:
         return ""
+
+    if _should_use_chat_answer(question, deep=deep, youtube=youtube, doc=doc):
+        from arka.agent.chat import answer_question
+        from arka.output import print_block
+
+        prov, answer = answer_question(
+            question,
+            deep=False,
+            use_session=False,
+            cleanup=True,
+        )
+        print_block("Answer", answer)
+        if prov == "search":
+            print("\n[Sources: web]", file=sys.stderr)
+        elif prov == "memory":
+            print("\n[Sources: memory]", file=sys.stderr)
+        if speak and answer:
+            tts_text = _llm(
+                "Rewrite for spoken TTS in 2-4 short sentences. Same language as input. No markdown.",
+                answer[:4000],
+                0.1,
+                task="chat",
+            ) or answer[:450]
+            _speak(tts_text)
+        return answer
 
     contexts: list[str] = []
     sources_used: list[str] = []
@@ -219,6 +260,7 @@ def unified_ask(
         answer = _llm(
             "Answer helpfully and concisely. Say if you are unsure.",
             question,
+            task="chat",
         )
     else:
         src_line = ", ".join(sources_used) if sources_used else "general"
@@ -232,7 +274,7 @@ def unified_ask(
             + "\n\n---\n\n".join(contexts)
             + f"\n\nQuestion: {question}"
         )
-        answer = _llm(system, user)
+        answer = _llm(system, user, task="chat")
 
     if not answer:
         answer = "I couldn't generate an answer. Check LLM API keys."

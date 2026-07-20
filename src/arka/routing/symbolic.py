@@ -1560,8 +1560,19 @@ def route_self_improve(cmd: str) -> str | None:
 
 def route_help(cmd: str) -> str | None:
     clean = cmd.strip().lower()
-    if clean in ("help", "skills", "?"):
+    if clean in ("help", "?"):
         return "help"
+    if clean in ("skills", "capabilities"):
+        return "capabilities"
+    if re.search(r"(?i)^(what can arka do|what does arka do)\s*$", clean):
+        return "capabilities"
+    if re.search(
+        r"(?i)(tell\s+(?:me\s+)?(?:about\s+)?(?:all\s+)?(?:your\s+)?skills?|"
+        r"tell\s+your\s+skills?|(list|show)\s+(?:me\s+)?(?:all\s+)?(?:your\s+)?skills?|"
+        r"what\s+(?:are\s+)?(?:all\s+)?your\s+skills?)",
+        clean,
+    ):
+        return "capabilities"
     return None
 
 

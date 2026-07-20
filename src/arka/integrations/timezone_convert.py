@@ -54,6 +54,34 @@ TZ_ALIASES: dict[str, str] = {
     "pkt": "Asia/Karachi",
     "brt": "America/Sao_Paulo",
     "art": "America/Argentina/Buenos_Aires",
+    # Common city names (normalized: lowercase, no spaces/punctuation)
+    "tokyo": "Asia/Tokyo",
+    "london": "Europe/London",
+    "paris": "Europe/Paris",
+    "berlin": "Europe/Berlin",
+    "rome": "Europe/Rome",
+    "madrid": "Europe/Madrid",
+    "moscow": "Europe/Moscow",
+    "dubai": "Asia/Dubai",
+    "singapore": "Asia/Singapore",
+    "hongkong": "Asia/Hong_Kong",
+    "beijing": "Asia/Shanghai",
+    "shanghai": "Asia/Shanghai",
+    "seoul": "Asia/Seoul",
+    "sydney": "Australia/Sydney",
+    "melbourne": "Australia/Melbourne",
+    "auckland": "Pacific/Auckland",
+    "mumbai": "Asia/Kolkata",
+    "delhi": "Asia/Kolkata",
+    "bangalore": "Asia/Kolkata",
+    "newyork": "America/New_York",
+    "losangeles": "America/Los_Angeles",
+    "chicago": "America/Chicago",
+    "denver": "America/Denver",
+    "toronto": "America/Toronto",
+    "vancouver": "America/Vancouver",
+    "saopaulo": "America/Sao_Paulo",
+    "buenosaires": "America/Argentina/Buenos_Aires",
 }
 
 _TZ_NAMES = "|".join(sorted(TZ_ALIASES, key=len, reverse=True))
@@ -79,6 +107,15 @@ _INTENT_RE = re.compile(
     r"(?i)\b(?:"
     r"timezone(?:\s+convert)?|time\s+zone|what\s+time|convert\s+(?:\d|today|tomorrow|"
     r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec))"
+    r")\b"
+)
+_CURRENT_TIME_RE = re.compile(
+    r"(?i)\b(?:"
+    r"what(?:'s|\s+is)\s+(?:the\s+)?time(?:\s+is\s+it)?|"
+    r"what\s+time(?:\s+is\s+it)?|"
+    r"time\s+now|"
+    r"time\s+in|"
+    r"current\s+time"
     r")\b"
 )
 _NOISE_RE = re.compile(
@@ -120,7 +157,24 @@ def _zone_label(name: str) -> str:
 
 
 def _has_time_signal(text: str) -> bool:
-    return bool(_TIME_RE.search(text) or _DATE_RE.search(text) or _INTENT_RE.search(text))
+    return bool(
+        _TIME_RE.search(text)
+        or _DATE_RE.search(text)
+        or _INTENT_RE.search(text)
+        or _CURRENT_TIME_RE.search(text)
+    )
+
+
+def _is_current_time_query(text: str) -> bool:
+    return bool(_CURRENT_TIME_RE.search(text or ""))
+
+
+def _local_tz_name() -> str:
+    tz = datetime.now().astimezone().tzinfo
+    key = getattr(tz, "key", None)
+    if key:
+        return str(key)
+    return "UTC"
 
 
 def wants_timezone_convert(text: str) -> bool:
@@ -217,17 +271,20 @@ def parse_convert(text: str) -> tuple[datetime, str, str] | None:
     if not t or not _TZ_TOKEN_RE.search(t) or not _has_time_signal(t):
         return None
 
+    now_query = _is_current_time_query(t)
     from_tz, to_tz = _infer_zones(t)
     if not to_tz:
         return None
     if not from_tz:
-        from_tz = "UTC"
+        from_tz = _local_tz_name() if now_query else "UTC"
 
     dt = _parse_datetime(t)
     if dt is None:
-        return None
+        if not now_query:
+            return None
+        dt = datetime.now().replace(second=0, microsecond=0)
 
-    if from_tz == to_tz:
+    if from_tz == to_tz and not now_query:
         return None
 
     return dt.replace(tzinfo=None), from_tz, to_tz

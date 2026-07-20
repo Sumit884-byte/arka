@@ -1,0 +1,23 @@
+━━━ Arka Doctor ━━━
+
+arka 0.1.0 — macos
+  Platform cache: ~/dev/arka/platform.json
+  Detected:       2026-07-17T07:30:30+00:00
+  Package bundle: ~/dev/arka/src/arka/bundled
+  ARKA_HOME:      ~/dev/arka/src/arka/bundled
+  Config:         ~/dev/arka
+  Cache:          ~/.cache/fish-agent
+  config.fish:    ok
+  venv-arka:      ~/dev/arka/venv-arka → ~/dev/arka/venv-arka/bin/python3
+  chat modules:   ok (agno, ddgs, trafilatura, …)
+  Playwright:    missing — run: python -m pip install playwright && python -m playwright install chromium
+  Skills:         full (70+) via ~/dev/arka/src/arka/bundled/config.fish
+  LLM providers:  gemini, groq, openrouter, huggingface, ollama
+  LLM preferred:  openrouter → x-ai/grok-4.20-multi-agent (328 models detected)
+  context7 npx: ok (npx available)
+  context7 mcp_config: ok (~/dev/arka/mcp.json)
+  context7 api_key: *** (CONTEXT7_API_KEY set)
+
+Next steps:
+  arka ask "what is Rust?"             # first command
+  Docs: https://arka-agent.mintlify.site/quickstart

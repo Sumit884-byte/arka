@@ -123,6 +123,18 @@ def route(text: str) -> Route | None:
             except ImportError:
                 pass
 
+        if mode in ("symbolic", "ai_only"):
+            offline = _route_offline(cmd)
+            if offline:
+                if span is not None:
+                    _finish_route_span(
+                        current,
+                        offline,
+                        decision="symbolic",
+                        start=route_start,
+                    )
+                return offline
+
         fish_route = _route_via_fish(cmd)
         if fish_route:
             if fish_route.kind == "llm":
@@ -193,7 +205,19 @@ def route(text: str) -> Route | None:
             if mode == "ai_only":
                 return None
 
-        if mode != "ai_only":
+        if mode == "symbolic_only":
+            offline = _route_offline(cmd)
+            if offline:
+                if span is not None:
+                    _finish_route_span(
+                        current,
+                        offline,
+                        decision="symbolic",
+                        start=route_start,
+                    )
+                return offline
+
+        if mode not in ("symbolic", "symbolic_only", "ai_only"):
             offline = _route_offline(cmd)
             if offline:
                 if span is not None:
@@ -217,6 +241,33 @@ def route(text: str) -> Route | None:
             return llm
 
         return None
+
+
+def route_preview(text: str) -> Route | None:
+    """Fast deterministic preview for `arka route` — Python symbolic only, no fish or LLM."""
+    cmd = text.strip()
+    if not cmd:
+        return None
+
+    slash_dev = re.match(r"^/(?:dev[-_ ]?tools?|developer[-_ ]?tools?)\b\s*(.*)$", cmd, re.I)
+    if slash_dev:
+        tail = slash_dev.group(1).strip()
+        skill = f"dev_tools {tail}" if tail else "dev_tools doctor"
+        return Route(skill, source="offline")
+
+    try:
+        from arka.integrations.fugu import route_command as fugu_route_cmd
+
+        fugu_hit = fugu_route_cmd(cmd)
+        if fugu_hit:
+            return Route(fugu_hit, source="offline")
+    except ImportError:
+        pass
+
+    offline = _route_offline(cmd)
+    if offline:
+        return Route(offline.skill, source="offline", kind="skill")
+    return None
 
 
 def _finish_route_span(
@@ -371,8 +422,10 @@ def _route_offline(cmd: str) -> Route | None:
         tail = slash_dev.group(1).strip()
         return Route(f"dev_tools {tail}" if tail else "dev_tools doctor", source="offline")
 
-    if clean in ("help", "skills", "?"):
+    if clean in ("help", "?"):
         return Route("help")
+    if clean in ("skills", "capabilities"):
+        return Route("capabilities")
 
     if re.search(r"(?i)\b(clone|setup|install)\b.*\b(profession|professions)\b.*\b(projects?|repos?)\b", clean):
         return Route("profession setup")
@@ -569,6 +622,9 @@ def _route_offline(cmd: str) -> Route | None:
     ):
         return Route(f"find_files_by_size {cmd}", source="offline")
 
+    if _is_knowledge_question(clean):
+        return Route(f"web_answer {cmd}", source="offline")
+
     chat_route = _route_chat_intent(cmd)
     if chat_route:
         return chat_route
@@ -633,9 +689,6 @@ def _route_offline(cmd: str) -> Route | None:
 
     if _is_system_advice_question(clean):
         return Route(f"agent_ask {cmd}", source="offline")
-
-    if _is_knowledge_question(clean):
-        return Route(f"web_answer {cmd}")
 
     return None
 

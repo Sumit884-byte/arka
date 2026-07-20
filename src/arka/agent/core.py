@@ -245,6 +245,13 @@ def memory_forget(ref: str) -> None:
 
 
 def memory_context_for(goal: str, *, limit: int = 3) -> str:
+    try:
+        from arka.integrations.supermemory import should_skip_memory_recall
+
+        if should_skip_memory_recall(goal):
+            return ""
+    except ImportError:
+        pass
     body = _memory_context_body(goal, limit=limit)
     rules = ""
     try:
@@ -294,11 +301,23 @@ def _memory_context_body(goal: str, *, limit: int = 3) -> str:
         if session_ctx:
             return session_ctx
         return _channel_memory_fallback()
-    q = goal.lower()
+    try:
+        from arka.integrations.supermemory import recall_query_terms, _term_matches
+
+        terms = recall_query_terms(goal)
+        term_matches = _term_matches
+    except ImportError:
+        terms = [w for w in goal.lower().split() if len(w) > 2]
+        term_matches = lambda term, hay: term in hay  # noqa: E731
+    if not terms:
+        if session_ctx:
+            return session_ctx
+        return _channel_memory_fallback()
     scored: list[tuple[float, str]] = []
     for row in items:
         text = row.get("text") or ""
-        score = sum(1 for w in q.split() if len(w) > 2 and w in text.lower())
+        hay = text.lower()
+        score = sum(1 for w in terms if term_matches(w, hay))
         if score:
             scored.append((score, text))
     scored.sort(key=lambda x: x[0], reverse=True)

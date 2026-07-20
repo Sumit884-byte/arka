@@ -1,0 +1,3 @@
+skill: web_answer what is Rust?
+kind: skill
+source: offline

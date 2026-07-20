@@ -832,6 +832,89 @@ RECENT FILE CHANGES (CHANGELOG)
   - modified docs/quickstart.mdx (docs)
   - … and 200 more files
 
+  --- sync 2026-07-20 14:53 UTC (bed4cb9a..cabfadb5)
+  - modified .arka-index
+  - added .env.railway.example
+  - added .githooks/prepare-commit-msg
+  - added Dockerfile
+  - modified README.md (docs)
+  - modified llm.txt
+  - modified logs/mcp.jsonl
+  - added railway.toml
+  - added recordings/live-demo-ui/desktop-polished.png
+  - added recordings/live-demo-ui/desktop.png
+  - added recordings/live-demo-ui/mobile-polished.png
+  - added recordings/live-demo-ui/mobile.png
+  - added recordings/live-demo-ui/run-1784533726409/000-loaded.png
+  - added recordings/live-demo-ui/run-1784533726409/001-after-attach-click.png
+  - added recordings/live-demo-ui/run-1784533726409/002-typed.png
+  - added recordings/live-demo-ui/run-1784533726409/003-no-token-state.png
+  - added recordings/live-demo-ui/run-1784533726409/ui-walkthrough.mp4
+  - added recordings/live-demo-ui/run-1784533726409/video-frames/frame-0000.jpg
+  - added recordings/live-demo-ui/run-1784533726409/video-frames/frame-0001.jpg
+  - added recordings/live-demo-ui/run-1784533726409/video-frames/frame-0002.jpg
+  - added recordings/live-demo-ui/run-1784533726409/video-frames/frame-0003.jpg
+  - added recordings/live-demo-ui/run-1784533726409/video-frames/frame-0004.jpg
+  - added recordings/live-demo-ui/run-1784533726409/video-frames/frame-0005.jpg
+  - added recordings/live-demo-ui/run-1784533726409/video-frames/frame-0006.jpg
+  - added recordings/live-demo-ui/run-1784533726409/video-frames/frame-0007.jpg
+  - added recordings/live-demo-ui/run-1784533726409/video-frames/frame-0008.jpg
+  - added recordings/live-demo-ui/run-1784533726409/video-frames/frame-0009.jpg
+  - added recordings/live-demo-ui/run-1784533726409/video-frames/frame-0010.jpg
+  - added recordings/live-demo-ui/run-1784533726409/video-frames/frame-0011.jpg
+  - added recordings/live-demo-ui/run-1784533726409/video-frames/frame-0012.jpg
+  - added recordings/live-demo-ui/run-1784533726409/video-frames/frame-0013.jpg
+  - added recordings/live-demo-ui/run-1784533726409/video-frames/frame-0014.jpg
+  - added recordings/live-demo-ui/run-1784533726409/video-frames/frame-0015.jpg
+  - added recordings/live-demo-ui/run-1784533726409/video-frames/frame-0016.jpg
+  - added recordings/live-demo-ui/run-1784533726409/video-frames/frame-0017.jpg
+  - added recordings/live-demo-ui/run-1784533726409/video-frames/frame-0018.jpg
+  - added recordings/live-demo-ui/run-1784533726409/video-frames/frame-0019.jpg
+  - added recordings/live-demo-ui/run-1784533726409/video-frames/frame-0020.jpg
+  - added recordings/live-demo-ui/run-1784533726409/video-frames/frame-0021.jpg
+  - added recordings/live-demo-ui/run-1784533726409/video-frames/frame-0022.jpg
+  - added recordings/live-demo-ui/run-1784533726409/video-frames/frame-0023.jpg
+  - added recordings/live-demo-ui/run-1784533726409/video-frames/frame-0024.jpg
+  - added recordings/live-demo-ui/run-1784533726409/video-frames/frame-0025.jpg
+  - added recordings/live-demo-ui/run-1784533726409/video-frames/frame-0026.jpg
+  - added recordings/live-demo-ui/run-1784533726409/video-frames/frame-0027.jpg
+  - added recordings/live-demo-ui/run-1784533726409/video-frames/frame-0028.jpg
+  - added recordings/live-demo-ui/run-1784533726409/video-frames/frame-0029.jpg
+  - added recordings/live-demo-ui/run-1784533726409/video-frames/frame-0030.jpg
+  - added recordings/live-demo-ui/run-1784533726409/video-frames/frame-0031.jpg
+  - added recordings/live-demo-ui/tablet.png
+  - modified src/arka/agent/coding_tui.py (agent skill)
+  - modified src/arka/agent/dev_tools.py (agent skill)
+  - modified src/arka/agent/profession_sources.py (agent skill)
+  - modified src/arka/agent/repo_health.py (agent skill)
+  - added src/arka/agent/script_discovery.py (agent skill)
+  - modified src/arka/agent/spline_guide.py (agent skill)
+  - added src/arka/agent/video_evidence.py (agent skill)
+  - modified src/arka/bundled/config.fish (fish router)
+  - modified src/arka/cli.py (python)
+  - modified src/arka/dispatch.py (python)
+  - modified src/arka/fish/config.fish (fish router)
+  - added src/arka/integrations/backend_client.py (python)
+  - added src/arka/integrations/greeting.py (python)
+  - modified src/arka/integrations/mcp_cli.py (python)
+  - modified src/arka/integrations/mcp_manager.py (python)
+  - modified src/arka/integrations/open_url.py (python)
+  - modified src/arka/integrations/remote_server.py (python)
+  - added src/arka/integrations/site_summary.py (python)
+  - modified src/arka/llm/cli.py (python)
+  - modified src/arka/llm/fallback.py (python)
+  - added src/arka/llm/prompt_compact.py (python)
+  - modified src/arka/routing/symbolic.py (routing)
+  - added src/arka/skills/video_evidence/skill.json
+  - added tests/test_backend_client.py (python)
+  - modified tests/test_coding_tui.py (python)
+  - modified tests/test_deploy.py (python)
+  - modified tests/test_dev_tools.py (python)
+  - added tests/test_greeting.py (python)
+  - added tests/test_llm_prompt_compact.py (python)
+  - modified tests/test_mcp_manager.py (python)
+  - … and 9 more files
+
 ================================================================================
 END — update this file when adding skills, routing rules, or major modules
 ================================================================================

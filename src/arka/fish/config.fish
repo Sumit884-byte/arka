@@ -2115,7 +2115,7 @@ end
 
 function _agent_is_skills_help_request --description "True if user wants Arka skill list (internal)"
     set -l clean (string lower (string trim -- "$argv[1]"))
-    if string match -qr '(?i)^(skills|help|\?|list skills|show skills|agent skills|what can you do|what do you do)\s*$' "$clean"
+    if string match -qr '(?i)^(skills|capabilities|\?|list skills|show skills|agent skills|what can you do|what do you do|what can arka do|what does arka do)\s*$' "$clean"
         return 0
     end
     if string match -qr '(?i)(tell\s+(?:me\s+)?(?:about\s+)?(?:all\s+)?(?:your\s+)?skills?|tell\s+your\s+skills?|(list|show)\s+(?:me\s+)?(?:all\s+)?(?:your\s+)?skills?|what\s+(?:are\s+)?(?:all\s+)?your\s+skills?)' "$clean"
@@ -15647,7 +15647,7 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         return
     end
     if _agent_is_skills_help_request "$cmd"
-        echo "skill|arka help|Arka skills + active LLM model"
+        echo "skill|capabilities|Arka skills + active LLM model"
         return
     end
     if string match -qr '(?i)^(remember|memorize|store|don\'t forget|dont forget|keep in mind)\s+' "$clean"
@@ -17295,6 +17295,10 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                     set -l py (_arka_python)
                     $py (_arka_py_script arka_compute.py)
                     return $status
+                case route
+                    set -l py (_arka_python)
+                    $py -m arka route $argv[2..-1]
+                    return $status
                 case refetch update sync
                     set -l py (_arka_python)
                     set -l flags $argv[2..-1]
@@ -18058,6 +18062,12 @@ function agent --description "Run commands safely: executes safe commands automa
         set clean_cmd (string lower "$cmd")
     end
 
+    if string match -qr '(?i)^help\s*$' "$clean_cmd"
+        set -l py (_arka_python)
+        $py -m arka help
+        return $status
+    end
+
     if _agent_is_skills_help_request "$clean_cmd"
         _arka_skills_help_show
         if _agent_voice_enabled
@@ -18069,7 +18079,7 @@ function agent --description "Run commands safely: executes safe commands automa
     end
 
     if test (count $argv) -eq 0
-        or string match -qr '(?i)^(skills|help|\?|list skills|show skills|agent skills)\s*$' "$clean_cmd"
+        or string match -qr '(?i)^(skills|capabilities|\?|list skills|show skills|agent skills)\s*$' "$clean_cmd"
 
         if _agent_voice_enabled
             set -l py (_arka_python)
@@ -18299,6 +18309,12 @@ function agent --description "Run commands safely: executes safe commands automa
     # 1. Agent loop (run → feedback → correct)
     if test "$first_word" = loop; or test "$first_word" = agent_loop
         agent_loop $argv[2..-1]
+        return $status
+    end
+
+    if test "$first_word" = route
+        set -l py (_arka_python)
+        $py -m arka route $argv[2..-1]
         return $status
     end
 
@@ -19288,7 +19304,7 @@ function agent --description "Run commands safely: executes safe commands automa
         end
     else if string match -qr '(?i)^(arka ask|unified ask|ask arka)\s+' "$clean_cmd"
         set -l aq (string replace -r -i '^(?:arka ask|unified ask|ask arka)\s+' '' "$cmd")
-        set interpreted "arka_ask $aq"
+        set interpreted "web_answer $aq"
     else if string match -qr '(?i)(speak|tell me).*youtube.*(research|summary|summarize)' "$clean_cmd"
         set -l sq (_agent_parse_youtube_research_query "$cmd")
         test -z "$sq"; and set sq $cmd

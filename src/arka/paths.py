@@ -9,7 +9,18 @@ from pathlib import Path
 
 
 def _platformdirs():
-    from platformdirs import user_cache_dir, user_config_dir
+    try:
+        from platformdirs import user_cache_dir, user_config_dir
+    except ImportError:
+        # Editable/source runs and fresh venv-arka bootstrap may call load_env()
+        # before `pip install -e .` has installed core deps.
+        def user_config_dir(appname: str, appauthor: bool = False) -> str:  # noqa: ARG001
+            return str(Path.home() / ".config" / appname)
+
+        def user_cache_dir(appname: str, appauthor: bool = False) -> str:  # noqa: ARG001
+            return str(Path.home() / ".cache" / appname)
+
+        return user_config_dir, user_cache_dir
 
     return user_config_dir, user_cache_dir
 

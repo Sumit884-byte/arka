@@ -71,6 +71,41 @@ class TimezoneParseTests(unittest.TestCase):
         self.assertIsNone(parse_convert("list files in data folder"))
         self.assertIsNone(parse_convert("what is 100 USD in INR"))
 
+    def test_current_time_in_city(self) -> None:
+        for phrase in (
+            "time in tokyo",
+            "time now in Tokyo",
+            "what time is it in tokyo",
+            "what time in tokyo",
+        ):
+            self.assertTrue(wants_timezone_convert(phrase), phrase)
+            parsed = parse_convert(phrase)
+            self.assertIsNotNone(parsed, phrase)
+            assert parsed is not None
+            _, from_tz, to_tz = parsed
+            self.assertEqual(to_tz, "Asia/Tokyo")
+            self.assertTrue(from_tz)
+
+    def test_current_time_routing(self) -> None:
+        hit = route_command("time in tokyo")
+        self.assertTrue(hit.startswith("timezone_convert "))
+        self.assertIn("Asia/Tokyo", hit)
+
+        hit = route_offline_extras("what time is it in tokyo")
+        self.assertIsNotNone(hit)
+        assert hit is not None
+        self.assertTrue(hit.startswith("timezone_convert "))
+
+        self.assertFalse(wants_data_ask("what time is it in tokyo"))
+
+    def test_router_time_in_tokyo(self) -> None:
+        with mock.patch.dict(os.environ, {"ROUTE_MODE": "symbolic_only"}, clear=False):
+            result = route("time in tokyo")
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertTrue(result.skill.startswith("timezone_convert "))
+        self.assertIn("Asia/Tokyo", result.skill)
+
     def test_nl_to_argv(self) -> None:
         argv = nl_to_argv("July 13 at 9:00am PDT in IST")
         self.assertEqual(argv[0], "2026-07-13 09:00")

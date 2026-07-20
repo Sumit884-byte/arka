@@ -369,6 +369,116 @@ def test_retired_model_error_is_permanent():
     assert not fb._is_retired_model_error("temporary timeout")
 
 
+def test_connection_error_is_treated_as_failure():
+    assert fb._looks_like_error("Connection error.")
+    assert fb._looks_like_error("Connection error")
+    assert fb.is_retryable_error("Connection error.")
+
+
+def test_connection_error_does_not_stop_fallback_chain(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _clear_fallback_env(monkeypatch)
+    monkeypatch.setenv("ARKA_MODE", "debug")
+
+    from importlib import reload
+    from types import SimpleNamespace
+    from unittest.mock import patch
+
+    import arka.llm.fallback as fb_mod
+
+    reload(fb_mod)
+    fb_mod.EXHAUSTION.reset()
+
+    chain = [
+        ("openrouter", "test-model"),
+        ("groq", "llama-3.3-70b-versatile"),
+        ("huggingface", "meta-llama/Meta-Llama-3-8B-Instruct"),
+        ("gemini", "gemini-2.0-flash"),
+    ]
+
+    class FakeAgent:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def run(self, _user):
+            provider = FakeAgent.last_provider
+            if provider == "openrouter":
+                raise RuntimeError("429 rate limit")
+            if provider == "groq":
+                return SimpleNamespace(content="quota exceeded")
+            if provider == "huggingface":
+                return SimpleNamespace(content="Connection error.")
+            return SimpleNamespace(content="Rust is a systems programming language focused on safety and performance.")
+
+    def fake_build_model(provider, model_id, temperature, *, max_tokens=None, session=None):
+        FakeAgent.last_provider = provider
+        return object()
+
+    FakeAgent.last_provider = ""
+    engine = fb_mod.LlmFallbackEngine(chain=chain, store=fb_mod.ExhaustionStore())
+
+    with patch.object(fb_mod, "build_model", side_effect=fake_build_model):
+        with patch("agno.agent.Agent", FakeAgent):
+            result = engine.complete("You are helpful.", "what is Rust?")
+
+    assert result.text == "Rust is a systems programming language focused on safety and performance."
+    assert result.provider == "gemini"
+    assert result.attempts == 4
+    captured = capsys.readouterr()
+    assert "huggingface" in captured.err
+    assert "Connection error" in captured.err or "fail huggingface" in captured.err
+
+
+def test_format_llm_failure_lists_providers():
+    msg = fb.format_llm_failure(
+        tried=[
+            "openrouter/x-ai/grok (max_tokens=512)",
+            "groq/llama-3.3-70b-versatile",
+            "huggingface/meta-llama/Meta-Llama-3-8B-Instruct",
+        ],
+        last_error="huggingface/meta-llama/Meta-Llama-3-8B-Instruct: Connection error.",
+        attempts=3,
+    )
+    assert "All configured LLM providers failed." in msg
+    assert "openrouter" in msg
+    assert "groq" in msg
+    assert "huggingface" in msg
+    assert "arka doctor" in msg
+    assert "Connection error" in msg
+
+
+def test_llm_complete_returns_formatted_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clear_fallback_env(monkeypatch)
+
+    from importlib import reload
+    from unittest.mock import patch
+
+    import arka.llm.fallback as fb_mod
+
+    reload(fb_mod)
+
+    engine = fb_mod.LlmFallbackEngine(
+        chain=[("gemini", "gemini-2.0-flash")],
+        store=fb_mod.ExhaustionStore(),
+    )
+
+    with patch.object(fb_mod.LlmFallbackEngine, "complete") as mock_complete:
+        mock_complete.return_value = fb_mod.CompletionResult(
+            error=fb_mod.format_llm_failure(
+                tried=["gemini/gemini-2.0-flash"],
+                last_error="gemini/gemini-2.0-flash: quota exceeded",
+                attempts=1,
+            ),
+            attempts=1,
+            tried=["gemini/gemini-2.0-flash"],
+        )
+        text = fb_mod.llm_complete("sys", "user", task="chat")
+
+    assert "All configured LLM providers failed." in text
+    assert "arka doctor" in text
+
+
 def test_exhaustion_notification_is_best_effort(monkeypatch):
     monkeypatch.setattr(fb, "_EXHAUSTION_NOTIFIED", False)
     monkeypatch.setattr(fb, "_truthy", lambda *args: True)

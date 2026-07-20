@@ -1,0 +1,62 @@
+{
+  "doctor": {
+    "live": true,
+    "args": [
+      "doctor"
+    ],
+    "chars": 1004
+  },
+  "route_tokyo_route": {
+    "live": true,
+    "args": [
+      "route",
+      "time in tokyo"
+    ],
+    "chars": 98
+  },
+  "route_tokyo": {
+    "live": true,
+    "args": [
+      "time in tokyo"
+    ],
+    "chars": 197
+  },
+  "route_rust": {
+    "live": true,
+    "args": [
+      "route",
+      "what is Rust?"
+    ],
+    "chars": 60
+  },
+  "ask_rust": {
+    "live": true,
+    "args": [
+      "ask",
+      "what is Rust?"
+    ],
+    "chars": 576
+  },
+  "mcp_doctor": {
+    "live": true,
+    "args": [
+      "mcp",
+      "doctor"
+    ],
+    "chars": 861
+  },
+  "coding_tui": {
+    "live": true,
+    "args": [
+      "coding-tui",
+      "."
+    ],
+    "chars": 1147
+  },
+  "capabilities": {
+    "live": true,
+    "args": [
+      "capabilities"
+    ]
+  }
+}

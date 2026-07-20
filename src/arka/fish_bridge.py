@@ -9,7 +9,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 
-from arka.paths import arka_home, bundled_dir, config_dir, fish_config
+from arka.paths import arka_home, bundled_dir, config_dir, env_file, fish_config
 
 
 @dataclass
@@ -17,6 +17,36 @@ class FishRoute:
     kind: str
     action: str
     why: str = ""
+
+
+_route_preview_cache: dict[tuple[str, str], FishRoute | None] = {}
+_route_preview_stamp: str | None = None
+
+
+def _fish_config_stamp() -> str:
+    cfg = fish_config()
+    if cfg is None:
+        return ""
+    parts: list[str] = []
+    try:
+        parts.append(f"cfg:{cfg.stat().st_mtime_ns}")
+    except OSError:
+        return ""
+    env = env_file()
+    if env.is_file():
+        try:
+            parts.append(f"env:{env.stat().st_mtime_ns}")
+        except OSError:
+            pass
+    return "|".join(parts)
+
+
+def _clear_route_preview_cache_if_stale() -> None:
+    global _route_preview_stamp
+    stamp = _fish_config_stamp()
+    if stamp != _route_preview_stamp:
+        _route_preview_cache.clear()
+        _route_preview_stamp = stamp
 
 
 def _fish_env() -> dict[str, str]:
@@ -132,6 +162,12 @@ def fish_route_preview(text: str) -> FishRoute | None:
     if not cmd:
         return None
 
+    _clear_route_preview_cache_if_stale()
+    stamp = _route_preview_stamp or ""
+    cache_key = (stamp, cmd.casefold())
+    if stamp and cache_key in _route_preview_cache:
+        return _route_preview_cache[cache_key]
+
     cfg = fish_config()
     fish = _find_fish()
     if cfg is None or not fish:
@@ -173,5 +209,11 @@ def fish_route_preview(text: str) -> FishRoute | None:
             fallback = route_find_files_by_size(cmd) or route_offline_extras(cmd)
         except ImportError:
             fallback = None
-        return FishRoute(kind="skill", action=fallback) if fallback else None
-    return FishRoute(kind=kind or "skill", action=action, why=why)
+        result = FishRoute(kind="skill", action=fallback) if fallback else None
+        if stamp:
+            _route_preview_cache[cache_key] = result
+        return result
+    result = FishRoute(kind=kind or "skill", action=action, why=why)
+    if stamp:
+        _route_preview_cache[cache_key] = result
+    return result
