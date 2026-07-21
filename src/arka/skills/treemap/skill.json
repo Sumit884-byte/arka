@@ -1,0 +1,23 @@
+{
+  "name": "treemap",
+  "description": "Create treemap visualizations from CSV, JSON, or other tabular data",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "generate treemap",
+    "create treemap",
+    "treemap from csv",
+    "treemap from sales data",
+    "nested chart from data",
+    "hierarchical chart"
+  ],
+  "permissions": ["read", "write"],
+  "requires": {
+    "anyBins": ["python3"]
+  },
+  "metadata": {
+    "optional": ["matplotlib (arka-agent[charts])"]
+  }
+}

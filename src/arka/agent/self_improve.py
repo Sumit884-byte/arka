@@ -138,6 +138,7 @@ def _diagnostic_pytest_cmd() -> str:
         "tests/test_llm_fallback.py",
         "tests/test_context7_mcp.py",
         "tests/test_self_improve.py",
+        "tests/test_self_build.py",
         "tests/test_free_credits.py",
         "tests/test_install_app_platform.py",
         "tests/test_router_gift_advice.py",
@@ -1090,6 +1091,11 @@ def main(argv: list[str] | None = None) -> int:
     p_imp.add_argument("target", nargs="*", help="Optional improvement focus")
     p_imp.add_argument("--apply", action="store_true", help="Run goal agent to implement the plan")
     p_imp.add_argument("--fast", action="store_true", help="Run compact diagnostics without LLM planning")
+    p_imp.add_argument(
+        "--mcp",
+        action="store_true",
+        help="Use MCP-orchestrated self-build loop (repo health audit via arka MCP tools)",
+    )
     p_imp.add_argument("-n", "--max-rounds", type=int, default=DEFAULT_MAX_ROUNDS)
     p_imp.add_argument("-s", "--max-steps", type=int, default=DEFAULT_MAX_STEPS)
     p_imp.add_argument("-y", "--yes", action="store_true", help="Auto-approve risky actions")
@@ -1117,6 +1123,17 @@ def main(argv: list[str] | None = None) -> int:
             max_steps=args.max_steps,
             auto_init=not args.no_auto_init,
         )
+        if getattr(args, "mcp", False):
+            from arka.agent.self_build import run_self_build
+
+            return run_self_build(
+                target,
+                apply=apply,
+                yes=yes,
+                max_rounds=max_rounds,
+                max_steps=max_steps,
+                auto_init=auto_init,
+            )
         return run_self_improve(
             target,
             max_rounds=max_rounds,

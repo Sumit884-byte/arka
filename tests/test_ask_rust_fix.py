@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from unittest import mock
 
 from arka.agent import chat
 from arka.integrations import supermemory as sm
@@ -13,12 +14,35 @@ def test_recall_query_terms_strips_what_is_boilerplate() -> None:
 
 
 def test_ambiguous_definitional_query_detects_rust() -> None:
-    assert sm.is_ambiguous_definitional_query("what is Rust?")
-    assert sm.should_skip_memory_recall("what is Rust?")
+    from arka.core.habitat import reset_habitat, set_domain
+
+    with mock.patch("arka.core.habitat.config_dir") as config_dir:
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            config_dir.return_value = Path(tmp)
+            reset_habitat()
+            set_domain("developer")
+            assert sm.is_ambiguous_definitional_query("what is Rust?")
+            set_domain("general")
+            assert not sm.is_ambiguous_definitional_query("what is Rust?")
 
 
 def test_enhance_definitional_search_query_disambiguates_rust() -> None:
-    assert "programming language" in sm.enhance_definitional_search_query("what is Rust?").lower()
+    from unittest import mock
+
+    from arka.core.habitat import reset_habitat, set_domain
+
+    with mock.patch("arka.core.habitat.config_dir") as config_dir:
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            config_dir.return_value = Path(tmp)
+            reset_habitat()
+            set_domain("developer")
+            assert "programming language" in sm.enhance_definitional_search_query("what is Rust?").lower()
 
 
 def test_local_recall_ignores_unrelated_probability_memories(tmp_path, monkeypatch) -> None:

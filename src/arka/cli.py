@@ -203,6 +203,11 @@ def main(argv: list[str] | None = None) -> int:
 
         return self_main(args[1:])
 
+    if args[0] in ("self_build", "self-build", "improve_self", "improve-self"):
+        from arka.agent.self_build import main as self_build_main
+
+        return self_build_main(args[1:])
+
     if args[0] == "repo":
         from arka.agent.repo_context import main as repo_context_main
 
@@ -356,6 +361,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if args[0] == "memory":
         return run_script("arka_memory.py", args[1:])
+
+    if args[0] == "habitat":
+        from arka.core.habitat import main as habitat_main
+
+        return habitat_main(args[1:])
 
     if args[0] == "remind":
         rest = args[1:]

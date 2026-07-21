@@ -1285,6 +1285,68 @@ def _handle_arka_agent_hub(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"agent_hub unavailable: {exc}") from exc
 
 
+def call_mcp_tool(name: str, arguments: dict[str, Any] | None = None) -> str:
+    """Invoke an Arka MCP tool handler in-process (no stdio client)."""
+    tool_name = str(name or "").strip()
+    if not tool_name:
+        raise ValueError("tool name is required")
+    args = arguments or {}
+    if not isinstance(args, dict):
+        raise ValueError("arguments must be an object")
+    for tool in _build_tools():
+        if tool.name == tool_name:
+            if tool.name in _mcp_disabled_tools():
+                raise RuntimeError(_mcp_disabled_message(tool_name))
+            return tool.handler(args)
+    raise ValueError(f"Unknown MCP tool: {tool_name}")
+
+
+def _handle_arka_self_build(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "run").strip().lower()
+    try:
+        from arka.agent.self_build import (
+            list_sessions,
+            run_self_build,
+            session_status,
+            status_summary,
+        )
+
+        if action == "run":
+            target = str(arguments.get("target") or arguments.get("focus") or "").strip()
+            return json.dumps(
+                {
+                    "exit_code": run_self_build(
+                        target,
+                        apply=bool(arguments.get("apply", False)),
+                        yes=bool(arguments.get("yes", False)),
+                        max_rounds=int(arguments.get("max_rounds") or 2),
+                        max_steps=int(arguments.get("max_steps") or 15),
+                        auto_init=not bool(arguments.get("no_auto_init", False)),
+                        use_jules=bool(arguments.get("use_jules", False)),
+                        session_id=str(arguments.get("session_id") or "").strip(),
+                    ),
+                    "target": target or "general",
+                },
+                indent=2,
+            )
+        if action == "list":
+            limit = int(arguments.get("limit") or 20)
+            return json.dumps(list_sessions(limit=max(1, min(limit, 100))), indent=2)
+        if action == "status":
+            session_id = str(arguments.get("session_id") or arguments.get("id") or "").strip()
+            if session_id:
+                data = session_status(session_id)
+                if not data:
+                    raise ValueError(f"unknown self-build session: {session_id}")
+                return json.dumps(data, indent=2)
+            return json.dumps(status_summary(), indent=2)
+        raise ValueError("action must be run, list, or status")
+    except ValueError:
+        raise
+    except ImportError as exc:
+        raise RuntimeError(f"self_build unavailable: {exc}") from exc
+
+
 def _handle_arka_team_run(arguments: dict[str, Any]) -> str:
     team = str(arguments.get("team") or arguments.get("name") or "").strip()
     task = str(arguments.get("task") or "").strip()
@@ -2508,6 +2570,32 @@ def _build_tools() -> list[ArkaMcpTool]:
             },
             handler=_handle_arka_team_run,
         ),
+        ArkaMcpTool(
+            name="arka_self_build",
+            description=(
+                "Run Arka's MCP-orchestrated self-build loop — repo health audit, plan, "
+                "optional apply via goal/jules, verify with tests."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["run", "list", "status"],
+                        "default": "run",
+                    },
+                    "target": {"type": "string", "description": "Optional improvement focus"},
+                    "apply": {"type": "boolean", "default": False},
+                    "yes": {"type": "boolean", "default": False},
+                    "use_jules": {"type": "boolean", "default": False},
+                    "max_rounds": {"type": "integer", "default": 2},
+                    "max_steps": {"type": "integer", "default": 15},
+                    "session_id": {"type": "string", "description": "Optional session id to reuse"},
+                    "limit": {"type": "integer", "default": 20},
+                },
+            },
+            handler=_handle_arka_self_build,
+        ),
     ]
 
 
@@ -2780,6 +2868,7 @@ def doctor(*, timeout: float = 8.0) -> tuple[str, int]:
 __all__ = [
     "ARKA_MCP_SERVER_KEY",
     "ArkaMcpServer",
+    "call_mcp_tool",
     "doctor",
     "ensure_arka_self_in_config",
     "install_config_snippet",

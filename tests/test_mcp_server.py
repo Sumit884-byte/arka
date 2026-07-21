@@ -25,6 +25,7 @@ def test_list_tool_definitions_schema(monkeypatch):
     assert "arka_session_memory" in names
     assert "arka_subagent" in names
     assert "arka_jules" in names
+    assert "arka_self_build" in names
     assert "arka_project_rules" in names
     assert "arka_webhook" in names
     assert "arka_view_data" in names
@@ -183,7 +184,7 @@ def test_mcp_server_stdio_roundtrip():
     server = ArkaMcpServer(stdin=inp, stdout=out)
     response = server.process_line(inp.getvalue().strip())
     assert response is not None
-    assert len(response["result"]["tools"]) == 38
+    assert len(response["result"]["tools"]) == 40
 
 
 def test_install_config_snippet():
@@ -1343,6 +1344,8 @@ def test_doctor_spawns_client(monkeypatch):
                 "arka_jsonkit",
                 "arka_repo_health",
                 "arka_agent_hub",
+                "arka_jules",
+                "arka_self_build",
                 "arka_team_run",
             ]]
 

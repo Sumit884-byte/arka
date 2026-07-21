@@ -1,0 +1,23 @@
+{
+  "name": "chart_from_pdf",
+  "description": "Extract tables from PDFs and generate bar, line, or pie charts from the tabular data",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "chart from pdf",
+    "graph pdf table",
+    "plot data from pdf",
+    "visualize pdf report",
+    "pdf to chart",
+    "extract chart from pdf"
+  ],
+  "permissions": ["read", "write"],
+  "requires": {
+    "anyBins": ["python3"]
+  },
+  "metadata": {
+    "optional": ["pypdf", "pymupdf", "pdfplumber", "matplotlib (arka-agent[charts])"]
+  }
+}

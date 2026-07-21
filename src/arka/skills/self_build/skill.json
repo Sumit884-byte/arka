@@ -1,0 +1,17 @@
+{
+  "name": "self_build",
+  "description": "MCP-orchestrated self-build loop — audit repo health via Arka MCP, plan improvements, apply via goal/jules",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "self build",
+    "improve self",
+    "build arka with mcp",
+    "use mcp to fix arka",
+    "improve arka using mcp",
+    "mcp self improve"
+  ],
+  "permissions": ["read", "write"]
+}

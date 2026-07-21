@@ -19,6 +19,7 @@ _HINTS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("compose_slides", ("pitch deck", "slides", "presentation")),
     ("urlkit", ("broken links", "repair links", "url validation")),
     ("self_improve", ("self improve", "improve arka", "improve routing")),
+    ("self_build", ("self build", "improve self", "mcp self improve")),
 )
 
 

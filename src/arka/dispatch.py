@@ -399,6 +399,12 @@ def run_skill(skill_line: str) -> int:
         elif head in ("terminal_video", "terminal-video", "terminal_demo", "terminal-demo", "cli_demo"):
             from arka.media.terminal_video import main as terminal_video_main
             code = terminal_video_main(rest)
+        elif head in ("chart_from_pdf", "chart-from-pdf", "pdf_chart", "pdf-chart"):
+            from arka.charts.chart_from_pdf import main as chart_from_pdf_main
+            code = chart_from_pdf_main(rest)
+        elif head in ("treemap", "tree_map", "tree-map"):
+            from arka.charts.treemap import main as treemap_main
+            code = treemap_main(rest)
         elif head in ("video_evidence", "video-evidence", "video_bug", "video-bug"):
             from arka.agent.video_evidence import main as video_evidence_main
 
@@ -512,15 +518,40 @@ def run_skill(skill_line: str) -> int:
             if len(argv) == 1 and argv[0] in ("memory", "status"):
                 code = self_main([argv[0]])
             else:
-                target, apply, max_rounds, max_steps, yes, auto_init = resolve_improve_args(argv)
-                code = run_self_improve(
-                    target,
-                    max_rounds=max_rounds,
-                    max_steps=max_steps,
-                    auto_init=auto_init,
-                    yes=yes,
-                    apply=apply,
-                )
+                use_mcp = False
+                filtered: list[str] = []
+                for tok in argv:
+                    if tok == "--mcp":
+                        use_mcp = True
+                    else:
+                        filtered.append(tok)
+                if use_mcp:
+                    from arka.agent.self_build import parse_self_build_argv, run_self_build
+
+                    target, apply, extras = parse_self_build_argv(filtered)
+                    code = run_self_build(
+                        target,
+                        apply=apply,
+                        yes=extras.get("yes", False),
+                        max_rounds=extras.get("max_rounds", 2),
+                        max_steps=extras.get("max_steps", 15),
+                        auto_init=extras.get("auto_init", True),
+                        use_jules=extras.get("use_jules", False),
+                    )
+                else:
+                    target, apply, max_rounds, max_steps, yes, auto_init = resolve_improve_args(filtered)
+                    code = run_self_improve(
+                        target,
+                        max_rounds=max_rounds,
+                        max_steps=max_steps,
+                        auto_init=auto_init,
+                        yes=yes,
+                        apply=apply,
+                    )
+        elif head in ("self_build", "self-build", "improve_self", "improve-self"):
+            from arka.agent.self_build import main as self_build_main
+
+            code = self_build_main(rest)
         elif head in ("ci", "review", "route_audit", "route-audit", "skill", "security", "doctor", "dev_doctor", "dev-doctor", "dev_tools", "dev-tools", "hooks"):
             from arka.agent.dev_tools import main as dev_tools_main
 

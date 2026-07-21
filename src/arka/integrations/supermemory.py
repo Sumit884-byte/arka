@@ -41,18 +41,6 @@ _RECALL_STOP_WORDS = frozenset({
     "about", "tell", "explain", "describe", "define", "give", "show", "list",
 })
 
-# Terms that collide with non-tech meanings in "what is X?" recall/search.
-_AMBIGUOUS_TECH_TERMS: dict[str, str] = {
-    "rust": "Rust programming language",
-    "go": "Go Golang programming language",
-    "swift": "Swift programming language",
-    "d": "D programming language",
-    "r": "R programming language",
-    "c": "C programming language",
-    "c++": "C++ programming language",
-    "c#": "C# programming language",
-}
-
 _DEFINITIONAL_QUERY_RE = re.compile(
     r"(?i)^(?:what|who|where|when|why|how|explain|describe|tell\s+me\s+about)\s+"
     r"(?:is|are|was|were|does|do|did|me|us)?\s*(?:a|an|the)?\s*(.+?)\??$"
@@ -61,6 +49,14 @@ _DEFINITIONAL_QUERY_RE = re.compile(
 
 def recall_query_terms(query: str) -> list[str]:
     """Return significant recall terms; drop NL stop words and 'what is X' boilerplate."""
+    try:
+        from arka.core.habitat import recall_query_terms as habitat_terms
+
+        terms = habitat_terms(query)
+        if terms:
+            return terms
+    except ImportError:
+        pass
     q = (query or "").strip().lower()
     if not q:
         return []
@@ -77,6 +73,12 @@ def recall_query_terms(query: str) -> list[str]:
 
 def is_definitional_query(query: str) -> bool:
     """True for 'what is X?', 'explain Y', etc."""
+    try:
+        from arka.core.habitat import is_definitional_query as habitat_is_def
+
+        return habitat_is_def(query)
+    except ImportError:
+        pass
     q = (query or "").strip()
     if not q:
         return False
@@ -86,33 +88,36 @@ def is_definitional_query(query: str) -> bool:
 
 
 def is_ambiguous_definitional_query(query: str) -> bool:
-    """True when a definitional question targets a single ambiguous tech/homograph term."""
-    if not is_definitional_query(query):
-        return False
-    terms = recall_query_terms(query)
-    if len(terms) != 1:
-        return False
-    return terms[0] in _AMBIGUOUS_TECH_TERMS
+    """True when habitat suggests a tech homograph in a definitional question."""
+    try:
+        from arka.core.habitat import is_ambiguous_definitional_query as habitat_ambiguous
+
+        return habitat_ambiguous(query)
+    except ImportError:
+        pass
+    return False
 
 
 def should_skip_memory_recall(query: str) -> bool:
     """Skip injecting personal memory for ambiguous definitional questions."""
+    try:
+        from arka.core.habitat import should_skip_memory_recall as habitat_skip
+
+        return habitat_skip(query)
+    except ImportError:
+        pass
     return is_ambiguous_definitional_query(query)
 
 
 def enhance_definitional_search_query(query: str) -> str:
-    """Disambiguate 'what is Rust?' → programming language, not iron oxide."""
-    q = (query or "").strip()
-    if not q:
-        return q
-    m = re.match(r"(?i)what\s+is\s+(?:a|an|the)?\s*(.+?)\??$", q)
-    if not m:
-        return q
-    subject = m.group(1).strip().rstrip("?")
-    hint = _AMBIGUOUS_TECH_TERMS.get(subject.lower())
-    if hint:
-        return f"what is {hint}"
-    return q
+    """Disambiguate homographs using user habitat (e.g. developer → Rust = programming language)."""
+    try:
+        from arka.core.habitat import enhance_definitional_search_query as habitat_enhance
+
+        return habitat_enhance(query)
+    except ImportError:
+        pass
+    return (query or "").strip()
 
 
 def _term_matches(term: str, hay: str) -> bool:

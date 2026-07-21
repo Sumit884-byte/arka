@@ -530,6 +530,28 @@ def route_terminal_video(cmd: str) -> str | None:
     return "terminal_video " + " ".join(shlex.quote(a) for a in argv)
 
 
+def route_chart_from_pdf(cmd: str) -> str | None:
+    try:
+        from arka.charts.chart_from_pdf import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "chart_from_pdf " + " ".join(shlex.quote(a) for a in argv)
+
+
+def route_treemap(cmd: str) -> str | None:
+    try:
+        from arka.charts.treemap import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "treemap " + " ".join(shlex.quote(a) for a in argv)
+
+
 def route_ascii_art(cmd: str) -> str | None:
     try:
         from arka.agent.ascii_art import nl_to_argv
@@ -921,6 +943,17 @@ def route_personalize(cmd: str) -> str | None:
     if not argv:
         return "personalize recommend"
     return "personalize " + " ".join(shlex.quote(a) for a in argv)
+
+
+def route_habitat(cmd: str) -> str | None:
+    try:
+        from arka.core.habitat import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "habitat " + " ".join(shlex.quote(a) for a in argv)
 
 
 def route_provider_select(cmd: str) -> str | None:
@@ -1560,6 +1593,15 @@ def route_coding_tui(cmd: str) -> str | None:
     return line or None
 
 
+def route_self_build(cmd: str) -> str | None:
+    try:
+        from arka.agent.self_build import route_command
+    except ImportError:
+        return None
+    line = route_command(cmd.strip())
+    return line or None
+
+
 def route_self_improve(cmd: str) -> str | None:
     try:
         from arka.agent.self_improve import route_command
@@ -1742,6 +1784,7 @@ def route_offline_extras(cmd: str) -> str | None:
         route_super_replica,
         route_pdf_interactive,
         route_media_quiz,
+        route_self_build,
         route_self_improve,
         route_jules,
         route_mode,
@@ -1767,8 +1810,11 @@ def route_offline_extras(cmd: str) -> str | None:
         route_spreadsheet,
         route_teammate_review,
         route_society,
+        route_chart_from_pdf,
+        route_treemap,
         route_generate_data,
         route_exercise_dataset,
+        route_kaggle,
         route_github_dataset,
         route_data_collect,
         route_view_data,
@@ -1800,9 +1846,11 @@ def route_offline_extras(cmd: str) -> str | None:
         route_model_select,
         route_stt_install,
         route_free_credits,
+        route_compose_slides,
         route_dev_tools,
         route_provider_select,
         route_personalize,
+        route_habitat,
         route_life_sciences,
         route_interesting_fact,
         route_platform_howto,
@@ -1815,7 +1863,6 @@ def route_offline_extras(cmd: str) -> str | None:
         route_post_x,
         route_find_files_by_size,
         route_kalshi,
-        route_kaggle,
         route_remind,
         route_batch,
         route_config_share,
@@ -1841,7 +1888,6 @@ def route_offline_extras(cmd: str) -> str | None:
         route_generate_image,
         route_download,
         route_convert_media,
-        route_compose_slides,
         route_compose_video,
         route_terminal_video,
         route_timer,

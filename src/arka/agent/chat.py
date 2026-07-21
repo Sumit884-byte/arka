@@ -134,6 +134,12 @@ def session_append(role: str, content: str) -> None:
             memory_auto_detect(content, quiet=True)
         except ImportError:
             pass
+        try:
+            from arka.core.habitat import update_from_message
+
+            update_from_message(content, quiet=True)
+        except ImportError:
+            pass
 
 
 def extract_pin(text: str) -> str | None:
@@ -1774,6 +1780,14 @@ def build_session_context(question: str | None = None) -> str:
             )
         )
     if question:
+        try:
+            from arka.core.habitat import context_for as habitat_context_for
+
+            habitat = habitat_context_for(question)
+            if habitat and habitat.strip():
+                parts.append(habitat.strip())
+        except ImportError:
+            pass
         try:
             from arka.agent.core import memory_context_for
 
