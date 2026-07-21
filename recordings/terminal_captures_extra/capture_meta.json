@@ -1,0 +1,169 @@
+{
+  "skills_list": {
+    "live": true,
+    "args": [
+      "skills",
+      "list"
+    ],
+    "source": "cli",
+    "via": "arka skills list",
+    "chars": 7065
+  },
+  "repo_health": {
+    "live": true,
+    "args": [
+      "repo_health"
+    ],
+    "source": "cli",
+    "via": "arka repo_health",
+    "chars": 735
+  },
+  "dev_route_audit": {
+    "live": true,
+    "args": [
+      "dev",
+      "route-audit"
+    ],
+    "source": "module_fallback",
+    "via": "arka dev route-audit",
+    "chars": 999
+  },
+  "route_chart_btc": {
+    "live": true,
+    "args": [
+      "route",
+      "chart BTC"
+    ],
+    "source": "cli",
+    "via": "arka route chart BTC",
+    "chars": 82
+  },
+  "chart_bar": {
+    "live": false,
+    "args": [
+      "chart",
+      "bar",
+      "--data",
+      "Apple:230,Samsung:210,Google:180",
+      "--title",
+      "Phone sales"
+    ],
+    "source": "cli",
+    "via": "arka chart bar --data Apple:230,Samsung:210,Google:180 --title Phone sales",
+    "chars": 467
+  },
+  "compose_slides": {
+    "live": true,
+    "args": [
+      "compose",
+      "slides",
+      "AI agents"
+    ],
+    "source": "cli",
+    "via": "arka compose slides AI agents",
+    "chars": 2546
+  },
+  "compose_3d_help": {
+    "live": true,
+    "args": [
+      "compose",
+      "3d",
+      "--help"
+    ],
+    "source": "module_fallback",
+    "via": "arka compose 3d --help",
+    "chars": 382
+  },
+  "password_list": {
+    "live": true,
+    "args": [
+      "password",
+      "list"
+    ],
+    "source": "cli",
+    "via": "arka password list",
+    "chars": 498
+  },
+  "bookmark_list": {
+    "live": true,
+    "args": [
+      "bookmark",
+      "list"
+    ],
+    "source": "module_fallback",
+    "via": "arka bookmark list",
+    "chars": 76
+  },
+  "docker_ps": {
+    "live": false,
+    "args": [
+      "docker",
+      "ps"
+    ],
+    "source": "module_fallback",
+    "via": "arka docker ps",
+    "chars": 54
+  },
+  "github_help": {
+    "live": true,
+    "args": [
+      "github",
+      "--help"
+    ],
+    "source": "module_fallback",
+    "via": "arka github --help",
+    "chars": 289
+  },
+  "agent_hub_list": {
+    "live": true,
+    "args": [
+      "agent_hub",
+      "list"
+    ],
+    "source": "cli",
+    "via": "arka agent_hub list",
+    "chars": 474
+  },
+  "self_improve_status": {
+    "live": true,
+    "args": [
+      "self-improve",
+      "status"
+    ],
+    "source": "module_fallback",
+    "via": "arka self-improve status",
+    "chars": 104
+  },
+  "remind_help": {
+    "live": true,
+    "args": [
+      "remind",
+      "--help"
+    ],
+    "source": "cli",
+    "via": "arka remind --help",
+    "chars": 813
+  },
+  "free_tier_help": {
+    "live": true,
+    "args": [
+      "free",
+      "tier",
+      "setup",
+      "--help"
+    ],
+    "source": "cli",
+    "via": "arka free tier setup --help",
+    "chars": 2009
+  },
+  "ascii_arka": {
+    "live": true,
+    "args": [
+      "ascii",
+      "ARKA"
+    ],
+    "source": "cli",
+    "via": "arka ascii ARKA",
+    "chars": 155
+  }
+}

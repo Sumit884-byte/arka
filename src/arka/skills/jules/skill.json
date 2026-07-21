@@ -1,0 +1,19 @@
+{
+  "name": "jules",
+  "description": "Jules-style async coding sessions — assign background tasks, fix GitHub issues, track status, open PRs",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "jules assign",
+    "jules list",
+    "jules status",
+    "fix github issue",
+    "work on issue",
+    "async coding task",
+    "background coding",
+    "create pr for session"
+  ],
+  "permissions": ["read", "write", "network"]
+}

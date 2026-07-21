@@ -1,0 +1,25 @@
+{
+  "name": "terminal_video",
+  "description": "Create animated terminal demo videos from Arka CLI captures with optional voiceover (ffmpeg + edge-tts)",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "terminal demo video",
+    "create terminal recording",
+    "animated cli demo",
+    "build arka demo video",
+    "terminal screencast",
+    "cli demo mp4",
+    "capture terminal output for video"
+  ],
+  "permissions": ["read", "write", "shell"],
+  "requires": {
+    "bins": ["ffmpeg", "ffprobe"],
+    "anyBins": ["python3"]
+  },
+  "metadata": {
+    "optional": ["Pillow", "edge-tts (arka-agent[video])"]
+  }
+}

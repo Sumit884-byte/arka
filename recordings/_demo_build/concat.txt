@@ -1,0 +1,8 @@
+file '/Users/sumitmishra/dev/arka/recordings/_demo_build/00_title.mp4'
+file '/Users/sumitmishra/dev/arka/recordings/_demo_build/01_install.mp4'
+file '/Users/sumitmishra/dev/arka/recordings/_demo_build/02_doctor.mp4'
+file '/Users/sumitmishra/dev/arka/recordings/_demo_build/03_routing.mp4'
+file '/Users/sumitmishra/dev/arka/recordings/_demo_build/04_tui.mp4'
+file '/Users/sumitmishra/dev/arka/recordings/_demo_build/05_mcp.mp4'
+file '/Users/sumitmishra/dev/arka/recordings/_demo_build/06_features.mp4'
+file '/Users/sumitmishra/dev/arka/recordings/_demo_build/07_outro.mp4'

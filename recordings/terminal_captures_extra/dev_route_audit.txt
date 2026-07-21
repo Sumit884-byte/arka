@@ -1,0 +1,70 @@
+Route audit
+symbolic routes: 161
+fish hooks: 259
+coverage cases: 41
+
+Routes without obvious fish parity:
+- agent_race
+- agent_skills
+- app_automation
+- app_check
+- ascii_art
+- astronomy
+- background_processes
+- background_remove
+- batch
+- blocks
+- browser_check
+- chart
+- code_convert
+- code_project
+- compose_3d
+- compose_slides
+- compose_video
+- config_share
+- convert
+- convert_media
+
+Routes without dedicated NL coverage:
+- agent_hub
+- agent_race
+- agent_skills
+- app_automation
+- app_check
+- background_processes
+- background_remove
+- batch
+- blocks
+- browser_check
+- chart
+- code_convert
+- code_project
+- coding_tui
+- compose_video
+- config_share
+- convert
+- convert_media
+- cool_build
+- council
+
+Docs mention routed skills:
+- agent_hub
+- ascii_art
+- background_remove
+- batch
+- blocks
+- bookmarks
+- browser_check
+- chart
+- clipboard_history
+- competitions
+- compose_3d
+- compose_slides
+- compose_video
+- convert
+- council
+- currency_convert
+- daily_brief
+- data_ask
+- deploy
+- describe_image

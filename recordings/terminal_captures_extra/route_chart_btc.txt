@@ -1,0 +1,3 @@
+skill: chart line BTC --range 3mo --title 'BTC (3mo)'
+kind: skill
+source: offline

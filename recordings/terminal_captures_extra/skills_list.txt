@@ -1,0 +1,85 @@
+Third-party skills (21):
+  [on ] arka v0.0.0 — MCP plugin server
+       adapter=mcp type=mcp root=
+       triggers: arka
+       permissions: network
+  [on ] astronomy v1.0.0 — Astronomy lookups — bright stars, planets, moon phase, ISS pass times
+       adapter=arka-manifest type=python root=~/dev/arka/src/arka/skills/astronomy
+       triggers: astronomy, what star is, what is betelgeuse, moon phase, moon phase tonight, iss pass, iss pass times, international space station
+       permissions: network
+  [on ] compose_3d v1.0.0 — Generate 3D models (OBJ/STL/GLB) from natural language prompts or procedural shapes
+       adapter=arka-manifest type=python root=~/dev/arka/src/arka/skills/three_d
+       triggers: compose 3d, 3d model, create 3d, generate 3d, make 3d, compose 3d, 3d cube, 3d sphere
+       permissions: network, write
+  [on ] context7 v0.0.0 — MCP plugin server
+       adapter=mcp type=mcp root=
+       triggers: context7
+       permissions: network
+  [on ] describe_video v1.0.0 — Sample video frames and describe visible subjects, actions, setting, people, positions, and visual issues using Arka's vision stack
+       adapter=arka-manifest type=python root=~/dev/arka/src/arka/skills/describe_video
+       triggers: describe video, describe video, analyze video, inspect video, review gameplay recording, who is in video, which people are in clip, where are people in video
+       permissions: read
+  [on ] exercise_dataset v0.1.0 — Import and query hasaneyldrm/exercises-dataset exercise metadata.
+       adapter=arka-manifest type=python root=~/dev/arka/src/arka/skills/exercise_dataset
+       triggers: exercise dataset, add exercise dataset, import exercises dataset, load fitness exercise data, search exercises dataset
+       permissions: read, write, network
+  [on ] game_control v1.0.0 — Play a browser game headlessly, capture gameplay frames/video, and report visual or console errors
+       adapter=arka-manifest type=python root=~/dev/arka/src/arka/skills/game_control
+       triggers: game control, check my game, test gameplay, play my game, record gameplay, capture game animation, review game visuals
+       permissions: read, write
+  [on ] github_dataset v0.1.0 — Import common data files from public GitHub dataset repositories.
+       adapter=arka-manifest type=python root=~/dev/arka/src/arka/skills/github_dataset
+       triggers: github dataset, add data from github repo, import dataset repo, load data from this repo, search github dataset
+       permissions: read, write, network
+  [on ] life_sciences v1.0.0 — Anthropic life-sciences marketplace — install PubMed, single-cell QC, Nextflow, and other research plugins
+       adapter=arka-manifest type=python root=~/dev/arka/src/arka/skills/life_sciences
+       triggers: life sciences, life sciences, life science, life-sciences, install life sciences, life sciences list, life sciences install, biomedical research tools
+       permissions: network, shell
+  [on ] local_image_gen v1.0.0 — Generate images through a locally hosted Stable Diffusion WebUI-compatible API
+       adapter=arka-manifest type=python root=~/dev/arka/src/arka/skills/local_image_gen
+       triggers: local image gen, generate image locally, use local image model, offline image generation
+       permissions: network, write
+  [on ] metallurgy v1.0.0 — Metallurgy — alloy properties, composition lookup, and heat-treatment procedures
+       adapter=arka-manifest type=python root=~/dev/arka/src/arka/skills/metallurgy
+       triggers: metallurgy, alloy, steel grade, stainless steel, heat treatment, alloy composition, properties of steel, brass composition
+       permissions: network
+  [on ] parallax_2d v1.0.0 — Create 2.5D depth scenes from layered 2D artwork using parallax motion
+       adapter=arka-manifest type=python root=~/dev/arka/src/arka/skills/parallax_2d
+       triggers: parallax 2d, parallax effect, 2.5d scene, make 2d look 3d, 2d depth effect
+       permissions: write
+  [on ] rig_3d v1.0.0 — Inspect and preview GLB/GLTF character rigs, skeletons, and animation clips in Three.js
+       adapter=arka-manifest type=python root=~/dev/arka/src/arka/skills/rig_3d
+       triggers: rig 3d, rig 3d model, rig a character, inspect skeleton, pose 3d model, skinned model
+       permissions: write, network
+  [on ] scene_3d v1.0.0 — Compose Three.js scenes from real GLB/GLTF model assets with lighting, camera, placement, and animation
+       adapter=arka-manifest type=python root=~/dev/arka/src/arka/skills/scene_3d
+       triggers: scene 3d, create 3d scene, build three js scene, place 3d models, create human 3d scene
+       permissions: write, network
+  [on ] semantic_alert v1.0.0 — Create source-grounded deadline alerts from natural language
+       adapter=arka-manifest type=python root=~/dev/arka/src/arka/skills/semantic_alert
+       triggers: semantic alert, alert me when, notify me when, deadline alert, remind me when
+       permissions: write
+  [on ] spline v0.0.0 — MCP plugin server
+       adapter=mcp type=mcp root=
+       triggers: spline
+       permissions: network
+  [on ] symbolic_image v1.0.0 — Compose reusable comparison and explainer graphics from pre-made image assets without an image-generation call
+       adapter=arka-manifest type=python root=~/dev/arka/src/arka/skills/symbolic_image
+       triggers: symbolic image, comparison image, split panel graphic, before and after image, compose visual explainer
+       permissions: read, write
+  [on ] text_to_3d v1.0.0 — Generate 3D models from text using free/non-trial providers by default, including local Shap-E and Hugging Face Shap-E
+       adapter=arka-manifest type=python root=~/dev/arka/src/arka/skills/text_to_3d
+       triggers: text to 3d, text to 3d, generate 3d model from text, create 3d model from text, use hugging face to generate 3d model
+       permissions: write, network
+  [on ] video_evidence v0.1.0 — Convert developer video recordings into architecture docs, PR reproduction context, or Jira-ready bug tickets.
+       adapter=arka-manifest type=python root=~/dev/arka/src/arka/skills/video_evidence
+       triggers: video evidence, video bug report to jira ticket, screen recording reproduction steps, architecture meeting video to docs, whiteboard recording to code stubs, loom bug report summary, jam video bug ticket
+       permissions: read, write
+  [on ] visual_diagnose v1.0.0 — Use local vLLM/vision to describe a rendered image first, then return concrete visual defects and fixes
+       adapter=arka-manifest type=python root=~/dev/arka/src/arka/skills/visual_diagnose
+       triggers: visual diagnose, describe image and find issues, diagnose visual issues, review screenshot for bugs, find visual fixes
+       permissions: read
+  [on ] word_counter v1.0.0 — Count words, characters, sentences, lines, unique words, and estimated reading time locally
+       adapter=arka-manifest type=python root=~/dev/arka/src/arka/skills/word_counter
+       triggers: word counter, word count, count words, count characters, reading time, text statistics
+       permissions: read

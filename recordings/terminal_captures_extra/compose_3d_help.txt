@@ -1,0 +1,12 @@
+usage: compose_3d.py [-h] {compose,parse,check} ...
+
+Compose 3D models — procedural meshes and AI shapes
+
+positional arguments:
+  {compose,parse,check}
+    compose             Generate a 3D model
+    parse               Parse natural language → compose_3d args
+    check               Verify compose_3d dependencies
+
+options:
+  -h, --help            show this help message and exit

@@ -1,0 +1,4 @@
+arka repo:  ~/dev/arka
+code project: yes
+  root: ~/dev/arka
+memory: ~/dev/arka/self-improve-memory.json

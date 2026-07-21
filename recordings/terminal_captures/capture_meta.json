@@ -19,7 +19,7 @@
     "args": [
       "time in tokyo"
     ],
-    "chars": 197
+    "chars": 198
   },
   "route_rust": {
     "live": true,
@@ -35,7 +35,7 @@
       "ask",
       "what is Rust?"
     ],
-    "chars": 576
+    "chars": 880
   },
   "mcp_doctor": {
     "live": true,

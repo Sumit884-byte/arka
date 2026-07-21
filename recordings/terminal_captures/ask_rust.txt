@@ -1,4 +1,23 @@
 [FROM MEMORY]
 
-Rust is a systems programming language designed for safety and performance. It provides memory safety without a garbage collector through its ownership system, preventing common bugs like null pointer dereferences and data races at compile time. Rust offers zero-cost abstractions, pattern matching, and strong type inference. It is widely used for embedded systems, command-line tools, web services, and applications where both performance and reliability are critical. The language is developed by Mozilla and has a strong community ecosystem.
+**What is Rust?**
+
+Rust is a systems programming language developed by Mozilla, first released in 2010. It focuses on three core goals:
+
+- **Safety** - Memory safety without garbage collection through its ownership and borrowing system
+- **Concurrency** - Built-in thread safety guarantees to prevent data races
+- **Performance** - Zero-cost abstractions and control over low-level details
+
+Common uses include:
+- Systems programming
+- WebAssembly applications
+- Command-line tools
+- Web services and APIs
+- Embedded systems development
+
+**Cargo** is Rust's package manager and build tool, handling dependency management and compilation.
+
+Wikipedia: https://en.wikipedia.org/wiki/Rust_(programming_language)
+
+You mentioned Kolkata location context but didn't ask a specific question. Let me know what you'd like to know about Rust or how I can help.
 Searching web…

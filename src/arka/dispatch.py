@@ -396,6 +396,9 @@ def run_skill(skill_line: str) -> int:
         elif head in ("describe_video", "describe-video", "video_describe", "video-description"):
             from arka.vision.video import main as video_main
             code = video_main(rest)
+        elif head in ("terminal_video", "terminal-video", "terminal_demo", "terminal-demo", "cli_demo"):
+            from arka.media.terminal_video import main as terminal_video_main
+            code = terminal_video_main(rest)
         elif head in ("video_evidence", "video-evidence", "video_bug", "video-bug"):
             from arka.agent.video_evidence import main as video_evidence_main
 
@@ -496,6 +499,10 @@ def run_skill(skill_line: str) -> int:
         elif head in ("supermemory", "super-memory"):
             from arka.integrations.supermemory import main as supermemory_main
             code = supermemory_main(rest)
+        elif head in ("jules",):
+            from arka.agent.jules import main as jules_main
+
+            code = jules_main(rest)
         elif head in ("self_improve", "self"):
             from arka.agent.self_improve import main as self_main, resolve_improve_args, run_self_improve
 

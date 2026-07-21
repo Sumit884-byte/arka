@@ -85,6 +85,18 @@ def collect_status() -> dict[str, Any]:
     except Exception as exc:
         subagents = {"error": str(exc), "summary": {}, "active": []}
 
+    jules: dict[str, Any] = {"summary": {}, "active": []}
+    try:
+        from arka.agent.jules import list_sessions, status_summary as jules_status_summary
+
+        rows = list_sessions(limit=200)
+        jules = {
+            "summary": jules_status_summary(),
+            "active": [row for row in rows if row.get("status") in {"pending", "running"}],
+        }
+    except Exception as exc:
+        jules = {"error": str(exc), "summary": {}, "active": []}
+
     routines: dict[str, Any] = {"enabled": [], "all": []}
     try:
         from arka.integrations.routines import list_routines
@@ -129,6 +141,7 @@ def collect_status() -> dict[str, Any]:
     webhook_seen = any(str(row.get("pid")) == webhook_pid for row in processes)
     active_count = (
         len(subagents.get("active", []))
+        + len(jules.get("active", []))
         + len(routines.get("enabled", []))
         + len([row for row in processes if row.get("kind") == "server"])
         + (1 if webhook.get("pid_alive") and not webhook_seen else 0)
@@ -136,6 +149,7 @@ def collect_status() -> dict[str, Any]:
     return {
         "active_count": active_count,
         "subagents": subagents,
+        "jules": jules,
         "routines": routines,
         "servers": servers,
     }
@@ -151,6 +165,16 @@ def format_status(data: dict[str, Any]) -> str:
     )
     for row in active_agents:
         lines.append(f"  [{row.get('status')}] {row.get('id')} — {row.get('task', '')}")
+
+    jules = data.get("jules", {})
+    active_jules = jules.get("active") or []
+    jules_summary = jules.get("summary") or {}
+    lines.append(
+        f"jules\tactive={len(active_jules)} running={jules_summary.get('running', 0)} total={jules_summary.get('total', 0)}"
+    )
+    for row in active_jules:
+        issue = f" #{row['issue_number']}" if row.get("issue_number") else ""
+        lines.append(f"  [{row.get('status')}] {row.get('id')}{issue} — {row.get('task', '')}")
 
     routines = data.get("routines", {})
     enabled = routines.get("enabled") or []

@@ -1,6 +1,6 @@
 ━━━ Arka Doctor ━━━
 
-arka 0.1.0 — macos
+arka 0.1.1 — macos
   Platform cache: ~/dev/arka/platform.json
   Detected:       2026-07-17T07:30:30+00:00
   Package bundle: ~/dev/arka/src/arka/bundled

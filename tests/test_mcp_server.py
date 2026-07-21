@@ -24,6 +24,7 @@ def test_list_tool_definitions_schema(monkeypatch):
     assert "arka_routines" in names
     assert "arka_session_memory" in names
     assert "arka_subagent" in names
+    assert "arka_jules" in names
     assert "arka_project_rules" in names
     assert "arka_webhook" in names
     assert "arka_view_data" in names
@@ -373,7 +374,9 @@ def test_handle_arka_routines_list(tmp_path, monkeypatch):
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr("arka.integrations.routines.ROUTINE_FILE", routine_file)
+    monkeypatch.setattr(
+        "arka.integrations.routines._routine_file", lambda: routine_file
+    )
 
     rows = json.loads(_handle_arka_routines({"action": "list"}))
     assert len(rows) == 2
@@ -389,7 +392,9 @@ def test_handle_arka_routines_add_and_remove(tmp_path, monkeypatch):
 
     routine_file = tmp_path / "routines.json"
     routine_file.write_text("[]", encoding="utf-8")
-    monkeypatch.setattr("arka.integrations.routines.ROUTINE_FILE", routine_file)
+    monkeypatch.setattr(
+        "arka.integrations.routines._routine_file", lambda: routine_file
+    )
     monkeypatch.setattr(
         "arka.integrations.routines._security_gate_action",
         lambda _action: True,
@@ -436,7 +441,9 @@ def test_handle_arka_routines_enable_disable(tmp_path, monkeypatch):
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr("arka.integrations.routines.ROUTINE_FILE", routine_file)
+    monkeypatch.setattr(
+        "arka.integrations.routines._routine_file", lambda: routine_file
+    )
     monkeypatch.setattr("arka.integrations.routines._install_one", lambda _entry: None)
     monkeypatch.setattr("arka.integrations.routines._uninstall_one", lambda _rid: None)
 
@@ -597,7 +604,9 @@ def test_handle_arka_remind_add_list_cancel(tmp_path, monkeypatch):
     from arka.integrations import remind
     from arka.integrations.mcp_server import _handle_arka_remind
 
-    monkeypatch.setattr(remind, "REMINDERS_FILE", tmp_path / "reminders.json")
+    monkeypatch.setattr(
+        remind, "_reminders_file", lambda: tmp_path / "reminders.json"
+    )
     monkeypatch.setattr(remind, "start_daemon", lambda: 0)
 
     created = json.loads(

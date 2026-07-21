@@ -1,0 +1,15 @@
+Repo health scan: arka
+Path: ~/dev/arka
+
+Detected 5 check(s):
+
+Test:
+  - pytest: pytest -q --tb=no -x
+  - script:verify_features.py: ~/dev/arka/venv-arka/bin/python3 scripts/verify_features.py  (filename suggests verification/testing; docstring/description mentions verification/testing)
+
+Lint:
+  - ruff check: ruff check .
+  - script:check_docs.py: ~/dev/arka/venv-arka/bin/python3 scripts/check_docs.py docs  (filename suggests checking/validation; docstring/description mentions verification/testing)
+  - script:sync_doc_icons.py: ~/dev/arka/venv-arka/bin/python3 scripts/sync_doc_icons.py --check docs  (supports --check validation mode; maintenance filename, but exposes read-only --check validation)
+
+Run checks: repo_health run

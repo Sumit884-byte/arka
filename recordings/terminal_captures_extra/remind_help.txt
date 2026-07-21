@@ -1,0 +1,20 @@
+usage: arka_remind.py [-h]
+                      {daemon,add,list,status,start,stop,check,cancel,parse} ...
+
+Schedule reminders — fires at due time; again when you're back after idle or
+shutdown.
+
+positional arguments:
+  {daemon,add,list,status,start,stop,check,cancel,parse}
+    daemon              ==SUPPRESS==
+    add                 Create a reminder (default command)
+    list                List reminders
+    status              Daemon + pending reminders
+    start               Start background daemon
+    stop                Stop background daemon
+    check               Process due reminders once (shell hook)
+    cancel              Cancel reminder by id prefix
+    parse               Parse natural language → remind args (internal)
+
+options:
+  -h, --help            show this help message and exit

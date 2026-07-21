@@ -163,6 +163,12 @@ SKILL_CATALOG: dict[str, dict[str, Any]] = {
         "beginner": False,
         "requires_env": ["GEMINI_API_KEY"],
     },
+    "terminal_video": {
+        "interests": ["media", "demo"],
+        "description": "Build animated terminal demo videos from CLI captures",
+        "example": "terminal_video build",
+        "beginner": False,
+    },
     "convert_media": {
         "interests": ["media"],
         "description": "Convert between video, audio, and image formats",

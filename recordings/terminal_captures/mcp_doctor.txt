@@ -1,7 +1,7 @@
 command	~/dev/arka/venv-arka/bin/arka
 args	mcp serve
 tools_expected	38
-initialize	ok	{'name': 'arka', 'version': '0.1.0'}
+initialize	ok	{'name': 'arka', 'version': '0.1.1'}
 tools_list	ok	count=38
 tool	arka_ask
 tool	arka_remember

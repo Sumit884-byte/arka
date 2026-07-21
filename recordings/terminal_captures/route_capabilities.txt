@@ -1,0 +1,3 @@
+skill: capabilities
+kind: skill
+source: offline

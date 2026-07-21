@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
-from pathlib import Path
 
 from arka import __version__
 from arka.dispatch import run_script, run_skill

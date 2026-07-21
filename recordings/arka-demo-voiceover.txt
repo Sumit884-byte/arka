@@ -1,19 +1,21 @@
-[0:00] Meet Arka — your terminal, upgraded. Arka routes plain English to seventy-plus local skills — deterministic offline routing, voice input, and multi-provider LLM failover from your terminal. Built for the OpenAI Build Week Developer Tools track, where we iterated with Codex to harden routing rules and ship a production-ready CLI.
+[0:00] Meet Arka — your terminal, upgraded. Arka routes plain English to seventy-plus local skills with deterministic offline routing, voice input, and multi-provider LLM failover — all from your terminal. Built for the OpenAI Build Week Developer Tools track, where we used Codex to harden routing rules, expand test coverage, and iterate on the agentic coding TUI — shipping release zero point one point one.
 
-[0:18] Getting started takes seconds. pipx install arka-agent with the chat extra pulls the full bundle from PyPI — isolated, easy to upgrade. Then arka setup configures your venv, chat dependencies, and optional Context7 MCP for library docs in Cursor or VS Code.
+[0:22] Getting started takes seconds. pipx install arka-agent with the chat extra pulls version zero point one point one from PyPI — isolated, easy to upgrade. Then arka setup configures your venv, chat dependencies, and optional Context7 MCP for library docs in Cursor or VS Code.
 
-[0:34] Run arka doctor to verify everything — platform, skills bundle, LLM providers, and MCP config. You see what's ready before your first command: venv status, bundled skills, provider failover, and MCP health. No guesswork, no silent misconfiguration.
+[0:38] Run arka doctor to verify everything — platform, skills bundle, LLM providers, and MCP config. You see what's ready before your first command: venv status, bundled skills, provider failover, and MCP health. No guesswork, no silent misconfiguration.
 
-[0:50] Now the magic: natural language routing. Type arka route time in Tokyo — Arka resolves timezone_convert instantly, no LLM tokens burned. Run it directly and you get JST. Offline pattern matching handles time zones, conversions, reminders, and dozens of other intents in milliseconds.
+[0:54] Now the magic: natural language routing. Type arka route time in Tokyo — Arka resolves timezone_convert instantly, no LLM tokens burned. Run it directly and you get JST. Offline pattern matching handles time zones, conversions, reminders, and dozens of other intents in milliseconds.
 
-[1:06] Try arka route what is Rust — same pipeline, skill match, kind skill, source offline. Deterministic routing means predictable behavior in CI and scripts. When reasoning is needed, Arka escalates automatically.
+[1:10] Try arka route what is Rust — same pipeline, skill match, kind skill, source offline. Deterministic routing means predictable behavior in CI and scripts. When reasoning is needed, Arka escalates automatically.
 
-[1:22] For open-ended questions, arka ask what is Rust hits the LLM failover chain — GPT-5.6, Codex-class models via OpenRouter — and returns a concise, accurate answer. If one provider is down or rate-limited, the next kicks in without config changes.
+[1:26] For open-ended questions, arka ask what is Rust hits the LLM failover chain — GPT-5.6 first via OpenRouter, then Codex-class models — and returns a concise, accurate answer. Codex helped us tune this chain; GPT-5.6 powers the agent steps in the coding TUI.
 
-[1:38] For coding, launch arka coding-tui — agentic development in the terminal. Plan tasks, edit files, run commands, with AssemblyAI voice input built in. Slash commands like plan and execute keep you in flow without leaving the terminal.
+[1:44] For coding, launch arka coding-tui — agentic development in the terminal. Slash plan builds a reviewable plan; approve with y and Arka auto-executes immediately. Slash test runs pytest read-only with one auto-fix pass. Slash test scripts discovers verification runners under scripts — no hardcoded list.
 
-[1:54] Arka ships as an MCP server with seventy-plus tools. arka mcp doctor verifies routing, memory, GitHub, Docker, calendar, and more — ready for Cursor, Claude Code, and VS Code. Connect once in mcp dot json; every tool is namespaced, typed, and discoverable.
+[2:02] Arka ships as an MCP server with thirty-eight tools — not seventy skills, thirty-eight MCP tools — namespaced and typed for IDEs. arka mcp doctor verifies routing, memory, GitHub, Docker, calendar, and more. Connect once in mcp dot json; every tool is discoverable from Cursor, Claude Code, and VS Code.
 
-[2:10] Under the hood: one hundred twenty plus routing rules, security gates on by default, and extensible skill plugins via skill dot json. Local-first architecture with twenty-four provider LLM failover. Your API keys stay on your machine — permission prompts gate file writes, shell commands, and network calls before anything runs.
+[2:18] Under the hood: one hundred twenty plus routing rules, security gates on by default, and extensible skill plugins via skill dot json. Local-first architecture with twenty-four provider LLM failover. Your API keys stay on your machine — permission prompts gate file writes, shell commands, and network calls before anything runs.
 
-[2:26] Explore with arka capabilities — a deterministic skills summary, no AI routing needed. Install: pipx install arka-agent with the chat extra. Docs at arka-agent dot mintlify dot site. GitHub: Sumit884-byte slash arka. Arka — your terminal, upgraded.
+[2:34] Explore with arka capabilities — a deterministic skills summary, no AI routing needed. Seventy-plus offline skills, thirty-eight MCP tools, one CLI.
+
+[2:48] Install: pipx install arka-agent with the chat extra. Docs at arka-agent dot mintlify dot site. GitHub: Sumit884-byte slash arka. Arka — your terminal, upgraded.

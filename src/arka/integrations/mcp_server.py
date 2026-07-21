@@ -514,6 +514,93 @@ def _handle_arka_subagent(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"subagent unavailable: {exc}") from exc
 
 
+def _handle_arka_jules(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "list").strip().lower()
+    try:
+        from arka.agent.jules import (
+            assign,
+            assign_issue,
+            cancel_session,
+            create_pr,
+            list_sessions,
+            session_status,
+            status_summary,
+        )
+
+        if action == "assign":
+            task = str(arguments.get("task") or "").strip()
+            if not task:
+                raise ValueError("task is required for assign")
+            sync = bool(arguments.get("sync", False))
+            if sync:
+                os.environ["JULES_SYNC"] = "1"
+            max_steps = int(arguments.get("max_steps") or 20)
+            open_pr = bool(arguments.get("open_pr", False))
+            branch = bool(arguments.get("branch", False))
+            data, err = assign(
+                task,
+                max_steps=max_steps,
+                open_pr=open_pr,
+                branch=branch,
+                background=not sync,
+            )
+            if err:
+                raise RuntimeError(err)
+            assert data is not None
+            return json.dumps(data, indent=2)
+        if action == "issue":
+            issue_number = int(arguments.get("issue_number") or arguments.get("issue") or 0)
+            if issue_number <= 0:
+                raise ValueError("issue_number is required for issue")
+            sync = bool(arguments.get("sync", False))
+            if sync:
+                os.environ["JULES_SYNC"] = "1"
+            repo = str(arguments.get("repo") or "").strip()
+            open_pr = bool(arguments.get("open_pr", True))
+            max_steps = int(arguments.get("max_steps") or 20)
+            data, err = assign_issue(
+                issue_number,
+                repo=repo,
+                max_steps=max_steps,
+                open_pr=open_pr,
+                background=not sync,
+            )
+            if err:
+                raise RuntimeError(err)
+            assert data is not None
+            return json.dumps(data, indent=2)
+        if action == "list":
+            limit = int(arguments.get("limit") or 20)
+            return json.dumps(list_sessions(limit=max(1, min(limit, 100))), indent=2)
+        if action == "status":
+            session_id = str(arguments.get("session_id") or arguments.get("id") or "").strip()
+            if session_id:
+                data = session_status(session_id)
+                if not data:
+                    raise ValueError(f"unknown session: {session_id}")
+                return json.dumps(data, indent=2)
+            return json.dumps(status_summary(), indent=2)
+        if action == "cancel":
+            session_id = str(arguments.get("session_id") or arguments.get("id") or "").strip()
+            if not session_id:
+                raise ValueError("session_id is required for cancel")
+            ok, msg = cancel_session(session_id)
+            if not ok:
+                raise RuntimeError(msg)
+            return json.dumps({"ok": True, "message": msg}, indent=2)
+        if action == "pr":
+            session_id = str(arguments.get("session_id") or arguments.get("id") or "").strip()
+            if not session_id:
+                raise ValueError("session_id is required for pr")
+            url, err = create_pr(session_id)
+            if err:
+                raise RuntimeError(err)
+            return json.dumps({"pr_url": url}, indent=2)
+        raise ValueError("action must be assign, issue, list, status, cancel, or pr")
+    except ImportError as exc:
+        raise RuntimeError(f"jules unavailable: {exc}") from exc
+
+
 def _handle_arka_webhook(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "status").strip().lower()
     try:
@@ -1556,6 +1643,63 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_subagent,
+        ),
+        ArkaMcpTool(
+            name="arka_jules",
+            description="Jules-style async coding sessions — assign tasks, fix GitHub issues, track status, open PRs.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["assign", "issue", "list", "status", "cancel", "pr"],
+                        "default": "list",
+                        "description": "assign, issue, list, status, cancel, or pr",
+                    },
+                    "task": {
+                        "type": "string",
+                        "description": "Coding task when action=assign",
+                    },
+                    "issue_number": {
+                        "type": "integer",
+                        "description": "GitHub issue number when action=issue",
+                    },
+                    "repo": {
+                        "type": "string",
+                        "description": "owner/repo when action=issue",
+                    },
+                    "session_id": {
+                        "type": "string",
+                        "description": "Session id when action=status, cancel, or pr",
+                    },
+                    "sync": {
+                        "type": "boolean",
+                        "description": "Wait for completion (default: background)",
+                        "default": False,
+                    },
+                    "open_pr": {
+                        "type": "boolean",
+                        "description": "Open PR when session completes",
+                        "default": False,
+                    },
+                    "branch": {
+                        "type": "boolean",
+                        "description": "Create jules/* branch before assign",
+                        "default": False,
+                    },
+                    "max_steps": {
+                        "type": "integer",
+                        "description": "Goal agent max steps",
+                        "default": 20,
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max rows when action=list",
+                        "default": 20,
+                    },
+                },
+            },
+            handler=_handle_arka_jules,
         ),
         ArkaMcpTool(
             name="arka_project_rules",

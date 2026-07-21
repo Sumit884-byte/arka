@@ -1,0 +1,15 @@
+hub	~/dev/arka/hub
+count	10
+claude	Claude Code	ollama launch claude
+codex	Codex CLI	ollama launch codex
+codex-app	Codex App	ollama launch codex-app
+copilot	GitHub Copilot Agent	ollama launch copilot
+droid	Droid	ollama launch droid
+fugu	Sakana Fugu	ollama launch codex
+hermes	Hermes Agent	ollama launch hermes
+openclaw	OpenClaw	ollama launch openclaw
+opencode	OpenCode	ollama launch opencode
+pi	Pi Agent	ollama launch pi
+
+Sync: agent_hub sync
+Launch: agent_hub launch <name>

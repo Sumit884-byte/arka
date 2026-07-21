@@ -1,0 +1,11 @@
+usage: github_repo.py [-h] {route,activity} ...
+
+GitHub repository activity
+
+positional arguments:
+  {route,activity}
+    route           Map NL to github_repo command
+    activity        List recent commits and modified files
+
+options:
+  -h, --help        show this help message and exit

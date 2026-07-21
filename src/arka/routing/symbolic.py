@@ -519,6 +519,17 @@ def route_compose_video(cmd: str) -> str | None:
     return "compose_video " + " ".join(shlex.quote(a) for a in argv)
 
 
+def route_terminal_video(cmd: str) -> str | None:
+    try:
+        from arka.media.terminal_video import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "terminal_video " + " ".join(shlex.quote(a) for a in argv)
+
+
 def route_ascii_art(cmd: str) -> str | None:
     try:
         from arka.agent.ascii_art import nl_to_argv
@@ -1558,6 +1569,15 @@ def route_self_improve(cmd: str) -> str | None:
     return line or None
 
 
+def route_jules(cmd: str) -> str | None:
+    try:
+        from arka.agent.jules import route_command
+    except ImportError:
+        return None
+    line = route_command(cmd.strip())
+    return line or None
+
+
 def route_help(cmd: str) -> str | None:
     clean = cmd.strip().lower()
     if clean in ("help", "?"):
@@ -1723,6 +1743,7 @@ def route_offline_extras(cmd: str) -> str | None:
         route_pdf_interactive,
         route_media_quiz,
         route_self_improve,
+        route_jules,
         route_mode,
         route_urlkit,
         route_lint_project,
@@ -1822,6 +1843,7 @@ def route_offline_extras(cmd: str) -> str | None:
         route_convert_media,
         route_compose_slides,
         route_compose_video,
+        route_terminal_video,
         route_timer,
         route_site_summary,
         route_open_url,

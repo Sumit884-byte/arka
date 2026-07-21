@@ -1,0 +1,1 @@
+No bookmarks saved yet. Try: bookmarks save https://example.com --tags docs

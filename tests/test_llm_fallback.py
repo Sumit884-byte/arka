@@ -458,11 +458,6 @@ def test_llm_complete_returns_formatted_failure(monkeypatch: pytest.MonkeyPatch)
 
     reload(fb_mod)
 
-    engine = fb_mod.LlmFallbackEngine(
-        chain=[("gemini", "gemini-2.0-flash")],
-        store=fb_mod.ExhaustionStore(),
-    )
-
     with patch.object(fb_mod.LlmFallbackEngine, "complete") as mock_complete:
         mock_complete.return_value = fb_mod.CompletionResult(
             error=fb_mod.format_llm_failure(

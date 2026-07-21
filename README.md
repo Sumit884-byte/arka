@@ -132,6 +132,15 @@ arka listen    # then say: "hey arka, what's the weather"
 
 More guides — skills, stocks, PDF RAG, Google Workspace, goal agent, testing — live on the [documentation site](https://arka-agent.mintlify.site).
 
+## Built with Codex & GPT-5.6
+
+Arka was built for the **OpenAI Build Week Developer Tools** track (July 2026):
+
+- **Codex** — routing rule hardening, NL routing test coverage, coding TUI iteration (`/plan` auto-execute, `/test`, `/test scripts`), and demo pipeline tooling.
+- **GPT-5.6** — primary model in the `arka ask` failover chain and agent steps inside `arka coding-tui` (via OpenRouter).
+
+Judges can reproduce the full path with `pipx install "arka-agent[chat]"`, `arka setup`, and `arka doctor`. Demo video and CLI screenshots live under `recordings/`.
+
 ## Contributing
 
 We welcome contributions of all sizes! Please read our [Contribution Guidelines](CONTRIBUTING.md) to get started with the local development workflow.

@@ -2991,3 +2991,811 @@
 {"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T11:17:04Z"}
 {"duration_ms": 3, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T11:17:04Z"}
 {"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T11:17:11Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T11:19:34Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T11:19:34Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T11:19:34Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T11:19:34Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T11:19:34Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T11:19:34Z"}
+{"duration_ms": 3, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T11:19:34Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T11:19:40Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T11:22:06Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T11:22:06Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T11:22:06Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T11:22:06Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T11:22:06Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T11:22:06Z"}
+{"duration_ms": 3, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T11:22:06Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T11:22:12Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T11:24:30Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T11:24:30Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T11:24:30Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T11:24:30Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T11:24:30Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T11:24:30Z"}
+{"duration_ms": 3, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T11:24:31Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T11:24:37Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T11:26:57Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T11:26:57Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T11:26:57Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T11:26:57Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T11:26:57Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T11:26:57Z"}
+{"duration_ms": 2, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T11:26:57Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T11:27:04Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T11:29:24Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T11:29:24Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T11:29:24Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T11:29:24Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T11:29:24Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T11:29:24Z"}
+{"duration_ms": 2, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T11:29:24Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T11:29:31Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T11:31:55Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T11:31:55Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T11:31:55Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T11:31:55Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T11:31:55Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T11:31:55Z"}
+{"duration_ms": 3, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T11:31:55Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T11:32:01Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T11:34:24Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T11:34:24Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T11:34:24Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T11:34:24Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T11:34:24Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T11:34:24Z"}
+{"duration_ms": 3, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T11:34:25Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T11:34:31Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T11:36:56Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T11:36:56Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T11:36:56Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T11:36:56Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T11:36:56Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T11:36:56Z"}
+{"duration_ms": 3, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T11:36:56Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T11:37:03Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T11:39:22Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T11:39:22Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T11:39:22Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T11:39:22Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T11:39:22Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T11:39:22Z"}
+{"duration_ms": 2, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T11:39:22Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T11:39:29Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T11:42:00Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T11:42:00Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T11:42:00Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T11:42:00Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T11:42:00Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T11:42:00Z"}
+{"duration_ms": 2, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T11:42:00Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T11:42:07Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T12:15:36Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T12:15:36Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T12:15:36Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T12:15:36Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T12:15:36Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T12:15:36Z"}
+{"duration_ms": 3, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T12:15:36Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T12:15:44Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T12:56:52Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T12:56:52Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T12:56:52Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T12:56:52Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T12:56:52Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T12:56:52Z"}
+{"duration_ms": 3, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T12:56:52Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T12:56:59Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T13:33:43Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T13:33:43Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T13:33:43Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T13:33:43Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T13:33:43Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T13:33:43Z"}
+{"duration_ms": 3, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T13:33:43Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T13:33:50Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T13:59:13Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T13:59:13Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T13:59:13Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T13:59:13Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T13:59:13Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T13:59:13Z"}
+{"duration_ms": 3, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T13:59:13Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T13:59:20Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T14:01:42Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T14:01:42Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T14:01:42Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T14:01:42Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T14:01:42Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T14:01:42Z"}
+{"duration_ms": 3, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T14:01:42Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T14:01:48Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T14:04:09Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T14:04:09Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T14:04:09Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T14:04:09Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T14:04:09Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T14:04:09Z"}
+{"duration_ms": 5, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T14:04:09Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T14:04:16Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T14:06:40Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T14:06:40Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T14:06:40Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T14:06:40Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T14:06:40Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T14:06:40Z"}
+{"duration_ms": 3, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T14:06:40Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T14:06:47Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T14:09:05Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T14:09:05Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T14:09:05Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T14:09:05Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T14:09:05Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T14:09:05Z"}
+{"duration_ms": 3, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T14:09:05Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T14:09:12Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T14:11:33Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T14:11:33Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T14:11:33Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T14:11:33Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T14:11:33Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T14:11:33Z"}
+{"duration_ms": 3, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T14:11:33Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T14:11:39Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T14:13:59Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T14:13:59Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T14:13:59Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T14:13:59Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T14:13:59Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T14:13:59Z"}
+{"duration_ms": 3, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T14:13:59Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T14:14:06Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T14:16:26Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T14:16:26Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T14:16:26Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T14:16:26Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T14:16:26Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T14:16:26Z"}
+{"duration_ms": 3, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T14:16:26Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T14:16:33Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T14:18:58Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T14:18:58Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T14:18:58Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T14:18:58Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T14:18:58Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T14:18:58Z"}
+{"duration_ms": 5, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T14:18:58Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T14:19:07Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T14:21:36Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T14:21:36Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T14:21:36Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T14:21:36Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T14:21:36Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T14:21:36Z"}
+{"duration_ms": 2, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T14:21:36Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T14:21:43Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T14:22:54Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T14:22:54Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T14:26:49Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T14:26:49Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T15:17:09Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T15:17:09Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T15:17:09Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T15:17:09Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T15:17:09Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T15:17:09Z"}
+{"duration_ms": 3, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T15:17:09Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T15:17:16Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T15:17:20Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T15:17:20Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T15:20:16Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T15:20:16Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T15:20:16Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T15:20:16Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T15:20:16Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T15:20:16Z"}
+{"duration_ms": 27, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T15:20:17Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T15:20:23Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T15:23:31Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T15:23:31Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T15:23:31Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T15:23:31Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T15:23:31Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T15:23:31Z"}
+{"duration_ms": 2, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T15:23:31Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T15:23:37Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T15:26:46Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T15:26:46Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T15:26:46Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T15:26:46Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T15:26:46Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T15:26:46Z"}
+{"duration_ms": 3, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T15:26:46Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T15:26:53Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T15:30:45Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T15:30:45Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T15:31:20Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T15:31:20Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T15:31:20Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T15:31:20Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T15:31:20Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T15:31:20Z"}
+{"duration_ms": 2, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T15:31:20Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T15:31:26Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T15:32:11Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T15:32:11Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T15:34:37Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T15:34:37Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T15:34:37Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T15:34:37Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T15:34:37Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T15:34:37Z"}
+{"duration_ms": 3, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T15:34:37Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T15:34:44Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T15:37:52Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T15:37:52Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T15:37:52Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T15:37:52Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T15:37:52Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T15:37:52Z"}
+{"duration_ms": 2, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T15:37:52Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T15:37:59Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T15:41:14Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T15:41:14Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T15:41:14Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T15:41:14Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T15:41:14Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T15:41:14Z"}
+{"duration_ms": 3, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T15:41:14Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T15:41:21Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T15:44:28Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T15:44:28Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T15:44:28Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T15:44:28Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T15:44:28Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T15:44:28Z"}
+{"duration_ms": 74, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T15:44:29Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T15:44:36Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T15:47:53Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T15:47:53Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T15:47:53Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T15:47:53Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T15:47:53Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T15:47:53Z"}
+{"duration_ms": 4, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T15:47:53Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T15:48:00Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T15:51:20Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T15:51:20Z"}
+{"duration_ms": 1, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T15:51:20Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T15:51:20Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T15:51:20Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T15:51:20Z"}
+{"duration_ms": 7, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T15:51:20Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T15:51:30Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T15:54:40Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T15:54:40Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T15:54:40Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T15:54:40Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T15:54:40Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T15:54:40Z"}
+{"duration_ms": 2, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T15:54:41Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T15:54:47Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T15:57:31Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T15:57:31Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T15:57:31Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T15:57:31Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T15:57:31Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T15:57:31Z"}
+{"duration_ms": 2, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T15:57:31Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T15:57:38Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T16:00:26Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:00:26Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T16:00:26Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T16:00:26Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T16:00:26Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:00:26Z"}
+{"duration_ms": 2, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T16:00:26Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T16:00:33Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T16:03:20Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:03:20Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T16:03:20Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T16:03:20Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T16:03:20Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:03:20Z"}
+{"duration_ms": 2, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-20T16:03:20Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-20T16:03:26Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T16:08:07Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:08:07Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T16:08:07Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T16:08:07Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T16:08:07Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:08:07Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T16:08:55Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:08:55Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T16:09:27Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:09:27Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T16:09:27Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T16:09:27Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T16:09:27Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:09:27Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T16:11:02Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:11:02Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T16:11:02Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T16:11:02Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T16:11:02Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:11:02Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T16:13:10Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:13:10Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T16:13:10Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T16:13:10Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T16:13:10Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:13:10Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T16:14:25Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:14:25Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T16:14:25Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T16:14:25Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T16:14:25Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:14:25Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T16:15:41Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:15:41Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T16:15:41Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T16:15:41Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T16:15:41Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:15:41Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T16:16:58Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:16:58Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T16:16:58Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T16:16:58Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T16:16:58Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:16:58Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T16:18:19Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:18:19Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T16:18:19Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T16:18:19Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T16:18:19Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:18:19Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T16:25:37Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:25:37Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T16:25:37Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T16:25:37Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T16:25:37Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:25:37Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T16:26:55Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:26:55Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T16:26:55Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T16:26:55Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T16:26:55Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:26:55Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T16:28:49Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:28:49Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T16:28:49Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T16:28:49Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T16:28:49Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:28:49Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T16:30:06Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:30:06Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T16:30:06Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T16:30:06Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T16:30:06Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:30:06Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T16:31:21Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:31:21Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T16:31:21Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T16:31:21Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T16:31:21Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:31:21Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T16:32:38Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:32:38Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T16:32:38Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T16:32:38Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T16:32:38Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:32:38Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T16:34:09Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:34:09Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T16:34:09Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T16:34:09Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T16:34:09Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:34:09Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T16:35:26Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:35:26Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T16:35:26Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T16:35:26Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T16:35:26Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:35:26Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T16:36:42Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:36:42Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T16:36:42Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T16:36:42Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T16:36:42Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:36:42Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T16:38:18Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:38:18Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T16:38:18Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T16:38:18Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T16:38:18Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:38:18Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T16:39:36Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:39:36Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T16:39:36Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T16:39:36Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T16:39:36Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:39:36Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T16:40:51Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:40:51Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T16:40:51Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T16:40:51Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T16:40:51Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:40:51Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T16:42:48Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:42:48Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T16:42:48Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T16:42:48Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T16:42:48Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:42:48Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T16:44:17Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:44:17Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T16:44:17Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T16:44:17Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T16:44:17Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:44:17Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T16:45:32Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:45:32Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T16:45:32Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T16:45:32Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T16:45:32Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:45:32Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T16:46:48Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:46:48Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T16:46:48Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T16:46:48Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T16:46:48Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:46:48Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T16:48:03Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:48:03Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T16:48:03Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T16:48:03Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T16:48:03Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:48:03Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T16:49:18Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:49:18Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T16:49:18Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T16:49:18Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T16:49:18Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:49:18Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T16:50:35Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:50:35Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T16:50:35Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T16:50:35Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T16:50:35Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:50:35Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T16:51:52Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:51:52Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T16:51:52Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T16:51:52Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T16:51:52Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T16:51:52Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T17:11:07Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T17:11:07Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T17:11:07Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T17:11:07Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T17:11:07Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T17:11:07Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T17:12:23Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T17:12:23Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T17:12:23Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T17:12:23Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T17:12:23Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T17:12:23Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T17:12:53Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T17:12:53Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T17:13:44Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T17:13:44Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T17:13:44Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T17:13:44Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T17:13:44Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T17:13:44Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T17:43:15Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T17:43:15Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T17:43:15Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T17:43:15Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T17:43:15Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T17:43:15Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T17:45:07Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T17:45:07Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T17:45:07Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T17:45:07Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T17:45:07Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T17:45:07Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T17:46:12Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T17:46:12Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T17:46:12Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T17:46:12Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T17:46:12Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T17:46:12Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T17:46:31Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T17:46:31Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T17:46:31Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T17:46:31Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T17:46:31Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T17:46:31Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T17:48:02Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T17:48:02Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T17:48:02Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T17:48:02Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T17:48:02Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T17:48:02Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T17:49:59Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T17:49:59Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T17:49:59Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T17:49:59Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T17:49:59Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T17:49:59Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T17:50:00Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T17:50:00Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T17:50:52Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T17:50:52Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T17:50:52Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T17:50:52Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T17:50:52Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T17:50:52Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T17:53:06Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T17:53:06Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T17:57:24Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T17:57:24Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T17:57:24Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T17:57:24Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T17:57:24Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T17:57:24Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T18:01:53Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T18:01:53Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T18:01:53Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T18:01:53Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T18:01:53Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T18:01:53Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T18:08:51Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T18:08:51Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T18:08:51Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T18:08:51Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T18:08:51Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T18:08:51Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-20T18:10:02Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T18:10:02Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-20T18:10:02Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-20T18:10:02Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-20T18:10:02Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-20T18:10:02Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-21T06:48:37Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T06:48:37Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-21T06:48:37Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-21T06:48:37Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-21T06:48:37Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T06:48:37Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-21T06:49:45Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T06:49:45Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-21T06:49:45Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-21T06:49:45Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-21T06:49:45Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T06:49:45Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-21T06:50:52Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T06:50:52Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-21T06:50:52Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-21T06:50:52Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-21T06:50:52Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T06:50:52Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-21T06:52:00Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T06:52:00Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-21T06:52:00Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-21T06:52:00Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-21T06:52:00Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T06:52:00Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-21T06:53:06Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T06:53:06Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-21T06:53:06Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-21T06:53:06Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-21T06:53:06Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T06:53:06Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-21T06:54:14Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T06:54:14Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-21T06:54:14Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-21T06:54:14Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-21T06:54:14Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T06:54:14Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-21T06:55:20Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T06:55:20Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-21T06:55:20Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-21T06:55:20Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-21T06:55:20Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T06:55:20Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-21T06:56:27Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T06:56:27Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-21T06:56:27Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-21T06:56:27Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-21T06:56:27Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T06:56:27Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-21T06:57:33Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T06:57:33Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-21T06:57:33Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-21T06:57:33Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-21T06:57:33Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T06:57:33Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-21T06:58:40Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T06:58:40Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-21T06:58:40Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-21T06:58:40Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-21T06:58:40Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T06:58:40Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-21T06:59:46Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T06:59:46Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-21T06:59:46Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-21T06:59:46Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-21T06:59:46Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T06:59:46Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-21T07:00:53Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T07:00:53Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-21T07:00:53Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-21T07:00:53Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-21T07:00:53Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T07:00:53Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-21T07:02:00Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T07:02:00Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-21T07:02:00Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-21T07:02:00Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-21T07:02:00Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T07:02:00Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-21T07:03:07Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T07:03:07Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-21T07:03:07Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-21T07:03:07Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-21T07:03:07Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T07:03:07Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-21T07:04:15Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T07:04:15Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-21T07:04:15Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-21T07:04:15Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-21T07:04:15Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T07:04:15Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-21T07:05:22Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T07:05:22Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-21T07:05:22Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-21T07:05:22Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-21T07:05:22Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T07:05:22Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-21T07:05:51Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T07:05:51Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-21T07:05:51Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-21T07:05:51Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-21T07:05:51Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T07:05:51Z"}
+{"duration_ms": 3, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-21T07:05:51Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-21T07:06:29Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T07:06:29Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-21T07:06:29Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-21T07:06:29Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-21T07:06:29Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T07:06:29Z"}
+{"duration_ms": 2, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-21T07:06:29Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-21T07:06:35Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-21T07:08:02Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T07:08:02Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-21T07:08:02Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-21T07:08:02Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-21T07:08:02Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T07:08:02Z"}
+{"duration_ms": 3, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-21T07:08:02Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-21T07:08:07Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-21T07:09:25Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T07:09:25Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-21T07:09:25Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-21T07:09:25Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-21T07:09:25Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T07:09:25Z"}
+{"duration_ms": 3, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-21T07:09:25Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-21T07:09:31Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-21T07:10:49Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T07:10:49Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-21T07:10:49Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-21T07:10:49Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-21T07:10:49Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T07:10:49Z"}
+{"duration_ms": 3, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-21T07:10:49Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-21T07:10:55Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-21T07:12:30Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T07:12:30Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-21T07:12:30Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-21T07:12:30Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-21T07:12:30Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T07:12:30Z"}
+{"duration_ms": 3, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-21T07:12:30Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-21T07:12:36Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-21T07:15:32Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T07:15:32Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-21T07:15:32Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-21T07:15:32Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-21T07:15:32Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T07:15:32Z"}
+{"duration_ms": 3, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-21T07:15:32Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-21T07:15:38Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-21T07:17:10Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T07:17:10Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-21T07:17:10Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-21T07:17:10Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-21T07:17:10Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T07:17:10Z"}
+{"duration_ms": 2, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-21T07:17:10Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-21T07:17:16Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-21T07:18:59Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T07:18:59Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-21T07:18:59Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-21T07:18:59Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-21T07:18:59Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T07:18:59Z"}
+{"duration_ms": 3, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-21T07:18:59Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-21T07:19:05Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-21T07:20:35Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T07:20:35Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-21T07:20:35Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-21T07:20:35Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-21T07:20:35Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T07:20:35Z"}
+{"duration_ms": 3, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-21T07:20:35Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-21T07:20:40Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-21T07:22:11Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T07:22:11Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-21T07:22:11Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-21T07:22:11Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-21T07:22:11Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T07:22:11Z"}
+{"duration_ms": 3, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-21T07:22:11Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-21T07:22:17Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-21T07:22:40Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T07:22:40Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-21T07:22:40Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-21T07:22:40Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-21T07:22:40Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T07:22:40Z"}
+{"duration_ms": 3, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-21T07:22:40Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-21T07:23:53Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T07:23:53Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-21T07:23:53Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-21T07:23:53Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-21T07:23:53Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T07:23:53Z"}
+{"duration_ms": 2, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-21T07:23:53Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-21T07:23:58Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-21T08:49:04Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T08:49:04Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-21T08:49:04Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-21T08:49:04Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-21T08:49:04Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T08:49:04Z"}
+{"duration_ms": 3, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-21T08:49:04Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-21T08:54:15Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-21T09:07:55Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T09:07:55Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-21T09:07:55Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-21T09:07:55Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-21T09:07:55Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T09:07:55Z"}
+{"duration_ms": 3, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-21T09:07:55Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-21T09:08:00Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-21T09:09:52Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T09:09:52Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-21T09:09:52Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-21T09:09:52Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-21T09:09:52Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 39, "ts": "2026-07-21T09:09:52Z"}
+{"duration_ms": 3, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_skill", "ts": "2026-07-21T09:09:52Z"}
+{"attempt": 1, "duration_ms": 0, "event": "client.call_tool", "server": "context7", "status": "ok", "tool": "query-docs", "ts": "2026-07-21T09:09:58Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-21T09:11:37Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 40, "ts": "2026-07-21T09:11:37Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-21T09:11:37Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-21T09:11:37Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-21T09:11:37Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 40, "ts": "2026-07-21T09:11:37Z"}
+{"event": "server.initialize", "method": "initialize", "status": "ok", "ts": "2026-07-21T09:12:56Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 40, "ts": "2026-07-21T09:12:56Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_capabilities", "ts": "2026-07-21T09:12:56Z"}
+{"duration_ms": 0, "event": "server.tools_call", "method": "tools/call", "status": "ok", "tool": "arka_recall", "ts": "2026-07-21T09:12:56Z"}
+{"event": "server.tools_call", "method": "tools/call", "status": "unknown_tool", "tool": "missing_tool", "ts": "2026-07-21T09:12:56Z"}
+{"event": "server.tools_list", "method": "tools/list", "status": "ok", "tools": 40, "ts": "2026-07-21T09:12:56Z"}
