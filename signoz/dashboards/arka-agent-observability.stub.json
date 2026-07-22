@@ -1,0 +1,326 @@
+{
+  "title": "Arka Agent Observability (stub — build panels in Query Builder)",
+  "description": "Import stub for Agents of SigNoz. Replace with Export JSON from SigNoz UI after building panels per dashboards/README.md.",
+  "tags": ["arka", "agents", "opentelemetry", "hackathon"],
+  "version": "v4",
+  "variables": {},
+  "layout": [
+    {
+      "i": "agent-request-rate",
+      "x": 0,
+      "y": 0,
+      "w": 6,
+      "h": 3
+    },
+    {
+      "i": "goal-step-latency",
+      "x": 6,
+      "y": 0,
+      "w": 6,
+      "h": 3
+    },
+    {
+      "i": "llm-provider-mix",
+      "x": 0,
+      "y": 3,
+      "w": 4,
+      "h": 3
+    },
+    {
+      "i": "self-heal-events",
+      "x": 4,
+      "y": 3,
+      "w": 4,
+      "h": 3
+    },
+    {
+      "i": "error-by-span",
+      "x": 8,
+      "y": 3,
+      "w": 4,
+      "h": 3
+    },
+    {
+      "i": "llm-ttft-demo",
+      "x": 0,
+      "y": 6,
+      "w": 4,
+      "h": 3
+    },
+    {
+      "i": "router-latency-demo",
+      "x": 4,
+      "y": 6,
+      "w": 4,
+      "h": 3
+    },
+    {
+      "i": "rag-lookup-demo",
+      "x": 8,
+      "y": 6,
+      "w": 4,
+      "h": 3
+    }
+  ],
+  "widgets": [
+    {
+      "id": "agent-request-rate",
+      "title": "Agent request rate",
+      "description": "Traces: service.name=arka, name=arka.request — replace query after import",
+      "panelTypes": "graph",
+      "query": {
+        "queryType": "builder",
+        "builder": {
+          "queryData": [
+            {
+              "dataSource": "traces",
+              "queryName": "A",
+              "expression": "service.name = arka AND name = arka.request",
+              "aggregateOperator": "count",
+              "aggregateAttribute": {},
+              "filters": {
+                "items": [],
+                "op": "AND"
+              },
+              "groupBy": [],
+              "orderBy": [],
+              "limit": null,
+              "stepInterval": 60,
+              "disabled": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "goal-step-latency",
+      "title": "Goal step latency p95",
+      "description": "Traces: name=arka.agent.goal.step, group by arka.agent.step",
+      "panelTypes": "graph",
+      "query": {
+        "queryType": "builder",
+        "builder": {
+          "queryData": [
+            {
+              "dataSource": "traces",
+              "queryName": "A",
+              "expression": "service.name = arka AND name = arka.agent.goal.step",
+              "aggregateOperator": "p95",
+              "aggregateAttribute": {
+                "key": "durationNano",
+                "type": ""
+              },
+              "filters": {
+                "items": [],
+                "op": "AND"
+              },
+              "groupBy": [
+                {
+                  "key": "arka.agent.step",
+                  "type": "tag"
+                }
+              ],
+              "orderBy": [],
+              "limit": null,
+              "stepInterval": 60,
+              "disabled": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "llm-provider-mix",
+      "title": "LLM provider mix",
+      "description": "Traces: name=arka.llm.attempt, group by gen_ai.provider.name",
+      "panelTypes": "pie",
+      "query": {
+        "queryType": "builder",
+        "builder": {
+          "queryData": [
+            {
+              "dataSource": "traces",
+              "queryName": "A",
+              "expression": "service.name = arka AND name = arka.llm.attempt",
+              "aggregateOperator": "count",
+              "aggregateAttribute": {},
+              "filters": {
+                "items": [],
+                "op": "AND"
+              },
+              "groupBy": [
+                {
+                  "key": "gen_ai.provider.name",
+                  "type": "tag"
+                }
+              ],
+              "orderBy": [],
+              "limit": null,
+              "stepInterval": 60,
+              "disabled": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "self-heal-events",
+      "title": "Self-heal events",
+      "description": "Count agent.self_heal span events on goal steps",
+      "panelTypes": "value",
+      "query": {
+        "queryType": "builder",
+        "builder": {
+          "queryData": [
+            {
+              "dataSource": "traces",
+              "queryName": "A",
+              "expression": "service.name = arka AND name = arka.agent.goal.step",
+              "aggregateOperator": "count",
+              "aggregateAttribute": {},
+              "filters": {
+                "items": [
+                  {
+                    "key": "event.name",
+                    "op": "=",
+                    "value": "agent.self_heal"
+                  }
+                ],
+                "op": "AND"
+              },
+              "groupBy": [],
+              "orderBy": [],
+              "limit": null,
+              "stepInterval": 60,
+              "disabled": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "error-by-span",
+      "title": "Errors by span name",
+      "description": "Traces: service.name=arka, status=error",
+      "panelTypes": "table",
+      "query": {
+        "queryType": "builder",
+        "builder": {
+          "queryData": [
+            {
+              "dataSource": "traces",
+              "queryName": "A",
+              "expression": "service.name = arka AND status = error",
+              "aggregateOperator": "count",
+              "aggregateAttribute": {},
+              "filters": {
+                "items": [],
+                "op": "AND"
+              },
+              "groupBy": [
+                {
+                  "key": "name",
+                  "type": "tag"
+                }
+              ],
+              "orderBy": [],
+              "limit": 10,
+              "stepInterval": 60,
+              "disabled": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "llm-ttft-demo",
+      "title": "LLM TTFT p95 (inference demo)",
+      "description": "arka signoz demo-inference — group by gen_ai.provider.name",
+      "panelTypes": "graph",
+      "query": {
+        "queryType": "builder",
+        "builder": {
+          "queryData": [
+            {
+              "dataSource": "traces",
+              "queryName": "A",
+              "expression": "service.name = arka AND name = arka.llm.attempt AND arka.demo.scenario = vllm-vs-cloud-latency",
+              "aggregateOperator": "p95",
+              "aggregateAttribute": {
+                "key": "arka.llm.ttft_ms",
+                "type": ""
+              },
+              "filters": { "items": [], "op": "AND" },
+              "groupBy": [
+                { "key": "gen_ai.provider.name", "type": "tag" },
+                { "key": "arka.inference.backend", "type": "tag" }
+              ],
+              "orderBy": [],
+              "limit": null,
+              "stepInterval": 60,
+              "disabled": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "router-latency-demo",
+      "title": "Router latency by decision",
+      "description": "arka signoz demo-router — symbolic vs llm",
+      "panelTypes": "graph",
+      "query": {
+        "queryType": "builder",
+        "builder": {
+          "queryData": [
+            {
+              "dataSource": "traces",
+              "queryName": "A",
+              "expression": "service.name = arka AND name = arka.route AND arka.demo.scenario = semantic-router-split",
+              "aggregateOperator": "avg",
+              "aggregateAttribute": {
+                "key": "arka.route.latency_ms",
+                "type": ""
+              },
+              "filters": { "items": [], "op": "AND" },
+              "groupBy": [{ "key": "arka.route.decision", "type": "tag" }],
+              "orderBy": [],
+              "limit": null,
+              "stepInterval": 60,
+              "disabled": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "rag-lookup-demo",
+      "title": "RAG vector lookup (demo)",
+      "description": "arka signoz demo-rag — arka.supermemory.vector_lookup",
+      "panelTypes": "graph",
+      "query": {
+        "queryType": "builder",
+        "builder": {
+          "queryData": [
+            {
+              "dataSource": "traces",
+              "queryName": "A",
+              "expression": "service.name = arka AND name = arka.supermemory.vector_lookup",
+              "aggregateOperator": "avg",
+              "aggregateAttribute": {
+                "key": "arka.supermemory.lookup_ms",
+                "type": ""
+              },
+              "filters": { "items": [], "op": "AND" },
+              "groupBy": [{ "key": "arka.supermemory.backend", "type": "tag" }],
+              "orderBy": [],
+              "limit": null,
+              "stepInterval": 60,
+              "disabled": false
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

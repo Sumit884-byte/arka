@@ -30,6 +30,9 @@ except ImportError:
 DEFAULT_MAX_ROUNDS = int(os.environ.get("SELF_BUILD_MAX_ROUNDS", "2"))
 DEFAULT_MAX_STEPS = int(os.environ.get("SELF_BUILD_MAX_STEPS", "15"))
 RESULT_LIMIT = 6000
+OBSERVABILITY_TARGETS = frozenset(
+    {"observability", "dashboard", "dashboards", "signoz", "signoz-dashboard", "signoz-dashboards"}
+)
 
 
 def self_build_root() -> Path:
@@ -136,6 +139,77 @@ def mcp_audit(root: Path, *, target: str = "") -> McpAudit:
     return audit
 
 
+def _is_observability_target(target: str) -> bool:
+    t = " ".join((target or "").split()).strip().lower()
+    if not t:
+        return False
+    if t in OBSERVABILITY_TARGETS:
+        return True
+    return any(token in t for token in ("observability", "dashboard", "signoz"))
+
+
+def format_observability_plan(*, apply: bool) -> str:
+    lines = [
+        "━━━ Observability plan ━━━",
+        "",
+        "Bundled SigNoz dashboard: signoz/dashboards/arka-agent-observability.json",
+        "Panels: service overview, skill dispatch latency/errors, routing decisions,",
+        "        LLM failover + token usage, correlated logs, error breakdown.",
+        "",
+        "Install:",
+        "  arka signoz dashboard install",
+        "  arka signoz dashboard install --alerts",
+        "",
+    ]
+    if apply:
+        lines.append("Apply mode: installing dashboard via SigNoz API (+ bundled alerts).")
+    else:
+        lines.append("Plan-only: re-run with --apply to install into local SigNoz.")
+    return "\n".join(lines)
+
+
+def apply_observability_improvements(
+    *,
+    apply: bool,
+    replace: bool = False,
+    use_mcp: bool = False,
+    with_alerts: bool = True,
+) -> tuple[int, dict[str, Any]]:
+    """Install bundled SigNoz dashboard (and optional alerts)."""
+    from arka.core.output import user_msg
+    from arka.telemetry.signoz_dashboards import install_observability_bundle, list_dashboard_templates
+
+    templates = list_dashboard_templates()
+    if "arka-agent-observability" not in templates:
+        user_msg("✗ Bundled dashboard template missing (signoz/dashboards/)")
+        return 1, {"error": "missing dashboard template"}
+
+    if not apply:
+        return 0, {"planned": True, "templates": templates}
+
+    try:
+        bundle = install_observability_bundle(
+            dry_run=False,
+            replace=replace,
+            alerts=with_alerts,
+            use_mcp=use_mcp,
+        )
+    except Exception as exc:
+        user_msg(f"✗ Observability install failed: {exc}")
+        return 1, {"error": str(exc)}
+
+    dashboard = bundle.get("dashboard") or {}
+    if dashboard.get("skipped"):
+        user_msg(f"Dashboard skipped: {dashboard.get('message', 'already exists')}")
+    elif dashboard.get("created"):
+        user_msg(f"✓ Dashboard installed: {dashboard.get('title', 'Arka Agent Observability')}")
+    alerts = bundle.get("alerts") or []
+    created_alerts = sum(1 for row in alerts if row.get("created"))
+    if with_alerts and created_alerts:
+        user_msg(f"✓ Alerts created: {created_alerts}")
+    return 0, bundle
+
+
 def format_audit_summary(audit: McpAudit) -> str:
     lines = ["━━━ Arka Self-Build (MCP) ━━━", ""]
     scan_count = audit.scan.get("count", 0)
@@ -226,11 +300,6 @@ def run_self_build(
     from arka.agent import self_improve
     from arka.core.output import debug_msg, user_msg
 
-    ok, reason = _check_mode(apply=apply)
-    if not ok:
-        user_msg(reason)
-        return 1
-
     try:
         root = self_improve.ensure_arka_project(auto_init=auto_init)
     except Exception as exc:
@@ -238,6 +307,14 @@ def run_self_build(
         return 1
 
     target = self_improve._normalize_target(target)
+    observability = _is_observability_target(target)
+
+    if apply and not observability:
+        ok, reason = _check_mode(apply=apply)
+        if not ok:
+            user_msg(reason)
+            return 1
+
     session: dict[str, Any] = {
         "id": session_id or uuid.uuid4().hex[:10],
         "status": "running",
@@ -262,6 +339,24 @@ def run_self_build(
         ],
     }
     print(format_audit_summary(audit))
+
+    if _is_observability_target(target):
+        print(format_observability_plan(apply=apply))
+        exit_code, obs_result = apply_observability_improvements(
+            apply=apply,
+            use_mcp=False,
+            with_alerts=True,
+        )
+        session["phases"]["observability"] = obs_result
+        session["status"] = "done" if exit_code == 0 else "failed"
+        session["exit_code"] = exit_code
+        session["finished"] = time.time()
+        _save(session)
+        if exit_code == 0 and apply:
+            user_msg("✓ Observability self-build complete")
+        elif exit_code == 0:
+            user_msg("Plan ready — run: self build observability --apply")
+        return exit_code
 
     context = self_improve._read_repo_context(root)
     if audit.repo_map and not audit.repo_map.startswith("("):
@@ -375,6 +470,8 @@ def parse_self_build_argv(argv: list[str]) -> tuple[str, bool, dict[str, Any]]:
             extras["max_rounds"] = int(nxt)
         elif tok in ("-s", "--max-steps") and (nxt := next(it, None)) is not None:
             extras["max_steps"] = int(nxt)
+        elif tok in ("--target", "--dashboard") and (nxt := next(it, None)) is not None:
+            tokens.append(nxt)
         elif tok == "--no-auto-init":
             extras["auto_init"] = False
         elif tok in ("build", "self_build", "self-build", "improve_self", "improve-self"):
@@ -401,7 +498,8 @@ def route_command(text: str) -> str:
     mcp_phrases = (
         r"(?i)\b(?:self\s+build|improve\s+self|build\s+arka(?:\s+with\s+mcp)?|"
         r"use\s+mcp\s+to\s+(?:fix|improve)\s+arka|improve\s+arka\s+using\s+mcp|"
-        r"mcp\s+self\s+improve|self\s+improve\s+(?:with|via|using)\s+mcp)\b"
+        r"mcp\s+self\s+improve|self\s+improve\s+(?:with|via|using)\s+mcp|"
+        r"use\s+arka\s+mcp\s+to\s+improve\s+arka)\b"
     )
     if not re.search(mcp_phrases, raw):
         return ""
@@ -413,6 +511,7 @@ def route_command(text: str) -> str:
         r"(?i)^(?:arka\s+)?build\s+arka(?:\s+with\s+mcp)?\s*",
         r"(?i)^(?:arka\s+)?use\s+mcp\s+to\s+(?:fix|improve)\s+arka\s*",
         r"(?i)^(?:arka\s+)?improve\s+arka\s+using\s+mcp\s*",
+        r"(?i)^(?:arka\s+)?use\s+arka\s+mcp\s+to\s+improve\s+arka\s*",
         r"(?i)^(?:arka\s+)?mcp\s+self\s+improve\s*",
         r"(?i)^(?:arka\s+)?self\s+improve\s+(?:with|via|using)\s+mcp\s*",
     ):

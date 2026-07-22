@@ -42,7 +42,7 @@ def cursor_setup_lines(*, write: bool = False) -> list[str]:
         f"signoz_mcp_url\t{mcp_url}",
         f"signoz_api_key\t{'set' if key else 'not_set'}",
         f"mcp_json\t{_mcp_target()}",
-        "docs\thackathon/signoz/CURSOR_AGENT_SKILLS.md",
+        "docs\tsignoz/CURSOR_AGENT_SKILLS.md",
         "official\thttps://signoz.io/docs/ai/agent-skills/?agent-client=cursor",
     ]
 
@@ -88,5 +88,5 @@ def cmd_cursor_setup(args) -> int:
     print("  4. Reload Cursor → Settings → MCP → authenticate signoz", file=sys.stderr)
     print("", file=sys.stderr)
     print("Fallback: arka signoz cursor-setup --write  (manual .cursor/mcp.json)", file=sys.stderr)
-    print("Docs: hackathon/signoz/CURSOR_AGENT_SKILLS.md", file=sys.stderr)
+    print("Docs: signoz/CURSOR_AGENT_SKILLS.md", file=sys.stderr)
     return 0

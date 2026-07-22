@@ -17,6 +17,21 @@ python3 arka_llm.py trace-status
 arka observability doctor
 ```
 
+### Autostart on login (macOS / Linux)
+
+After a one-time `arka signoz setup -y`, enable the local Docker stack to come up at login:
+
+```bash
+arka signoz autostart install
+arka signoz autostart status
+```
+
+On macOS, also enable **Docker Desktop → Settings → General → Start Docker Desktop when you sign in**.
+Autostart waits for Docker, then runs `foundryctl cast -f casting.yaml --no-gauge`.
+Logs: `~/.cache/fish-agent/signoz-autostart.log` (or your `CACHE_DIR`).
+
+Remove with `arka signoz autostart uninstall`. Pass `--autostart` to `arka signoz setup -y` to install in the same step.
+
 `arka observability doctor` is a read-only local check. It reports whether
 OpenTelemetry is enabled and configured, but does not claim that SigNoz has
 received data. After enabling telemetry, run `arka signoz demo` and verify
@@ -44,7 +59,35 @@ OTEL_SERVICE_NAME=arka
 Every dispatched skill records a bounded skill name, duration, exit status, and
 error state. Secrets and full user prompts are not added to these attributes.
 This makes failures in long-running loops and MCP-backed skills visible without
-turning telemetry into a copy of the user's code or credentials.
+turning exported logs into a copy of the user's code or credentials.
+
+Structured logs include `trace_id` and `span_id` when emitted inside an active
+span — use SigNoz log ↔ trace correlation to jump from a skill failure log to
+its trace. Metrics `arka.routing.decisions`, `arka.skill.duration`, and
+`arka.llm.failover` complement span attributes in the Metrics explorer.
+
+## SigNoz dashboard
+
+Install the bundled Arka agent observability dashboard (15 panels: service overview,
+skill dispatch latency/errors, routing, LLM failover, model/provider mix, token usage, correlated logs):
+
+```bash
+arka signoz dashboard install
+arka signoz dashboard install --alerts   # also create bundled alert rules
+arka signoz dashboard install --dry-run  # preview without POST
+arka signoz dashboard list
+```
+
+Requires `SIGNOZ_API_KEY` from SigNoz → Settings → Service Accounts. Template JSON:
+`signoz/dashboards/arka-agent-observability.json`.
+
+MCP-orchestrated install via self-build:
+
+```bash
+self build observability
+self build observability --apply
+self build dashboard --apply
+```
 
 ## SigNoz MCP \+ Cursor
 
@@ -53,7 +96,7 @@ python3 bin/arka_signoz.py mcp tools
 python3 bin/arka_signoz.py cursor-setup
 ```
 
-Hackathon assets (dashboards, alerts, demos) live in `hackathon/signoz/` in the repo.
+Bundled SigNoz assets (dashboards, alerts, demos) live in `signoz/` in the repo.
 
 <Note>
   Both `OTEL_TRACES_ENABLED=1` and `SIGNOZ_ENDPOINT` must be set for traces to export.

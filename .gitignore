@@ -63,8 +63,7 @@ htmlcov/
 .mpl-cache/
 test-output/
 
-# Hackathon / Agents of SigNoz (local only — not published)
-hackathon/
+# SigNoz Foundry local deploy (not published)
 casting.yaml
 casting.yaml.lock
 bin/arka_signoz.py

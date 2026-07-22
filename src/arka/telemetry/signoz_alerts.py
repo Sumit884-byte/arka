@@ -1,4 +1,4 @@
-"""SigNoz alert rule definitions and API helpers for hackathon demos."""
+"""SigNoz alert rule definitions and API helpers for bundled demos."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-_ALERTS_DIR = Path(__file__).resolve().parents[3] / "hackathon" / "signoz" / "alerts"
+_ALERTS_DIR = Path(__file__).resolve().parents[3] / "signoz" / "alerts"
 
 
 def signoz_ui_url() -> str:
@@ -137,7 +137,7 @@ def create_alert_rule(
 def cmd_alert_create(args: argparse.Namespace) -> int:
     names = list_alert_rules() if getattr(args, "all", False) else [args.name]
     if not names:
-        print("No bundled alert rules found under hackathon/signoz/alerts/", file=sys.stderr)
+        print("No bundled alert rules found under signoz/alerts/", file=sys.stderr)
         return 1
 
     if not signoz_api_key() and not args.dry_run:

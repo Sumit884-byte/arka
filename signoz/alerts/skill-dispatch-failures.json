@@ -1,0 +1,64 @@
+{
+  "alert": "Arka skill dispatch failures",
+  "alertType": "TRACES_BASED_ALERT",
+  "ruleType": "threshold_rule",
+  "version": "v5",
+  "schemaVersion": "v2alpha1",
+  "evalWindow": "15m0s",
+  "frequency": "1m0s",
+  "description": "More than {{$threshold}} failed skill dispatches (non-zero exit) in the evaluation window (current: {{$value}}).",
+  "summary": "Arka skill spans with arka.skill.success = false above threshold",
+  "disabled": false,
+  "labels": {
+    "severity": "warning",
+    "team": "arka",
+    "hackathon": "agents-of-signoz"
+  },
+  "condition": {
+    "compositeQuery": {
+      "queryType": "builder",
+      "panelType": "graph",
+      "queries": [
+        {
+          "type": "builder_query",
+          "spec": {
+            "name": "A",
+            "signal": "traces",
+            "stepInterval": 60,
+            "aggregations": [
+              {
+                "expression": "count()"
+              }
+            ],
+            "filter": {
+              "expression": "service.name = 'arka' AND name LIKE 'arka.skill.%' AND arka.skill.success = false"
+            },
+            "groupBy": [
+              {
+                "name": "arka.skill.name",
+                "fieldContext": "span",
+                "fieldDataType": "string"
+              }
+            ],
+            "legend": "{{arka.skill.name}}"
+          }
+        }
+      ]
+    },
+    "selectedQueryName": "A",
+    "thresholds": {
+      "kind": "basic",
+      "spec": [
+        {
+          "name": "warning",
+          "op": "above",
+          "matchType": "at_least_once",
+          "target": 3,
+          "targetUnit": "",
+          "recoveryTarget": null,
+          "channels": []
+        }
+      ]
+    }
+  }
+}

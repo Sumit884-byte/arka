@@ -1,0 +1,465 @@
+{
+  "title": "Arka Agent Observability",
+  "description": "Arka service overview — skill dispatch, routing, LLM failover, model/provider mix, token usage, and correlated logs.",
+  "tags": ["arka", "agents", "opentelemetry", "hackathon"],
+  "version": "v5",
+  "variables": {},
+  "layout": [
+    {"i": "service-overview", "x": 0, "y": 0, "w": 3, "h": 3},
+    {"i": "agent-request-rate", "x": 3, "y": 0, "w": 3, "h": 3},
+    {"i": "skill-dispatch-rate", "x": 6, "y": 0, "w": 3, "h": 3},
+    {"i": "skill-dispatch-errors", "x": 9, "y": 0, "w": 3, "h": 3},
+    {"i": "skill-dispatch-latency", "x": 0, "y": 3, "w": 6, "h": 3},
+    {"i": "routing-decisions", "x": 6, "y": 3, "w": 6, "h": 3},
+    {"i": "llm-failover-events", "x": 0, "y": 6, "w": 3, "h": 3},
+    {"i": "llm-provider-mix", "x": 3, "y": 6, "w": 3, "h": 3},
+    {"i": "llm-model-mix", "x": 6, "y": 6, "w": 3, "h": 3},
+    {"i": "llm-token-usage", "x": 9, "y": 6, "w": 3, "h": 3},
+    {"i": "routing-metrics", "x": 0, "y": 9, "w": 6, "h": 3},
+    {"i": "skill-duration-metrics", "x": 6, "y": 9, "w": 6, "h": 3},
+    {"i": "correlated-logs", "x": 0, "y": 12, "w": 12, "h": 4},
+    {"i": "error-by-span", "x": 0, "y": 16, "w": 6, "h": 3},
+    {"i": "goal-step-latency", "x": 6, "y": 16, "w": 6, "h": 3}
+  ],
+  "widgets": [
+    {
+      "id": "service-overview",
+      "title": "Arka service requests",
+      "description": "Live request volume for service.name=arka",
+      "panelTypes": "value",
+      "query": {
+        "queryType": "builder",
+        "builder": {
+          "queryData": [
+            {
+              "dataSource": "traces",
+              "queryName": "A",
+              "expression": "service.name = arka AND name = arka.request",
+              "aggregateOperator": "count",
+              "aggregateAttribute": {},
+              "filters": {"items": [], "op": "AND"},
+              "groupBy": [],
+              "orderBy": [],
+              "limit": null,
+              "stepInterval": 60,
+              "disabled": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "agent-request-rate",
+      "title": "Agent request rate",
+      "description": "Traces: service.name=arka, name=arka.request",
+      "panelTypes": "graph",
+      "query": {
+        "queryType": "builder",
+        "builder": {
+          "queryData": [
+            {
+              "dataSource": "traces",
+              "queryName": "A",
+              "expression": "service.name = arka AND name = arka.request",
+              "aggregateOperator": "count",
+              "aggregateAttribute": {},
+              "filters": {"items": [], "op": "AND"},
+              "groupBy": [],
+              "orderBy": [],
+              "limit": null,
+              "stepInterval": 60,
+              "disabled": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "skill-dispatch-rate",
+      "title": "Skill dispatch rate",
+      "description": "Count of arka.skill.* spans",
+      "panelTypes": "graph",
+      "query": {
+        "queryType": "builder",
+        "builder": {
+          "queryData": [
+            {
+              "dataSource": "traces",
+              "queryName": "A",
+              "expression": "service.name = arka AND name LIKE 'arka.skill.%'",
+              "aggregateOperator": "count",
+              "aggregateAttribute": {},
+              "filters": {"items": [], "op": "AND"},
+              "groupBy": [
+                {"key": "arka.skill.name", "type": "tag"}
+              ],
+              "orderBy": [],
+              "limit": 10,
+              "stepInterval": 60,
+              "disabled": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "skill-dispatch-errors",
+      "title": "Skill dispatch failures",
+      "description": "Non-zero exit / arka.skill.success=false",
+      "panelTypes": "graph",
+      "query": {
+        "queryType": "builder",
+        "builder": {
+          "queryData": [
+            {
+              "dataSource": "traces",
+              "queryName": "A",
+              "expression": "service.name = arka AND name LIKE 'arka.skill.%' AND arka.skill.success = false",
+              "aggregateOperator": "count",
+              "aggregateAttribute": {},
+              "filters": {"items": [], "op": "AND"},
+              "groupBy": [
+                {"key": "arka.skill.name", "type": "tag"}
+              ],
+              "orderBy": [],
+              "limit": 10,
+              "stepInterval": 60,
+              "disabled": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "skill-dispatch-latency",
+      "title": "Skill dispatch latency p95",
+      "description": "p95 duration for arka.skill.* spans",
+      "panelTypes": "graph",
+      "query": {
+        "queryType": "builder",
+        "builder": {
+          "queryData": [
+            {
+              "dataSource": "traces",
+              "queryName": "A",
+              "expression": "service.name = arka AND name LIKE 'arka.skill.%'",
+              "aggregateOperator": "p95",
+              "aggregateAttribute": {"key": "durationNano", "type": ""},
+              "filters": {"items": [], "op": "AND"},
+              "groupBy": [
+                {"key": "arka.skill.name", "type": "tag"}
+              ],
+              "orderBy": [],
+              "limit": 10,
+              "stepInterval": 60,
+              "disabled": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "routing-decisions",
+      "title": "Routing decisions",
+      "description": "arka.route spans grouped by arka.route.decision",
+      "panelTypes": "bar",
+      "query": {
+        "queryType": "builder",
+        "builder": {
+          "queryData": [
+            {
+              "dataSource": "traces",
+              "queryName": "A",
+              "expression": "service.name = arka AND name = arka.route AND arka.route.decision exists",
+              "aggregateOperator": "count",
+              "aggregateAttribute": {},
+              "filters": {"items": [], "op": "AND"},
+              "groupBy": [
+                {"key": "arka.route.decision", "type": "tag"}
+              ],
+              "legend": "{{arka.route.decision}}",
+              "reduceTo": "sum",
+              "having": [],
+              "functions": [],
+              "orderBy": [],
+              "limit": null,
+              "stepInterval": 60,
+              "disabled": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "llm-failover-events",
+      "title": "LLM failover events",
+      "description": "LLM attempts after the first provider (arka.llm.attempt_index > 1)",
+      "panelTypes": "graph",
+      "query": {
+        "queryType": "builder",
+        "builder": {
+          "queryData": [
+            {
+              "dataSource": "traces",
+              "queryName": "A",
+              "expression": "service.name = arka AND name = arka.llm.attempt AND arka.llm.attempt_index > 1",
+              "aggregateOperator": "count",
+              "aggregateAttribute": {},
+              "filters": {"items": [], "op": "AND"},
+              "groupBy": [
+                {"key": "gen_ai.provider.name", "type": "tag"}
+              ],
+              "orderBy": [],
+              "limit": null,
+              "stepInterval": 60,
+              "disabled": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "llm-model-mix",
+      "title": "LLM model mix",
+      "description": "LLM attempts grouped by gen_ai.request.model (request count)",
+      "panelTypes": "bar",
+      "query": {
+        "queryType": "builder",
+        "builder": {
+          "queryData": [
+            {
+              "dataSource": "traces",
+              "queryName": "A",
+              "expression": "service.name = arka AND name = arka.llm.attempt",
+              "aggregateOperator": "count",
+              "aggregateAttribute": {},
+              "filters": {"items": [], "op": "AND"},
+              "groupBy": [
+                {"key": "gen_ai.request.model", "type": "tag"}
+              ],
+              "legend": "{{gen_ai.request.model}}",
+              "reduceTo": "sum",
+              "having": [],
+              "functions": [],
+              "orderBy": [],
+              "limit": 10,
+              "stepInterval": 60,
+              "disabled": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "llm-provider-mix",
+      "title": "LLM provider mix",
+      "description": "Traces: name=arka.llm.attempt, group by gen_ai.provider.name",
+      "panelTypes": "bar",
+      "query": {
+        "queryType": "builder",
+        "builder": {
+          "queryData": [
+            {
+              "dataSource": "traces",
+              "queryName": "A",
+              "expression": "service.name = arka AND name = arka.llm.attempt",
+              "aggregateOperator": "count",
+              "aggregateAttribute": {},
+              "filters": {"items": [], "op": "AND"},
+              "groupBy": [
+                {"key": "gen_ai.provider.name", "type": "tag"}
+              ],
+              "legend": "{{gen_ai.provider.name}}",
+              "reduceTo": "sum",
+              "having": [],
+              "functions": [],
+              "orderBy": [],
+              "limit": 5,
+              "stepInterval": 60,
+              "disabled": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "llm-token-usage",
+      "title": "LLM token usage by model",
+      "description": "Sum gen_ai.usage.total_tokens on arka.llm.attempt spans",
+      "panelTypes": "table",
+      "query": {
+        "queryType": "builder",
+        "builder": {
+          "queryData": [
+            {
+              "dataSource": "traces",
+              "queryName": "A",
+              "expression": "service.name = arka AND name = arka.llm.attempt AND gen_ai.usage.total_tokens exists",
+              "aggregateOperator": "sum",
+              "aggregateAttribute": {"key": "gen_ai.usage.total_tokens", "type": ""},
+              "filters": {"items": [], "op": "AND"},
+              "groupBy": [
+                {"key": "gen_ai.request.model", "type": "tag"},
+                {"key": "gen_ai.provider.name", "type": "tag"}
+              ],
+              "orderBy": [],
+              "limit": 10,
+              "stepInterval": 60,
+              "disabled": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "routing-metrics",
+      "title": "Routing decisions over time",
+      "description": "Trace count for arka.route spans by arka.route.decision",
+      "panelTypes": "graph",
+      "query": {
+        "queryType": "builder",
+        "builder": {
+          "queryData": [
+            {
+              "dataSource": "traces",
+              "queryName": "A",
+              "expression": "service.name = arka AND name = arka.route AND arka.route.decision exists",
+              "aggregateOperator": "count",
+              "aggregateAttribute": {},
+              "filters": {"items": [], "op": "AND"},
+              "groupBy": [
+                {"key": "arka.route.decision", "type": "tag"}
+              ],
+              "orderBy": [],
+              "limit": null,
+              "stepInterval": 60,
+              "disabled": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "skill-duration-metrics",
+      "title": "Skill dispatch duration p95",
+      "description": "p95 arka.skill.duration_ms on arka.skill.* spans",
+      "panelTypes": "graph",
+      "query": {
+        "queryType": "builder",
+        "builder": {
+          "queryData": [
+            {
+              "dataSource": "traces",
+              "queryName": "A",
+              "expression": "service.name = arka AND name LIKE 'arka.skill.%' AND arka.skill.duration_ms exists",
+              "aggregateOperator": "p95",
+              "aggregateAttribute": {"key": "arka.skill.duration_ms", "type": ""},
+              "filters": {"items": [], "op": "AND"},
+              "groupBy": [
+                {"key": "arka.skill.name", "type": "tag"}
+              ],
+              "orderBy": [],
+              "limit": 10,
+              "stepInterval": 60,
+              "disabled": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "correlated-logs",
+      "title": "Correlated skill dispatch logs",
+      "description": "Structured logs with trace correlation — click a row to jump to its trace",
+      "panelTypes": "list",
+      "selectedLogFields": [
+        {"dataType": "string", "type": "", "name": "body"},
+        {"dataType": "string", "type": "", "name": "timestamp"}
+      ],
+      "query": {
+        "queryType": "builder",
+        "builder": {
+          "queryData": [
+            {
+              "dataSource": "logs",
+              "queryName": "A",
+              "expression": "service.name = arka AND (arka.event = skill.dispatch OR arka.component exists OR arka.command exists)",
+              "aggregateOperator": "noop",
+              "aggregateAttribute": {},
+              "filters": {"items": [], "op": "AND"},
+              "groupBy": [],
+              "legend": "",
+              "reduceTo": "last",
+              "having": [],
+              "functions": [],
+              "orderBy": [
+                {"columnName": "timestamp", "order": "desc"}
+              ],
+              "limit": 100,
+              "pageSize": 100,
+              "offset": 0,
+              "stepInterval": 60,
+              "disabled": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "error-by-span",
+      "title": "Errors by span name",
+      "description": "Traces: service.name=arka, status=error",
+      "panelTypes": "table",
+      "query": {
+        "queryType": "builder",
+        "builder": {
+          "queryData": [
+            {
+              "dataSource": "traces",
+              "queryName": "A",
+              "expression": "service.name = arka AND status = error",
+              "aggregateOperator": "count",
+              "aggregateAttribute": {},
+              "filters": {"items": [], "op": "AND"},
+              "groupBy": [
+                {"key": "name", "type": "tag"}
+              ],
+              "orderBy": [],
+              "limit": 10,
+              "stepInterval": 60,
+              "disabled": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "goal-step-latency",
+      "title": "Goal step latency p95",
+      "description": "Traces: name=arka.agent.goal.step, group by arka.agent.step",
+      "panelTypes": "graph",
+      "query": {
+        "queryType": "builder",
+        "builder": {
+          "queryData": [
+            {
+              "dataSource": "traces",
+              "queryName": "A",
+              "expression": "service.name = arka AND name = arka.agent.goal.step",
+              "aggregateOperator": "p95",
+              "aggregateAttribute": {"key": "durationNano", "type": ""},
+              "filters": {"items": [], "op": "AND"},
+              "groupBy": [
+                {"key": "arka.agent.step", "type": "tag"}
+              ],
+              "orderBy": [],
+              "limit": null,
+              "stepInterval": 60,
+              "disabled": false
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

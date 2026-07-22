@@ -1,0 +1,80 @@
+{
+  "alert": "Arka LLM token budget spike",
+  "alertType": "TRACES_BASED_ALERT",
+  "ruleType": "threshold_rule",
+  "version": "v5",
+  "schemaVersion": "v2alpha1",
+  "evalWindow": "15m0s",
+  "frequency": "1m0s",
+  "description": "Total LLM tokens in window exceeded {{$threshold}} (current: {{$value}}). Review prompt size and model choice.",
+  "summary": "Arka LLM token usage above budget",
+  "disabled": false,
+  "labels": {
+    "severity": "warning",
+    "team": "arka",
+    "pillar": "token-cost"
+  },
+  "condition": {
+    "compositeQuery": {
+      "queryType": "builder",
+      "panelType": "graph",
+      "queries": [
+        {
+          "type": "builder_query",
+          "spec": {
+            "name": "A",
+            "signal": "traces",
+            "stepInterval": 60,
+            "aggregations": [
+              {
+                "expression": "sum(gen_ai.usage.total_tokens)"
+              }
+            ],
+            "filter": {
+              "expression": "service.name = 'arka' AND name = 'arka.llm.attempt' AND gen_ai.usage.total_tokens exists"
+            },
+            "groupBy": [
+              {
+                "name": "gen_ai.request.model",
+                "fieldContext": "attribute",
+                "fieldDataType": "string"
+              }
+            ],
+            "legend": "{{gen_ai.request.model}}"
+          }
+        }
+      ]
+    },
+    "selectedQueryName": "A",
+    "thresholds": {
+      "kind": "basic",
+      "spec": [
+        {
+          "name": "warning",
+          "op": "above",
+          "matchType": "at_least_once",
+          "target": 50000,
+          "targetUnit": "",
+          "recoveryTarget": null,
+          "channels": []
+        }
+      ]
+    }
+  },
+  "evaluation": {
+    "kind": "rolling",
+    "spec": {
+      "evalWindow": "15m0s",
+      "frequency": "1m0s"
+    }
+  },
+  "notificationSettings": {
+    "groupBy": ["gen_ai.request.model"],
+    "renotify": {
+      "enabled": true,
+      "interval": "1h0s",
+      "alertStates": ["firing"]
+    },
+    "usePolicy": false
+  }
+}

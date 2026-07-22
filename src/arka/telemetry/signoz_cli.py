@@ -40,6 +40,16 @@ def cmd_status(_args: argparse.Namespace) -> int:
     status = trace_status()
     for key, value in status.items():
         print(f"{key}\t{value}")
+    try:
+        from arka.telemetry.observability_doctor import collect as doctor_collect
+
+        doctor = doctor_collect()
+        print(f"collector_reachable\t{str(doctor.get('collector_reachable', False)).lower()}")
+        print(f"packages_installed\t{str(doctor.get('packages_installed', False)).lower()}")
+        for key, value in (doctor.get("verification") or {}).items():
+            print(f"verify_{key}\t{value}")
+    except ImportError:
+        pass
     for key, value in prereq_status_lines():
         print(f"{key}\t{value}")
     try:
@@ -106,12 +116,36 @@ def cmd_demo(_args: argparse.Namespace) -> int:
         print("  OTEL_TRACES_ENABLED=1 SIGNOZ_ENDPOINT=http://localhost:4318", file=sys.stderr)
         return 1
 
+    import time
+
+    from arka.telemetry.skill_obs import finish_skill_dispatch
+
     with span(
         "arka.request",
         attributes={"arka.command": "signoz demo", "arka.track": "01"},
     ):
-        with span("arka.route", attributes={"arka.route.source": "offline", "arka.route.skill": "goal demo"}):
+        with span(
+            "arka.route",
+            attributes={
+                "arka.route.source": "offline",
+                "arka.route.skill": "goal demo",
+                "arka.route.decision": "symbolic",
+            },
+        ):
             pass
+        for skill, exit_code in (("greeting", 0), ("help", 0), ("play", 1)):
+            skill_start = time.perf_counter()
+            with span(
+                f"arka.skill.{skill}",
+                attributes={"arka.skill.name": skill, "arka.skill.line": skill},
+            ) as skill_span:
+                finish_skill_dispatch(
+                    skill_span,
+                    skill=skill,
+                    exit_code=exit_code,
+                    start=skill_start,
+                    skill_line=skill,
+                )
         with span(
             "arka.agent.goal",
             attributes={"arka.agent.goal_text": "demo observability trace", "arka.agent.max_steps": 3},
@@ -384,6 +418,18 @@ def _cmd_alert_list(args: argparse.Namespace) -> int:
     return cmd_alert_list(args)
 
 
+def _cmd_dashboard_install(args: argparse.Namespace) -> int:
+    from arka.telemetry.signoz_dashboards import cmd_dashboard_install
+
+    return cmd_dashboard_install(args)
+
+
+def _cmd_dashboard_list(args: argparse.Namespace) -> int:
+    from arka.telemetry.signoz_dashboards import cmd_dashboard_list
+
+    return cmd_dashboard_list(args)
+
+
 def _cmd_mcp_ping(_args: argparse.Namespace) -> int:
     from arka.integrations.signoz_mcp import signoz_mcp_ping
 
@@ -443,6 +489,12 @@ def _cmd_cursor_setup(args: argparse.Namespace) -> int:
     return cmd_cursor_setup(args)
 
 
+def _cmd_autostart(args: argparse.Namespace) -> int:
+    from arka.telemetry.signoz_autostart import cmd_autostart
+
+    return cmd_autostart(args)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="SigNoz helpers for Arka Track 01 — AI & Agent Observability",
@@ -476,7 +528,24 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Report prerequisite status and exit (no installs)",
     )
+    p_setup.add_argument(
+        "--autostart",
+        action="store_true",
+        help="Install login autostart after a successful cast (macOS launchd / Linux systemd)",
+    )
     p_setup.set_defaults(func=cmd_setup)
+
+    p_autostart = sub.add_parser(
+        "autostart",
+        help="Install login autostart for the SigNoz Docker stack",
+    )
+    autostart_sub = p_autostart.add_subparsers(dest="autostart_action", required=True)
+    p_autostart_install = autostart_sub.add_parser("install", help="Enable SigNoz autostart on login")
+    p_autostart_install.set_defaults(func=_cmd_autostart)
+    p_autostart_status = autostart_sub.add_parser("status", help="Report autostart installation status")
+    p_autostart_status.set_defaults(func=_cmd_autostart)
+    p_autostart_uninstall = autostart_sub.add_parser("uninstall", help="Remove SigNoz autostart")
+    p_autostart_uninstall.set_defaults(func=_cmd_autostart)
 
     p_demo = sub.add_parser("demo", help="Send a sample E2E agent trace (no LLM)")
     p_demo.set_defaults(func=cmd_demo)
@@ -535,7 +604,7 @@ def main(argv: list[str] | None = None) -> int:
         "name",
         nargs="?",
         default="agent-error-spike",
-        help="Alert slug from hackathon/signoz/alerts/ (default: agent-error-spike)",
+        help="Alert slug from signoz/alerts/ (default: agent-error-spike)",
     )
     p_alert_create.add_argument("--all", action="store_true", help="Create every bundled alert rule")
     p_alert_create.add_argument("--dry-run", action="store_true", help="Print payload without POST")
@@ -544,6 +613,34 @@ def main(argv: list[str] | None = None) -> int:
 
     p_alert_list = sub.add_parser("alert-list", help="List bundled and remote SigNoz alert rules")
     p_alert_list.set_defaults(func=_cmd_alert_list)
+
+    p_dashboard = sub.add_parser("dashboard", help="Bundled Arka observability dashboards")
+    dashboard_sub = p_dashboard.add_subparsers(dest="dashboard_action", required=True)
+    p_dashboard_install = dashboard_sub.add_parser(
+        "install",
+        help="Install the Arka agent observability dashboard (requires SIGNOZ_API_KEY)",
+    )
+    p_dashboard_install.add_argument(
+        "name",
+        nargs="?",
+        default="arka-agent-observability",
+        help="Dashboard slug from signoz/dashboards/ (default: arka-agent-observability)",
+    )
+    p_dashboard_install.add_argument("--dry-run", action="store_true", help="Print payload summary without POST")
+    p_dashboard_install.add_argument("--replace", action="store_true", help="Recreate even if title exists")
+    p_dashboard_install.add_argument(
+        "--alerts",
+        action="store_true",
+        help="Also create bundled observability alerts (agent-error-spike, skill-dispatch-failures, llm-p99-latency)",
+    )
+    p_dashboard_install.add_argument(
+        "--mcp",
+        action="store_true",
+        help="Try SigNoz MCP import before HTTP API",
+    )
+    p_dashboard_install.set_defaults(func=_cmd_dashboard_install)
+    p_dashboard_list = dashboard_sub.add_parser("list", help="List bundled and remote dashboards")
+    p_dashboard_list.set_defaults(func=_cmd_dashboard_list)
 
     p_mcp = sub.add_parser("mcp", help="SigNoz MCP client (traced connect / tools / call)")
     mcp_sub = p_mcp.add_subparsers(dest="mcp_cmd", required=True)
