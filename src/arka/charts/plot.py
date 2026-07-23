@@ -98,8 +98,9 @@ def _require_matplotlib():
     except ImportError as exc:
         raise SystemExit(
             "matplotlib is required for charts.\n"
-            "Install: pip install matplotlib\n"
-            "Or: pip install 'arka-agent[charts]'"
+            f"Install: {sys.executable} -m pip install matplotlib\n"
+            "Or: pip install 'arka-agent[charts]'\n"
+            "Or (pipx): pipx inject arka-agent matplotlib"
         ) from exc
 
 
