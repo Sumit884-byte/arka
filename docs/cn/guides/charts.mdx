@@ -15,19 +15,19 @@ pip install "arka-agent[charts]"
 
 | 类型 | CLI | 自然语言示例 |
 | ---- | --- | ---------- |
-| line | `chart line AAPL TSLA --range 1y` | `compare Apple and Tesla stock last year` |
-| bar | `chart bar --data "A:1,B:2"` | `phone sales Apple 230 Samsung 210` |
-| pie | `chart pie --data "A:40,B:30"` | `pie chart traffic organic 400 direct 300` |
-| scatter | `chart scatter --data "100:200,120:190"` | `scatter ad spend vs revenue 100 200 120 190` |
-| histogram | `chart histogram --data "12,15,18,22"` | `histogram response times 12 15 18 22` |
-| pareto | `chart pareto --data "A:45,B:28"` | `pareto defects Scratches 45 Dents 28` |
+| line | `arka chart line AAPL TSLA --range 1y` | `compare Apple and Tesla stock last year` |
+| bar | `arka chart bar --data "A:1,B:2"` | `phone sales Apple 230 Samsung 210` |
+| pie | `arka chart pie --data "A:40,B:30"` | `pie chart traffic organic 400 direct 300` |
+| scatter | `arka chart scatter --data "100:200,120:190"` | `scatter ad spend vs revenue 100 200 120 190` |
+| histogram | `arka chart histogram --data "12,15,18,22"` | `histogram response times 12 15 18 22` |
+| pareto | `arka chart pareto --data "A:45,B:28"` | `pareto defects Scratches 45 Dents 28` |
 
 ## 直接使用 CLI
 
 ```bash
-chart line AAPL TSLA --range 1y
-chart bar --data "Apple:230,Samsung:210,Xiaomi:140" --title "Phone sales"
-chart pie --data "Organic:400,Direct:300,Referral:300" --title "Traffic"
+arka chart line AAPL TSLA --range 1y
+arka chart bar --data "Apple:230,Samsung:210,Xiaomi:140" --title "Phone sales"
+arka chart pie --data "Organic:400,Direct:300,Referral:300" --title "Traffic"
 ```
 
 ## 图表默认值
