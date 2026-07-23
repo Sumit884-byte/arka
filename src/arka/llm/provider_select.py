@@ -57,6 +57,17 @@ _LIST_PROVIDERS_RE = re.compile(
 _SHOW_PREF_RE = re.compile(
     r"(?i)\b(?:show|what\s+is|get)\s+(?:my\s+)?(?:preferred\s+)?(?:ai\s+|llm\s+)?provider\b"
 )
+_EXPLICIT_MODEL_SET_RE = re.compile(
+    r"(?i)^(?:select|use|switch)\s+(?:to\s+)?(?:model\s+)?(?P<model>.+?)\s*$"
+)
+_HARDWARE_ADVISOR_HINTS = re.compile(
+    r"(?i)\b(?:best|for\s+my|for\s+this|hardware|pc|mac|laptop|computer|machine|"
+    r"resources|optimize|recommend|should\s+i\s+use|my\s+pc)\b"
+)
+_MODEL_ID_LIKE = re.compile(
+    r"(?i)(?:claude|gpt|gemini|llama|qwen|mistral|grok|deepseek|sonnet|haiku|opus|"
+    r"mixtral|phi|codestral|command-|sonar|venice|moonshot|kimi|glm|abab|o1|o3|nano)"
+)
 
 
 @dataclass
@@ -397,11 +408,74 @@ def auto_pick_model_if_needed(provider: str | None = None, *, force: bool = Fals
     return chosen
 
 
+def looks_like_model_id(model: str) -> bool:
+    raw = (model or "").strip()
+    if not raw:
+        return False
+    low = raw.lower()
+    if low in {"model", "llm", "ai"}:
+        return False
+    if "/" in raw or ":" in raw:
+        return True
+    if _MODEL_ID_LIKE.search(raw):
+        return True
+    if re.fullmatch(r"[\w][\w./:-]*[\w]", raw) and "-" in raw:
+        return True
+    return False
+
+
+def extract_explicit_model_id(text: str) -> str | None:
+    """Return a concrete model id from 'select/use/switch <model>' NL, else None."""
+    clean = (text or "").strip()
+    if not clean or _HARDWARE_ADVISOR_HINTS.search(clean):
+        return None
+    if re.search(r"(?i)\bfree\b.*\bmodels?\b|\bmodels?\b.*\bfree\b", clean):
+        return None
+    match = _EXPLICIT_MODEL_SET_RE.match(clean)
+    if not match:
+        return None
+    model = match.group("model").strip()
+    if not looks_like_model_id(model):
+        return None
+    return model
+
+
+def is_preferred_model_set_query(text: str) -> bool:
+    return extract_explicit_model_id(text) is not None
+
+
+def resolve_model_set_target(model: str) -> tuple[str, str]:
+    """Return (provider_slug, model_id) for set_preferred_provider."""
+    from arka.llm.fallback import infer_provider_from_model
+
+    raw = (model or "").strip()
+    if "/" in raw and not raw.lower().startswith(("http://", "https://")):
+        head, _, tail = raw.partition("/")
+        slug = normalize_provider_slug(head)
+        if tail and get_provider(slug):
+            return slug, tail
+    provider = infer_provider_from_model(raw)
+    if not provider:
+        pref, _ = get_preferred()
+        provider = pref or "openrouter"
+    return provider, raw
+
+
+def build_preferred_model_set_command(text: str) -> str | None:
+    model = extract_explicit_model_id(text)
+    if not model:
+        return None
+    provider, model_id = resolve_model_set_target(model)
+    return f"provider set {provider} --model {model_id}"
+
+
 def is_provider_select_query(text: str) -> bool:
     clean = (text or "").strip()
     if not clean:
         return False
     if clean.lower().startswith("provider "):
+        return True
+    if is_preferred_model_set_query(clean):
         return True
     patterns = (_SET_PROVIDER_RE, _MODELS_ON_RE, _LIST_PROVIDERS_RE, _SHOW_PREF_RE)
     return any(p.search(clean) for p in patterns)
@@ -411,6 +485,11 @@ def nl_to_argv(text: str) -> list[str]:
     clean = (text or "").strip()
     if not clean:
         return []
+
+    model = extract_explicit_model_id(clean)
+    if model:
+        provider, model_id = resolve_model_set_target(model)
+        return ["set", provider, "--model", model_id]
 
     if clean.lower().startswith("provider "):
         return clean.split()[1:]

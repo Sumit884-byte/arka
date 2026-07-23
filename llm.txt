@@ -915,6 +915,89 @@ RECENT FILE CHANGES (CHANGELOG)
   - modified tests/test_mcp_manager.py (python)
   - … and 9 more files
 
+  --- sync 2026-07-22 11:04 UTC (cabfadb5..60f7b335)
+  - modified .arka-index
+  - modified .gitignore
+  - modified CONTRIBUTING.md (docs)
+  - modified README.md (docs)
+  - added bin/arka_chart_from_pdf.py (python)
+  - added bin/arka_self_build.py (python)
+  - added bin/arka_terminal_video.py (python)
+  - added bin/arka_treemap.py (python)
+  - modified docs/cn/guides/observability.mdx (docs)
+  - modified docs/guides/observability.mdx (docs)
+  - modified docs/quickstart.mdx (docs)
+  - modified llm.txt
+  - modified logs/mcp.jsonl
+  - modified pyproject.toml
+  - added recordings/_demo_build/00_title.mp4
+  - added recordings/_demo_build/01_install.mp4
+  - added recordings/_demo_build/02_doctor.mp4
+  - added recordings/_demo_build/03_routing.mp4
+  - added recordings/_demo_build/03_routing_tokyo.mp4
+  - added recordings/_demo_build/04_routing_rust.mp4
+  - added recordings/_demo_build/04_tui.mp4
+  - added recordings/_demo_build/05_ask.mp4
+  - added recordings/_demo_build/05_mcp.mp4
+  - added recordings/_demo_build/06_features.mp4
+  - added recordings/_demo_build/06_tui.mp4
+  - added recordings/_demo_build/07_mcp.mp4
+  - added recordings/_demo_build/07_outro.mp4
+  - added recordings/_demo_build/08_underhood.mp4
+  - added recordings/_demo_build/09_capabilities.mp4
+  - added recordings/_demo_build/10_outro.mp4
+  - added recordings/_demo_build/concat.txt
+  - added recordings/_demo_build/doctor.png
+  - added recordings/_demo_build/features.png
+  - added recordings/_demo_build/install.png
+  - added recordings/_demo_build/mcp.png
+  - added recordings/_demo_build/mcp_0.mp4
+  - added recordings/_demo_build/mcp_1.mp4
+  - added recordings/_demo_build/mcp_list.txt
+  - added recordings/_demo_build/outro.png
+  - added recordings/_demo_build/routing.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000000.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000001.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000002.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000003.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000004.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000005.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000006.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000007.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000008.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000009.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000010.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000011.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000012.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000013.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000014.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000015.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000016.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000017.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000018.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000019.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000020.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000021.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000022.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000023.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000024.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000025.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000026.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000027.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000028.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000029.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000030.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000031.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000032.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000033.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000034.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000035.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000036.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000037.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000038.png
+  - added recordings/_demo_build/terminal_frames/ask/frame_000039.png
+  - … and 6426 more files
+
 ================================================================================
 END — update this file when adding skills, routing rules, or major modules
 ================================================================================

@@ -35,9 +35,9 @@ arka mcp status
 来自 fish：
 
 ```fish
-mcp list
-mcp status
-mcp tools signoz
+arka mcp list
+arka mcp status
+arka mcp tools signoz
 ```
 
 自然语言（智能体路由）：
@@ -183,6 +183,7 @@ arka mcp doctor
 | `arka_webhook` | Webhook 网关 — 状态或健康检查 |
 | `arka_view_data` | 预览 CSV/TSV 表格为纯文本 |
 | `arka_clipboard` | 剪贴板历史 — 列出、保存、获取或清空 |
+| `arka_share` | 分享最近一次 LLM 回复（含模型、提供商、token、延迟与输出，支持 markdown 或 JSON） |
 | `arka_remind` | 提醒 — 列出、添加或取消 |
 | `arka_bookmarks` | 书签 — 列出、保存、搜索、获取或删除 |
 | `arka_docker` | Docker — 健康、容器、镜像或日志 |
@@ -204,7 +205,7 @@ arka mcp doctor
 | `arka_currency` | 汇率换算 — 金额转换或自然语言查询 |
 | `arka_disk` | 磁盘空间 — 用量摘要或分类占用 |
 | `arka_repo_health` | 仓库健康 — 扫描或运行 lint/测试检查 |
-| `arka_agent_hub` | Agent Hub — 状态、适配器、检测、诊断或列表 |
+| `arka_agent_hub` | Agent Hub — 状态、适配器、检测、诊断、列表、内存来源或从 IDE 导入内存 |
 | `arka_team_run` | 运行智能体团队工作流 |
 
 ### Agent Hub
@@ -217,3 +218,20 @@ arka agent_hub adapters    # see which agent configs would gain hub servers
 ```
 
 中枢环境变量（`ARKA_MCP_CONFIG`、`ARKA_HUB_DIR`）已在 [Agent Hub](/cn/guides/agent-hub) 中记录。
+
+#### 通过 MCP 从 IDE 导入内存
+
+`arka_agent_hub` 可列出并导入 Cursor、Codex、OpenClaw、Arka 会话笔记及中枢导出：
+
+```bash
+arka mcp call arka arka_agent_hub --args '{"action":"memory_sources"}'
+arka mcp call arka arka_agent_hub --args '{"action":"import_memory","source":"cursor"}'
+arka mcp call arka arka_agent_hub --args '{"action":"import_memory","all":true}'
+```
+
+| `action` | 参数 | 返回 |
+| --- | --- | --- |
+| `memory_sources` | — | 本地存在的 `{ id, name, ide, files, file_count }` 数组 |
+| `import_memory` | `path` 或 `source` / `ide` / `agent` 或 `all: true` | `{ ok, facts_imported, notes_imported, imports, errors }` |
+
+详见 [Agent Hub — 内存导入](/cn/guides/agent-hub#内存导入)。

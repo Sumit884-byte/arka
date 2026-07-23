@@ -11,12 +11,12 @@ Arka 会跨会话记住事实。使用 [Supermemory](https://supermemory.ai) API
 
 | 命令 | 示例 |
 | ------- | ------- |
-| `agent_remember` | `agent_remember I prefer Hindi TTS` |
-| `agent_recall` | `agent_recall what TTS do I prefer` |
-| `supermemory status` | 显示后端模式（api / local） |
-| `supermemory remember` | 显式云端记忆 |
-| `supermemory recall` | 显式云端回忆 |
-| `semantic_memory reindex` | 在本地缓存上重建语义索引 |
+| `arka memory remember` | `arka memory remember I prefer Hindi TTS` |
+| `arka memory recall` | `arka memory recall what TTS do I prefer` |
+| `arka supermemory status` | 显示后端模式（api / local） |
+| `arka supermemory remember` | 显式云端记忆 |
+| `arka supermemory recall` | 显式云端回忆 |
+| `arka "semantic memory reindex"` | 在本地缓存上重建语义索引 |
 
 ## 自然语言
 
@@ -42,9 +42,9 @@ Arka 使用多个互补的上下文存储。选择适合你用例的层：
 
 | 层 | 命令 / 存储 | 何时使用 |
 | ----- | --------------- | ----------- |
-| 事实（长期） | `agent_remember`，Supermemory | 偏好、数周内稳定的知识 |
-| 会话笔记 | `session_memory` | Markdown 笔记、每日日志（`MEMORY.md`） |
-| 频道对话 | `message_session` | 每个聊天/线程的连续性（webhook、CLI、Telegram 桥） |
+| 事实（长期） | `arka memory remember`，Supermemory | 偏好、数周内稳定的知识 |
+| 会话笔记 | `arka session-memory` | Markdown 笔记、每日日志（`MEMORY.md`） |
+| 频道对话 | `arka session` | 每个聊天/线程的连续性（webhook、CLI、Telegram 桥） |
 | 聊天会话 | 在 `arka ask` 中自动 | 进程内当前对话窗口 |
 
 ```mermaid
@@ -81,15 +81,11 @@ flowchart LR
 
 | 命令 | 示例 |
 | ------- | ------- |
-| `memory remember` | `memory remember I prefer dark mode` |
-| `memory recall` | `memory recall "what theme do I prefer"` |
-| `memory status` | 显示所有层的计数 |
-| `memory scratchpad list` | 列出作用域内的工作流条目 |
-| `memory promote <id>` | 将草稿板条目提升为全局事实 |
-| `unified_memory remember` | `unified_memory remember I prefer dark mode` |
-| `unified_memory remember` | `unified_memory remember "note: standup at 9am" --layer note` |
-| `unified_memory recall` | `unified_memory recall "what theme do I prefer"` |
-| `unified_memory status` | 显示所有层的计数 |
+| `arka memory remember` | `arka memory remember I prefer dark mode` |
+| `arka memory recall` | `arka memory recall "what theme do I prefer"` |
+| `arka memory status` | 显示所有层的计数 |
+| `arka memory scratchpad list` | 列出作用域内的工作流条目 |
+| `arka memory promote <id>` | 将草稿板条目提升为全局事实 |
 
 ```env
 UNIFIED_MEMORY=1    # 默认开启；设置为 0 仅使用旧的按层回忆
@@ -101,7 +97,7 @@ UNIFIED_MEMORY=1    # 默认开启；设置为 0 仅使用旧的按层回忆
 - **笔记** —— 日志、会议 → `session_memory` markdown
 - **频道** —— 对话轮次 → `message_session` JSON
 
-现有命令（`agent_remember`、`session_memory`、`message_session`）仍可独立工作。
+现有命令（`arka session-memory`、`arka session`）仍可与统一记忆一起使用。
 
 ## 作用域记忆和溯源（v3）
 
@@ -118,11 +114,10 @@ UNIFIED_MEMORY=1    # 默认开启；设置为 0 仅使用旧的按层回忆
 
 | 命令 | 示例 |
 | ------- | ------- |
-| `memory_scope status` | 信任上限、草稿板数量 |
-| `memory_scope scratchpad list` | 列出作用域条目 |
-| `memory_scope scratchpad list --team research` | 按团队筛选 |
-| `memory_promote <id>` | 将草稿板条目提升为全局事实 |
-| `unified_memory scope status` | 通过 Python CLI 同上 |
+| `arka memory scope status` | 信任上限、草稿板数量 |
+| `arka memory scratchpad list` | 列出作用域条目 |
+| `arka memory scratchpad list --team research` | 按团队筛选 |
+| `arka memory promote <id>` | 将草稿板条目提升为全局事实 |
 
 ### 配置
 

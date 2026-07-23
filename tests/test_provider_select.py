@@ -214,6 +214,34 @@ def test_nl_to_argv_patterns() -> None:
     assert nl_to_argv("show my preferred ai provider") == ["show"]
 
 
+def test_explicit_model_set_routing() -> None:
+    from arka.llm.provider_select import (
+        build_preferred_model_set_command,
+        extract_explicit_model_id,
+        is_preferred_model_set_query,
+        is_provider_select_query,
+        nl_to_argv,
+        resolve_model_set_target,
+    )
+    from arka.routing.symbolic import route_offline_extras, route_preferred_model_set
+
+    assert extract_explicit_model_id("select claude-haiku-4-5") == "claude-haiku-4-5"
+    assert extract_explicit_model_id("use gpt-4o") == "gpt-4o"
+    assert extract_explicit_model_id("switch to model gemini-2.5-flash") == "gemini-2.5-flash"
+    assert extract_explicit_model_id("select best model for my pc") is None
+    assert extract_explicit_model_id("select model") is None
+
+    assert is_preferred_model_set_query("select claude-haiku-4-5")
+    assert is_provider_select_query("select claude-haiku-4-5")
+    assert nl_to_argv("select claude-haiku-4-5") == ["set", "anthropic", "--model", "claude-haiku-4-5"]
+    assert resolve_model_set_target("claude-haiku-4-5") == ("anthropic", "claude-haiku-4-5")
+
+    routed = build_preferred_model_set_command("select claude-haiku-4-5")
+    assert routed == "provider set anthropic --model claude-haiku-4-5"
+    assert route_preferred_model_set("select claude-haiku-4-5") == routed
+    assert route_offline_extras("select claude-haiku-4-5") == routed
+
+
 def test_llm_doctor_shows_model_count(monkeypatch: pytest.MonkeyPatch) -> None:
     _clear_env(monkeypatch)
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")

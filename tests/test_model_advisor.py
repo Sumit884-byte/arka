@@ -98,6 +98,8 @@ class ModelAdvisorRoutingTests(unittest.TestCase):
         self.assertTrue(is_model_select_query("what model should I use"))
         self.assertTrue(is_model_select_query("optimize models for my hardware"))
         self.assertFalse(is_model_select_query("what is a language model"))
+        self.assertFalse(is_model_select_query("select claude-haiku-4-5"))
+        self.assertFalse(is_model_select_query("use gpt-4o"))
 
     def test_nl_to_argv_apply_and_json(self) -> None:
         self.assertEqual(nl_to_argv("apply best model for my laptop"), ["--apply"])

@@ -408,8 +408,18 @@ def auto_remember(text: str, *, quiet: bool = True) -> list[str]:
     """Detect and store memories. Returns list of stored fact strings."""
     if not autodetect_enabled():
         return []
-    existing = _load_existing()
     stored: list[str] = []
+    try:
+        from arka.integrations.email_contacts import try_autodetect_contact
+
+        contact_msg = try_autodetect_contact(text)
+        if contact_msg:
+            stored.append(contact_msg)
+            if not quiet:
+                print(f"Auto-remembered [email_contact]: {contact_msg}")
+    except ImportError:
+        pass
+    existing = _load_existing()
     for hit in detect_memories(text, existing=existing + stored):
         try:
             from arka.agent.core import memory_remember_silent

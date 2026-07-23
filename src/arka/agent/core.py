@@ -260,9 +260,15 @@ def memory_context_for(goal: str, *, limit: int = 3) -> str:
         rules = project_rules_context(goal, limit_chars=2000)
     except ImportError:
         pass
-    if rules and body:
-        return f"{rules}\n\n{body}"
-    return rules or body
+    frontend = ""
+    try:
+        from arka.core.design_guides import context_for as design_guides_context
+
+        frontend = design_guides_context(goal, limit_chars=2000)
+    except ImportError:
+        pass
+    parts = [part for part in (rules, frontend, body) if part]
+    return "\n\n".join(parts)
 
 
 def _memory_context_body(goal: str, *, limit: int = 3) -> str:

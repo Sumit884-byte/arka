@@ -11,12 +11,12 @@ Arka remembers facts across sessions. With a [Supermemory](https://supermemory.a
 
 | Command | Example |
 | --- | --- |
-| `agent_remember` | `agent_remember I prefer Hindi TTS` |
-| `agent_recall` | `agent_recall what TTS do I prefer` |
-| `supermemory status` | Show backend mode (api / local) |
-| `supermemory remember` | Explicit cloud remember |
-| `supermemory recall` | Explicit cloud recall |
-| `semantic_memory reindex` | Rebuild semantic index on local cache |
+| `arka memory remember` | `arka memory remember I prefer Hindi TTS` |
+| `arka memory recall` | `arka memory recall what TTS do I prefer` |
+| `arka supermemory status` | Show backend mode (api / local) |
+| `arka supermemory remember` | Explicit cloud remember |
+| `arka supermemory recall` | Explicit cloud recall |
+| `arka "semantic memory reindex"` | Rebuild semantic index on local cache |
 
 ## Natural language
 
@@ -42,9 +42,9 @@ Arka uses several complementary context stores. Pick the layer that matches your
 
 | Layer | Command / store | When to use |
 | --- | --- | --- |
-| Facts (long-term) | `agent_remember`, Supermemory | Preferences, stable knowledge across weeks |
-| Session notes | `session_memory` | Markdown notes, daily journaling (`MEMORY.md`) |
-| Channel turns | `message_session` | Per chat/thread continuity (webhook, CLI, Telegram bridge) |
+| Facts (long-term) | `arka memory remember`, Supermemory | Preferences, stable knowledge across weeks |
+| Session notes | `arka session-memory` | Markdown notes, daily journaling (`MEMORY.md`) |
+| Channel turns | `arka session` | Per chat/thread continuity (webhook, CLI, Telegram bridge) |
 | Chat session | automatic in `arka ask` | Current conversation window in-process |
 
 ```mermaid
@@ -81,15 +81,11 @@ When `UNIFIED_MEMORY=1` (default), Arka routes recall through a single facade th
 
 | Command | Example |
 | --- | --- |
-| `memory remember` | `memory remember I prefer dark mode` |
-| `memory recall` | `memory recall "what theme do I prefer"` |
-| `memory status` | Show counts across all layers |
-| `memory scratchpad list` | List scoped workflow entries |
-| `memory promote <id>` | Elevate scratchpad entry to global facts |
-| `unified_memory remember` | `unified_memory remember I prefer dark mode` |
-| `unified_memory remember` | `unified_memory remember "note: standup at 9am" --layer note` |
-| `unified_memory recall` | `unified_memory recall "what theme do I prefer"` |
-| `unified_memory status` | Show counts across all layers |
+| `arka memory remember` | `arka memory remember I prefer dark mode` |
+| `arka memory recall` | `arka memory recall "what theme do I prefer"` |
+| `arka memory status` | Show counts across all layers |
+| `arka memory scratchpad list` | List scoped workflow entries |
+| `arka memory promote <id>` | Elevate scratchpad entry to global facts |
 
 ```env
 UNIFIED_MEMORY=1    # default on; set 0 to use legacy per-layer recall only
@@ -101,7 +97,7 @@ Layer routing with `--layer auto` (default):
 - **Notes** — journaling, meetings → `session_memory` markdown
 - **Channel** — conversation turns → `message_session` JSON
 
-Existing commands (`agent_remember`, `session_memory`, `message_session`) still work independently.
+Existing commands (`arka session-memory`, `arka session`) still work alongside unified memory.
 
 ## Scoped memory and provenance (v3)
 
@@ -118,11 +114,10 @@ Shared memory is useful only when trust boundaries are explicit. Scoped memory a
 
 | Command | Example |
 | --- | --- |
-| `memory_scope status` | Trust cap, scratchpad count |
-| `memory_scope scratchpad list` | List scoped entries |
-| `memory_scope scratchpad list --team research` | Filter by team |
-| `memory_promote <id>` | Elevate scratchpad entry to global facts |
-| `unified_memory scope status` | Same via Python CLI |
+| `arka memory scope status` | Trust cap, scratchpad count |
+| `arka memory scratchpad list` | List scoped entries |
+| `arka memory scratchpad list --team research` | Filter by team |
+| `arka memory promote <id>` | Elevate scratchpad entry to global facts |
 
 ### Configuration
 
@@ -153,3 +148,5 @@ arka workflow run review-and-ship --task "..." --promote-final
 ```
 
 See [Agent Teams](/guides/agent-teams) and [Agent Hub](/guides/agent-hub) for edge deployment (Jetson / ClawBox).
+
+To pull memory **from other IDEs into Arka** (Cursor rules, Codex notes, hub exports), use [Agent Hub — Memory import](/guides/agent-hub#memory-import) or the `arka_agent_hub` MCP tool with `memory_sources` / `import_memory`.

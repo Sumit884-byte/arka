@@ -11,7 +11,10 @@ import os
 import re
 import shlex
 import shutil
+import subprocess
 import sys
+import tempfile
+import xml.etree.ElementTree as ET
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -435,6 +438,164 @@ def _require_pillow():
         ) from None
 
 
+def _is_svg(data: bytes, mime: str = "") -> bool:
+    if mime == "image/svg+xml":
+        return True
+    head = data[:512].lstrip()
+    return head.startswith((b"<?xml", b"<svg", b"<!DOCTYPE svg", b"<!doctype svg"))
+
+
+def _svg_local_name(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1] if "}" in tag else tag
+
+
+def _svg_element_text(elem: ET.Element) -> str:
+    parts: list[str] = []
+    if elem.text and elem.text.strip():
+        parts.append(elem.text.strip())
+    for child in elem:
+        child_text = _svg_element_text(child)
+        if child_text:
+            parts.append(child_text)
+        if child.tail and child.tail.strip():
+            parts.append(child.tail.strip())
+    return " ".join(parts)
+
+
+def _extract_svg_text(data: bytes) -> str:
+    """Extract title, description, and visible text from SVG markup."""
+    try:
+        raw = data.decode("utf-8")
+    except UnicodeDecodeError:
+        raw = data.decode("utf-8", errors="replace")
+    try:
+        root = ET.fromstring(raw)
+    except ET.ParseError:
+        text_bits = re.findall(r"<text[^>]*>([^<]+)</text>", raw, flags=re.I)
+        cleaned = [_clean_svg_line(t) for t in text_bits if _clean_svg_line(t)]
+        return "\n".join(cleaned) if cleaned else raw[:2000].strip()
+
+    lines: list[str] = ["SVG vector graphic"]
+    for tag_name in ("title", "desc"):
+        for elem in root.iter():
+            if _svg_local_name(elem.tag) != tag_name:
+                continue
+            text = _clean_svg_line(_svg_element_text(elem))
+            if text:
+                label = "Title" if tag_name == "title" else "Summary"
+                lines.append(f"{label}: {text}")
+            break
+
+    body_lines: list[str] = []
+    for elem in root.iter():
+        if _svg_local_name(elem.tag) != "text":
+            continue
+        text = _clean_svg_line(_svg_element_text(elem))
+        if text:
+            body_lines.append(text)
+
+    if body_lines:
+        lines.append("Text content:")
+        lines.extend(f"  • {line}" for line in body_lines)
+    return "\n".join(lines)
+
+
+def _clean_svg_line(text: str) -> str:
+    return re.sub(r"\s+", " ", (text or "").strip())
+
+
+def _svg_to_png(data: bytes, *, max_edge: int | None = None) -> bytes | None:
+    """Rasterize SVG to PNG using an external tool or cairosvg when available."""
+    edge = max(256, max_edge or _max_edge())
+    with tempfile.TemporaryDirectory(prefix="arka-svg-") as tmp:
+        svg_path = Path(tmp) / "input.svg"
+        svg_path.write_bytes(data)
+        png_path = Path(tmp) / "out.png"
+
+        rsvg = shutil.which("rsvg-convert")
+        if rsvg:
+            try:
+                subprocess.run(
+                    [rsvg, "-w", str(edge), str(svg_path), "-o", str(png_path)],
+                    check=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=30,
+                )
+                if png_path.is_file():
+                    return png_path.read_bytes()
+            except (OSError, subprocess.SubprocessError):
+                pass
+
+        inkscape = shutil.which("inkscape")
+        if inkscape:
+            try:
+                subprocess.run(
+                    [
+                        inkscape,
+                        str(svg_path),
+                        "--export-type=png",
+                        f"--export-width={edge}",
+                        f"--export-filename={png_path}",
+                    ],
+                    check=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=60,
+                )
+                if png_path.is_file():
+                    return png_path.read_bytes()
+            except (OSError, subprocess.SubprocessError):
+                pass
+
+        qlmanage = shutil.which("qlmanage")
+        if qlmanage:
+            try:
+                subprocess.run(
+                    [qlmanage, "-t", "-s", str(edge), "-o", tmp, str(svg_path)],
+                    check=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=30,
+                )
+                quicklook_png = Path(tmp) / "input.svg.png"
+                if quicklook_png.is_file():
+                    return quicklook_png.read_bytes()
+            except (OSError, subprocess.SubprocessError):
+                pass
+
+        try:
+            import cairosvg
+
+            return cairosvg.svg2png(bytestring=data, output_width=edge)
+        except Exception:
+            pass
+    return None
+
+
+def _prepare_image_bytes(
+    data: bytes,
+    mime: str,
+    *,
+    max_edge: int | None = None,
+    prefer_jpeg: bool | None = None,
+) -> tuple[bytes, str, str | None]:
+    """Return (image_bytes, mime, svg_text_fallback)."""
+    if _is_svg(data, mime):
+        raster = _svg_to_png(data, max_edge=max_edge or _max_edge())
+        if raster:
+            out, out_mime = _resize_image(
+                raster,
+                "image/png",
+                max_edge=max_edge,
+                prefer_jpeg=prefer_jpeg,
+            )
+            return out, out_mime, None
+        return data, mime, _extract_svg_text(data)
+    out, out_mime = _resize_image(data, mime, max_edge=max_edge, prefer_jpeg=prefer_jpeg)
+    return out, out_mime, None
+
+
 def _guess_mime(path_or_url: str) -> str:
     ext = Path(urllib.parse.urlparse(path_or_url).path).suffix.lower()
     if not ext and "." in path_or_url.rsplit("/", 1)[-1]:
@@ -463,6 +624,13 @@ def _resize_image(
 ) -> tuple[bytes, str]:
     _require_pillow()
     from PIL import Image
+
+    if _is_svg(data, mime):
+        raster = _svg_to_png(data, max_edge=max_edge)
+        if not raster:
+            raise ValueError("Cannot rasterize SVG for resize")
+        data = raster
+        mime = "image/png"
 
     img = Image.open(io.BytesIO(data))
     if img.mode not in ("RGB", "RGBA"):
@@ -501,7 +669,7 @@ def _is_url(text: str) -> bool:
     return bool(re.match(r"https?://", text, re.I))
 
 
-def _load_local(path: Path) -> tuple[bytes, str]:
+def _load_local(path: Path) -> tuple[bytes, str, str | None]:
     if not path.is_file():
         raise SystemExit(f"Image not found: {path}")
     ext = path.suffix.lower()
@@ -511,10 +679,10 @@ def _load_local(path: Path) -> tuple[bytes, str]:
         )
     raw = path.read_bytes()
     mime = _guess_mime(str(path))
-    return _resize_image(raw, mime)
+    return _prepare_image_bytes(raw, mime)
 
 
-def _load_url(url: str) -> tuple[bytes, str]:
+def _load_url(url: str) -> tuple[bytes, str, str | None]:
     req = urllib.request.Request(url, headers={"User-Agent": "arka/1.0"})
     try:
         with urllib.request.urlopen(req, timeout=60) as resp:
@@ -523,25 +691,30 @@ def _load_url(url: str) -> tuple[bytes, str]:
     except urllib.error.URLError as exc:
         raise SystemExit(f"Failed to download image: {exc}") from exc
     mime = ctype if ctype.startswith("image/") else _guess_mime(url)
-    return _resize_image(data, mime)
+    return _prepare_image_bytes(data, mime)
 
 
 def load_image(source: str) -> tuple[str, str]:
     """Return (data_url, label) for OpenAI-compatible vision APIs."""
-    data, mime, label = load_image_bytes(source)
+    data, mime, label, svg_text = load_image_bytes(source)
+    if svg_text:
+        raise SystemExit(
+            "SVG could not be rasterized for vision APIs. "
+            "Install rsvg-convert, inkscape, or cairosvg — or use `arka describe` for text extraction."
+        )
     return _to_data_url(data, mime), label
 
 
-def load_image_bytes(source: str) -> tuple[bytes, str, str]:
-    """Return (image_bytes, mime, label)."""
+def load_image_bytes(source: str) -> tuple[bytes, str, str, str | None]:
+    """Return (image_bytes, mime, label, svg_text_fallback)."""
     src = source.strip().strip("'\"")
     if _is_url(src):
-        data, mime = _load_url(src)
+        data, mime, svg_text = _load_url(src)
         label = urllib.parse.urlparse(src).path.rsplit("/", 1)[-1] or src
-        return data, mime, label
+        return data, mime, label, svg_text
     path = resolve_image_path(src)
-    data, mime = _load_local(path)
-    return data, mime, path.name
+    data, mime, svg_text = _load_local(path)
+    return data, mime, path.name, svg_text
 
 
 def _vllm_describe(data_url: str, prompt: str, *, max_tokens: int | None = None) -> str:
@@ -1063,6 +1236,13 @@ def _ocr_layer(data: bytes, mime: str, chart_facts: str | None):
     return result, facts
 
 
+def _svg_text_summary(svg_text: str) -> str:
+    return (
+        "SVG vector graphic (text extracted from markup; raster conversion unavailable).\n"
+        f"{svg_text.strip()}"
+    )
+
+
 def describe_source(source: str, prompt: str | None = None) -> str:
     _load_arka_env()
     mode = _backend()
@@ -1072,21 +1252,38 @@ def describe_source(source: str, prompt: str | None = None) -> str:
     candidates = _backend_candidates(person_focused=person_focused)
     if not candidates:
         raise SystemExit(_describe_unavailable_message())
-    data, mime, image_label = load_image_bytes(source)
+    data, mime, image_label, svg_text = load_image_bytes(source)
     errors: list[str] = []
 
     chart_payload = _load_chart_payload(source)
     chart_facts = _format_chart_facts(chart_payload) if chart_payload else None
     ocr_result = None
     facts = chart_facts
-    if _two_layer_enabled():
+    if svg_text:
+        facts = chart_facts or svg_text
+        ocr_result = None
+    elif _two_layer_enabled():
         ocr_result, facts = _ocr_layer(data, mime, chart_facts)
     elif chart_facts:
         facts = chart_facts
 
-    ocr_text = ocr_result.plain_text if ocr_result else ""
-    ocr_engine = ocr_result.engine if ocr_result else "disabled"
+    ocr_text = svg_text or (ocr_result.plain_text if ocr_result else "")
+    ocr_engine = "svg" if svg_text else (ocr_result.engine if ocr_result else "disabled")
     ocr_blocks = ocr_result.blocks if ocr_result else ()
+
+    if svg_text:
+        summary = _svg_text_summary(svg_text)
+        if _two_layer_enabled():
+            return _format_two_layer_output(
+                chart_facts=facts,
+                ocr_text=ocr_text,
+                ocr_engine=ocr_engine,
+                ocr_blocks=ocr_blocks,
+                vision_text=summary,
+                vision_backend="svg",
+                image_label=image_label,
+            )
+        return summary
 
     if _two_layer_enabled() and _prefer_structured_visual(chart_payload):
         from arka.vision.chart_visual import render_structured_visual

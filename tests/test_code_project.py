@@ -164,6 +164,52 @@ class CodeProjectScopeTests(unittest.TestCase):
         self.assertTrue(ok)
 
 
+class CodeProjectAutoTrustTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name) / "project"
+        self.root.mkdir()
+        (self.root / "src").mkdir()
+        (self.root / "src" / "main.py").write_text("print('hi')\n", encoding="utf-8")
+        (self.root / "scripts").mkdir()
+        (self.root / "scripts" / "verify.py").write_text("print('ok')\n", encoding="utf-8")
+        self.patch = mock.patch("arka.core.code_project.config_dir")
+        self.mock_config_dir = self.patch.start()
+        self.addCleanup(self.patch.stop)
+        self.config = Path(self.tmp.name) / "config"
+        self.config.mkdir(parents=True, exist_ok=True)
+        self.mock_config_dir.return_value = self.config
+        code_project.init_project(self.root)
+
+    def test_capture_baseline_and_trust_existing_file(self) -> None:
+        baseline = code_project.capture_baseline(self.root)
+        self.assertGreaterEqual(int(baseline.get("file_count") or 0), 2)
+        self.assertTrue(code_project.is_auto_trusted_file("src/main.py"))
+        self.assertTrue(code_project.is_auto_trusted_file("scripts/verify.py"))
+
+    def test_new_file_not_auto_trusted(self) -> None:
+        code_project.capture_baseline(self.root)
+        (self.root / "src" / "new.py").write_text("x\n", encoding="utf-8")
+        self.assertFalse(code_project.is_auto_trusted_file("src/new.py"))
+
+    def test_extract_exec_target(self) -> None:
+        self.assertEqual(
+            code_project.extract_exec_target("run_script scripts/verify.py"),
+            "scripts/verify.py",
+        )
+        self.assertEqual(
+            code_project.extract_exec_target("python3 scripts/verify.py --check"),
+            "scripts/verify.py",
+        )
+
+    def test_capture_baseline_if_needed_is_idempotent(self) -> None:
+        first = code_project.capture_baseline_if_needed(self.root)
+        second = code_project.capture_baseline_if_needed(self.root)
+        self.assertEqual(first, second)
+        self.assertTrue(code_project.is_auto_trusted_file("src/main.py"))
+
+
 class CodeProjectRoutingTests(unittest.TestCase):
     def test_route_init_nl(self) -> None:
         hit = code_project.route_code_nl("initialize project for coding in ~/dev/myapp")

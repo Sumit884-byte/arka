@@ -15,6 +15,26 @@ from arka.paths import config_dir
 
 _CONFIG_NAME = "code-project.json"
 _ENV_KEY = "ARKA_CODE_PROJECT"
+_BASELINE_SKIP_PARTS = frozenset(
+    {
+        ".git",
+        ".arka",
+        "__pycache__",
+        ".mypy_cache",
+        ".pytest_cache",
+        "node_modules",
+        ".venv",
+        "venv",
+        "dist",
+        "build",
+        ".ruff_cache",
+        ".tox",
+    }
+)
+_EXEC_TARGET_RE = re.compile(
+    r"(?i)^(?:run_script|write_script)\s+(\S+\.py)\b|"
+    r"(?:^|\s)(?:python3?|/[^\s]+\.py)\s+(\S+\.py)\b"
+)
 def not_init_message(*, cwd: Path | None = None) -> str:
     """Hint when agent_code / code write run without an initialized project."""
     here = (cwd or Path.cwd()).resolve()
@@ -121,6 +141,117 @@ def is_scoped() -> bool:
     return get_active_root() is not None
 
 
+def auto_trust_enabled() -> bool:
+    raw = os.environ.get("ARKA_CODING_AUTO_TRUST", "1").strip().lower()
+    return raw not in ("0", "false", "no", "off")
+
+
+def _baseline_skip(path: Path) -> bool:
+    return any(part in _BASELINE_SKIP_PARTS for part in path.parts)
+
+
+def get_baseline_files(*, root: Path | None = None) -> dict[str, dict[str, int]]:
+    """Return baseline relative paths captured at coding-tui init for the active root."""
+    data = _load_data()
+    baseline = data.get("baseline")
+    if not isinstance(baseline, dict):
+        return {}
+    project = root or get_active_root()
+    if project is None:
+        return {}
+    if str(baseline.get("root") or "") != str(project.resolve()):
+        return {}
+    files = baseline.get("files")
+    return files if isinstance(files, dict) else {}
+
+
+def capture_baseline(root: str | Path | None = None, *, session: str = "coding-tui") -> dict[str, object]:
+    """Snapshot project files present at coding-tui initialization."""
+    project = _normalize_root(root or require_initialized())
+    files: dict[str, dict[str, int]] = {}
+    for path in project.rglob("*"):
+        if not path.is_file():
+            continue
+        rel_path = path.relative_to(project)
+        if _baseline_skip(rel_path):
+            continue
+        rel = rel_path.as_posix()
+        try:
+            stat = path.stat()
+        except OSError:
+            continue
+        files[rel] = {"size": int(stat.st_size), "mtime": int(stat.st_mtime)}
+
+    data = _load_data()
+    baseline = {
+        "root": str(project),
+        "captured_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "session": session,
+        "file_count": len(files),
+        "files": files,
+    }
+    data["baseline"] = baseline
+    if str(data.get("root") or "") != str(project):
+        data["root"] = str(project)
+        data["name"] = project.name
+        data.setdefault("initialized_at", baseline["captured_at"])
+    _save_data(data)
+    os.environ[_ENV_KEY] = str(project)
+    return baseline
+
+
+def capture_baseline_if_needed(root: str | Path | None = None, *, session: str = "coding-tui") -> int:
+    """Capture baseline once per project root unless refresh is requested."""
+    if not auto_trust_enabled():
+        return 0
+    project = _normalize_root(root or require_initialized())
+    refresh = os.environ.get("ARKA_CODING_BASELINE_REFRESH", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+    existing = get_baseline_files(root=project)
+    if existing and not refresh:
+        return len(existing)
+    baseline = capture_baseline(project, session=session)
+    return int(baseline.get("file_count") or len(baseline.get("files") or {}))
+
+
+def is_auto_trusted_file(path: str | Path, *, root: Path | None = None) -> bool:
+    """True when *path* existed in the project before coding-tui baseline capture."""
+    if not auto_trust_enabled():
+        return False
+    if not get_baseline_files(root=root):
+        return False
+    try:
+        resolved = resolve_in_project(path, root=root)
+        project = (root or get_active_root()).resolve()
+        rel = resolved.relative_to(project).as_posix()
+    except CodeProjectError:
+        return False
+    return rel in get_baseline_files(root=project)
+
+
+def extract_exec_target(cmd: str) -> str | None:
+    """Best-effort script path from run_script / python invocations."""
+    clean = " ".join((cmd or "").split())
+    if not clean:
+        return None
+    match = _EXEC_TARGET_RE.search(clean)
+    if not match:
+        return None
+    target = (match.group(1) or match.group(2) or "").strip().strip("'\"")
+    return target or None
+
+
+def is_auto_trusted_action(cmd: str) -> bool:
+    target = extract_exec_target(cmd)
+    if not target:
+        return False
+    return is_auto_trusted_file(target)
+
+
 def init_project(path: str | Path = ".") -> Path:
     root = _normalize_root(path)
     _save_data(
@@ -215,6 +346,8 @@ def gate_code_write(skill_line: str) -> tuple[bool, str]:
         "clear",
         "help",
         "validate-write",
+        "trusted-write",
+        "is-trusted",
         "in",
     ):
         return True, ""
@@ -274,12 +407,21 @@ def check_shell_scope(cmd: str, *, root: Path | None = None) -> tuple[bool, str]
 def status_dict() -> dict[str, object]:
     root = get_active_root()
     data = _load_data()
+    baseline = data.get("baseline") if isinstance(data.get("baseline"), dict) else {}
+    baseline_count = 0
+    if root is not None and str(baseline.get("root") or "") == str(root):
+        files = baseline.get("files")
+        if isinstance(files, dict):
+            baseline_count = len(files)
     return {
         "initialized": root is not None,
         "root": str(root) if root else None,
         "name": data.get("name"),
         "initialized_at": data.get("initialized_at"),
         "config": str(project_file()),
+        "auto_trust_enabled": auto_trust_enabled(),
+        "baseline_files": baseline_count,
+        "baseline_captured_at": baseline.get("captured_at"),
     }
 
 
@@ -343,6 +485,14 @@ def cmd_status() -> int:
     print(f"  Root: {info['root']}")
     if info.get("initialized_at"):
         print(f"  Since: {info['initialized_at']}")
+    if info.get("auto_trust_enabled"):
+        count = int(info.get("baseline_files") or 0)
+        if count:
+            print(f"  Auto-trust: {count} pre-existing file(s) from coding-tui baseline")
+            if info.get("baseline_captured_at"):
+                print(f"  Baseline: {info['baseline_captured_at']}")
+        else:
+            print("  Auto-trust: enabled (baseline not captured yet)")
     print(f"  Config: {info['config']}")
     return 0
 
@@ -431,6 +581,27 @@ def main(argv: list[str] | None = None) -> int:
             print(msg, file=sys.stderr)
             return 1
         return 0
+    if sub == "trusted-write":
+        if len(args) < 2:
+            print("Usage: arka code trusted-write <filename>", file=sys.stderr)
+            return 1
+        filename = args[1]
+        try:
+            resolved = resolve_in_project(filename)
+        except CodeProjectError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+        if not resolved.is_file():
+            return 0
+        if is_auto_trusted_file(filename):
+            return 0
+        return 2
+    if sub == "is-trusted":
+        if len(args) < 2:
+            print("Usage: arka code is-trusted <filename>", file=sys.stderr)
+            return 1
+        print("yes" if is_auto_trusted_file(args[1]) else "no")
+        return 0 if is_auto_trusted_file(args[1]) else 1
     if sub == "in" and len(args) >= 3:
         path = args[1]
         goal = " ".join(args[2:])

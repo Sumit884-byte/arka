@@ -24,6 +24,44 @@ def test_cli_offline_smoke(monkeypatch, capsys, argv, expected):
     assert expected in capsys.readouterr().out
 
 
+def test_cli_signoz_setup_routes_to_python_cli(monkeypatch, capsys):
+    from arka import cli
+
+    monkeypatch.setenv("ARKA_AUTO_REFETCH", "0")
+    code = cli.main(["signoz", "setup", "--check-only"])
+    captured = capsys.readouterr()
+    assert "docker_cli" in captured.out
+    assert "foundryctl" in captured.out
+    assert "integration setup" not in captured.out.lower()
+    assert "Paste SIGNOZ_API_KEY" not in captured.out
+    assert code in (0, 1)
+
+
+def test_cli_signoz_status_smoke(monkeypatch, capsys):
+    from arka import cli
+
+    monkeypatch.setenv("ARKA_AUTO_REFETCH", "0")
+    assert cli.main(["signoz", "status"]) == 0
+    output = capsys.readouterr().out
+    assert "signoz_setup" in output
+
+
+def test_route_integration_setup_skips_signoz_cli_commands():
+    from arka.routing.symbolic import route_integration_setup
+
+    assert route_integration_setup("signoz setup -y") is None
+    assert route_integration_setup("signoz status") is None
+    assert route_integration_setup("setup signoz api key") == "integration setup signoz"
+
+
+def test_route_observability_skips_signoz_cli_commands():
+    from arka.routing.symbolic import route_observability
+
+    assert route_observability("signoz setup -y") is None
+    assert route_observability("signoz status") is None
+    assert route_observability("check signoz observability") == "observability doctor"
+
+
 def test_cli_route_preview_smoke(monkeypatch, capsys):
     from arka import cli
 

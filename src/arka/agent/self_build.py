@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 try:
+    from arka.env import env_int
     from arka.paths import cache_dir, load_env_file
 
     load_env_file()
@@ -26,9 +27,12 @@ except ImportError:
     def load_env_file() -> None:
         pass
 
+    def env_int(name: str, default: int) -> int:
+        return int(os.environ.get(name) or str(default))
 
-DEFAULT_MAX_ROUNDS = int(os.environ.get("SELF_BUILD_MAX_ROUNDS", "2"))
-DEFAULT_MAX_STEPS = int(os.environ.get("SELF_BUILD_MAX_STEPS", "15"))
+
+DEFAULT_MAX_ROUNDS = env_int("SELF_BUILD_MAX_ROUNDS", 2)
+DEFAULT_MAX_STEPS = env_int("SELF_BUILD_MAX_STEPS", 15)
 RESULT_LIMIT = 6000
 OBSERVABILITY_TARGETS = frozenset(
     {"observability", "dashboard", "dashboards", "signoz", "signoz-dashboard", "signoz-dashboards"}

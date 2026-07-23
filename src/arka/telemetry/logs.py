@@ -83,6 +83,22 @@ def _setup() -> None:
     atexit.register(shutdown_logs)
 
 
+def current_trace_ids() -> tuple[str, str]:
+    """Return (trace_id_hex, span_id_hex) for the active span, or empty strings."""
+    try:
+        from opentelemetry import trace
+
+        span_context = trace.get_current_span().get_span_context()
+        if span_context.is_valid:
+            return (
+                format(span_context.trace_id, "032x"),
+                format(span_context.span_id, "016x"),
+            )
+    except Exception:
+        pass
+    return "", ""
+
+
 def emit_log(
     message: str,
     *,
@@ -100,13 +116,10 @@ def emit_log(
     otel_context = None
     try:
         from opentelemetry import context as otel_context_api
-        from opentelemetry import trace
 
         otel_context = otel_context_api.get_current()
-        span_context = trace.get_current_span().get_span_context()
-        if span_context.is_valid:
-            trace_id_hex = format(span_context.trace_id, "032x")
-            span_id_hex = format(span_context.span_id, "016x")
+        trace_id_hex, span_id_hex = current_trace_ids()
+        if trace_id_hex:
             attrs.setdefault("trace_id", trace_id_hex)
             attrs.setdefault("span_id", span_id_hex)
     except Exception:

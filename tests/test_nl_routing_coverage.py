@@ -25,6 +25,7 @@ NL_CASES: tuple[tuple[str, str], ...] = (
     ("use baryhuang/mcp-threejs", "mcp"),
     ("show agent heartbeat", "heartbeat"),
     ("validate json package.json", "jsonkit"),
+    ("style markdown README.md", "markdown_style"),
     ("save bookmark https://example.com", "bookmarks"),
     (
         "edit src/App.jsx add Inter font from https://fonts.googleapis.com in index.html",
@@ -38,6 +39,9 @@ NL_CASES: tuple[tuple[str, str], ...] = (
     ("show docker containers", "docker_status"),
     ("show clipboard history", "clipboard_history"),
     ("select best model", "select_model"),
+    ("select claude-haiku-4-5", "provider"),
+    ("use gpt-4o", "provider"),
+    ("which models can i use for free from claude", "free_models"),
     ("set preferred provider to openrouter", "provider"),
     ("what models are available on groq", "provider"),
     ("list llm providers", "provider"),

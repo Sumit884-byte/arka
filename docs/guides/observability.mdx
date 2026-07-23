@@ -10,10 +10,10 @@ Export traces, metrics, and logs to [SigNoz](https://signoz.io) when enabled. **
 ## Quick start
 
 ```bash
-python3 bin/arka_signoz.py status
-python3 bin/arka_signoz.py setup -y
-python3 bin/arka_signoz.py demo
-python3 arka_llm.py trace-status
+arka signoz status
+arka signoz setup -y
+arka signoz demo
+arka ai trace-status
 arka observability doctor
 ```
 
@@ -84,16 +84,16 @@ Requires `SIGNOZ_API_KEY` from SigNoz → Settings → Service Accounts. Templat
 MCP-orchestrated install via self-build:
 
 ```bash
-self build observability
-self build observability --apply
-self build dashboard --apply
+arka self build observability
+arka self build observability --apply
+arka self build dashboard --apply
 ```
 
 ## SigNoz MCP \+ Cursor
 
 ```bash
-python3 bin/arka_signoz.py mcp tools
-python3 bin/arka_signoz.py cursor-setup
+arka signoz mcp tools
+arka signoz cursor-setup
 ```
 
 Bundled SigNoz assets (dashboards, alerts, demos) live in `signoz/` in the repo.

@@ -133,6 +133,15 @@ def show_help() -> int:
     return 0
 
 
+def _print_indented_body(text: str) -> None:
+    for line in text.splitlines():
+        stripped = line.rstrip()
+        if stripped:
+            print(f"  {stripped}")
+        else:
+            print()
+
+
 def print_block(title: str, body: str, *, model: str | None = None) -> None:
     """Standard answer block: green-style header, indented body, optional model footer."""
     title = (title or "Answer").strip()
@@ -140,12 +149,16 @@ def print_block(title: str, body: str, *, model: str | None = None) -> None:
     print(f"━━━ {title} ━━━")
     print()
     if text:
-        for line in text.splitlines():
-            stripped = line.rstrip()
-            if stripped:
-                print(f"  {stripped}")
+        try:
+            from arka.core.markdown_style import maybe_style_markdown
+
+            styled = maybe_style_markdown(text)
+            if styled != text:
+                print(styled)
             else:
-                print()
+                _print_indented_body(text)
+        except ImportError:
+            _print_indented_body(text)
     label = model if model is not None else active_model_label()
     docs = active_context7_label()
     if label or docs:

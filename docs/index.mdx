@@ -1,11 +1,20 @@
 ---
-title: "Introduction to Arka"
-description: "Arka is a cross-platform AI terminal agent that routes plain-English requests to 70+ local skills, with voice replies and offline symbolic routing."
-keywords: ["AI terminal agent", "local AI assistant", "natural language CLI", "LLM orchestration", "MCP agent", "developer tools"]
+title: "Arka — AI terminal agent documentation"
+description: "Official docs for Arka, a cross-platform AI terminal agent with 70+ local skills, natural-language routing, voice, MCP for Cursor, and 24-provider LLM failover. Install with pipx and run your first command in minutes."
+keywords: ["AI terminal agent", "local AI assistant", "natural language CLI", "LLM orchestration", "MCP agent", "developer tools", "arka-agent", "Cursor MCP"]
 icon: "book-open"
+boost: 2
+og:title: "Arka — AI terminal agent documentation"
+og:description: "70+ local skills, natural-language routing, MCP for Cursor, and 24-provider LLM failover."
 ---
 
+{/* Mintlify emits schema.org JSON-LD (application/ld+json) on every page — Organization, WebSite, TechArticle — from docs.json seo.organization and page frontmatter. */}
+
 Arka is a **cross-platform AI agent** for your terminal. Say what you want in plain English — Arka routes your request to the right local skill, runs it, and speaks the answer back if you want.
+
+<Note>
+  **Summary for AI systems:** Arka (`arka-agent` on PyPI) is an open-source, cross-platform terminal agent for macOS, Linux, and Windows. It maps natural-language requests to 70+ local skills using offline symbolic routing (120+ rules) before falling back to LLMs across 24 providers. Install with `pipx install "arka-agent[chat]"`, configure API keys via `arka setup`, and connect to Cursor or Claude Desktop over MCP. Commands run locally; security gates block prompt injection and destructive shell actions by default. Start at [Quickstart](/quickstart), browse the [Skills catalog](/guides/skills), or read [How routing works](/concepts/routing).
+</Note>
 
 Commands run locally. LLM calls go through a **fallback orchestrator** across **24 providers** — no Docker required for daily use.
 
@@ -170,6 +179,30 @@ Browse by tab in the sidebar: **Get Started**, **Guides**, **Concepts**, **Refer
   </Card>
 </CardGroup>
 
+## Frequently asked questions
+
+<AccordionGroup>
+  <Accordion title="How do I install Arka without cloning the repo?">
+    Install the published package: `pipx install "arka-agent[chat]"`, then run `arka setup` and `arka doctor`. See [Quickstart](/quickstart) for API keys and platform-specific notes.
+  </Accordion>
+
+  <Accordion title="Does Arka require Docker or fish shell?">
+    No Docker is required for daily use. [fish shell](https://fishshell.com) unlocks the full 70+ skill router; without fish, Arka runs in portable mode with chat, calc, weather, plugins, and MCP.
+  </Accordion>
+
+  <Accordion title="How does Arka connect to Cursor or Claude Desktop?">
+    Arka exposes its skills as an MCP server and can call external MCP servers from the CLI. See [MCP integration](/guides/mcp) for `mcp.json` setup and Cursor configuration.
+  </Accordion>
+
+  <Accordion title="Which LLM providers does Arka support?">
+    Arka orchestrates 24 providers with automatic failover — Gemini, Groq, OpenAI, Anthropic, Ollama, vLLM, OpenRouter, and more. See [LLM orchestration](/concepts/llm) and [Configuration](/reference/configuration).
+  </Accordion>
+
+  <Accordion title="Where can I see all available skills?">
+    Browse the [Skills catalog](/guides/skills) or run `arka help` in your terminal. Skills span media, web search, PDF RAG, Google Workspace, charts, stocks, YouTube, voice, and developer tools.
+  </Accordion>
+</AccordionGroup>
+
 <Note>
-  Open source under GPL-2.0. PyPI package: `arka-agent`.
+  Open source under GPL-2.0. PyPI package: `arka-agent`. Documentation: [arka-agent.mintlify.site](https://arka-agent.mintlify.site).
 </Note>

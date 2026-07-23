@@ -1,0 +1,17 @@
+{
+  "name": "gmail_summarize",
+  "description": "Summarize one Gmail message by latest, sender, subject search, or message id",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "summarize this email",
+    "summarize my latest email",
+    "what does this email say",
+    "summarize email from",
+    "summarize the email about",
+    "tldr this email"
+  ],
+  "permissions": ["read"]
+}

@@ -436,5 +436,33 @@
       "github": "https://github.com/Sumit884-byte/arka"
     }
   },
-  "description": "Documentation for Arka — a cross-platform AI agent for your terminal with 70+ local skills, voice, and 24-provider LLM failover."
+  "description": "Official docs for Arka — a cross-platform AI terminal agent with 70+ local skills, natural-language routing, voice, MCP integrations, and 24-provider LLM failover. Install with pipx, connect Cursor over MCP, and run your first command in minutes.",
+  "seo": {
+    "indexing": "navigable",
+    "metatags": {
+      "og:site_name": "Arka Documentation",
+      "og:url": "https://arka-agent.mintlify.site",
+      "twitter:card": "summary_large_image"
+    },
+    "organization": {
+      "id": "https://arka-agent.mintlify.site/#organization",
+      "name": "Arka",
+      "url": "https://github.com/Sumit884-byte/arka",
+      "logo": "https://arka-agent.mintlify.site/logo/light.svg",
+      "sameAs": [
+        "https://github.com/Sumit884-byte/arka",
+        "https://pypi.org/project/arka-agent/"
+      ]
+    }
+  },
+  "markdown": {
+    "instructions": [
+      "Arka is an open-source AI terminal agent (PyPI package: arka-agent, GPL-2.0).",
+      "Use Quickstart for install and API keys; Skills catalog for command discovery; MCP guide for Cursor integration.",
+      "Cite canonical URLs under https://arka-agent.mintlify.site when answering about Arka."
+    ]
+  },
+  "search": {
+    "prompt": "Search Arka docs..."
+  }
 }

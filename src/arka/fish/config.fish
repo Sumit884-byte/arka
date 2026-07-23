@@ -168,32 +168,91 @@ function _arka_env_key --description "Canonical .env key (strip legacy ARKA_ pre
     echo $key
 end
 
+function _arka_env_blocked_key --description "True when .env key must not override fish/shell vars (internal)"
+    switch $argv[1]
+        case HOME PATH USER SHELL PWD LANG TERM
+            return 0
+    end
+    return 1
+end
+
+function _arka_env_file_lines --description "Non-comment, non-blank lines from an env file (internal)"
+    set -l path $argv[1]
+    test -f "$path"; or return 1
+    set -l content (read --whole-file "$path")
+    for line in (string split \n -- "$content")
+        set line (string trim -- "$line")
+        test -z "$line"; and continue
+        string match -qr '^#' -- "$line"; and continue
+        echo $line
+    end
+end
+
+function _arka_uname_s --description "uname -s via PATH or standard locations (internal)"
+    set -l candidates
+    if set -l u (command -v uname 2>/dev/null)
+        set candidates $u
+    end
+    set candidates $candidates /usr/bin/uname /bin/uname
+    for candidate in $candidates
+        if test -n "$candidate"; and test -x "$candidate"
+            $candidate -s
+            return 0
+        end
+    end
+    return 1
+end
+
+function _arka_ensure_path --description "Ensure essential system PATH entries exist (internal)"
+    set -l essentials
+    if test -d /opt/homebrew/bin
+        set essentials /opt/homebrew/bin /opt/homebrew/sbin
+    end
+    if test -d /usr/local/bin
+        set essentials $essentials /usr/local/bin
+    end
+    set essentials $essentials /usr/bin /bin /usr/sbin /sbin
+    for p in $essentials
+        if test -d "$p"; and not contains -- $p $PATH
+            set -gx PATH $PATH $p
+        end
+    end
+end
+
+_arka_ensure_path
+
 # --- Environment Setup ---
 if test -f "$_ARKA_CFG/.env"
-    for line in (cat "$_ARKA_CFG/.env" | grep -v '^#' | grep -v '^\s*$')
+    for line in (_arka_env_file_lines "$_ARKA_CFG/.env")
         set -l kv (string split -m 1 "=" $line)
         if test (count $kv) -eq 2
             set -l val (string trim -c '"' $kv[2])
             set val (string replace -r '#.*$' '' -- "$val" | string trim)
+            test -n "$val"; or continue
             set -l key (_arka_env_key $kv[1])
+            _arka_env_blocked_key $key; and continue
             set -gx $key $val
         end
     end
 end
 # Dev checkout .env — fill in vars not already set (e.g. REMOTE_TOKEN in repo root)
 if test -f "$_ARKA_ROOT/.env"; and test "$_ARKA_ROOT/.env" != "$_ARKA_CFG/.env"
-    for line in (cat "$_ARKA_ROOT/.env" | grep -v '^#' | grep -v '^\s*$')
+    for line in (_arka_env_file_lines "$_ARKA_ROOT/.env")
         set -l kv (string split -m 1 "=" $line)
         if test (count $kv) -eq 2
             set -l key (_arka_env_key $kv[1])
+            _arka_env_blocked_key $key; and continue
             if not set -q $key
                 set -l val (string trim -c '"' $kv[2])
                 set val (string replace -r '#.*$' '' -- "$val" | string trim)
+                test -n "$val"; or continue
                 set -gx $key $val
             end
         end
     end
 end
+
+_arka_ensure_path
 
 function _arka_src_pythonpath --description "Directory to put on PYTHONPATH for arka imports (internal)"
     if test -d "$_ARKA_ROOT/src/arka"
@@ -238,10 +297,12 @@ function _arka_platform_init --description "Load cached platform profile (detect
         end
     end
     if test -f "$pf"
-        for line in (cat "$pf" | grep -v '^#' | grep -v '^\s*$')
+        for line in (_arka_env_file_lines "$pf")
             set -l kv (string split -m 1 "=" $line)
             if test (count $kv) -eq 2
-                set -gx $kv[1] $kv[2]
+                set -l val (string trim -- "$kv[2]")
+                test -n "$val"; or continue
+                set -gx $kv[1] $val
             end
         end
     end
@@ -251,7 +312,7 @@ function _arka_platform_init --description "Load cached platform profile (detect
     else if set -q PLATFORM; and test -n "$PLATFORM"
         set -gx _PLATFORM $PLATFORM
     else if not set -q _PLATFORM
-        set -l uname (uname -s)
+        set -l uname (_arka_uname_s 2>/dev/null)
         if test "$uname" = Darwin
             set -gx _PLATFORM macos
         else if test "$uname" = Linux
@@ -465,24 +526,43 @@ function _arka_generate_password_once --description "Generate one-time password 
     echo "Store your own:  generate_password set <name> <password>"
 end
 
-function _arka_config_mtime --description "Modification time of config.fish (internal)"
-    set -l cfg "$_ARKA_ROOT/config.fish"
-    test -f "$cfg"; or return 1
-    if _arka_is_macos
-        stat -f %m "$cfg" 2>/dev/null
-    else
-        stat -c %Y "$cfg" 2>/dev/null
+function _arka_stat_cmd --description "Resolve stat binary (internal)"
+    if command -v stat >/dev/null 2>&1
+        command -v stat
+        return 0
     end
+    for candidate in /usr/bin/stat /bin/stat
+        if test -x "$candidate"
+            echo "$candidate"
+            return 0
+        end
+    end
+    return 1
+end
+
+function _arka_file_mtime --description "File modification epoch seconds (internal)"
+    set -l path $argv[1]
+    test -n "$path"; and test -f "$path"; or return 1
+    set -l stat_cmd (_arka_stat_cmd 2>/dev/null)
+    if test -n "$stat_cmd"
+        set -l mt ($stat_cmd -f %m "$path" 2>/dev/null)
+        if test -z "$mt"
+            set mt ($stat_cmd -c %Y "$path" 2>/dev/null)
+        end
+        if test -n "$mt"
+            echo $mt
+            return 0
+        end
+    end
+    return 1
+end
+
+function _arka_config_mtime --description "Modification time of config.fish (internal)"
+    _arka_file_mtime "$_ARKA_ROOT/config.fish"
 end
 
 function _arka_env_mtime --description "Modification time of .env (internal)"
-    set -l env "$_ARKA_CFG/.env"
-    test -f "$env"; or return 1
-    if _arka_is_macos
-        stat -f %m "$env" 2>/dev/null
-    else
-        stat -c %Y "$env" 2>/dev/null
-    end
+    _arka_file_mtime "$_ARKA_CFG/.env"
 end
 
 function _arka_reload_stamp --description "Combined stamp for config + env (internal)"
@@ -563,21 +643,31 @@ end
 set --export BUN_INSTALL "$HOME/.bun"
 set --export PATH $BUN_INSTALL/bin $PATH
 
-set -gx PNPM_HOME "/home/s/.local/share/pnpm"
-if not string match -q -- $PNPM_HOME $PATH
+if not set -q PNPM_HOME; or test -z "$PNPM_HOME"
+    set -gx PNPM_HOME "$HOME/.local/share/pnpm"
+end
+if test -d "$PNPM_HOME"; and not contains -- $PNPM_HOME $PATH
     set -gx PATH "$PNPM_HOME" $PATH
 end
+_arka_ensure_path
 
 # --- Abbreviations & Aliases ---
 if status is-interactive
-    abbr -a update 'sudo apt update'
-    abbr -a up 'sudo apt update && sudo apt upgrade -y && sudo apt autoremove -y'
-    
-    alias ls='ls --color=auto'
-    alias grep='grep --color=auto'
-    alias ll='ls -alF'
-    alias la='ls -A'
-    alias l='ls -CF'
+    if _arka_is_linux
+        abbr -a update 'sudo apt update'
+        abbr -a up 'sudo apt update && sudo apt upgrade -y && sudo apt autoremove -y'
+
+        alias ls='command ls --color=auto'
+        alias grep='grep --color=auto'
+        alias ll='command ls -alF'
+        alias la='command ls -A'
+        alias l='command ls -CF'
+    else if _arka_is_macos
+        alias ls='command /bin/ls -G'
+        alias ll='command /bin/ls -alF'
+        alias la='command /bin/ls -A'
+        alias l='command /bin/ls -CF'
+    end
 
     # System Maintenance Aliases
     alias update='sudo apt update'
@@ -1056,9 +1146,11 @@ function _arka_usage_autostart_ensure --description "Install autostart for usage
     set -l py (_arka_python)
     set -l script (_arka_py_script arka_usage.py)
     if _arka_is_macos
+        test -n "$HOME"; or return 1
         set -l label com.arka.usage
-        set -l plist ~/Library/LaunchAgents/$label.plist
-        mkdir -p ~/Library/LaunchAgents
+        set -l plist "$HOME/Library/LaunchAgents/$label.plist"
+        test -n "$plist"; or return 1
+        mkdir -p "$HOME/Library/LaunchAgents"
         printf '%s\n' \
             '<?xml version="1.0" encoding="UTF-8"?>' \
             '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
@@ -1076,10 +1168,9 @@ function _arka_usage_autostart_ensure --description "Install autostart for usage
             '  <key>StandardOutPath</key><string>'$HOME'/.cache/fish-agent/arka_usage.log</string>' \
             '  <key>StandardErrorPath</key><string>'$HOME'/.cache/fish-agent/arka_usage.log</string>' \
             '</dict>' \
-            '</plist>' \
-            > $plist
-        launchctl bootout gui/(id -u) $plist 2>/dev/null
-        launchctl bootstrap gui/(id -u) $plist 2>/dev/null; or launchctl load $plist 2>/dev/null
+            '</plist>' > "$plist"
+        launchctl bootout gui/(id -u) "$plist" 2>/dev/null
+        launchctl bootstrap gui/(id -u) "$plist" 2>/dev/null; or launchctl load "$plist" 2>/dev/null
         return 0
     end
     if not _arka_is_linux
@@ -1105,9 +1196,11 @@ function _arka_remind_autostart_ensure --description "Install autostart for remi
     set -l py (_arka_python)
     set -l script (_arka_py_script arka_remind.py)
     if _arka_is_macos
+        test -n "$HOME"; or return 1
         set -l label com.arka.remind
-        set -l plist ~/Library/LaunchAgents/$label.plist
-        mkdir -p ~/Library/LaunchAgents
+        set -l plist "$HOME/Library/LaunchAgents/$label.plist"
+        test -n "$plist"; or return 1
+        mkdir -p "$HOME/Library/LaunchAgents"
         printf '%s\n' \
             '<?xml version="1.0" encoding="UTF-8"?>' \
             '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
@@ -1124,10 +1217,9 @@ function _arka_remind_autostart_ensure --description "Install autostart for remi
             '  <key>StandardOutPath</key><string>'$HOME'/.cache/fish-agent/arka_remind.log</string>' \
             '  <key>StandardErrorPath</key><string>'$HOME'/.cache/fish-agent/arka_remind.log</string>' \
             '</dict>' \
-            '</plist>' \
-            > $plist
-        launchctl bootout gui/(id -u) $plist 2>/dev/null
-        launchctl bootstrap gui/(id -u) $plist 2>/dev/null; or launchctl load $plist 2>/dev/null
+            '</plist>' > "$plist"
+        launchctl bootout gui/(id -u) "$plist" 2>/dev/null
+        launchctl bootstrap gui/(id -u) "$plist" 2>/dev/null; or launchctl load "$plist" 2>/dev/null
         return 0
     end
     if not _arka_is_linux
@@ -1894,6 +1986,20 @@ function _agent_dispatch_one --description "Run one skill by name or shell via _
         $py (_arka_py_script arka_google.py) $gargv
         return $status
     end
+    if test "$first" = github
+        if test (count $tokens) -ge 2; and contains -- $tokens[2] resume cv
+            if _arka_routing_trace_enabled
+                echo (set_color cyan)"▶ Running skill: $cmd_trim"(set_color normal)
+            end
+            set -lx ARKA_SKILL github_resume
+            set -l py (_arka_python)
+            set -l gargv (_agent_shlex_split "$cmd_trim")
+            set -e gargv[1]
+            set -e gargv[1]
+            $py (_arka_py_script arka_github_resume.py) $gargv
+            return $status
+        end
+    end
     if _arka_is_builtin_skill "$first"
         if _arka_routing_trace_enabled
             if test "$first" = pdf_ask
@@ -1990,7 +2096,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         agent_resume agent_research agent_nudge agent_watch agent_routine agent_fanout \
         agent_code agent_handoff agent_browser transcript_ask media_ask \
         meeting_agent study_agent inbox_agent compare_agent product_reviewer price_check profession pr_check self_improve coding_tui github_repo competitions route_learn \
-        bookmarks repo_health repo_context repo_map generate_data data_gen data_ask ask_data query_data analyze_data view_data view_csv show_csv docker_status clipboard_history jsonkit heartbeat mcp agent_hub gemini_cli harvard_ark persona elon talk_to_elon elon_chat \
+        bookmarks repo_health repo_context repo_map generate_data data_gen data_ask ask_data query_data analyze_data view_data view_csv show_csv docker_status clipboard_history jsonkit markdown_style style_markdown heartbeat mcp agent_hub gemini_cli harvard_ark persona elon talk_to_elon elon_chat \
         arka_ask semantic_memory supermemory speak_research voice_session handoff_notify remind routines predictions stock \
         rag_setup rag_status voice_agent wake_control \
         greeting agent_ask web_answer deep_web_answer web_essay platform_howto interesting_fact calc chat_reset set_location files_preference_help google \
@@ -3134,10 +3240,23 @@ end
 fish_add_path /home/s/.opencode/bin
 export OLLAMA_HOST=0.0.0.0:11434
 alias bat='batcat' # Use bat instead of batcat
-alias ls='eza' # Modern ls with colors
-alias ll='eza -l' # Detailed listing
-alias la='eza -la' # Detailed with hidden files
-alias lt='eza --tree --level 2' # Tree view
+# Opt-in eza aliases (off by default): set ARKA_EZA_LS=1 in ~/.config/arka/.env
+set -l _arka_eza_ls (string lower (string trim -- "$ARKA_EZA_LS"))
+if test "$_arka_eza_ls" = 1 -o "$_arka_eza_ls" = true -o "$_arka_eza_ls" = yes -o "$_arka_eza_ls" = on
+    if type -q eza
+        alias ls='eza' # Modern ls with colors
+        alias ll='eza -l' # Detailed listing
+        alias la='eza -la' # Detailed with hidden files
+        alias lt='eza --tree --level 2' # Tree view
+    end
+else
+    for _fn in ls ll la lt
+        if functions -q $_fn; and functions $_fn | string match -qr '\beza\b'
+            functions -e $_fn 2>/dev/null
+        end
+    end
+end
+set -e _arka_eza_ls
 if type -q batcat
     alias cat='batcat' # Syntax-highlighted cat
 end
@@ -4211,12 +4330,17 @@ function write_script --description "Create a Python script with the given name 
 
     # Check if file exists
     if test -f "$filename"
-        echo (set_color yellow)"⚠ File already exists: $filename"(set_color normal)
-        echo -n (set_color --bold cyan)"Overwrite? (y/n): "(set_color normal)
-        read -l confirm
-        if not string match -qi "y*" "$confirm"
-            echo "Aborted."
-            return 0
+        set -l trusted 1
+        $py -m arka.core.code_project code trusted-write $filename >/dev/null 2>&1
+        and set trusted 0
+        if test $trusted -ne 0
+            echo (set_color yellow)"⚠ File already exists: $filename"(set_color normal)
+            echo -n (set_color --bold cyan)"Overwrite? (y/n): "(set_color normal)
+            read -l confirm
+            if not string match -qi "y*" "$confirm"
+                echo "Aborted."
+                return 0
+            end
         end
     end
 
@@ -10354,6 +10478,18 @@ function _agent_route_jsonkit --description "Build jsonkit invocation from NL (i
     echo "$route"
 end
 
+function _agent_is_markdown_style_request --description "True if user wants markdown styling (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_markdown_style.py) route "$argv[1]" 2>/dev/null | string trim)
+    test -n "$route"
+end
+
+function _agent_route_markdown_style --description "Build markdown_style invocation from NL (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_markdown_style.py) route "$argv[1]" 2>/dev/null | string trim)
+    echo "$route"
+end
+
 function _agent_is_repo_health_request --description "True if user wants repo health checks (internal)"
     set -l py (_arka_python)
     set -l route ($py (_arka_py_script arka_repo_health.py) route "$argv[1]" 2>/dev/null | string trim)
@@ -10590,6 +10726,18 @@ end
 function _agent_route_github_repo --description "Build github_repo invocation from NL (internal)"
     set -l py (_arka_python)
     set -l route ($py (_arka_py_script arka_github_repo.py) route "$argv[1]" 2>/dev/null | string trim)
+    echo "$route"
+end
+
+function _agent_is_github_resume_request --description "True if user wants a resume PDF from GitHub (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_github_resume.py) route "$argv[1]" 2>/dev/null | string trim)
+    test -n "$route"
+end
+
+function _agent_route_github_resume --description "Build github resume invocation from NL (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_github_resume.py) route "$argv[1]" 2>/dev/null | string trim)
     echo "$route"
 end
 
@@ -11006,6 +11154,9 @@ function _agent_is_knowledge_question --description "True if user wants a factua
     if _agent_is_coding_tui_request "$argv[1]"
         return 1
     end
+    if _agent_is_github_resume_request "$argv[1]"
+        return 1
+    end
     if _agent_is_github_repo_request "$argv[1]"
         return 1
     end
@@ -11022,6 +11173,9 @@ function _agent_is_knowledge_question --description "True if user wants a factua
         return 1
     end
     if _agent_is_jsonkit_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_markdown_style_request "$argv[1]"
         return 1
     end
     if _agent_is_repo_context_request "$argv[1]"
@@ -11045,6 +11199,9 @@ function _agent_is_knowledge_question --description "True if user wants a factua
     if _agent_is_clipboard_history_request "$argv[1]"
         return 1
     end
+    if _agent_is_preferred_model_set_request "$argv[1]"
+        return 1
+    end
     if _agent_is_model_select_request "$argv[1]"
         return 1
     end
@@ -11064,24 +11221,6 @@ function _agent_is_knowledge_question --description "True if user wants a factua
         return 1
     end
     if _agent_is_route_learn_request "$argv[1]"
-        return 1
-    end
-    if _agent_is_model_select_request "$argv[1]"
-        return 1
-    end
-    if _agent_is_personalize_request "$argv[1]"
-        return 1
-    end
-    if _agent_is_life_sciences_request "$argv[1]"
-        return 1
-    end
-    if _agent_is_gemini_cli_request "$argv[1]"
-        return 1
-    end
-    if _agent_is_harvard_ark_request "$argv[1]"
-        return 1
-    end
-    if _agent_is_elon_request "$argv[1]"
         return 1
     end
     if _agent_is_survival_lang_request "$argv[1]"
@@ -11198,6 +11337,9 @@ function _agent_is_desktop_organize_request --description "True if user wants to
 end
 
 function _agent_is_advisory_question --description "True if user wants an opinion/answer, not a metrics dump"
+    if _agent_is_github_resume_request "$argv[1]"
+        return 1
+    end
     if _agent_is_describe_screen_request "$argv[1]"
         return 1
     end
@@ -11300,6 +11442,9 @@ function _agent_is_general_chat --description "True if plain conversational inpu
     if _agent_is_youtube_download_request "$argv[1]"
         return 1
     end
+    if _agent_is_preferred_model_set_request "$argv[1]"
+        return 1
+    end
     if _agent_is_model_select_request "$argv[1]"
         return 1
     end
@@ -11324,6 +11469,9 @@ function _agent_is_general_chat --description "True if plain conversational inpu
     if _agent_is_competitions_request "$argv[1]"
         return 1
     end
+    if _agent_is_github_resume_request "$argv[1]"
+        return 1
+    end
     if _agent_is_generate_data_request "$argv[1]"
         return 1
     end
@@ -11340,6 +11488,9 @@ function _agent_is_general_chat --description "True if plain conversational inpu
         return 1
     end
     if _agent_is_jsonkit_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_markdown_style_request "$argv[1]"
         return 1
     end
     if _agent_is_repo_context_request "$argv[1]"
@@ -11360,7 +11511,7 @@ function _agent_is_general_chat --description "True if plain conversational inpu
     if _agent_is_mcp_request "$argv[1]"
         return 1
     end
-    if string match -qr '(?i)^(select|best_model|model_select|gemini|gemini_cli|harvard_ark|elon|talk_to_elon|elon_chat|life|bookmarks|mcp|docker|clipboard|competitions|route|teach|generate_data|view_data|view_csv|show_csv|data_ask|ask_data|query_data|analyze_data|repo_health|repo_context|repo_map|jsonkit|heartbeat|post_x|daily_brief)\b' "$clean"
+    if string match -qr '(?i)^(select|best_model|model_select|gemini|gemini_cli|harvard_ark|elon|talk_to_elon|elon_chat|life|bookmarks|mcp|docker|clipboard|competitions|route|teach|generate_data|view_data|view_csv|show_csv|data_ask|ask_data|query_data|analyze_data|repo_health|repo_context|repo_map|jsonkit|markdown_style|style_markdown|heartbeat|post_x|daily_brief)\b' "$clean"
         return 1
     end
     if string match -qr '(?i)^(install|play|open|run|create|download|search|list|show|fix|set|take|timer|remind|weather|pdf|ingest|screenshot|spotify|whatsapp|send|loop|agent_|generate_image|generate_video|generate_password|chart|ascii|ascii_art|figlet|flow|graph|plot|predictions|stock|translate|survive_lang|pr_check|cheat|excuse|bored)\b' "$clean"
@@ -11414,6 +11565,10 @@ end
 
 function _agent_route_general_chat --description "Pick web_answer vs agent_ask for conversational input (internal)"
     set -l cmd "$argv[1]"
+    if _agent_is_github_resume_request "$cmd"
+        echo (_agent_route_github_resume "$cmd")
+        return
+    end
     if string match -qr '(?i)^(hi|hello|hey|yo|namaste|thanks|thank you|good morning|good afternoon|good evening|good night)[!.\s]*$' "$cmd"
         echo "greeting $cmd"
         return
@@ -11477,7 +11632,23 @@ function _agent_build_gmail_draft_cmd --description "Build google gmail --draft 
     end
 end
 
+function _agent_is_gmail_single_email_summarize_request --description "True if user wants a single-email Gmail summary (internal)"
+    set -l py (_arka_python)
+    $py (_arka_py_script arka_google.py) parse-email-summary (string escape --style=script -- $argv[1]) >/dev/null 2>&1
+end
+
+function _agent_build_gmail_single_email_summary_cmd --description "Build google summarize args from NL (internal)"
+    set -l py (_arka_python)
+    set -l rest ($py (_arka_py_script arka_google.py) parse-email-summary (string escape --style=script -- $argv[1]) 2>/dev/null)
+    if test (count $rest) -gt 0
+        echo "google $rest"
+    end
+end
+
 function _agent_is_gmail_summarize_request --description "True if user wants AI summary of Gmail (internal)"
+    if _agent_is_gmail_single_email_summarize_request "$argv[1]"
+        return 1
+    end
     string match -qr '(?i)(summarize|summary|tldr|digest|brief).*(email|emails|gmail|gmails|mail|inbox)' "$argv[1]"
     or string match -qr '(?i)(email|emails|gmail|gmails|mail|inbox).*(summarize|summary|tldr|digest|brief)' "$argv[1]"
 end
@@ -11726,6 +11897,10 @@ function _agent_offline_route_cmd --description "Full symbolic NL to skill comma
         echo (_agent_build_chart_cmd "$cmd")
         return 0
     end
+    if _agent_is_preferred_model_set_request "$cmd"
+        echo (_agent_build_preferred_model_cmd "$cmd")
+        return 0
+    end
     if _agent_is_model_select_request "$cmd"
         echo (_agent_build_model_select_cmd "$cmd")
         return 0
@@ -11832,6 +12007,10 @@ function _agent_offline_route_cmd --description "Full symbolic NL to skill comma
         echo (_agent_build_post_x_cmd "$cmd")
         return 0
     end
+    if _agent_is_gmail_single_email_summarize_request "$cmd"
+        echo (_agent_build_gmail_single_email_summary_cmd "$cmd")
+        return 0
+    end
     if _agent_is_gmail_summarize_request "$cmd"
         echo (_agent_build_gmail_cmd "$cmd" summarize)
         return 0
@@ -11863,6 +12042,10 @@ function _agent_offline_route_cmd --description "Full symbolic NL to skill comma
     end
     if _agent_is_jsonkit_request "$cmd"
         echo (_agent_route_jsonkit "$cmd")
+        return 0
+    end
+    if _agent_is_markdown_style_request "$cmd"
+        echo (_agent_route_markdown_style "$cmd")
         return 0
     end
     if _agent_is_repo_context_request "$cmd"
@@ -11942,6 +12125,16 @@ end
 
 function _agent_is_chart_request --description "True if user wants a data chart (internal)"
     test -n "$(_agent_build_chart_cmd "$argv[1]")"
+end
+
+function _agent_build_preferred_model_cmd --description "Build provider set --model from NL (internal)"
+    set -l py (_arka_python)
+    set -l cmd "$argv[1]"
+    $py -c 'import sys; from arka.llm.provider_select import build_preferred_model_set_command; r=build_preferred_model_set_command(" ".join(sys.argv[1:])); print(r or "", end="")' (string escape --style=script -- $cmd) 2>/dev/null
+end
+
+function _agent_is_preferred_model_set_request --description "True if user wants to set a concrete LLM model (internal)"
+    test -n "$(_agent_build_preferred_model_cmd "$argv[1]")"
 end
 
 function _agent_build_model_select_cmd --description "Build select_model args from NL (internal)"
@@ -12317,6 +12510,9 @@ function _agent_is_google_gmail_request --description "True if user wants Gmail 
     if _agent_is_gmail_summarize_request "$cmd"
         return 1
     end
+    if _agent_is_gmail_single_email_summarize_request "$cmd"
+        return 1
+    end
     string match -qr '(?i)(unread|check|read|show|list|recent|today|inbox|all|within|last|past|from|get|fetch|see|view|any|my\s+(?:gmail|mail|email)|how\s+many|count|\d+\s+days?|\d+\s+hours?)' "$cmd"
 end
 
@@ -12379,6 +12575,10 @@ function _agent_route_google --description "Map NL to google subcommand (interna
     set -l cmd "$argv[1]"
     if _agent_is_gmail_draft_request "$cmd"
         echo (_agent_build_gmail_draft_cmd "$cmd")
+        return 0
+    end
+    if _agent_is_gmail_single_email_summarize_request "$cmd"
+        echo (_agent_build_gmail_single_email_summary_cmd "$cmd")
         return 0
     end
     if _agent_is_google_login_request "$cmd"
@@ -12855,7 +13055,7 @@ function _arka_chat_ask --description "Run arka_chat.py ask; prints answer (inte
     set -l py_args ask
     test -n "$_flag_d"; and set -a py_args --deep
     test -n "$_flag_n"; and set -a py_args --no-session
-    set -l question (_agent_with_voice_context (string join " " $argv))
+    set -l question (_agent_with_voice_context (string join " " -- $argv))
     set -a py_args "$question"
     set -l py (_arka_python)
     $py (_arka_py_script arka_chat.py) $py_args
@@ -13637,6 +13837,16 @@ function jsonkit --description "JSON validate, pretty-print, minify, and path ge
     set -l script (_arka_py_script arka_jsonkit.py)
     if test (count $argv) -eq 0
         echo "Usage: jsonkit validate|pretty|minify|get ..."
+        return 1
+    end
+    $py $script $argv
+end
+
+function markdown_style --description "Style markdown text or files for the terminal"
+    set -l py (_arka_python)
+    set -l script (_arka_py_script arka_markdown_style.py)
+    if test (count $argv) -eq 0
+        echo "Usage: markdown_style style <file.md|-> [--plain] [--backend auto|rich|glow|ansi]"
         return 1
     end
     $py $script $argv
@@ -14463,6 +14673,9 @@ function _agent_skill_matches_request --description "True if skill fits the user
             _agent_is_chart_request "$cmd"
         case select_model model_select best_model model_advisor
             _agent_is_model_select_request "$cmd"
+        case provider
+            _agent_is_preferred_model_set_request "$cmd"
+            or string match -qr '(?i)(preferred provider|list llm providers|models are available on)' "$cmd"
         case personalize onboard onboarding
             _agent_is_personalize_request "$cmd"
         case ascii_art
@@ -14825,6 +15038,13 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
             return
         end
     end
+    if _agent_is_preferred_model_set_request "$cmd"
+        set -l parts (_agent_build_preferred_model_cmd "$cmd")
+        if test -n "$parts"
+            echo "skill|$parts|Set preferred LLM model"
+            return
+        end
+    end
     if _agent_is_model_select_request "$cmd"
         set -l parts (_agent_build_model_select_cmd "$cmd")
         if test -n "$parts"
@@ -15072,6 +15292,13 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
             return
         end
     end
+    if _agent_is_markdown_style_request "$cmd"
+        set -l ms (_agent_route_markdown_style "$cmd")
+        if test -n "$ms"
+            echo "skill|$ms|Style markdown for the terminal"
+            return
+        end
+    end
     if _agent_is_repo_context_request "$cmd"
         set -l rcx (_agent_route_repo_context "$cmd")
         if test -n "$rcx"
@@ -15290,6 +15517,13 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
             return
         end
     end
+    if _agent_is_github_resume_request "$cmd"
+        set -l ghr (_agent_route_github_resume "$cmd")
+        if test -n "$ghr"
+            echo "skill|$ghr|Generate resume PDF from GitHub profile"
+            return
+        end
+    end
     if _agent_is_github_repo_request "$cmd"
         set -l gr (_agent_route_github_repo "$cmd")
         if test -n "$gr"
@@ -15329,6 +15563,13 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         set -l jk (_agent_route_jsonkit "$cmd")
         if test -n "$jk"
             echo "skill|$jk|JSON validate, pretty-print, minify, get"
+            return
+        end
+    end
+    if _agent_is_markdown_style_request "$cmd"
+        set -l ms (_agent_route_markdown_style "$cmd")
+        if test -n "$ms"
+            echo "skill|$ms|Style markdown for the terminal"
             return
         end
     end
@@ -15707,6 +15948,11 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         test -n "$parts"; and echo "skill|$parts|Line, bar, pie, or scatter chart (matplotlib PNG)"
         return
     end
+    if _agent_is_preferred_model_set_request "$cmd"
+        set -l parts (_agent_build_preferred_model_cmd "$cmd")
+        test -n "$parts"; and echo "skill|$parts|Set preferred LLM model"
+        return
+    end
     if _agent_is_model_select_request "$cmd"
         set -l parts (_agent_build_model_select_cmd "$cmd")
         test -n "$parts"; and echo "skill|$parts|Recommend LLM models from PC resources"
@@ -15768,6 +16014,13 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
     if _agent_is_platform_howto_question "$cmd"
         echo "skill|platform_howto $cmd|Platform-specific app/UI how-to"
         return
+    end
+    if _agent_is_preferred_model_set_request "$cmd"
+        set -l parts (_agent_build_preferred_model_cmd "$cmd")
+        if test -n "$parts"
+            echo "skill|$parts|Set preferred LLM model"
+            return
+        end
     end
     if _agent_is_model_select_request "$cmd"
         set -l parts (_agent_build_model_select_cmd "$cmd")
@@ -15905,6 +16158,11 @@ function _agent_correct_interpretation --description "Fix bad LLM skill picks us
 
     if _agent_is_chart_request "$cmd"
         echo (_agent_build_chart_cmd "$cmd")
+        return
+    end
+
+    if _agent_is_preferred_model_set_request "$cmd"
+        echo (_agent_build_preferred_model_cmd "$cmd")
         return
     end
 
@@ -17285,6 +17543,16 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                     set -l py (_arka_python)
                     $py -m arka doctor
                     return $status
+                case signoz observability otel telemetry
+                    set -l py (_arka_python)
+                    $py -m arka signoz $argv[2..-1]
+                    return $status
+                case credits credit
+                    if test (count $argv) -ge 2; and contains -- usage $argv[2]
+                        set -l py (_arka_python)
+                        $py -m arka credits usage $argv[3..-1]
+                        return $status
+                    end
                 case personalize onboard onboarding
                     personalize $argv[2..-1]
                     return $status
@@ -17397,6 +17665,14 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                             _agent_dispatch_one "$dcmd"
                             return $status
                         end
+                        if _agent_is_github_resume_request "$raw"
+                            set -l ghr (_agent_route_github_resume "$raw")
+                            if test -n "$ghr"
+                                echo (set_color yellow)"💡 [GitHub resume]"(set_color normal)
+                                _agent_dispatch_one "$ghr"
+                                return $status
+                            end
+                        end
                         if _agent_is_github_repo_request "$raw"
                             set -l gr (_agent_route_github_repo "$raw")
                             if test -n "$gr"
@@ -17442,6 +17718,14 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                             if test -n "$jk"
                                 echo (set_color yellow)"💡 [JSON tools]"(set_color normal)
                                 _agent_dispatch_one "$jk"
+                                return $status
+                            end
+                        end
+                        if _agent_is_markdown_style_request "$raw"
+                            set -l ms (_agent_route_markdown_style "$raw")
+                            if test -n "$ms"
+                                echo (set_color yellow)"💡 [Markdown style]"(set_color normal)
+                                _agent_dispatch_one "$ms"
                                 return $status
                             end
                         end
@@ -18318,6 +18602,28 @@ function agent --description "Run commands safely: executes safe commands automa
         return $status
     end
 
+    if test "$first_word" = signoz
+        set -l py (_arka_python)
+        $py -m arka signoz $argv[2..-1]
+        return $status
+    end
+
+    if test "$first_word" = github
+        if test (count $argv) -ge 2; and contains -- $argv[2] resume cv
+            set -l py (_arka_python)
+            $py (_arka_py_script arka_github_resume.py) $argv[3..-1]
+            return $status
+        end
+    end
+
+    if test "$first_word" = credits; or test "$first_word" = credit
+        if test (count $argv) -ge 2; and test "$argv[2]" = usage
+            set -l py (_arka_python)
+            $py -m arka credits usage $argv[3..-1]
+            return $status
+        end
+    end
+
     # 2. Direct Skill Execution
     if contains -- "$first_word" $available_skills
         $argv
@@ -18401,6 +18707,11 @@ function agent --description "Run commands safely: executes safe commands automa
 
     if test -z "$interpreted"; and _agent_is_chart_request "$cmd"
         set interpreted (_agent_build_chart_cmd "$cmd")
+        set route_source offline
+    end
+
+    if test -z "$interpreted"; and _agent_is_preferred_model_set_request "$cmd"
+        set interpreted (_agent_build_preferred_model_cmd "$cmd")
         set route_source offline
     end
 
@@ -18693,6 +19004,11 @@ function agent --description "Run commands safely: executes safe commands automa
         if test -n "$interpreted"
             set route_source offline
         end
+    else if _agent_is_preferred_model_set_request "$cmd"
+        set interpreted (_agent_build_preferred_model_cmd "$cmd")
+        if test -n "$interpreted"
+            set route_source offline
+        end
     else if _agent_is_model_select_request "$cmd"
         set interpreted (_agent_build_model_select_cmd "$cmd")
         if test -n "$interpreted"
@@ -18766,6 +19082,9 @@ function agent --description "Run commands safely: executes safe commands automa
         set route_source offline
     else if _agent_is_jsonkit_request "$cmd"
         set interpreted (_agent_route_jsonkit "$cmd")
+        set route_source offline
+    else if _agent_is_markdown_style_request "$cmd"
+        set interpreted (_agent_route_markdown_style "$cmd")
         set route_source offline
     else if _agent_is_repo_context_request "$cmd"
         set interpreted (_agent_route_repo_context "$cmd")
@@ -19009,6 +19328,9 @@ function agent --description "Run commands safely: executes safe commands automa
     else if _agent_is_coding_tui_request "$cmd"
         set interpreted (_agent_route_coding_tui "$cmd")
         set route_source offline
+    else if _agent_is_github_resume_request "$cmd"
+        set interpreted (_agent_route_github_resume "$cmd")
+        set route_source offline
     else if _agent_is_github_repo_request "$cmd"
         set interpreted (_agent_route_github_repo "$cmd")
         set route_source offline
@@ -19026,6 +19348,9 @@ function agent --description "Run commands safely: executes safe commands automa
         set route_source offline
     else if _agent_is_jsonkit_request "$cmd"
         set interpreted (_agent_route_jsonkit "$cmd")
+        set route_source offline
+    else if _agent_is_markdown_style_request "$cmd"
+        set interpreted (_agent_route_markdown_style "$cmd")
         set route_source offline
     else if _agent_is_repo_context_request "$cmd"
         set interpreted (_agent_route_repo_context "$cmd")
@@ -19569,6 +19894,10 @@ function agent --description "Run commands safely: executes safe commands automa
         set -l chart_cmd (_agent_build_chart_cmd "$cmd")
         echo (set_color yellow)"💡 [Chart → $chart_cmd]"(set_color normal)
         _agent_dispatch_one "$chart_cmd"
+    else if _agent_is_preferred_model_set_request "$cmd"
+        set -l model_cmd (_agent_build_preferred_model_cmd "$cmd")
+        echo (set_color yellow)"💡 [Model select → $model_cmd]"(set_color normal)
+        _agent_dispatch_one "$model_cmd"
     else if _agent_is_model_select_request "$cmd"
         set -l model_cmd (_agent_build_model_select_cmd "$cmd")
         echo (set_color yellow)"💡 [Model advisor → $model_cmd]"(set_color normal)
@@ -20291,9 +20620,15 @@ end
 
 
 # NemoClaw PATH setup
-fish_add_path --path --append "/home/s/.local/bin"
-fish_add_path --path --append "/home/s/.local/share/nvm/v22.22.2/bin"
+if test -d "$HOME/.local/bin"
+    fish_add_path --path --append "$HOME/.local/bin"
+end
+if test -d "$HOME/.local/share/nvm/v22.22.2/bin"
+    fish_add_path --path --append "$HOME/.local/share/nvm/v22.22.2/bin"
+end
 # end NemoClaw PATH setup
+
+_arka_ensure_path
 
 # --- First Run Setup ---
 set -g _ARKA_RELOAD_STAMP (_arka_reload_stamp)
@@ -20326,5 +20661,12 @@ if not test -f $_ARKA_ROOT/.skills_setup_done
 end
 
 
-# Added by Antigravity CLI installer
-set -gx PATH "/home/s/.local/bin" $PATH
+# Added by Antigravity CLI installer (only when the directory exists)
+if test -d "$HOME/.local/bin"; and not contains -- "$HOME/.local/bin" $PATH
+    set -gx PATH "$HOME/.local/bin" $PATH
+end
+
+# Railway CLI env (optional; skip when unset or missing)
+if test -n "$HOME"; and test -f "$HOME/.railway/env.fish"
+    source "$HOME/.railway/env.fish"
+end

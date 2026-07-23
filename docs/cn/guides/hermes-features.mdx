@@ -23,13 +23,13 @@ Arka **不**附带完整的网关适配器（Telegram、Discord 等）。使用 
 按频道的对话轮次存储在 `~/.config/arka/message-sessions/`：
 
 ```bash
-message_session push cli default user "Start the deploy checklist"
-message_session push cli default assistant "Step 1: run tests"
-message_session context cli default
-message_session resume cli default
-message_session list
-message_session reset telegram 123456789
-message_session status
+arka session push cli default user "Start the deploy checklist"
+arka session push cli default assistant "Step 1: run tests"
+arka session context cli default
+arka session resume cli default
+arka session list
+arka session reset telegram 123456789
+arka session status
 ```
 
 会话以 `channel:chat_id` 为键（例如 `webhook:slack`、`cli:default`、`telegram:987654321`）。

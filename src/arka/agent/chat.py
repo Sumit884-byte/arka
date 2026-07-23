@@ -73,6 +73,15 @@ def env(name: str, default: str = "") -> str:
     return (os.environ.get(name) or default).strip()
 
 
+def _print_answer(text: str) -> None:
+    try:
+        from arka.core.markdown_style import maybe_style_markdown
+
+        print(maybe_style_markdown(text))
+    except ImportError:
+        print(text)
+
+
 def ensure_cache() -> None:
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     MAPS_DIR.mkdir(parents=True, exist_ok=True)
@@ -2255,7 +2264,7 @@ def queue_run_all() -> None:
         item["status"] = "done"
         item["finished"] = time.time()
         results.append({"task": task, "provenance": prov, "answer": answer, "finished": item["finished"]})
-        print(answer)
+        _print_answer(answer)
     save_json(QUEUE_FILE, q)
     save_json(QUEUE_RESULTS_FILE, results[-30:])
 
@@ -2344,7 +2353,7 @@ def main() -> int:
             use_session=not args.no_session,
             cleanup=not args.no_cleanup,
         )
-        print(answer)
+        _print_answer(answer)
         return 0
 
     if args.cmd == "calc":
@@ -2412,7 +2421,7 @@ def main() -> int:
     if args.cmd == "error-explain":
         text = " ".join(args.text)
         _, answer = answer_question(text, deep=False, use_session=True)
-        print(answer)
+        _print_answer(answer)
         return 0
 
     if args.cmd == "queue":

@@ -10,10 +10,11 @@ icon: "chart-line"
 ## 快速开始
 
 ```bash
-python3 bin/arka_signoz.py status
-python3 bin/arka_signoz.py setup -y
-python3 bin/arka_signoz.py demo
-python3 arka_llm.py trace-status
+arka signoz status
+arka signoz setup -y
+arka signoz demo
+arka ai trace-status
+arka observability doctor
 ```
 
 ## 配置
@@ -36,8 +37,8 @@ OTEL_SERVICE_NAME=arka
 ## SigNoz MCP + Cursor
 
 ```bash
-python3 bin/arka_signoz.py mcp tools
-python3 bin/arka_signoz.py cursor-setup
+arka signoz mcp tools
+arka signoz cursor-setup
 ```
 
 捆绑的 SigNoz 资产（仪表板、告警、演示）位于仓库的 `signoz/` 中。

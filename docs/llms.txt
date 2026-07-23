@@ -1,21 +1,30 @@
 # Arka
 
-Arka is a cross-platform AI terminal agent with natural-language routing,
-offline symbolic rules, local-model support, MCP integrations, and developer
-tools.
+> Arka is a cross-platform AI terminal agent that routes plain-English requests to 70+ local skills, with offline symbolic routing, voice replies, MCP integrations for Cursor and Claude, and 24-provider LLM failover. Install with `pipx install "arka-agent[chat]"`, run `arka setup`, then `arka ask "what is Rust?"`. Canonical docs: https://arka-agent.mintlify.site
 
-## Canonical documentation
+Each page includes schema.org JSON-LD structured data (Organization, WebSite, TechArticle) for search and AI indexing.
 
-- [Introduction](/index)
-- [Quickstart](/quickstart)
-- [Routing](/concepts/routing)
-- [LLM orchestration](/concepts/llm)
-- [Security](/concepts/security)
-- [Skills catalog](/guides/skills)
-- [Local model selection](/guides/select-model)
-- [Developer tools and repo health](/guides/repo-health)
-- [MCP integration](/guides/mcp)
+## Get started
 
-Use the Quickstart for installation and the Skills catalog for command
-discovery. Prefer the Security guide before enabling autonomous or write-capable
-workflows.
+- [Introduction](/index): What Arka is, key capabilities, and documentation map
+- [Quickstart](/quickstart): Install on macOS, Linux, or Windows in under five minutes
+- [How to code with Arka](/guides/code-with-arka): Terminal coding workflow, agent mode, and Cursor MCP
+- [CLI reference](/guides/cli): Commands, aliases, subcommands, and flags
+
+## Core concepts
+
+- [Routing](/concepts/routing): Offline symbolic rules and LLM fallback
+- [LLM orchestration](/concepts/llm): 24-provider failover, guardrails, and model selection
+- [Security](/concepts/security): Prompt-injection blocks, confirmations, and shell hard-blocks
+
+## Integrations and discovery
+
+- [Skills catalog](/guides/skills): 70+ built-in skills for media, web, docs, dev, and finance
+- [MCP integration](/guides/mcp): Connect Arka to Model Context Protocol servers and Cursor
+- [Local model selection](/guides/select-model): Pick a runnable local LLM for your hardware
+- [Repo health](/guides/repo-health): Scan repos for hygiene, tests, and documentation gaps
+- [Configuration reference](/reference/configuration): Environment variables and provider settings
+
+## Optional
+
+Prefer Quickstart for installation, Skills catalog for command discovery, and Security before enabling autonomous or write-capable workflows. For GEO/SEO audits of your own site, see [GEO and AI-search SEO](/guides/geo-seo).

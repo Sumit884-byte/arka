@@ -279,13 +279,16 @@ def _finish_route_span(
 ) -> None:
     try:
         from arka.telemetry import mark_ok
+        from arka.telemetry.metrics import record_routing_decision
         from arka.telemetry.tracing import duration_ms
     except ImportError:
         return
+    elapsed = duration_ms(start)
     current.set_attribute("arka.route.source", route_result.source)
     current.set_attribute("arka.route.skill", route_result.skill[:500])
     current.set_attribute("arka.route.decision", decision)
-    current.set_attribute("arka.route.latency_ms", duration_ms(start))
+    current.set_attribute("arka.route.latency_ms", elapsed)
+    record_routing_decision(decision=decision, source=route_result.source, latency_ms=elapsed)
     mark_ok(current)
 
 
@@ -412,6 +415,19 @@ def _route_github_repo(cmd: str) -> Route | None:
     return None
 
 
+def _route_github_resume(cmd: str) -> Route | None:
+    try:
+        from arka.agent.github_resume import route_command, wants_github_resume
+
+        if wants_github_resume(cmd):
+            skill = route_command(cmd)
+            if skill:
+                return Route(skill, source="offline")
+    except ImportError:
+        pass
+    return None
+
+
 def _route_offline(cmd: str) -> Route | None:
     clean = cmd.lower()
 
@@ -452,11 +468,29 @@ def _route_offline(cmd: str) -> Route | None:
         pass
 
     try:
+        from arka.llm.credits_usage import route_command as credits_usage_route
+
+        usage_hit = credits_usage_route(cmd)
+        if usage_hit:
+            return Route(usage_hit, source="offline")
+    except ImportError:
+        pass
+
+    try:
         from arka.agent.free_credits import route_command as free_credits_route
 
         credits_hit = free_credits_route(cmd)
         if credits_hit:
             return Route(credits_hit, source="offline")
+    except ImportError:
+        pass
+
+    try:
+        from arka.core.network_proxy import route_command as proxy_route
+
+        proxy_hit = proxy_route(cmd)
+        if proxy_hit:
+            return Route(proxy_hit, source="offline")
     except ImportError:
         pass
 
@@ -491,6 +525,12 @@ def _route_offline(cmd: str) -> Route | None:
 
     if re.search(r"(?i)\b(life[- ]sciences?|biomedical research tools|bioinformatics tools)\b", clean):
         return Route("life_sciences list")
+
+    # GitHub resume/profile CV requests must win before repo activity and
+    # generic "my …" advisory fallbacks (e.g. "from my github profile").
+    github_resume_route = _route_github_resume(cmd)
+    if github_resume_route:
+        return github_resume_route
 
     # GitHub activity language is more specific than generic profession/data
     # questions and must win before plugin/profile routing.
@@ -870,6 +910,13 @@ def _is_knowledge_question(clean: str) -> bool:
     except ImportError:
         pass
     try:
+        from arka.agent.github_resume import wants_github_resume
+
+        if wants_github_resume(clean):
+            return False
+    except ImportError:
+        pass
+    try:
         from arka.agent.data_ask import wants_data_ask
 
         if wants_data_ask(clean):
@@ -880,6 +927,13 @@ def _is_knowledge_question(clean: str) -> bool:
         from arka.llm.model_advisor import is_model_select_query
 
         if is_model_select_query(clean):
+            return False
+    except ImportError:
+        pass
+    try:
+        from arka.llm.provider_select import is_preferred_model_set_query
+
+        if is_preferred_model_set_query(clean):
             return False
     except ImportError:
         pass

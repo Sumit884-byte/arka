@@ -76,7 +76,7 @@ The benchmark profile follows the routed task, so a request that routes to `web_
 One session cache — exhausted models are skipped across skills until reset:
 
 ```bash
-python3 arka_llm.py reset-exhaustion
+arka ai reset-exhaustion
 ```
 
 Enable stderr notification on failover: `LLM_FALLBACK_NOTIFY=1`. Debug attempts: `LLM_VERBOSE=1`.
@@ -103,10 +103,10 @@ The route task uses low temperature and a dedicated chain so a fast/cheap model 
 
 ```bash
 arka ai-models
-python3 arka_llm.py models --task summarize
-python3 arka_llm.py models --skill web_answer
-python3 arka_llm.py active-model
-python3 arka_llm.py reset-exhaustion
+arka ai models --task summarize
+arka ai models --skill web_answer
+arka ai active-model
+arka ai reset-exhaustion
 ```
 
 <Note>

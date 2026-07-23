@@ -11,7 +11,7 @@ Arka provides **channel sessions** and **sub-agent delegation** — patterns ins
 
 | Concept | Arka feature |
 | --- | --- |
-| Per-chat session store | `message_session` — keyed by `channel:chat_id` |
+| Per-chat session store | `arka session` — keyed by `channel:chat_id` |
 | Cross-platform continuity | Webhook \+ `arka ask` share the same session when `channel`/`chat_id` match |
 | Silence tokens | `[SILENT]`, `NO_REPLY` suppress webhook outbound delivery |
 | Sub-agent delegation | `subagent spawn` — isolated background agent tasks |
@@ -23,13 +23,13 @@ Arka does **not** ship full gateway adapters (Telegram, Discord, etc.). Use [web
 Per-channel conversation turns stored under `~/.config/arka/message-sessions/`:
 
 ```bash
-message_session push cli default user "Start the deploy checklist"
-message_session push cli default assistant "Step 1: run tests"
-message_session context cli default
-message_session resume cli default
-message_session list
-message_session reset telegram 123456789
-message_session status
+arka session push cli default user "Start the deploy checklist"
+arka session push cli default assistant "Step 1: run tests"
+arka session context cli default
+arka session resume cli default
+arka session list
+arka session reset telegram 123456789
+arka session status
 ```
 
 Sessions are keyed as `channel:chat_id` (e.g. `webhook:slack`, `cli:default`, `telegram:987654321`).

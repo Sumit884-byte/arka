@@ -22,9 +22,11 @@ except ImportError:
     def load_env_file() -> None:
         pass
 
-MAX_DIFF_CHARS = int(os.environ.get("PR_CHECK_MAX_DIFF", "14000"))
-MAX_LOG_CHARS = int(os.environ.get("PR_CHECK_MAX_LOG", "9000"))
-BABYSIT_POLL_SEC = int(os.environ.get("PR_CHECK_POLL_SEC", "20"))
+from arka.env import env_int
+
+MAX_DIFF_CHARS = env_int("PR_CHECK_MAX_DIFF", 14000)
+MAX_LOG_CHARS = env_int("PR_CHECK_MAX_LOG", 9000)
+BABYSIT_POLL_SEC = env_int("PR_CHECK_POLL_SEC", 20)
 
 
 def _run(

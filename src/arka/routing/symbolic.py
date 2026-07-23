@@ -60,6 +60,15 @@ def route_semantic_alert(cmd: str) -> str | None:
     return "semantic_alert " + shlex.quote(event)
 
 
+def route_bi_dashboard(cmd: str) -> str | None:
+    try:
+        from arka.agent.bi_dashboard import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
+
+
 def route_usage_dashboard(cmd: str) -> str | None:
     if re.search(r"(?i)\b(?:usage|skill\s+usage)\b", cmd) and re.search(r"(?i)\b(?:dashboard|visuali[sz]e|report)\b", cmd):
         return "usage dashboard"
@@ -150,6 +159,10 @@ def route_ultra_fast(cmd: str) -> str | None:
     return None
 
 def route_env_setup(cmd: str) -> str | None:
+    if re.search(r"(?i)\b(?:fill|populate|migrate|sync)\b.*\.env\b.*\b(?:constant|source|script|project)s?\b", cmd):
+        return "env_setup --fill-from-source --apply"
+    if re.search(r"(?i)\b(?:fill|populate)\b.*\.env\b", cmd):
+        return "env_setup --fill-from-source --apply"
     if re.search(r"(?i)\b(?:create|generate|make)\s+(?:a\s+)?(?:safe\s+)?\.env\b", cmd):
         return "env_setup"
     return None
@@ -690,6 +703,24 @@ def route_generate_thumbnail(cmd: str) -> str | None:
 from arka.routing.file_size import route_find_files_by_size  # noqa: F401 — re-export
 
 
+def route_gmail_auto_draft(cmd: str) -> str | None:
+    try:
+        from arka.integrations.gmail_auto_draft import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
+
+
+def route_email_contacts(cmd: str) -> str | None:
+    try:
+        from arka.integrations.email_contacts import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
+
+
 def route_gmail_draft(cmd: str) -> str | None:
     try:
         from arka.integrations.google_workspace import build_gmail_draft_argv_from_nl
@@ -699,6 +730,38 @@ def route_gmail_draft(cmd: str) -> str | None:
     if not argv:
         return None
     return " ".join(shlex.quote(a) for a in argv)
+
+
+def route_gmail_email_summarize(cmd: str) -> str | None:
+    try:
+        from arka.integrations.gmail_email_summarize import (
+            build_gmail_email_summarize_argv_from_nl,
+            is_single_email_summarize_request,
+        )
+    except ImportError:
+        return None
+    if not is_single_email_summarize_request(cmd):
+        return None
+    argv = build_gmail_email_summarize_argv_from_nl(cmd)
+    if not argv:
+        return None
+    return "google " + " ".join(shlex.quote(a) for a in argv)
+
+
+def route_unified_inbox(cmd: str) -> str | None:
+    try:
+        from arka.integrations.gmail_unified import (
+            build_unified_inbox_argv_from_nl,
+            is_unified_inbox_request,
+        )
+    except ImportError:
+        return None
+    if not is_unified_inbox_request(cmd):
+        return None
+    argv = build_unified_inbox_argv_from_nl(cmd, summarize=True)
+    if not argv:
+        return None
+    return "google " + " ".join(shlex.quote(a) for a in argv)
 
 
 def route_post_x(cmd: str) -> str | None:
@@ -818,6 +881,12 @@ def route_repo_health(cmd: str) -> str | None:
 
 
 def route_observability(cmd: str) -> str | None:
+    clean = " ".join((cmd or "").split())
+    if re.match(
+        r"(?i)^signoz\s+(?:setup|status|demo|vllm|demo-|alert-|mcp|cursor-setup)\b",
+        clean,
+    ):
+        return None
     if not re.search(r"(?i)\b(?:signoz|observability|telemetry|otel|opentelemetry)\b", cmd):
         return None
     if not re.search(r"(?i)\b(?:check|doctor|diagnos|improv|setup|status|working|health)\w*\b", cmd):
@@ -863,6 +932,15 @@ def route_pr_check(cmd: str) -> str | None:
 def route_generate_data(cmd: str) -> str | None:
     try:
         from arka.agent.generate_data import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
+
+
+def route_md_doc(cmd: str) -> str | None:
+    try:
+        from arka.agent.md_doc import route_command
     except ImportError:
         return None
     route = route_command(cmd)
@@ -923,6 +1001,15 @@ def route_jsonkit(cmd: str) -> str | None:
     return route or None
 
 
+def route_markdown_style(cmd: str) -> str | None:
+    try:
+        from arka.core.markdown_style import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
+
+
 def route_clipboard_history(cmd: str) -> str | None:
     try:
         from arka.integrations.clipboard_history import route_command
@@ -954,6 +1041,14 @@ def route_habitat(cmd: str) -> str | None:
     if not argv:
         return None
     return "habitat " + " ".join(shlex.quote(a) for a in argv)
+
+
+def route_preferred_model_set(cmd: str) -> str | None:
+    try:
+        from arka.llm.provider_select import build_preferred_model_set_command
+    except ImportError:
+        return None
+    return build_preferred_model_set_command(cmd.strip())
 
 
 def route_provider_select(cmd: str) -> str | None:
@@ -995,6 +1090,22 @@ def route_stt_install(cmd: str) -> str | None:
 def route_free_credits(cmd: str) -> str | None:
     try:
         from arka.agent.free_credits import route_command
+    except ImportError:
+        return None
+    return route_command(cmd)
+
+
+def route_credits_usage(cmd: str) -> str | None:
+    try:
+        from arka.llm.credits_usage import route_command
+    except ImportError:
+        return None
+    return route_command(cmd)
+
+
+def route_llm_share(cmd: str) -> str | None:
+    try:
+        from arka.llm.share import route_command
     except ImportError:
         return None
     return route_command(cmd)
@@ -1063,6 +1174,19 @@ def route_free_models(cmd: str) -> str | None:
                 suffix = ""
             select = " --select" if model else ""
             return "free_models --provider openai" + suffix + select
+        if re.search(r"(?i)\b(?:claude|anthropic)\b", cmd):
+            model = re.search(
+                r"(?i)\b(claude[- ]?(?:[0-9]+(?:\.[0-9]+)?(?:[- ]?(?:sonnet|haiku|opus))?|[a-z]+))\b",
+                cmd,
+            )
+            if model:
+                from arka.llm.free_models import normalize_model_name
+                canonical = normalize_model_name(model.group(1))
+                suffix = " --model " + shlex.quote(canonical)
+            else:
+                suffix = ""
+            select = " --select" if model else ""
+            return "free_models --provider anthropic" + suffix + select
         return "free_models"
     return None
 
@@ -1179,6 +1303,15 @@ def route_exercise_dataset(cmd: str) -> str | None:
 def route_github_dataset(cmd: str) -> str | None:
     try:
         from arka.agent.github_dataset import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
+
+
+def route_github_resume(cmd: str) -> str | None:
+    try:
+        from arka.agent.github_resume import route_command
     except ImportError:
         return None
     route = route_command(cmd)
@@ -1382,7 +1515,27 @@ def route_ui_copy(cmd: str) -> str | None:
     return "ui_copy " + shlex.quote(path.group(1) if path else ".")
 
 
+def route_component_screenshots(cmd: str) -> str | None:
+    if not re.search(
+        r"(?i)\b(?:screenshot|snapshot|capture|photograph)(?:s)?\b.*\b(?:component|components|ui\s+element|ui\s+components)\b|\b(?:component|components|all\s+components|every\s+component)\b.*\b(?:screenshot|snapshot|capture|photograph)\b",
+        cmd,
+    ):
+        return None
+    url = re.search(r"https?://[^\s'\"]+", cmd, re.I)
+    if not url:
+        url = re.search(r"(?:localhost|127\.0\.0\.1)(?::\d+)?(?:/[^\s'\"]*)?", cmd, re.I)
+    if not url:
+        return None
+    output = re.search(r"(?:output|into|to|dir(?:ectory)?)\s+([^\s]+)", cmd, re.I)
+    parts = ["component_screenshots", shlex.quote(url.group(0))]
+    if output:
+        parts.extend(["--output", shlex.quote(output.group(1))])
+    return " ".join(parts)
+
+
 def route_web_screenshot(cmd: str) -> str | None:
+    if re.search(r"(?i)\bcomponent(?:s)?\b", cmd):
+        return None
     if not re.search(r"\b(?:screenshot|snapshot|capture)(?:s)?\b.*(?:\b(?:website|site|webpage|url)\b|https?://)|\b(?:website|site|webpage)\b.*\b(?:screenshot|snapshot|capture)\b", cmd, re.I):
         return None
     url = re.search(r"https?://[^\s'\"]+", cmd, re.I)
@@ -1664,8 +1817,10 @@ def route_hybrid_models(cmd: str) -> str | None:
     if match:
         kind = next((item for item in ("feature", "bugfix", "frontend", "api") if item in clean), "feature")
         return "coding-workflow " + kind
-    if re.search(r"(?i)\b(?:copy|fill|sync|project|populate)\b.*\b(?:arka|our)\s+\.env\b|\b\.env\b.*\b(?:local\s+llm|project)\b", clean):
+    if re.search(r"(?i)\b(?:copy|sync)\b.*\b(?:arka|our)\s+\.env\b", clean):
         return "env-bridge ."
+    if re.search(r"(?i)\b(?:fill|populate|migrate)\b.*\b(?:project|local)\s+\.env\b", clean):
+        return "env_setup --fill-from-source --apply"
     if re.search(r"(?i)\b(?:flashattention|flash\s+attention|tensor\s+split|row[- ]level|multi[- ]gpu|ds4|co[- ]engine)\b", clean):
         return "backend capabilities"
     if re.search(r"(?i)\b(?:speculative|mtp|draft\s+model)\b.*\b(?:decode|token|inference|configure|enable|use)\b", clean):
@@ -1692,6 +1847,11 @@ def route_hybrid_models(cmd: str) -> str | None:
 def route_integration_setup(cmd: str) -> str | None:
     """Route setup/status requests for the unified integration wizard."""
     clean = " ".join((cmd or "").split()).lower()
+    if re.match(
+        r"(?i)^signoz\s+(?:setup|status|demo|vllm|demo-|alert-|mcp|cursor-setup)\b",
+        clean,
+    ):
+        return None
     if not re.search(r"\b(?:integration|integrations|provider|api|connect|configure|setup|set\s+up)\b", clean):
         return None
     try:
@@ -1764,6 +1924,7 @@ def route_offline_extras(cmd: str) -> str | None:
         route_visual_inspection,
         route_visual_diagnose,
         route_ui_copy,
+        route_component_screenshots,
         route_web_screenshot,
         route_app_automation,
         route_spline,
@@ -1793,6 +1954,7 @@ def route_offline_extras(cmd: str) -> str | None:
         route_heartbeat,
         route_background_processes,
         route_jsonkit,
+        route_markdown_style,
         route_agent_hub,
         route_mcp,
         route_clipboard_history,
@@ -1816,8 +1978,10 @@ def route_offline_extras(cmd: str) -> str | None:
         route_exercise_dataset,
         route_kaggle,
         route_github_dataset,
+        route_github_resume,
         route_data_collect,
         route_view_data,
+        route_md_doc,
         route_describe_screen,
         route_describe_video,
         route_describe_image,
@@ -1843,8 +2007,11 @@ def route_offline_extras(cmd: str) -> str | None:
         route_data_ask,
         route_docker_status,
         route_daily_brief,
+        route_preferred_model_set,
         route_model_select,
         route_stt_install,
+        route_credits_usage,
+        route_llm_share,
         route_free_credits,
         route_compose_slides,
         route_dev_tools,
@@ -1860,6 +2027,10 @@ def route_offline_extras(cmd: str) -> str | None:
         route_persona,
         route_elon,
         route_gmail_draft,
+        route_gmail_auto_draft,
+        route_email_contacts,
+        route_gmail_email_summarize,
+        route_unified_inbox,
         route_post_x,
         route_find_files_by_size,
         route_kalshi,
@@ -1867,6 +2038,7 @@ def route_offline_extras(cmd: str) -> str | None:
         route_batch,
         route_config_share,
         route_semantic_alert,
+        route_bi_dashboard,
         route_usage_dashboard,
         route_symbolic_image,
         route_routines,

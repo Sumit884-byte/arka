@@ -245,8 +245,8 @@ Per-step override: `memory_scope: { write: run }` on a workflow step.
 
 ```bash
 arka workflow run review-and-ship --task "..." --promote-final
-memory_scope scratchpad list --team research
-memory_promote abc123def456
+arka memory scratchpad list --team research
+arka memory promote abc123def456
 ```
 
 Workflow runs print `run_id` and `scratchpad_writes` in CLI output.

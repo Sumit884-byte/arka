@@ -47,6 +47,10 @@ arka agent_hub tools
 # Import memory export back into Arka
 arka agent_hub import-memory path/to/export.json
 
+# From MCP: list IDE memory sources, then import
+arka mcp call arka arka_agent_hub --args '{"action":"memory_sources"}'
+arka mcp call arka arka_agent_hub --args '{"action":"import_memory","all":true}'
+
 # Check sync state and unify status
 arka agent_hub status
 
@@ -57,10 +61,10 @@ arka agent_hub doctor
 From fish:
 
 ```fish
-agent_hub sync
-agent_hub sync --unify
-agent_hub detect
-agent_hub launch claude
+arka agent_hub sync
+arka agent_hub sync --unify
+arka agent_hub detect
+arka agent_hub launch claude
 source ~/.config/arka/hub/launch.env
 ```
 
@@ -139,14 +143,66 @@ source ~/.config/arka/hub/launch.env
 
 ## Memory import
 
-Import JSON or markdown memory exports back into Arka unified memory and session notes:
+Import memory **into Arka** from hub exports, session notes, or IDE-specific stores (Cursor rules, Codex `AGENTS.md`, OpenClaw `MEMORY.md`, and more). Imported text passes through Arka security gates before writing to unified memory or session notes.
+
+### CLI
 
 ```bash
+# Explicit JSON or markdown export
 arka agent_hub import-memory ~/.config/arka/hub/memory/summary.json
 arka agent_hub import-memory ./notes.md
 ```
 
-Imported text passes through Arka security gates before writing to memory.
+### MCP (Cursor, Claude Code, VS Code)
+
+Use `arka_agent_hub` from any connected MCP client:
+
+```json
+{ "action": "memory_sources" }
+```
+
+Returns importable files grouped by source id, for example `arka_session`, `cursor`, `arka_hub`, or `agent:openclaw`.
+
+```json
+{ "action": "import_memory", "source": "cursor" }
+{ "action": "import_memory", "source": "agent:claude" }
+{ "action": "import_memory", "all": true }
+{ "action": "import_memory", "path": "/path/to/export.json" }
+```
+
+Typical workflow:
+
+1. Call `memory_sources` to see which IDE files exist on this machine.
+2. Import one source (`source`) or everything detected (`all: true`).
+3. Confirm with `arka memory status` or `arka_recall` from MCP.
+
+From the terminal:
+
+```bash
+arka mcp call arka arka_agent_hub --args '{"action":"memory_sources"}'
+arka mcp call arka arka_agent_hub --args '{"action":"import_memory","all":true}'
+```
+
+### Supported IDE memory locations
+
+| Source id | IDE / agent | Paths scanned |
+| --- | --- | --- |
+| `arka_session` | Arka | `~/.config/arka/agent-memory/MEMORY.md` |
+| `arka_hub` | Arka Hub export | `hub/memory/summary.json`, `hub/memory/context.md` |
+| `cursor` | Cursor | `~/.cursor/rules/*.mdc` (user rules directory) |
+| `vscode_copilot` | VS Code / Copilot | `~/.github/copilot-instructions.md` |
+| `agent:openclaw` | OpenClaw | `~/.openclaw/MEMORY.md`, `~/.config/openclaw/MEMORY.md` |
+| `agent:claude` | Claude Code | session `MEMORY.md`, Claude project files |
+| `agent:codex` | Codex CLI / App | `~/.codex/AGENTS.md` |
+
+Only files that exist locally are returned by `memory_sources`. Empty files are skipped with an error in the import result.
+
+### Formats
+
+| Format | Behavior |
+| --- | --- |
+| JSON (`summary.json`) | Imports `facts` into unified memory and `long_term_notes` into session notes |
+| Markdown (`.md`, `.mdc`) | Each non-empty bullet or line becomes a long-term session note |
 
 ## MCP adapters
 

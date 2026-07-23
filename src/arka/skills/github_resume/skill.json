@@ -1,0 +1,20 @@
+{
+  "name": "github_resume",
+  "description": "Generate a professional resume PDF from a public GitHub profile.",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "arka.agent.github_resume",
+  "triggers": [
+    "github resume",
+    "generate resume from github",
+    "create resume from my github profile",
+    "github cv",
+    "resume from github profile"
+  ],
+  "permissions": ["read", "write", "network"],
+  "metadata": {
+    "output_dir": "~/arka-generated",
+    "env": ["GITHUB_USERNAME", "GITHUB_USER", "GITHUB_TOKEN", "GH_TOKEN", "github_token", "RESUME_NAME"]
+  }
+}

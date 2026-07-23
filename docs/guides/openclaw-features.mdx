@@ -15,14 +15,14 @@ Markdown-based session notes stored under `~/.config/arka/agent-memory/`:
 - `daily/YYYY-MM-DD.md` — per-day session notes
 
 ```bash
-session_memory append "Prefers morning standups at 9am"
-session_memory append "Always use dark terminal theme" --long-term
-session_memory search standup
-session_memory context "plan my morning routine"
-session_memory status
-session_memory clear                # today's daily notes
-session_memory clear --long-term    # reset MEMORY.md
-session_memory clear --all
+arka session-memory append "Prefers morning standups at 9am"
+arka session-memory append "Always use dark terminal theme" --long-term
+arka session-memory search standup
+arka session-memory context "plan my morning routine"
+arka session-memory status
+arka session-memory clear                # today's daily notes
+arka session-memory clear --long-term    # reset MEMORY.md
+arka session-memory clear --all
 ```
 
 Recalled context is injected into agent loops via `context_for()` when `SESSION_MEMORY=1`.

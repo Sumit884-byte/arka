@@ -43,6 +43,7 @@ HELP = (
     "/queue add <goal> queues work; /queue list shows it; /queue run executes sequentially; /queue clear removes it. "
     "/test runs tests read-only, then one auto-fix pass on failure (--no-fix to skip). "
     "/run tests runs repository tests directly; use --fix to repair failures after the test output is known. "
+    "Pre-existing project files are auto-trusted for run/overwrite prompts once coding-tui starts (baseline snapshot). "
     "/scaffold 3d writes a React + Three.js space scene and runs npm install (trusted template). "
     "Add --run to start the Vite dev server after install. "
     "Plain text is treated as a plan request; approve with y to execute immediately."
@@ -744,14 +745,26 @@ def status(root: Path) -> str:
     branch = _git_value(root, "rev-parse", "--abbrev-ref", "HEAD") or "unknown"
     dirty = _dirty_count(root)
     code_project = "yes" if _code_project_initialized(root) else "no"
+    baseline_note = ""
+    try:
+        from arka.core.code_project import auto_trust_enabled, get_baseline_files
+
+        if auto_trust_enabled() and code_project == "yes":
+            count = len(get_baseline_files(root=root))
+            if count:
+                baseline_note = f"auto-trust baseline: {count} pre-existing file(s)"
+    except ImportError:
+        pass
     lines = [
         f"repo: {root}",
         f"branch: {branch}",
         f"dirty files: {dirty}",
         f"files: {files}",
         f"code project initialized: {code_project}",
-        "Tip: /plan builds a reviewable plan; approve with y to execute immediately.",
     ]
+    if baseline_note:
+        lines.append(baseline_note)
+    lines.append("Tip: /plan builds a reviewable plan; approve with y to execute immediately.")
     if code_project == "no":
         lines.insert(
             -1,
@@ -1024,6 +1037,14 @@ def llm_plan(goal: str, root: Path) -> str | None:
     mem = memory_context_for(goal)
     if mem:
         plan_user += mem + "\n"
+    try:
+        from arka.core.design_guides import context_for as design_guides_context
+
+        guide = design_guides_context(goal, coding=True, limit_chars=2000)
+        if guide and guide not in (mem or ""):
+            plan_user += guide + "\n"
+    except ImportError:
+        pass
     try:
         from arka.agent.design_memory import context as design_context
 
@@ -1353,6 +1374,15 @@ def run(root: str = ".") -> int:
         print(message)
         print(f"Run: arka code init .  (cwd: {repo})")
         return finish(1)
+
+    try:
+        from arka.core.code_project import capture_baseline_if_needed
+
+        baseline_count = capture_baseline_if_needed(repo)
+        if baseline_count and not message:
+            message = f"Auto-trust baseline: {baseline_count} pre-existing file(s)"
+    except Exception:
+        pass
 
     _setup_readline()
     print_welcome(repo)

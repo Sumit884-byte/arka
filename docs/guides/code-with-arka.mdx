@@ -1,10 +1,16 @@
 ---
 title: "How to code with Arka"
-description: "A practical terminal workflow for coding with Arka — setup, daily commands, operation modes, IDE integration, and a five-minute example session."
+description: "Terminal coding workflow with Arka — arka code init, agent mode, repo health checks, CI fixes, and Cursor MCP integration for a full edit-review-test loop without leaving the CLI."
+keywords: ["coding with arka", "terminal copilot", "Cursor MCP", "agent mode", "repo health", "developer workflow"]
 icon: "laptop-code"
+boost: 1.5
 ---
 
 Arka is a **terminal coding copilot**. You describe what you need in plain English; Arka routes the request to the right skill, runs it locally, and keeps risky writes scoped to your project. Combine the CLI with **agent mode**, **MCP tools in Cursor**, and **repo health gates** for a full coding loop without leaving the terminal.
+
+<Note>
+  **Summary:** Initialize a repo with `arka code init .`, keep agent mode on for skill execution with security gates, use [MCP](/guides/mcp) to expose Arka inside Cursor, and run [repo health](/guides/repo-health) before merges. Arka complements your editor — terminal for fast asks, reviews, and CI; Cursor for inline diffs when connected over MCP.
+</Note>
 
 <Tip>
   New here? Complete [Quickstart](/quickstart) first, then run `arka code init .` in the repo you are working on.

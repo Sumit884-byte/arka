@@ -2,7 +2,7 @@
   "title": "Arka Agent Observability",
   "description": "Arka service overview — skill dispatch, routing, LLM failover, model/provider mix, token usage, and correlated logs.",
   "tags": ["arka", "agents", "opentelemetry", "hackathon"],
-  "version": "v5",
+  "version": "v6",
   "variables": {},
   "layout": [
     {"i": "service-overview", "x": 0, "y": 0, "w": 3, "h": 3},
@@ -19,7 +19,9 @@
     {"i": "skill-duration-metrics", "x": 6, "y": 9, "w": 6, "h": 3},
     {"i": "correlated-logs", "x": 0, "y": 12, "w": 12, "h": 4},
     {"i": "error-by-span", "x": 0, "y": 16, "w": 6, "h": 3},
-    {"i": "goal-step-latency", "x": 6, "y": 16, "w": 6, "h": 3}
+    {"i": "goal-step-latency", "x": 6, "y": 16, "w": 6, "h": 3},
+    {"i": "mcp-server-tool-rate", "x": 0, "y": 19, "w": 6, "h": 3},
+    {"i": "mcp-client-tool-rate", "x": 6, "y": 19, "w": 6, "h": 3}
   ],
   "widgets": [
     {
@@ -454,6 +456,63 @@
               ],
               "orderBy": [],
               "limit": null,
+              "stepInterval": 60,
+              "disabled": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "mcp-server-tool-rate",
+      "title": "Arka MCP server tool calls",
+      "description": "Inbound arka_* MCP tool handlers (stdio server)",
+      "panelTypes": "graph",
+      "query": {
+        "queryType": "builder",
+        "builder": {
+          "queryData": [
+            {
+              "dataSource": "traces",
+              "queryName": "A",
+              "expression": "service.name = arka AND name = arka.mcp.server.tool",
+              "aggregateOperator": "count",
+              "aggregateAttribute": {},
+              "filters": {"items": [], "op": "AND"},
+              "groupBy": [
+                {"key": "arka.mcp.tool_name", "type": "tag"}
+              ],
+              "orderBy": [],
+              "limit": 10,
+              "stepInterval": 60,
+              "disabled": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "mcp-client-tool-rate",
+      "title": "Outbound MCP client tool calls",
+      "description": "SigNoz and other MCP clients invoked by Arka",
+      "panelTypes": "graph",
+      "query": {
+        "queryType": "builder",
+        "builder": {
+          "queryData": [
+            {
+              "dataSource": "traces",
+              "queryName": "A",
+              "expression": "service.name = arka AND (name = arka.mcp.call_tool OR name = arka.tool.mcp OR name LIKE 'arka.mcp.%')",
+              "aggregateOperator": "count",
+              "aggregateAttribute": {},
+              "filters": {"items": [], "op": "AND"},
+              "groupBy": [
+                {"key": "arka.mcp.server", "type": "tag"},
+                {"key": "arka.mcp.tool_name", "type": "tag"}
+              ],
+              "orderBy": [],
+              "limit": 10,
               "stepInterval": 60,
               "disabled": false
             }

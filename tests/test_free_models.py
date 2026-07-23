@@ -14,6 +14,7 @@ def test_free_models_route():
     assert route_offline_extras("find free models across providers") == "free_models"
     assert route_offline_extras("which ChatGPT models can I access for free") == "free_models --provider openai"
     assert route_offline_extras("which Codex models can I access for free") == "free_models --provider openai"
+    assert route_offline_extras("which models can i use for free from claude") == "free_models --provider anthropic"
 
 
 def test_free_models_route_is_not_a_generic_free_keyword_trap():

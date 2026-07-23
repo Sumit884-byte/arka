@@ -56,10 +56,10 @@ arka agent_hub doctor
 来自 fish：
 
 ```fish
-agent_hub sync
-agent_hub sync --unify
-agent_hub detect
-agent_hub launch claude
+arka agent_hub sync
+arka agent_hub sync --unify
+arka agent_hub detect
+arka agent_hub launch claude
 source ~/.config/arka/hub/launch.env
 ```
 
@@ -138,14 +138,44 @@ source ~/.config/arka/hub/launch.env
 
 ## 内存导入
 
-将 JSON 或 markdown 内存导出重新导入到 Arka 统一内存和会话笔记：
+将 JSON 或 markdown 内存导出，或来自各 IDE/智能体的本地记忆文件，重新导入到 Arka 统一内存和会话笔记。导入的文本在写入内存之前会经过 Arka 安全网关。
+
+### CLI
 
 ```bash
 arka agent_hub import-memory ~/.config/arka/hub/memory/summary.json
 arka agent_hub import-memory ./notes.md
 ```
 
-导入的文本在写入内存之前会经过 Arka 安全网关。
+### MCP（Cursor、Claude Code、VS Code）
+
+通过 MCP 客户端调用 `arka_agent_hub`：
+
+```json
+{ "action": "memory_sources" }
+{ "action": "import_memory", "source": "cursor" }
+{ "action": "import_memory", "all": true }
+{ "action": "import_memory", "path": "/path/to/export.json" }
+```
+
+终端等效命令：
+
+```bash
+arka mcp call arka arka_agent_hub --args '{"action":"memory_sources"}'
+arka mcp call arka arka_agent_hub --args '{"action":"import_memory","all":true}'
+```
+
+### 支持的 IDE 内存位置
+
+| 来源 id | IDE / 智能体 | 扫描路径 |
+| --- | --- | --- |
+| `arka_session` | Arka | `~/.config/arka/agent-memory/MEMORY.md` |
+| `arka_hub` | Arka Hub 导出 | `hub/memory/summary.json`、`hub/memory/context.md` |
+| `cursor` | Cursor | `~/.cursor/rules/*.mdc` |
+| `agent:openclaw` | OpenClaw | `~/.openclaw/MEMORY.md` |
+| `agent:codex` | Codex | `~/.codex/AGENTS.md` |
+
+`memory_sources` 仅返回本机已存在的文件。空文件会在导入结果中报告错误。
 
 ## MCP 适配器
 

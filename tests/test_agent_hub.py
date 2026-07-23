@@ -301,6 +301,81 @@ def test_import_memory_markdown(hub_paths, tmp_path, monkeypatch):
     assert result["notes_imported"] == 2
 
 
+def test_list_memory_sources(tmp_path, monkeypatch):
+    from arka.integrations import agent_hub
+
+    mem_root = tmp_path / "agent-memory"
+    mem_root.mkdir(parents=True)
+    memory_file = mem_root / "MEMORY.md"
+    memory_file.write_text("- prefers pytest\n", encoding="utf-8")
+    rules_dir = tmp_path / "cursor-rules"
+    rules_dir.mkdir()
+    (rules_dir / "style.mdc").write_text("Use sentence case headings\n", encoding="utf-8")
+
+    monkeypatch.setitem(
+        agent_hub.IDE_MEMORY_SOURCES,
+        "arka_session",
+        {
+            "name": "Arka session memory",
+            "ide": "arka",
+            "paths": [str(memory_file)],
+        },
+    )
+    monkeypatch.setitem(
+        agent_hub.IDE_MEMORY_SOURCES,
+        "cursor",
+        {
+            "name": "Cursor user rules",
+            "ide": "cursor",
+            "paths": [str(rules_dir)],
+            "directory": True,
+        },
+    )
+
+    rows = agent_hub.list_memory_sources()
+    ids = {row["id"] for row in rows}
+    assert "arka_session" in ids
+    assert "cursor" in ids
+    assert any(row["file_count"] >= 1 for row in rows if row["id"] == "cursor")
+
+
+def test_import_ide_memory_all(tmp_path, monkeypatch):
+    from arka.integrations import agent_hub
+
+    export = tmp_path / "MEMORY.md"
+    export.write_text("- imported from ide\n", encoding="utf-8")
+    monkeypatch.setitem(
+        agent_hub.IDE_MEMORY_SOURCES,
+        "arka_session",
+        {
+            "name": "Arka session memory",
+            "ide": "arka",
+            "paths": [str(export)],
+        },
+    )
+    monkeypatch.setattr(
+        "arka.integrations.agent_hub._import_note",
+        lambda text, **_: (True, None),
+    )
+    monkeypatch.setattr(
+        "arka.integrations.agent_hub.list_memory_sources",
+        lambda **_: [
+            {
+                "id": "arka_session",
+                "name": "Arka session memory",
+                "ide": "arka",
+                "files": [str(export)],
+                "file_count": 1,
+            }
+        ],
+    )
+
+    result = agent_hub.import_ide_memory(all_sources=True)
+    assert result["ok"] is True
+    assert result["notes_imported"] >= 1
+    assert result["imports"]
+
+
 def test_launch_env(hub_paths):
     from arka.integrations.agent_hub import launch_env
 

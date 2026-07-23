@@ -658,6 +658,13 @@ def is_model_select_query(text: str) -> bool:
     clean = (text or "").strip()
     if not clean:
         return False
+    try:
+        from arka.llm.provider_select import is_preferred_model_set_query
+
+        if is_preferred_model_set_query(clean):
+            return False
+    except ImportError:
+        pass
     return any(p.search(clean) for p in _SELECT_PATTERNS)
 
 

@@ -1,8 +1,79 @@
 ---
-title: "Managing skills"
-description: "Enable or disable Arka skills without editing configuration files."
+title: "Skills catalog: 70+ built-in Arka commands"
+description: "Browse Arka's 70+ built-in skills for media, web search, PDF RAG, Google Workspace, charts, stocks, YouTube, voice, and developer automation — plus enable, disable, and create custom skills."
+keywords: ["skills", "catalog", "automation", "commands", "built-in skills", "arka skills"]
 icon: "list-check"
+boost: 1.5
 ---
+
+Arka ships **70+ built-in skills**. Describe what you want in plain English and the router picks the right skill — offline symbolic rules first, LLM fallback when needed. Run `arka help` to list skills available on your platform.
+
+<CardGroup cols={3}>
+  <Card title="Chat & web" icon="message-circle" href="/guides/chat">Web Q&A, calc, weather</Card>
+  <Card title="Memory" icon="database" href="/guides/memory">Remember and recall facts</Card>
+  <Card title="PDF RAG" icon="file-text" href="/guides/pdf-rag">Ingest and query PDFs</Card>
+  <Card title="Charts" icon="chart-bar" href="/guides/charts">Line, bar, pie, scatter plots</Card>
+  <Card title="Vision" icon="eye" href="/guides/vision">Images and blueprints</Card>
+  <Card title="YouTube" icon="play" href="/guides/youtube">Research and download</Card>
+  <Card title="Google" icon="mail" href="/guides/google-workspace">Gmail and Calendar</Card>
+  <Card title="Stocks" icon="chart-line" href="/guides/stocks">Market intelligence</Card>
+  <Card title="Voice" icon="microphone" href="/guides/voice">Wake word and TTS</Card>
+  <Card title="Goal agent" icon="bot" href="/guides/goal-agent">Multi-step automation</Card>
+  <Card title="Life sciences" icon="dna" href="/guides/life-sciences">PubMed, genomics, bioinformatics</Card>
+  <Card title="Plugins" icon="plug" href="/guides/plugins">Third-party skills</Card>
+  <Card title="CLI" icon="terminal" href="/guides/cli">Full command reference</Card>
+  <Card title="Route learn" icon="route" href="/guides/route-learn">Teach phrase → skill</Card>
+  <Card title="MCP" icon="network-wired" href="/guides/mcp">Cursor and external servers</Card>
+  <Card title="Repo health" icon="heart-pulse" href="/guides/repo-health">Lint and test checks</Card>
+</CardGroup>
+
+## Web and chat
+
+| Skill | Example |
+| --- | --- |
+| `web_answer` | `arka ask who won IPL 2025` |
+| `deep_web_answer` | `arka /latest AI regulation news` |
+| `search_web` | `arka search rust async tutorials` |
+| `calc` | `arka calc 2^10 + sqrt(144)` |
+| `hyperlocal_weather` | `arka weather near me` |
+
+## Media and documents
+
+| Skill | Example |
+| --- | --- |
+| `compose_video` | `arka compose a video about climate change` |
+| `compose_slides` | `arka make slides about climate change` |
+| `compose_3d` | `arka create a 3d model of a gear` |
+| `pdf_ingest` | `pdf_ingest ~/Documents/resume.pdf` |
+| `pdf_ask` | `pdf_ask --doc resume.pdf "summarize skills"` |
+| `youtube_research` | `arka youtube research "python asyncio tutorial"` |
+
+## Developer tools
+
+| Skill | Example |
+| --- | --- |
+| `git_summary` | `arka git summary` |
+| `lint_python` | `arka lint this file` |
+| `github_repo` | `arka github repo stats for arka-agent/arka` |
+| `goal` | `arka goal set up venv and run pytest` |
+| `repo_health` | `arka repo health .` |
+
+## Finance
+
+| Skill | Example |
+| --- | --- |
+| `stock` | `arka stock analyze AAPL` |
+| `currency_convert` | `arka convert 100 USD to INR` |
+| `kalshi` | `kalshi search bitcoin` |
+| `price_check` | `arka price check iPhone 16` |
+
+<Tip>
+  Run `arka help` to see every skill in your install. The list varies by platform mode (full vs portable) and installed extras such as `[voice]` or `[pdf]`.
+</Tip>
+
+## Managing skills
+
+Enable or disable skills without editing configuration files:
 
 ```bash
 arka skills list
@@ -10,19 +81,12 @@ arka skills disable compose_video
 arka skills enable compose_video
 ```
 
-Disabled skills remain visible to routing and capability discovery, but
-execution is blocked with an explicit enable command. Preferences are stored
-in Arka's user configuration under `skills.json`.
+Disabled skills remain visible to routing and capability discovery, but execution is blocked with an explicit enable command. Preferences are stored in Arka's user configuration under `skills.json`.
 
-Create a guided skill with metadata and a test plan:
+## Create a custom skill
 
 ```bash
 arka skill new api_checker --template dev --guided
 ```
 
-The wizard asks for a description and natural-language triggers, then creates
-`skill.json`, `run.py`, `README.md`, and `TEST_PLAN.md`.
-
-It also checks existing skill manifests for duplicate triggers. Collisions are
-reported with the owning skill, and the wizard prints an AI-led trigger
-suggestion such as “ask the AI teammate to use the api checker skill.”
+The wizard asks for a description and natural-language triggers, then creates `skill.json`, `run.py`, `README.md`, and `TEST_PLAN.md`. It checks existing manifests for duplicate triggers and suggests non-colliding phrases.

@@ -1,0 +1,20 @@
+{
+  "name": "bi_dashboard",
+  "description": "Generate local HTML BI dashboards from CSV, JSON, or TSV data",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "generate bi dashboard",
+    "create bi dashboard",
+    "build dashboard from data",
+    "bi dashboard from csv",
+    "dashboard from sales data",
+    "visualize data as dashboard"
+  ],
+  "permissions": ["read", "write"],
+  "requires": {
+    "anyBins": ["python3"]
+  }
+}

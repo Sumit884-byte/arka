@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 
@@ -65,6 +66,88 @@ def test_mcp_client_connect_with_mock_http():
         tools = client.list_tools()
     assert client.session_id == "sess-123"
     assert [tool.name for tool in tools] == ["signoz_ask"]
+
+
+def test_observe_mcp_server_request_records_metrics(monkeypatch):
+    from arka.telemetry import mcp_obs
+
+    calls: list[dict] = []
+    span_calls: list[dict] = []
+
+    def fake_record(**kwargs):
+        calls.append(kwargs)
+
+    def fake_emit_span(**kwargs):
+        span_calls.append(kwargs)
+
+    monkeypatch.setattr(mcp_obs, "record_mcp_request", fake_record)
+    monkeypatch.setattr(mcp_obs, "emit_mcp_log", lambda *args, **kwargs: None)
+    monkeypatch.setattr(mcp_obs, "_emit_mcp_server_span", fake_emit_span)
+
+    mcp_obs.observe_mcp_server_request(
+        method="tools/call",
+        tool_name="arka_route",
+        success=True,
+        duration_ms=12,
+    )
+
+    assert calls == [
+        {
+            "server": "arka",
+            "operation": "tools_call",
+            "success": True,
+            "tool_name": "arka_route",
+        }
+    ]
+    assert span_calls[0]["tool_name"] == "arka_route"
+    assert span_calls[0]["duration_ms"] == 12.0
+
+
+def test_trace_mcp_server_tool_call_records_on_success(monkeypatch):
+    from arka.telemetry import mcp_obs
+
+    calls: list[dict] = []
+    monkeypatch.setattr(mcp_obs, "record_mcp_request", lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setattr(mcp_obs, "emit_mcp_log", lambda *args, **kwargs: None)
+
+    class _NoOpSpan:
+        def set_attribute(self, *_args, **_kwargs):
+            pass
+
+        def set_status(self, *_args, **_kwargs):
+            pass
+
+        def record_exception(self, *_args, **_kwargs):
+            pass
+
+    @contextmanager
+    def fake_span(_name, *, attributes=None):
+        yield _NoOpSpan()
+
+    monkeypatch.setattr("arka.telemetry.tracing.span", fake_span)
+    monkeypatch.setattr("arka.telemetry.tracing.mark_ok", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("arka.telemetry.tracing.mark_error", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("arka.telemetry.tracing.set_span_attributes", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("arka.telemetry.tracing.duration_ms", lambda *_args, **_kwargs: 5.0)
+
+    with mcp_obs.trace_mcp_server_tool_call(tool_name="arka_ask"):
+        pass
+
+    assert calls[-1]["tool_name"] == "arka_ask"
+    assert calls[-1]["success"] is True
+
+
+def test_mcp_server_log_status(tmp_path, monkeypatch):
+    from arka.telemetry.mcp_obs import mcp_server_log_status
+
+    log_file = tmp_path / "mcp.jsonl"
+    log_file.write_text("{}\n", encoding="utf-8")
+    monkeypatch.setattr("arka.integrations.mcp_logs.mcp_log_path", lambda: log_file)
+
+    status = mcp_server_log_status()
+    assert status["log_exists"] is True
+    assert status["log_bytes"] > 0
+    assert str(log_file) == status["log_path"]
 
 
 def test_signoz_mcp_self_heal_disabled():

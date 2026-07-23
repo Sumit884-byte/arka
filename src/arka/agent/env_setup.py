@@ -1,5 +1,6 @@
-"""Create safe .env templates without fabricating credentials."""
+"""Create safe .env templates and migrate values from local project source files."""
 from __future__ import annotations
+
 import argparse
 import re
 from pathlib import Path
@@ -7,12 +8,29 @@ from pathlib import Path
 _ENV_REF = re.compile(r"\bos\.environ(?:\.get)?\(\s*['\"]([A-Z][A-Z0-9_]+)")
 _DOLLAR_REF = re.compile(r"\$\{([A-Z][A-Z0-9_]+)\}")
 _SECRET = re.compile(r"(?i)(key|token|secret|password|credential)")
+_CONST_ASSIGN = re.compile(
+    r"^\s*([A-Z][A-Z0-9_]+)\s*=\s*(?:"
+    r"['\"]([^'\"\\]*(?:\\.[^'\"\\]*)*)['\"]|"
+    r"'''([^']*)'''|"
+    r'"""([^"]*)"""'
+    r")\s*(?:#.*)?$"
+)
+_SKIP_PARTS = frozenset({".git", ".venv", "venv", "node_modules", "dist", "build", "__pycache__"})
+_SOURCE_NAMES = frozenset({"constants.py", "config.py", "settings.py", "secrets.py"})
+
+
+def _iter_project_files(root: Path) -> list[Path]:
+    paths: list[Path] = []
+    for path in root.rglob("*"):
+        if not path.is_file() or any(part in _SKIP_PARTS for part in path.parts):
+            continue
+        paths.append(path)
+    return paths
+
 
 def required_env(root: Path) -> list[str]:
     found: set[str] = set()
-    for path in root.rglob("*"):
-        if not path.is_file() or any(p in {".git", ".venv", "venv", "node_modules"} for p in path.parts):
-            continue
+    for path in _iter_project_files(root):
         try:
             text = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
@@ -20,6 +38,82 @@ def required_env(root: Path) -> list[str]:
         found.update(_ENV_REF.findall(text))
         found.update(_DOLLAR_REF.findall(text))
     return sorted(found)
+
+
+def _parse_env_text(text: str) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        out[key.strip()] = value.strip()
+    return out
+
+
+def scan_source_constants(root: Path) -> dict[str, str]:
+    """Read UPPER_SNAKE = \"value\" assignments from constants/config modules."""
+    found: dict[str, str] = {}
+    for path in _iter_project_files(root):
+        if path.name not in _SOURCE_NAMES and "constants" not in path.name.lower():
+            continue
+        if path.suffix != ".py":
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        for line in text.splitlines():
+            match = _CONST_ASSIGN.match(line)
+            if not match:
+                continue
+            key = match.group(1)
+            value = next(g for g in match.groups()[1:] if g is not None)
+            if value and not value.startswith(("os.", "Path(", "pathlib.")):
+                found[key] = value
+    return found
+
+
+def fill_env_from_source(
+    root: Path,
+    *,
+    output: Path | None = None,
+    apply: bool = False,
+) -> tuple[Path, dict[str, str], dict[str, str]]:
+    """Map local constants/config values into .env for keys referenced by the project."""
+    dest = output or root / ".env"
+    needed = set(required_env(root))
+    sources = scan_source_constants(root)
+    existing = _parse_env_text(dest.read_text(encoding="utf-8")) if dest.is_file() else {}
+
+    additions: dict[str, str] = {}
+    for key in sorted(needed):
+        if key in existing and existing[key]:
+            continue
+        if key in sources and sources[key]:
+            additions[key] = sources[key]
+            continue
+        alt = key.rstrip("_")
+        for src_key, src_val in sources.items():
+            if src_key == key or src_key.rstrip("_") == alt:
+                additions[key] = src_val
+                break
+
+    if apply:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        existing_text = dest.read_text(encoding="utf-8", errors="replace") if dest.is_file() else ""
+        with dest.open("a", encoding="utf-8") as handle:
+            if existing_text and not existing_text.endswith("\n"):
+                handle.write("\n")
+            if not existing_text.strip():
+                handle.write("# Filled by Arka env fill (local source only; no cloud LLM).\n")
+            elif additions and "# Filled by Arka" not in existing_text:
+                handle.write("# Filled by Arka env fill (local source only; no cloud LLM).\n")
+            for key in sorted(additions):
+                handle.write(f"{key}={additions[key]}\n")
+
+    return dest, additions, sources
+
 
 def create_env(root: Path, *, output: Path | None = None, force: bool = False) -> Path:
     dest = output or root / ".env"
@@ -36,14 +130,44 @@ def create_env(root: Path, *, output: Path | None = None, force: bool = False) -
     dest.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
     return dest
 
+
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description="Generate a safe .env template using local project inspection")
+    p = argparse.ArgumentParser(
+        description="Generate or fill a project .env from local inspection (no cloud LLM, no fabricated secrets)"
+    )
     p.add_argument("path", nargs="?", default=".")
     p.add_argument("--output")
-    p.add_argument("--force", action="store_true")
+    p.add_argument("--force", action="store_true", help="Allow writing an empty .env template")
+    p.add_argument(
+        "--fill-from-source",
+        action="store_true",
+        help="Copy values from constants.py / config.py into .env for referenced keys",
+    )
+    p.add_argument(
+        "--apply",
+        action="store_true",
+        help="Write .env (default is preview only for --fill-from-source)",
+    )
     args = p.parse_args(argv)
+    root = Path(args.path).expanduser().resolve()
+    output = Path(args.output).expanduser() if args.output else None
+
+    if args.fill_from_source:
+        dest, additions, sources = fill_env_from_source(root, output=output, apply=args.apply)
+        print(f"target\t{dest}")
+        print(f"required_keys\t{len(required_env(root))}")
+        print(f"source_keys\t{len(sources)}")
+        print(f"additions\t{len(additions)}")
+        for key in sorted(additions):
+            print(f"candidate\t{key}\t[redacted]")
+        if not args.apply:
+            print("preview\tpass --apply to write; values never printed")
+        else:
+            print(f"applied\t{len(additions)}")
+        return 0
+
     try:
-        print(create_env(Path(args.path).expanduser().resolve(), output=Path(args.output).expanduser() if args.output else None, force=args.force))
+        print(create_env(root, output=output, force=args.force))
     except FileExistsError as exc:
         p.error(str(exc))
     return 0

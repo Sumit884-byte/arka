@@ -26,6 +26,8 @@ class DataAskTests(unittest.TestCase):
         self.assertFalse(da.wants_data_ask("generate 100 users as csv"))
         self.assertFalse(da.wants_data_ask("create sample json data"))
         self.assertFalse(da.wants_data_ask("how many files in this folder"))
+        self.assertFalse(da.wants_data_ask("which models can i use for free from claude"))
+        self.assertFalse(da.wants_data_ask("which ChatGPT models can I access for free"))
 
     def test_route_command(self) -> None:
         self.assertEqual(

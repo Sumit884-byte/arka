@@ -9,7 +9,7 @@ icon: "life-ring"
 
 | Issue | Fix |
 | --- | --- |
-| `Could not generate an answer` / `401` | Check API keys; `arka ai-models`; set `AI_PREFERRED_PROVIDER=groq`; `python3 arka_llm.py reset-exhaustion` |
+| `Could not generate an answer` / `401` | Check API keys; `arka ai-models`; set `AI_PREFERRED_PROVIDER=groq`; `arka ai reset-exhaustion` |
 | Gemini 429 / slow responses | Orchestrator auto-fails over with `LLM_AUTO_FALLBACK=1`; prefer Groq via `AI_PREFERRED_PROVIDER=groq` |
 | Wrong model picked | `arka ai-skill-model web_answer groq/llama-3.3-70b-versatile` |
 
@@ -41,7 +41,7 @@ icon: "life-ring"
 | --- | --- |
 | Wake word missed / wrong STT | Set `ASSEMBLYAI_API_KEY`; or `SARVAM_API_KEY` \+ `SARVAM_STT_MODE=translit` |
 | Devanagari breaks routing | Fixed via `arka_stt_map.py`; try `LISTEN_STT_LANG=en-IN` |
-| Listener crashes | `python3 arka_wake.py --check` then `arka doctor` |
+| Listener crashes | `arka wake --check` then `arka doctor` |
 | Wrong microphone | Linux: `pactl list sources short` → set `MIC_DEVICE` in `.env` |
 
 ## Charts
@@ -55,13 +55,13 @@ icon: "life-ring"
 
 | Issue | Fix |
 | --- | --- |
-| SigNoz traces not appearing | Set `OTEL_TRACES_ENABLED=1` (not just `SIGNOZ_ENDPOINT`); `python3 bin/arka_signoz.py status` |
+| SigNoz traces not appearing | Set `OTEL_TRACES_ENABLED=1` (not just `SIGNOZ_ENDPOINT`); `arka signoz status` |
 
 ## Memory
 
 | Issue | Fix |
 | --- | --- |
-| Supermemory not used | `supermemory status`; set `SUPERMEMORY_API_KEY`; `MEMORY=auto` |
+| Supermemory not used | `arka supermemory status`; set `SUPERMEMORY_API_KEY`; `MEMORY=auto` |
 
 ## Logs
 

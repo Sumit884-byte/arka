@@ -1,11 +1,16 @@
 ---
-title: "MCP integration"
-description: "Connect Arka to any Model Context Protocol (MCP) server — stdio or HTTP — list tools, call tools, and check health."
-keywords: ["mcp", "model context protocol", "integration", "tools"]
+title: "MCP integration for Cursor and Claude"
+description: "Connect Arka to Model Context Protocol servers — stdio or HTTP — expose 70+ Arka skills to Cursor and Claude Desktop, list tools, call tools, and verify health from the CLI."
+keywords: ["mcp", "model context protocol", "Cursor", "Claude Desktop", "integration", "arka mcp server"]
 icon: "network-wired"
+boost: 1.5
 ---
 
 Arka can connect to **any MCP server** from the terminal — the same [Model Context Protocol](https://modelcontextprotocol.io) used by Cursor, Claude Desktop, and other AI clients.
+
+<Note>
+  **Summary:** Arka is both an MCP client (call external servers like SigNoz or filesystem) and an MCP server (expose Arka skills to Cursor). Config lives at `~/.config/arka/mcp.json` in Cursor-compatible format. Quick start: `arka mcp list`, `arka mcp add`, `arka mcp tools`, `arka mcp call`. See also [How to code with Arka](/guides/code-with-arka) for IDE workflow.
+</Note>
 
 MCP servers can also participate in Arka’s universal plugin catalog. After
 adding a server, use `arka plugin doctor` and `arka plugin inspect <name>` to
@@ -40,9 +45,9 @@ arka mcp status
 From fish:
 
 ```fish
-mcp list
-mcp status
-mcp tools signoz
+arka mcp list
+arka mcp status
+arka mcp tools signoz
 ```
 
 Natural language (agent routing):
@@ -365,6 +370,7 @@ Run `arka mcp install` to print the correct command for your machine.
 | `arka_webhook` | Webhook gateway — status or health |
 | `arka_view_data` | Preview CSV/TSV tables as plain text |
 | `arka_clipboard` | Clipboard history — list, save, get, or clear |
+| `arka_share` | Share last LLM response with model, provider, tokens, latency, and output (markdown or JSON) |
 | `arka_remind` | Reminders — list, add, or cancel |
 | `arka_bookmarks` | Bookmarks — list, save, search, get, or delete |
 | `arka_docker` | Docker — health, containers, images, or logs |
@@ -386,7 +392,7 @@ Run `arka mcp install` to print the correct command for your machine.
 | `arka_currency` | Currency — convert amounts or parse NL queries |
 | `arka_disk` | Disk space — usage summary or category breakdown |
 | `arka_repo_health` | Repo health — scan or run lint/test checks |
-| `arka_agent_hub` | Agent Hub — status, adapters, detect, doctor, or list |
+| `arka_agent_hub` | Agent Hub — status, adapters, detect, doctor, list, memory sources, or import IDE memory |
 | `arka_team_run` | Run an agent team workflow |
 
 ### MCP-safe defaults
@@ -432,6 +438,29 @@ arka agent_hub adapters    # see which agent configs would gain hub servers
 ```
 
 Hub env vars (`ARKA_MCP_CONFIG`, `ARKA_HUB_DIR`) are documented in [Agent Hub](/guides/agent-hub).
+
+#### Import IDE memory via MCP
+
+`arka_agent_hub` can list and import memory from Cursor, Codex, OpenClaw, Arka session notes, and hub exports:
+
+```bash
+# List importable memory files on this machine
+arka mcp call arka arka_agent_hub --args '{"action":"memory_sources"}'
+
+# Import one IDE source or everything detected
+arka mcp call arka arka_agent_hub --args '{"action":"import_memory","source":"cursor"}'
+arka mcp call arka arka_agent_hub --args '{"action":"import_memory","all":true}'
+
+# Import an explicit export file
+arka mcp call arka arka_agent_hub --args '{"action":"import_memory","path":"~/.config/arka/hub/memory/summary.json"}'
+```
+
+| `action` | Parameters | Returns |
+| --- | --- | --- |
+| `memory_sources` | — | Array of `{ id, name, ide, files, file_count }` for sources that exist locally |
+| `import_memory` | `path` **or** `source` / `ide` / `agent` **or** `all: true` | `{ ok, facts_imported, notes_imported, imports, errors }` |
+
+Other `arka_agent_hub` actions: `status`, `adapters`, `detect`, `doctor`, `list`. See [Agent Hub — Memory import](/guides/agent-hub#memory-import) for source ids and formats.
 
 ## Using Arka MCP to extend Arka
 

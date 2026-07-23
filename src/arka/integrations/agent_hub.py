@@ -23,6 +23,11 @@ AGENTS: dict[str, dict[str, Any]] = {
         ],
         "mcp_merge_key": "mcpServers",
         "memory_hint": "Read ARKA_MEMORY_DIR/context.md or summary.json for Arka facts",
+        "memory_paths": [
+            "~/.config/arka/agent-memory/MEMORY.md",
+            "~/.claude/CLAUDE.md",
+            "~/.claude/projects/CLAUDE.md",
+        ],
         "skills_path_var": "ARKA_SKILLS_DIR",
     },
     "codex-app": {
@@ -32,6 +37,7 @@ AGENTS: dict[str, dict[str, Any]] = {
         "mcp_paths": ["~/.codex/mcp.json"],
         "mcp_merge_key": "mcpServers",
         "memory_hint": "Set ARKA_MEMORY_DIR; read context.md for cross-agent context",
+        "memory_paths": ["~/.codex/AGENTS.md"],
         "skills_path_var": "ARKA_SKILLS_DIR",
     },
     "hermes": {
@@ -67,6 +73,7 @@ AGENTS: dict[str, dict[str, Any]] = {
         "mcp_paths": ["~/.codex/mcp.json"],
         "mcp_merge_key": "mcpServers",
         "memory_hint": "Set MCP_CONFIG or ARKA_MCP_CONFIG to hub/mcp.json",
+        "memory_paths": ["~/.codex/AGENTS.md"],
         "skills_path_var": "ARKA_SKILLS_DIR",
     },
     "fugu": {
@@ -111,6 +118,31 @@ ADAPTER_TARGETS: dict[str, Path] = {
     "claude_desktop": Path(
         "~/Library/Application Support/Claude/claude_desktop_config.json"
     ).expanduser(),
+}
+
+# IDE-specific memory locations (files or directories) for import into Arka.
+IDE_MEMORY_SOURCES: dict[str, dict[str, Any]] = {
+    "arka_session": {
+        "name": "Arka session memory",
+        "ide": "arka",
+        "paths": ["~/.config/arka/agent-memory/MEMORY.md"],
+    },
+    "arka_hub": {
+        "name": "Arka Hub export",
+        "ide": "arka",
+        "paths": [],
+    },
+    "cursor": {
+        "name": "Cursor user rules",
+        "ide": "cursor",
+        "paths": ["~/.cursor/rules"],
+        "directory": True,
+    },
+    "vscode_copilot": {
+        "name": "VS Code / Copilot instructions",
+        "ide": "vscode",
+        "paths": ["~/.vscode/argv.json", "~/.github/copilot-instructions.md"],
+    },
 }
 
 
@@ -370,6 +402,125 @@ def _import_note(text: str, *, long_term: bool = False) -> tuple[bool, str | Non
         return code == 0, None if code == 0 else "append failed"
     except ImportError:
         return False, "session_memory unavailable"
+
+
+def _memory_import_paths(source_id: str, meta: dict[str, Any]) -> list[Path]:
+    """Resolve configured memory paths for an IDE/agent source."""
+    if source_id == "arka_hub":
+        mem = hub_memory_dir()
+        return [mem / "summary.json", mem / "context.md"]
+    paths = _expand_config_paths(meta.get("paths"))
+    if meta.get("directory"):
+        expanded: list[Path] = []
+        for root in paths:
+            if not root.is_dir():
+                continue
+            for pattern in ("*.md", "*.mdc", "*.markdown", "*.json"):
+                expanded.extend(sorted(root.glob(pattern)))
+        return expanded
+    return paths
+
+
+def list_memory_sources(*, existing_only: bool = True) -> list[dict[str, Any]]:
+    """List importable memory files from Arka hub, launch agents, and IDE adapters."""
+    rows: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def _append(source_id: str, name: str, ide: str, paths: list[Path]) -> None:
+        files = [str(p.resolve()) for p in paths if p.is_file()]
+        if existing_only and not files:
+            return
+        rows.append(
+            {
+                "id": source_id,
+                "name": name,
+                "ide": ide,
+                "files": files,
+                "file_count": len(files),
+            }
+        )
+
+    for source_id, meta in IDE_MEMORY_SOURCES.items():
+        paths = _memory_import_paths(source_id, meta)
+        _append(source_id, str(meta.get("name", source_id)), str(meta.get("ide", source_id)), paths)
+
+    for agent_key, meta in list_agents():
+        paths = _expand_config_paths(meta.get("memory_paths"))
+        agent_files = [p for p in paths if p.is_file()]
+        if existing_only and not agent_files:
+            continue
+        key = f"agent:{agent_key}"
+        if key in seen:
+            continue
+        seen.add(key)
+        _append(key, str(meta.get("name", agent_key)), agent_key, agent_files)
+
+    return rows
+
+
+def import_ide_memory(
+    *,
+    source: str | None = None,
+    all_sources: bool = False,
+) -> dict[str, Any]:
+    """Import memory from one IDE source or from every detected source."""
+    available = list_memory_sources(existing_only=True)
+    if not all_sources and not source:
+        return {
+            "ok": False,
+            "error": "source or all_sources=true required",
+            "sources": [],
+            "facts_imported": 0,
+            "notes_imported": 0,
+            "imports": [],
+            "errors": [],
+        }
+
+    selected: list[dict[str, Any]]
+    if all_sources:
+        selected = available
+    else:
+        needle = str(source or "").strip().lower()
+        selected = [
+            row
+            for row in available
+            if row.get("id", "").lower() == needle
+            or row.get("ide", "").lower() == needle
+            or str(row.get("id", "")).lower().endswith(f":{needle}")
+        ]
+        if not selected:
+            return {
+                "ok": False,
+                "error": f"no memory files found for source: {source}",
+                "sources": [row.get("id") for row in available],
+                "facts_imported": 0,
+                "notes_imported": 0,
+                "imports": [],
+                "errors": [],
+            }
+
+    result: dict[str, Any] = {
+        "ok": False,
+        "sources": [row.get("id") for row in selected],
+        "facts_imported": 0,
+        "notes_imported": 0,
+        "imports": [],
+        "errors": [],
+    }
+    seen_files: set[str] = set()
+    for row in selected:
+        for file_path in row.get("files") or []:
+            if file_path in seen_files:
+                continue
+            seen_files.add(file_path)
+            imported = import_memory(Path(file_path))
+            result["imports"].append({"source": row.get("id"), **imported})
+            result["facts_imported"] += int(imported.get("facts_imported") or 0)
+            result["notes_imported"] += int(imported.get("notes_imported") or 0)
+            result["errors"].extend(imported.get("errors") or [])
+
+    result["ok"] = bool(result["facts_imported"] or result["notes_imported"])
+    return result
 
 
 def import_memory(path: Path) -> dict[str, Any]:
@@ -1390,7 +1541,9 @@ __all__ = [
     "hub_dir",
     "hub_mcp_path",
     "hub_memory_dir",
-    "import_memory",
+    "IDE_MEMORY_SOURCES",
+    "import_ide_memory",
+    "list_memory_sources",
     "launch_agent",
     "launch_env",
     "list_adapters",

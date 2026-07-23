@@ -61,6 +61,11 @@ def env_get(key: str, default: str = "") -> str:
     return default
 
 
+def env_int(name: str, default: int) -> int:
+    """Read int env var (missing / empty → default)."""
+    return int(os.environ.get(name) or str(default))
+
+
 def load_env(extra: Path | None = None) -> None:
     paths: list[Path] = []
     if extra:
@@ -100,3 +105,10 @@ def load_env(extra: Path | None = None) -> None:
 
     os.environ.setdefault("CONFIG_DIR", str(config_dir()))
     os.environ.setdefault("CACHE_DIR", str(cache_dir()))
+
+    try:
+        from arka.core.network_proxy import apply_proxy_env
+
+        apply_proxy_env()
+    except ImportError:
+        pass

@@ -1,0 +1,16 @@
+{
+  "name": "markdown_style",
+  "description": "Detect markdown-like text and render it with terminal styling (rich, glow, or ANSI)",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "markdown style",
+    "style markdown",
+    "render markdown",
+    "pretty markdown",
+    "format markdown"
+  ],
+  "permissions": ["read"]
+}

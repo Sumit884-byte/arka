@@ -25,6 +25,12 @@ from arka.platform_info import fish_install_hint, has_full_fish_agent, skill_mod
 
 def main(argv: list[str] | None = None) -> int:
     load_env()
+    try:
+        from arka.telemetry.telemetry_hints import maybe_emit_telemetry_setup_hint
+
+        maybe_emit_telemetry_setup_hint()
+    except ImportError:
+        pass
     from arka.core.mode import load_mode
 
     load_mode()
@@ -39,6 +45,7 @@ def main(argv: list[str] | None = None) -> int:
             "refresh",
             "shell-init",
             "setup",
+            "mcp",
             "-h",
             "--help",
             "help",
@@ -88,8 +95,36 @@ def main(argv: list[str] | None = None) -> int:
     if args[0] == "platform":
         return _cmd_platform(args[1:])
 
+    if args[0] == "proxy":
+        from arka.core.network_proxy import main as proxy_main
+
+        return proxy_main(args[1:])
+
     if args[0] == "doctor":
         return _cmd_doctor()
+
+    if args[0] in ("credits", "credit") and len(args) >= 2 and args[1] == "usage":
+        from arka.llm.credits_usage import main as credits_usage_main
+
+        return credits_usage_main(args[2:])
+
+    if len(args) >= 3 and args[0] == "ai" and args[1] in ("credits", "credit") and args[2] == "usage":
+        from arka.llm.credits_usage import main as credits_usage_main
+
+        return credits_usage_main(args[3:])
+
+    credits_nl = _try_credits_usage_nl(args)
+    if credits_nl is not None:
+        return credits_nl
+
+    if args[0] == "skill" and len(args) >= 2 and args[1] == "usage":
+        from arka.core.skill_usage import report
+
+        payload = report()
+        print(f"Arka skill usage: {payload['total']} invocations")
+        for skill, count in payload["skills"][:20]:
+            print(f"  {skill}: {count}")
+        return 0
 
     if args[0] == "background":
         from arka.agent.background import main as background_main
@@ -162,6 +197,19 @@ def main(argv: list[str] | None = None) -> int:
         from arka.llm.provider_select import main as provider_main
 
         return provider_main(args[1:] or None)
+
+    if args[0] == "select" and len(args) >= 2:
+        from arka.llm.provider_select import (
+            extract_explicit_model_id,
+            main as provider_main,
+            resolve_model_set_target,
+        )
+
+        text = " ".join(args).strip()
+        model = extract_explicit_model_id(text)
+        if model:
+            provider, model_id = resolve_model_set_target(model)
+            return provider_main(["set", provider, "--model", model_id])
 
     if args[0] in ("free_models", "free-models", "free_models_list"):
         from arka.llm.free_models import main as free_models_main
@@ -326,6 +374,27 @@ def main(argv: list[str] | None = None) -> int:
     if args[0] == "aie":
         return run_script("arka_aie.py", args[1:] or ["status"])
 
+    if args[0] in ("unified_inbox", "unified-inbox", "gmail_summary", "gmail-summary"):
+        if not args[1:] or args[1] in ("-h", "--help", "help"):
+            print(
+                "Usage: arka unified_inbox [--summarize] --unread --all\n"
+                "       arka unified_inbox summarize unread emails\n"
+                "\n"
+                "Requires linked Google accounts:\n"
+                "  arka google login\n"
+                "  arka google login --add [--account student|personal|work]\n"
+                "\n"
+                "Same as: arka google inbox --summarize --unread --all"
+            )
+            return 0 if args[1:] else 1
+        text = " ".join(args[1:])
+        if text.lstrip("-").startswith("summarize") or _is_unified_inbox_request(args[1:]):
+            return _cmd_unified_inbox_nl(args[1:])
+        return run_script(
+            "arka_google.py",
+            ["inbox", "--summarize", "--unread", "--all", *args[1:]],
+        )
+
     if args[0] == "google":
         return run_script("arka_google.py", args[1:])
 
@@ -350,6 +419,14 @@ def main(argv: list[str] | None = None) -> int:
     if args[0] == "mcp":
         return run_script("arka_mcp.py", args[1:])
 
+    if args[0] == "signoz":
+        from arka.telemetry.signoz_cli import main as signoz_main
+
+        try:
+            return signoz_main(args[1:])
+        except SystemExit as exc:
+            return int(exc.code or 0)
+
     if args[0] in ("agent_hub", "agent-hub", "hub"):
         return run_script("arka_agent_hub.py", args[1:])
 
@@ -361,6 +438,24 @@ def main(argv: list[str] | None = None) -> int:
 
     if args[0] == "memory":
         return run_script("arka_memory.py", args[1:])
+
+    if args[0] in ("session-memory", "session_memory"):
+        return run_script("arka_session_memory.py", args[1:])
+
+    if args[0] in ("session", "sessions", "message-session", "message_session"):
+        return run_script("arka_message_sessions.py", args[1:])
+
+    if args[0] == "ai" and len(args) > 1 and args[1] in (
+        "reset-exhaustion",
+        "trace-status",
+        "active-model",
+        "models",
+        "vllm-status",
+    ):
+        return run_script("arka_llm.py", args[1:])
+
+    if args[0] == "wake":
+        return run_script("arka_wake.py", args[1:])
 
     if args[0] == "habitat":
         from arka.core.habitat import main as habitat_main
@@ -419,6 +514,16 @@ def main(argv: list[str] | None = None) -> int:
 
         return github_dataset_main(args[1:])
 
+    if args[0] == "github" and len(args) > 1 and args[1] in ("resume", "cv"):
+        from arka.agent.github_resume import main as github_resume_main
+
+        return github_resume_main(args[2:] or ["generate"])
+
+    if args[0] in ("github_resume", "github-resume", "github_cv", "github-cv"):
+        from arka.agent.github_resume import main as github_resume_main
+
+        return github_resume_main(args[1:] or ["generate"])
+
     # Fish-only service subcommands (listen, start, serve, …)
     fish_subs = {
         "listen",
@@ -447,6 +552,9 @@ def main(argv: list[str] | None = None) -> int:
 
     # Natural language: full agent via bundled config.fish when fish is installed
     text = " ".join(args).strip()
+    credits_nl = _try_credits_usage_nl(args)
+    if credits_nl is not None:
+        return credits_nl
     mode_hit = _try_mode_nl(text)
     if mode_hit is not None:
         return mode_hit
@@ -485,6 +593,19 @@ def _run_convert(rest: list[str]) -> int:
     if text and is_timezone_convert_request(text):
         return run_script("arka_timezone_convert.py", ["convert", *rest])
     return run_script("arka_currency.py", ["convert", *rest])
+
+
+def _try_credits_usage_nl(args: list[str]) -> int | None:
+    from arka.llm.credits_usage import is_credits_usage_request, main as credits_usage_main
+
+    text = " ".join(args).strip()
+    if not text or not is_credits_usage_request(text):
+        return None
+    if args and args[0] in ("credits", "credit") and len(args) >= 2 and args[1] == "usage":
+        return None
+    if len(args) >= 3 and args[0] == "ai" and args[1] in ("credits", "credit") and args[2] == "usage":
+        return None
+    return credits_usage_main([])
 
 
 def _try_code_nl(text: str) -> int | None:
@@ -788,7 +909,36 @@ def _is_email_summarize_request(rest: list[str]) -> bool:
     return bool(re.search(r"\b(emails?|gmail|gmails|mail|inbox)\b", text))
 
 
+def _is_unified_inbox_request(rest: list[str]) -> bool:
+    from arka.integrations.gmail_unified import is_unified_inbox_request
+
+    return is_unified_inbox_request(" ".join(rest))
+
+
+def _cmd_unified_inbox_nl(rest: list[str]) -> int:
+    from arka.integrations.gmail_unified import build_unified_inbox_argv_from_nl
+
+    text = " ".join(rest).strip()
+    if not text:
+        print(
+            "Usage: arka unified_inbox [--summarize] unread emails\n"
+            "       arka summarize unread emails across all google accounts",
+            file=sys.stderr,
+        )
+        return 1
+    try:
+        return run_script("arka_google.py", build_unified_inbox_argv_from_nl(text, summarize=True))
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
+
 def _cmd_gmail_summarize_nl(rest: list[str]) -> int:
+    from arka.integrations.gmail_email_summarize import (
+        build_gmail_email_summarize_argv_from_nl,
+        is_single_email_summarize_request,
+    )
+    from arka.integrations.gmail_unified import build_unified_inbox_argv_from_nl, is_unified_inbox_request
     from arka.integrations.google_workspace import build_gmail_argv_from_nl
 
     text = " ".join(rest).strip()
@@ -796,6 +946,12 @@ def _cmd_gmail_summarize_nl(rest: list[str]) -> int:
         print("Usage: arka summarize unread emails [within N days]", file=sys.stderr)
         return 1
     try:
+        if is_single_email_summarize_request(text):
+            argv = build_gmail_email_summarize_argv_from_nl(text)
+            if argv:
+                return run_script("arka_google.py", argv)
+        if is_unified_inbox_request(text):
+            return run_script("arka_google.py", build_unified_inbox_argv_from_nl(text, summarize=True))
         return run_script("arka_google.py", build_gmail_argv_from_nl(text, summarize=True))
     except RuntimeError as exc:
         print(str(exc), file=sys.stderr)
@@ -809,18 +965,26 @@ def _cmd_summarize(rest: list[str]) -> int:
             "       arka summarize playlist --url <url> [--limit N]\n"
             "       arka summarize folder <directory>\n"
             "       arka summarize unread emails [within N days]\n"
+            "       arka summarize my latest email\n"
+            "       arka summarize email from john about the project\n"
+            "       arka summarize unread emails across all google accounts\n"
             "       arka summarize all emails within 2 days\n"
             "\n"
             "YouTube: tries captions first. If missing, asks to download audio\n"
             "         and transcribe locally (unless --yes-transcribe / --no-transcribe).\n"
             "\n"
             "Gmail: requires arka google login. Uses calendar-day windows by default.\n"
+            "Unified inbox (multiple Google accounts): arka google login --add, then\n"
+            "  arka google inbox --summarize --unread --all\n"
             "\n"
             "Examples:\n"
             "  arka summarize youtube dQw4w9WgXcQ\n"
             "  arka summarize unread emails within 2 days\n"
+            "  arka summarize my latest email\n"
+            "  arka google summarize --latest-unread\n"
+            "  arka summarize unread emails across all my google accounts\n"
             "  arka summarize all emails from last 3 days\n"
-            "  arka google gmail --summarize --unread --days 2 --all"
+            "  arka google inbox --summarize --unread --all"
         )
         return 0 if rest and rest[0] in ("-h", "--help", "help") else 1
 
@@ -1190,6 +1354,13 @@ def _cmd_doctor() -> int:
         print(line)
     for line in format_doctor_lines():
         print(line)
+    try:
+        from arka.core.network_proxy import doctor_lines as proxy_doctor_lines
+
+        for line in proxy_doctor_lines():
+            print(line)
+    except ImportError:
+        pass
     llm_configured = any(provider_available(spec.slug) for spec in provider_specs())
     print()
     print("Next steps:")

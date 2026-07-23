@@ -16,6 +16,12 @@ def apply_env() -> None:
     os.environ["INSTALL_HOME"] = str(home)
     os.environ.setdefault("CONFIG_DIR", str(config_dir()))
     os.environ.setdefault("CACHE_DIR", str(cache_dir()))
+    try:
+        from arka.env import load_env
+
+        load_env()
+    except ImportError:
+        pass
 
 
 def run_script(script: str, args: list[str] | None = None) -> int:
@@ -67,6 +73,10 @@ def run_skill(skill_line: str) -> int:
         if not rest:
             return cmd_show()
         return mode_main(["mode", *rest])
+    if head in ("proxy", "network_proxy"):
+        from arka.core.network_proxy import main as proxy_main
+
+        return proxy_main(rest or ["status"])
     if head in ("skills", "skill_settings"):
         from arka.core.skill_settings import main as skill_settings_main
         return skill_settings_main(rest)
@@ -120,7 +130,7 @@ def run_skill(skill_line: str) -> int:
         pass
 
     try:
-        from arka.telemetry import mark_error, mark_ok, span
+        from arka.telemetry import span
     except ImportError:
         span = None  # type: ignore[assignment,misc]
     from contextlib import nullcontext
@@ -173,7 +183,13 @@ def run_skill(skill_line: str) -> int:
         elif head in ("observability", "observability_doctor", "signoz_doctor"):
             from arka.telemetry.observability_doctor import main as observability_main
 
-            code = observability_main(rest)
+            cli_args = [
+                arg
+                for arg in rest
+                if arg.lower()
+                not in {"doctor", "status", "check", "diagnose", "diagnostics", "health"}
+            ]
+            code = observability_main(cli_args)
         elif head in ("telemetry_connect", "telemetry-connect", "production_telemetry"):
             from arka.telemetry.codebase_connectors import main as connector_main
             code = connector_main(rest)
@@ -276,6 +292,17 @@ def run_skill(skill_line: str) -> int:
         elif head in ("env_bridge", "env-bridge", "project_env"):
             from arka.agent.env_bridge import main as env_bridge_main
             code = env_bridge_main(rest)
+        elif head in ("md_doc", "md-doc", "use_md", "markdown_doc", "read_md"):
+            from arka.agent.md_doc import main as md_doc_main
+            code = md_doc_main(rest)
+        elif head == "markdown" and rest and rest[0] == "style":
+            from arka.core.markdown_style import main as markdown_style_main
+
+            code = markdown_style_main(["style", *rest[1:]])
+        elif head in ("markdown_style", "markdown-style", "style_markdown", "style-markdown"):
+            from arka.core.markdown_style import main as markdown_style_main
+
+            code = markdown_style_main(rest or ["style", "-"])
         elif head in ("coding_workflow", "coding-workflow", "workflow"):
             from arka.agent.coding_workflows import main as workflow_main
             code = workflow_main(rest)
@@ -298,6 +325,14 @@ def run_skill(skill_line: str) -> int:
             from arka.agent.free_credits import run_guide
 
             code = run_guide()
+        elif head in ("credits", "credit") and rest and rest[0] == "usage":
+            from arka.llm.credits_usage import main as credits_usage_main
+
+            code = credits_usage_main(rest[1:])
+        elif head == "share":
+            from arka.llm.share import main as share_main
+
+            code = share_main(rest)
         elif head == "provider":
             from arka.llm.provider_select import main as provider_main
 
@@ -316,6 +351,8 @@ def run_skill(skill_line: str) -> int:
             code = elon_main(rest)
         elif head == "google":
             code = run_script("arka_google.py", rest)
+        elif head in ("email_contacts", "email-contacts"):
+            code = run_script("arka_email_contacts.py", rest)
         elif head == "code":
             from arka.core.code_project import main as code_main
 
@@ -331,6 +368,14 @@ def run_skill(skill_line: str) -> int:
             from arka.agent.github_dataset import main as github_dataset_main
 
             code = github_dataset_main(rest)
+        elif head == "github" and rest and rest[0] in ("resume", "cv"):
+            from arka.agent.github_resume import main as github_resume_main
+
+            code = github_resume_main(rest[1:] or ["generate"])
+        elif head in ("github_resume", "github-resume", "github_cv", "github-cv"):
+            from arka.agent.github_resume import main as github_resume_main
+
+            code = github_resume_main(rest or ["generate"])
         elif head in ("search", "search_setup", "search-setup"):
             from arka.agent.search_setup import main as search_setup_main
             code = search_setup_main(rest)
@@ -405,6 +450,12 @@ def run_skill(skill_line: str) -> int:
         elif head in ("treemap", "tree_map", "tree-map"):
             from arka.charts.treemap import main as treemap_main
             code = treemap_main(rest)
+        elif head in ("bi_dashboard", "bi-dashboard"):
+            from arka.agent.bi_dashboard import main as bi_dashboard_main
+            code = bi_dashboard_main(rest)
+        elif head == "dashboard" and rest and rest[0] in ("bi", "bi-dashboard"):
+            from arka.agent.bi_dashboard import main as bi_dashboard_main
+            code = bi_dashboard_main(rest[1:])
         elif head in ("video_evidence", "video-evidence", "video_bug", "video-bug"):
             from arka.agent.video_evidence import main as video_evidence_main
 
@@ -484,6 +535,14 @@ def run_skill(skill_line: str) -> int:
         elif head in ("automate", "app_automate", "app-automate"):
             from arka.agent.automation import main as automation_main
             code = automation_main(rest)
+        elif head == "skill" and rest and rest[0] == "usage":
+            from arka.core.skill_usage import report
+
+            payload = report()
+            print(f"Arka skill usage: {payload['total']} invocations")
+            for skill, count in payload["skills"][:20]:
+                print(f"  {skill}: {count}")
+            code = 0
         elif head in ("usage", "skill_usage"):
             if rest and rest[0] in ("dashboard", "dash"):
                 from arka.agent.usage_dashboard import main as usage_dashboard_main
@@ -578,6 +637,14 @@ def run_skill(skill_line: str) -> int:
         elif head in ("ui_copy", "ui-copy", "copy_audit", "copy-audit"):
             from arka.agent.ui_copy_audit import main as copy_main
             code = copy_main(rest)
+        elif head == "screenshot" and rest and rest[0] in ("components", "component"):
+            from arka.agent.component_screenshots import main as component_screenshot_main
+
+            code = component_screenshot_main(rest[1:])
+        elif head in ("component_screenshots", "component-screenshots", "component_screenshot", "component-screenshot"):
+            from arka.agent.component_screenshots import main as component_screenshot_main
+
+            code = component_screenshot_main(rest)
         elif head in ("web_screenshot", "web-screenshot", "site_screenshot"):
             from arka.agent.web_screenshot import main as screenshot_main
             code = screenshot_main(rest)
@@ -665,11 +732,22 @@ def run_skill(skill_line: str) -> int:
                 code = run_fish_skill(skill_line)
 
         if span is not None:
-            current.set_attribute("arka.skill.exit_code", code)
-            if code == 0:
-                mark_ok(current)
-            else:
-                mark_error(current, f"exit {code}")
+            from arka.telemetry.skill_obs import finish_skill_dispatch
+
+            finish_skill_dispatch(
+                current,
+                skill=head,
+                exit_code=code,
+                start=started,
+                skill_line=skill_line,
+            )
+        else:
+            try:
+                from arka.core.skill_usage import record
+                record(head, code, (time.perf_counter() - started) * 1000)
+            except Exception:
+                pass
+            return code
         try:
             from arka.core.skill_usage import record
             record(head, code, (time.perf_counter() - started) * 1000)

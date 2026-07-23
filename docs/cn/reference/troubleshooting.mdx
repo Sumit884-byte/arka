@@ -9,7 +9,7 @@ icon: "life-ring"
 
 | 问题 | 修复方式 |
 | ----- | --- |
-| `Could not generate an answer` / `401` | 检查 API 密钥；`arka ai-models`；设置 `AI_PREFERRED_PROVIDER=groq`；`python3 arka_llm.py reset-exhaustion` |
+| `Could not generate an answer` / `401` | 检查 API 密钥；`arka ai-models`；设置 `AI_PREFERRED_PROVIDER=groq`；`arka ai reset-exhaustion` |
 | Gemini 429 / 响应缓慢 | 编排器会通过 `LLM_AUTO_FALLBACK=1` 自动切换；通过 `AI_PREFERRED_PROVIDER=groq` 优先使用 Groq |
 | 选到了错误模型 | `arka ai-skill-model web_answer groq/llama-3.3-70b-versatile` |
 
@@ -40,7 +40,7 @@ icon: "life-ring"
 | ----- | --- |
 | 唤醒词漏检 / STT 错误 | 设置 `ASSEMBLYAI_API_KEY`；或 `SARVAM_API_KEY` + `SARVAM_STT_MODE=translit` |
 | 天城文导致路由异常 | 通过 `arka_stt_map.py` 修复；试试 `LISTEN_STT_LANG=en-IN` |
-| 监听器崩溃 | `python3 arka_wake.py --check` 然后 `arka doctor` |
+| 监听器崩溃 | `arka wake --check` 然后 `arka doctor` |
 | 麦克风错误 | Linux：`pactl list sources short` → 在 `.env` 中设置 `MIC_DEVICE` |
 
 ## 图表
@@ -54,13 +54,13 @@ icon: "life-ring"
 
 | 问题 | 修复方式 |
 | ----- | --- |
-| SigNoz 追踪未显示 | 设置 `OTEL_TRACES_ENABLED=1`（不仅仅是 `SIGNOZ_ENDPOINT`）；`python3 bin/arka_signoz.py status` |
+| SigNoz 追踪未显示 | 设置 `OTEL_TRACES_ENABLED=1`（不仅仅是 `SIGNOZ_ENDPOINT`）；`arka signoz status` |
 
 ## 记忆
 
 | 问题 | 修复方式 |
 | ----- | --- |
-| Supermemory 未被使用 | `supermemory status`；设置 `SUPERMEMORY_API_KEY`；`MEMORY=auto` |
+| Supermemory 未被使用 | `arka supermemory status`；设置 `SUPERMEMORY_API_KEY`；`MEMORY=auto` |
 
 ## 日志
 

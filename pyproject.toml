@@ -124,6 +124,7 @@ arka = [
     "bundled/*.txt",
     "bundled/*.yaml",
     "bundled/*.html",
+    "bundled/*.md",
     "bundled/privategpt/*",
     "bundled/aie/*",
     "bundled/whatsapp/*",

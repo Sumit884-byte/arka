@@ -531,7 +531,10 @@ def main(argv: list[str] | None = None) -> int:
     p_setup.add_argument(
         "--autostart",
         action="store_true",
-        help="Install login autostart after a successful cast (macOS launchd / Linux systemd)",
+        help=(
+            "Install login autostart after a successful cast (macOS launchd / Linux systemd; "
+            "respects SIGNOZ_AUTOSTART in .env)"
+        ),
     )
     p_setup.set_defaults(func=cmd_setup)
 
@@ -540,7 +543,10 @@ def main(argv: list[str] | None = None) -> int:
         help="Install login autostart for the SigNoz Docker stack",
     )
     autostart_sub = p_autostart.add_subparsers(dest="autostart_action", required=True)
-    p_autostart_install = autostart_sub.add_parser("install", help="Enable SigNoz autostart on login")
+    p_autostart_install = autostart_sub.add_parser(
+        "install",
+        help="Enable SigNoz autostart on login (skipped when SIGNOZ_AUTOSTART=0 in .env)",
+    )
     p_autostart_install.set_defaults(func=_cmd_autostart)
     p_autostart_status = autostart_sub.add_parser("status", help="Report autostart installation status")
     p_autostart_status.set_defaults(func=_cmd_autostart)

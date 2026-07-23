@@ -1,0 +1,17 @@
+{
+  "name": "unified_inbox",
+  "description": "Summarize unread Gmail across all linked Google accounts (student + personal, etc.)",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "unified inbox",
+    "unified inbox summary",
+    "summarize unread emails across google accounts",
+    "all my google accounts unread",
+    "multiple google accounts email summary",
+    "combined gmail summary"
+  ],
+  "permissions": ["read"]
+}

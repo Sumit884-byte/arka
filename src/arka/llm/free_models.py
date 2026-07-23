@@ -23,7 +23,12 @@ def normalize_model_name(value: str) -> str:
 def discover(*, live: bool = True, limit: int = 50, provider: str = "") -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
     # Local runtimes have no provider token cost; availability is labeled separately.
-    provider_filter = provider.lower().replace("chatgpt", "openai").replace("gpt", "openai")
+    provider_filter = (
+        provider.lower()
+        .replace("chatgpt", "openai")
+        .replace("gpt", "openai")
+        .replace("claude", "anthropic")
+    )
     local = fetch_ollama_models_live() if live else ollama_model_ids(include_live=False)
     if not provider_filter or provider_filter == "ollama":
         for model in local:
@@ -39,6 +44,29 @@ def discover(*, live: bool = True, limit: int = 50, provider: str = "") -> list[
             rows.append({"provider": provider_name, "model": model, "cost": "free-tier-eligible", "confidence": "provider-plan-dependent"})
     if not provider_filter or provider_filter == "openai":
         rows.append({"provider": "openai/chatgpt", "model": "eligible models vary by ChatGPT plan", "cost": "plan-dependent", "confidence": "account-required"})
+    if not provider_filter or provider_filter == "anthropic":
+        rows.extend(
+            [
+                {
+                    "provider": "anthropic/claude.ai",
+                    "model": "claude-haiku-4-5 (free tier, daily limits)",
+                    "cost": "free-tier-eligible",
+                    "confidence": "provider-plan-dependent",
+                },
+                {
+                    "provider": "anthropic/claude-code",
+                    "model": "included with Pro/Max; limited on free claude.ai",
+                    "cost": "plan-dependent",
+                    "confidence": "account-required",
+                },
+                {
+                    "provider": "anthropic/api",
+                    "model": "new accounts may receive trial credits; no always-free API tier",
+                    "cost": "trial-credits",
+                    "confidence": "account-required",
+                },
+            ]
+        )
     unique: dict[tuple[str, str], dict[str, str]] = {(row["provider"], row["model"]): row for row in rows}
     return list(unique.values())[: max(1, limit)]
 

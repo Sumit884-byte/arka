@@ -201,6 +201,11 @@ def read_clipboard() -> str:
     return _read_clipboard()
 
 
+def write_clipboard(text: str) -> bool:
+    """Copy text to the system clipboard (platform-aware)."""
+    return _write_clipboard(text)
+
+
 def _write_clipboard(text: str) -> bool:
     _, copy_cmd = _clipboard_caps()
     if not copy_cmd or not text:

@@ -249,6 +249,13 @@ def check_action(cmd: str) -> SecurityResult:
     if first in _DOWNLOAD_SKILLS:
         return SecurityResult("confirm", "download", "This will download files from the internet.")
     if first in _EXEC_SKILLS:
+        try:
+            from arka.core.code_project import is_auto_trusted_action
+
+            if is_auto_trusted_action(c):
+                return SecurityResult("ok")
+        except ImportError:
+            pass
         return SecurityResult(
             "confirm",
             "exec",

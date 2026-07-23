@@ -30,6 +30,7 @@ def test_list_tool_definitions_schema(monkeypatch):
     assert "arka_webhook" in names
     assert "arka_view_data" in names
     assert "arka_clipboard" in names
+    assert "arka_share" in names
     assert "arka_remind" in names
     assert "arka_bookmarks" in names
     assert "arka_docker" in names
@@ -167,7 +168,7 @@ def test_mcp_server_writes_tool_call_logs(tmp_path, monkeypatch):
 
 
 def test_mcp_server_stdio_roundtrip():
-    from arka.integrations.mcp_server import ArkaMcpServer
+    from arka.integrations.mcp_server import ArkaMcpServer, list_tool_definitions
 
     inp = io.StringIO(
         json.dumps(
@@ -184,7 +185,7 @@ def test_mcp_server_stdio_roundtrip():
     server = ArkaMcpServer(stdin=inp, stdout=out)
     response = server.process_line(inp.getvalue().strip())
     assert response is not None
-    assert len(response["result"]["tools"]) == 40
+    assert len(response["result"]["tools"]) == len(list_tool_definitions())
 
 
 def test_install_config_snippet():
@@ -215,7 +216,7 @@ def test_mcp_server_launch_spec():
 
     spec = mcp_server_launch_spec()
     assert spec["command"]
-    assert spec["args"][-2:] == ["mcp", "serve"]
+    assert spec["args"][-2:] in (["mcp", "serve"], ["arka.integrations.mcp_server"])
 
 
 def test_handle_arka_repo_map(tmp_path):
@@ -707,6 +708,55 @@ def test_handle_arka_agent_hub_status(tmp_path, monkeypatch):
 
     listed = json.loads(_handle_arka_agent_hub({"action": "list"}))
     assert isinstance(listed, list) and listed
+
+
+def test_handle_arka_agent_hub_memory_import(tmp_path, monkeypatch):
+    from arka.integrations import agent_hub
+    from arka.integrations.mcp_server import _handle_arka_agent_hub
+
+    export = tmp_path / "mem.json"
+    export.write_text(json.dumps({"facts": [{"text": "mcp fact"}]}), encoding="utf-8")
+    monkeypatch.setattr(
+        agent_hub,
+        "import_memory",
+        lambda path: {
+            "source": str(path),
+            "ok": True,
+            "facts_imported": 1,
+            "notes_imported": 0,
+            "errors": [],
+        },
+    )
+    monkeypatch.setattr(
+        agent_hub,
+        "list_memory_sources",
+        lambda **_: [{"id": "arka_session", "ide": "arka", "files": [str(export)]}],
+    )
+    monkeypatch.setattr(
+        agent_hub,
+        "import_ide_memory",
+        lambda **_: {
+            "ok": True,
+            "sources": ["arka_session"],
+            "facts_imported": 1,
+            "notes_imported": 0,
+            "imports": [],
+            "errors": [],
+        },
+    )
+
+    by_path = json.loads(
+        _handle_arka_agent_hub({"action": "import_memory", "path": str(export)})
+    )
+    assert by_path["facts_imported"] == 1
+
+    sources = json.loads(_handle_arka_agent_hub({"action": "memory_sources"}))
+    assert sources[0]["id"] == "arka_session"
+
+    by_ide = json.loads(
+        _handle_arka_agent_hub({"action": "import_memory", "source": "arka_session"})
+    )
+    assert by_ide["ok"] is True
 
 
 def test_handle_arka_bookmarks(tmp_path, monkeypatch):
@@ -1293,7 +1343,7 @@ def test_handle_arka_repo_health_scan(tmp_path):
 
 def test_doctor_spawns_client(monkeypatch):
     from arka.integrations.mcp_client import McpTool
-    from arka.integrations.mcp_server import doctor
+    from arka.integrations.mcp_server import doctor, list_tool_names
 
     class FakeClient:
         server = "arka"
@@ -1305,49 +1355,7 @@ def test_doctor_spawns_client(monkeypatch):
             return {"serverInfo": {"name": "arka"}}
 
         def list_tools(self):
-            return [McpTool(name=n) for n in [
-                "arka_ask",
-                "arka_remember",
-                "arka_recall",
-                        "arka_skill",
-                        "arka_capabilities",
-                    "arka_route",
-                "arka_repo_map",
-                "arka_heartbeat",
-                "arka_sessions",
-                "arka_routines",
-                "arka_session_memory",
-                "arka_subagent",
-                "arka_project_rules",
-                "arka_webhook",
-                "arka_view_data",
-                "arka_clipboard",
-                "arka_remind",
-                "arka_bookmarks",
-                "arka_docker",
-                "arka_disk",
-                "arka_currency",
-                "arka_qr",
-                "arka_sports",
-                "arka_config",
-                "arka_price",
-                "arka_github",
-                "arka_persona",
-                "arka_personalize",
-                "arka_platform",
-                "arka_calendar",
-                "arka_textkit",
-                "arka_spotify",
-                "arka_password",
-                "arka_urlkit",
-                "arka_timekit",
-                "arka_jsonkit",
-                "arka_repo_health",
-                "arka_agent_hub",
-                "arka_jules",
-                "arka_self_build",
-                "arka_team_run",
-            ]]
+            return [McpTool(name=n) for n in list_tool_names()]
 
         def close(self):
             pass

@@ -13,7 +13,7 @@ Arka 支持视觉任务：照片描述、蓝图分析和屏幕捕获。
 
 ```bash
 arka describe photo.jpg
-describe_image ~/Downloads/chart.png
+arka describe ~/Downloads/chart.png
 ```
 
 后端（自动选择）：Gemini、Ollama (llava)、vLLM。
@@ -35,8 +35,8 @@ brew install tesseract    # OCR 层
 使用 Gemini 视觉分析平面图、立面图、MEP 图纸和扫描的合同：
 
 ```bash
-drawing_ask plan.pdf "extract door schedule and room dimensions"
-drawing_ask --pages 1-3 specs.pdf "summarize payment terms"
+arka analyze plan.pdf "extract door schedule and room dimensions"
+arka analyze --pages 1-3 specs.pdf "summarize payment terms"
 ```
 
 ```bash
@@ -53,7 +53,7 @@ pip install "arka-agent[drawings]"
 10 秒倒计时、全屏捕获、视觉描述：
 
 ```bash
-describe_screen
+arka describe screen
 arka describe my screen
-describe_screen what app is in focus
+arka describe screen "what app is in focus"
 ```

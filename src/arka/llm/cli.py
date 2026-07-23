@@ -652,6 +652,26 @@ def cmd_route(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_share(args: argparse.Namespace) -> int:
+    from arka.llm.share import main as share_main
+
+    argv = ["last"]
+    if args.format != "markdown":
+        argv.extend(["--format", args.format])
+    if args.copy:
+        argv.append("--copy")
+    for flag, value in (
+        ("--output", args.output),
+        ("--provider", args.provider),
+        ("--model", args.model),
+        ("--task", args.task),
+        ("--skill", args.skill),
+    ):
+        if value:
+            argv.extend([flag, str(value)])
+    return share_main(argv)
+
+
 def main() -> int:
     _load_fish_env()
     parser = argparse.ArgumentParser(description="Arka model-agnostic LLM (Agno)")
@@ -755,6 +775,17 @@ def main() -> int:
 
     p_trace = sub.add_parser("trace-status", help="Show OpenTelemetry / SigNoz tracing status")
     p_trace.set_defaults(func=cmd_trace_status)
+
+    p_share = sub.add_parser("share", help="Share last LLM response with model metadata")
+    p_share.add_argument("target", nargs="?", default="last", choices=["last"])
+    p_share.add_argument("--format", "-f", choices=["markdown", "json"], default="markdown")
+    p_share.add_argument("--copy", "-c", action="store_true", help="copy bundle to clipboard")
+    p_share.add_argument("--output", help="override response text")
+    p_share.add_argument("--provider", help="override provider slug")
+    p_share.add_argument("--model", help="override model id")
+    p_share.add_argument("--task", help="override task profile")
+    p_share.add_argument("--skill", help="override skill name")
+    p_share.set_defaults(func=cmd_share)
 
     args = parser.parse_args()
     return args.func(args)

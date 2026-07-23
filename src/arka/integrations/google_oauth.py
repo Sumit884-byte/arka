@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import base64
+import contextvars
 import json
 import os
+import re
 import secrets
 import threading
 import time
@@ -12,9 +14,10 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import webbrowser
+from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 try:
     from arka.env import env_get
@@ -41,6 +44,10 @@ SCOPES = (
 DEFAULT_PORT = 8766
 DEFAULT_REDIRECT_PATH = "/oauth2callback"
 
+_account_override: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "google_oauth_account", default=None
+)
+
 
 def _cache() -> Path:
     if cache_dir is not None:
@@ -51,8 +58,40 @@ def _cache() -> Path:
     return d
 
 
-def _token_file() -> Path:
+def _legacy_token_file() -> Path:
     return _cache() / "google_oauth.json"
+
+
+def _accounts_dir() -> Path:
+    d = _cache() / "google_accounts"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _sanitize_account_key(key: str) -> str:
+    cleaned = re.sub(r"[^a-zA-Z0-9._@-]+", "_", (key or "").strip())
+    return (cleaned[:120] or "default").lower()
+
+
+def _token_file(account: str | None = None) -> Path:
+    if not account:
+        return _legacy_token_file()
+    return _accounts_dir() / f"{_sanitize_account_key(account)}.json"
+
+
+def _resolve_account_key(explicit: str | None = None) -> str | None:
+    if explicit is not None:
+        return explicit
+    return _account_override.get()
+
+
+@contextmanager
+def using_account(account: str) -> Iterator[None]:
+    token = _account_override.set(account)
+    try:
+        yield
+    finally:
+        _account_override.reset(token)
 
 
 def _key_file() -> Path:
@@ -136,8 +175,7 @@ def _fernet():
     return Fernet(raw.encode() if isinstance(raw, str) else raw)
 
 
-def load_tokens() -> dict[str, Any] | None:
-    path = _token_file()
+def _read_token_file(path: Path) -> dict[str, Any] | None:
     if not path.is_file():
         return None
     try:
@@ -147,8 +185,14 @@ def load_tokens() -> dict[str, Any] | None:
     return payload if isinstance(payload, dict) else None
 
 
-def save_tokens(data: dict[str, Any]) -> None:
-    path = _token_file()
+def load_tokens(account: str | None = None) -> dict[str, Any] | None:
+    account = _resolve_account_key(account)
+    return _read_token_file(_token_file(account))
+
+
+def save_tokens(data: dict[str, Any], account: str | None = None) -> None:
+    account = _resolve_account_key(account)
+    path = _token_file(account)
     path.write_bytes(_fernet().encrypt(json.dumps(data).encode("utf-8")))
     try:
         path.chmod(0o600)
@@ -156,25 +200,99 @@ def save_tokens(data: dict[str, Any]) -> None:
         pass
 
 
-def clear_tokens() -> None:
-    path = _token_file()
+def clear_tokens(account: str | None = None) -> None:
+    path = _token_file(account)
     if path.is_file():
         path.unlink()
 
 
-def signed_in_email() -> str:
+def clear_all_tokens() -> None:
+    clear_tokens(None)
+    for path in _accounts_dir().glob("*.json"):
+        path.unlink(missing_ok=True)
+
+
+def _account_record(*, key: str, path: Path, tokens: dict[str, Any]) -> dict[str, Any]:
+    email = str(tokens.get("email") or "").strip()
+    alias = str(tokens.get("account_alias") or "").strip()
+    return {
+        "key": key,
+        "email": email,
+        "alias": alias,
+        "path": str(path),
+        "legacy": path == _legacy_token_file(),
+    }
+
+
+def list_linked_accounts() -> list[dict[str, Any]]:
+    """Return linked Google accounts (legacy token file + google_accounts/*)."""
+    rows: list[dict[str, Any]] = []
+    seen_keys: set[str] = set()
+
+    legacy = _legacy_token_file()
+    legacy_tokens = _read_token_file(legacy)
+    if legacy_tokens:
+        email = str(legacy_tokens.get("email") or "").strip()
+        key = _sanitize_account_key(email or "default")
+        rows.append(_account_record(key=key, path=legacy, tokens=legacy_tokens))
+        seen_keys.add(key)
+        if email:
+            seen_keys.add(_sanitize_account_key(email))
+
+    for path in sorted(_accounts_dir().glob("*.json")):
+        tokens = _read_token_file(path)
+        if not tokens:
+            continue
+        stem_key = _sanitize_account_key(path.stem)
+        email = str(tokens.get("email") or "").strip()
+        alias = str(tokens.get("account_alias") or "").strip()
+        key = _sanitize_account_key(alias or email or stem_key)
+        if key in seen_keys:
+            continue
+        rows.append(_account_record(key=key, path=path, tokens=tokens))
+        seen_keys.add(key)
+        if email:
+            seen_keys.add(_sanitize_account_key(email))
+    return rows
+
+
+def resolve_account_keys(selected: str | None = None) -> list[str]:
+    """Resolve account keys for unified inbox (GOOGLE_ACCOUNTS or all linked)."""
+    linked = list_linked_accounts()
+    if not linked:
+        return []
+    raw = (selected or _getenv("GOOGLE_ACCOUNTS")).strip()
+    if not raw:
+        return [row["key"] for row in linked]
+    wanted = {_sanitize_account_key(part) for part in raw.split(",") if part.strip()}
+    keys: list[str] = []
+    for row in linked:
+        candidates = {_sanitize_account_key(row["key"])}
+        email = str(row.get("email") or "").strip()
+        alias = str(row.get("alias") or "").strip()
+        if email:
+            candidates.add(_sanitize_account_key(email))
+        if alias:
+            candidates.add(_sanitize_account_key(alias))
+        if candidates & wanted:
+            keys.append(row["key"])
+    return keys
+
+
+def signed_in_email(account: str | None = None) -> str:
     """Email from stored OAuth tokens (refresh if needed)."""
-    tokens = load_tokens()
+    account = _resolve_account_key(account)
+    tokens = load_tokens(account)
     if not tokens:
         return ""
     email = str(tokens.get("email") or "").strip()
     if email:
         return email
     try:
-        get_access_token()
+        get_access_token(account=account)
     except RuntimeError:
         return ""
-    tokens = load_tokens() or {}
+    tokens = load_tokens(account) or {}
     return str(tokens.get("email") or "").strip()
 
 
@@ -313,10 +431,14 @@ def _merge_token_response(existing: dict[str, Any] | None, fresh: dict[str, Any]
     return out
 
 
-def get_access_token(*, force_refresh: bool = False) -> str:
-    tokens = load_tokens()
+def get_access_token(*, account: str | None = None, force_refresh: bool = False) -> str:
+    account = _resolve_account_key(account)
+    tokens = load_tokens(account)
     if not tokens:
-        raise RuntimeError("Not signed in — run: arka google login")
+        hint = "run: arka google login"
+        if account:
+            hint = f"run: arka google login --account {account} (or --add for another account)"
+        raise RuntimeError(f"Not signed in — {hint}")
 
     access = str(tokens.get("access_token") or "")
     expires_at = float(tokens.get("expires_at") or 0)
@@ -334,15 +456,22 @@ def get_access_token(*, force_refresh: bool = False) -> str:
             merged["email"] = resolve_user_email(merged)
         except RuntimeError:
             pass
-    save_tokens(merged)
+    save_tokens(merged, account=account)
     access = str(merged.get("access_token") or "")
     if not access:
         raise RuntimeError("Could not refresh Google token — run: arka google login")
     return access
 
 
-def api_request(url: str, *, method: str = "GET", body: dict | None = None) -> dict[str, Any]:
-    token = get_access_token()
+def api_request(
+    url: str,
+    *,
+    method: str = "GET",
+    body: dict | None = None,
+    account: str | None = None,
+) -> dict[str, Any]:
+    account = _resolve_account_key(account)
+    token = get_access_token(account=account)
     headers = {"Authorization": f"Bearer {token}"}
     data = None
     if body is not None:
@@ -354,7 +483,7 @@ def api_request(url: str, *, method: str = "GET", body: dict | None = None) -> d
             raw = resp.read().decode("utf-8", errors="replace")
     except urllib.error.HTTPError as exc:
         if exc.code == 401:
-            token = get_access_token(force_refresh=True)
+            token = get_access_token(account=account, force_refresh=True)
             headers["Authorization"] = f"Bearer {token}"
             req = urllib.request.Request(url, data=data, headers=headers, method=method)
             with urllib.request.urlopen(req, timeout=45) as resp:
@@ -368,7 +497,13 @@ def api_request(url: str, *, method: str = "GET", body: dict | None = None) -> d
     return parsed if isinstance(parsed, dict) else {"data": parsed}
 
 
-def run_login(*, open_browser: bool = True, timeout: int = 180) -> dict[str, Any]:
+def run_login(
+    *,
+    open_browser: bool = True,
+    timeout: int = 180,
+    account: str | None = None,
+    add_account: bool = False,
+) -> dict[str, Any]:
     state = secrets.token_urlsafe(16)
     auth_url = build_auth_url(state)
     result: dict[str, Any] = {"code": None, "error": None}
@@ -448,7 +583,17 @@ h1{{font-size:1.25rem}}</style></head><body><h1>{message}</h1></body></html>"""
     if email:
         merged["email"] = email
     merged["scopes"] = " ".join(SCOPES)
-    save_tokens(merged)
+
+    store_account: str | None = None
+    if add_account:
+        store_account = _sanitize_account_key(account or email or "account")
+        if account:
+            merged["account_alias"] = account.strip()
+    elif account:
+        store_account = _sanitize_account_key(account)
+        merged["account_alias"] = account.strip()
+
+    save_tokens(merged, account=store_account)
     return merged
 
 

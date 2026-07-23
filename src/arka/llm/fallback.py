@@ -268,6 +268,10 @@ class ExhaustionStore:
         with self._lock:
             return (provider.lower(), model_id) in self._exhausted
 
+    def list_exhausted(self) -> list[tuple[str, str]]:
+        with self._lock:
+            return sorted(self._exhausted)
+
     def reset(self) -> None:
         with self._lock:
             self._exhausted.clear()
@@ -2034,8 +2038,47 @@ class LlmFallbackEngine:
                                                 f"(after {len(tried) - 1} failure(s))",
                                                 file=sys.stderr,
                                             )
+                                        if len(tried) > 1:
+                                            try:
+                                                from arka.telemetry.logs import emit_log
+                                                from arka.telemetry.metrics import record_llm_failover
+
+                                                record_llm_failover(
+                                                    provider=provider,
+                                                    model=model_id,
+                                                    attempts=attempts,
+                                                    from_provider=tried[0].split("/")[0] if tried else "",
+                                                )
+                                                emit_log(
+                                                    f"llm failover ok {label}",
+                                                    level="info",
+                                                    attributes={
+                                                        "gen_ai.provider.name": provider,
+                                                        "gen_ai.request.model": model_id,
+                                                        "arka.llm.attempts": attempts,
+                                                        "arka.event": "llm.failover",
+                                                    },
+                                                )
+                                            except ImportError:
+                                                pass
                                         elif verbose:
                                             print(f"arka_llm: ok {label}", file=sys.stderr)
+                                        try:
+                                            from arka.llm.share import capture_llm_completion
+
+                                            capture_llm_completion(
+                                                output=text,
+                                                provider=provider,
+                                                model_id=model_id,
+                                                task=normalize_task(self.task),
+                                                skill=self.skill or "",
+                                                user_prompt=user,
+                                                run=run,
+                                                latency_ms=(time.perf_counter() - attempt_start) * 1000.0,
+                                                attempts=attempts,
+                                            )
+                                        except ImportError:
+                                            pass
                                         return CompletionResult(
                                             text=text,
                                             provider=provider,
@@ -2054,6 +2097,17 @@ class LlmFallbackEngine:
                                             if code is not None:
                                                 set_http_span_attributes(attempt_span, status_code=code)
                                         mark_error(attempt_span, err_text)
+                                    try:
+                                        from arka.telemetry.metrics import record_llm_attempt
+
+                                        record_llm_attempt(
+                                            provider=provider,
+                                            model=model_id,
+                                            success=False,
+                                            backend=_inference_backend(provider),
+                                        )
+                                    except ImportError:
+                                        pass
                                     if _is_retired_model_error(err_text):
                                         self.store.mark(provider, model_id, RuntimeError(f"retired model: {err_text}"))
                                         if verbose:
@@ -2117,6 +2171,17 @@ class LlmFallbackEngine:
                                         if code is not None:
                                             set_http_span_attributes(attempt_span, status_code=code)
                                     mark_error(attempt_span, err_text, exc=exc)
+                                try:
+                                    from arka.telemetry.metrics import record_llm_attempt
+
+                                    record_llm_attempt(
+                                        provider=provider,
+                                        model=model_id,
+                                        success=False,
+                                        backend=_inference_backend(provider),
+                                    )
+                                except ImportError:
+                                    pass
                                 if _is_retired_model_error(err_text):
                                     self.store.mark(provider, model_id, RuntimeError(f"retired model: {err_text}"))
                                     if verbose:
@@ -2247,6 +2312,19 @@ class LlmFallbackEngine:
                                 if text and not _looks_like_error(text):
                                     _LAST_MODEL = (provider, model_id)
                                     _LAST_ERROR = ""
+                                    try:
+                                        from arka.llm.share import capture_llm_completion
+
+                                        capture_llm_completion(
+                                            output=text,
+                                            provider=provider,
+                                            model_id=model_id,
+                                            task=normalize_task(self.task),
+                                            skill=self.skill or "",
+                                            user_prompt=user,
+                                        )
+                                    except ImportError:
+                                        pass
                                     return
                                 last_error = text[:300] if text else "empty stream response"
                                 if rotate_provider_key(provider, last_error):

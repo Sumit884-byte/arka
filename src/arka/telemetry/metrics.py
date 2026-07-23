@@ -18,6 +18,7 @@ from arka.telemetry._otlp import (
 _meter: Any | None = None
 _initialized = False
 _counters: dict[str, Any] = {}
+_histograms: dict[str, Any] = {}
 _reader: Any | None = None
 
 
@@ -26,7 +27,7 @@ def metrics_enabled() -> bool:
 
 
 def _setup() -> None:
-    global _meter, _initialized, _counters, _reader
+    global _meter, _initialized, _counters, _histograms, _reader
     if _initialized:
         return
     _initialized = True
@@ -87,6 +88,23 @@ def _setup() -> None:
     _counters["llm_tokens"] = _meter.create_counter(
         "arka.llm.tokens",
         description="LLM input/output token usage",
+    )
+    _counters["routing"] = _meter.create_counter(
+        "arka.routing.decisions",
+        description="NL routing decisions (symbolic, fish, llm)",
+    )
+    _counters["skill_dispatch"] = _meter.create_counter(
+        "arka.skill.dispatch",
+        description="Skill dispatch completions",
+    )
+    _counters["llm_failover"] = _meter.create_counter(
+        "arka.llm.failover",
+        description="LLM completions after one or more failed attempts",
+    )
+    _histograms["skill_duration"] = _meter.create_histogram(
+        "arka.skill.duration",
+        description="Skill dispatch wall time",
+        unit="ms",
     )
     atexit.register(shutdown_metrics)
 
@@ -211,6 +229,67 @@ def record_mcp_op(
     if tool_name:
         attrs["arka.mcp.tool_name"] = tool_name[:120]
     counter.add(1, attrs)
+
+
+def record_routing_decision(
+    *,
+    decision: str,
+    source: str = "",
+    latency_ms: float | None = None,
+) -> None:
+    _setup()
+    counter = _counters.get("routing")
+    if counter is None:
+        return
+    attrs: dict[str, str | float] = {
+        "arka.route.decision": decision[:40] or "unknown",
+        "arka.route.source": source[:40] or "unknown",
+    }
+    if latency_ms is not None:
+        attrs["arka.route.latency_ms"] = round(latency_ms, 2)
+    counter.add(1, attrs)
+
+
+def record_skill_dispatch(
+    *,
+    skill: str,
+    duration_ms: float,
+    exit_code: int,
+) -> None:
+    _setup()
+    attrs = {
+        "arka.skill.name": skill[:120] or "unknown",
+        "arka.skill.success": exit_code == 0,
+        "arka.skill.exit_code": exit_code,
+    }
+    counter = _counters.get("skill_dispatch")
+    if counter is not None:
+        counter.add(1, attrs)
+    hist = _histograms.get("skill_duration")
+    if hist is not None:
+        hist.record(max(0.0, duration_ms), attrs)
+
+
+def record_llm_failover(
+    *,
+    provider: str,
+    model: str = "",
+    attempts: int = 2,
+    from_provider: str = "",
+) -> None:
+    _setup()
+    counter = _counters.get("llm_failover")
+    if counter is None:
+        return
+    counter.add(
+        1,
+        {
+            "gen_ai.provider.name": provider[:40] or "unknown",
+            "gen_ai.request.model": model[:120] if model else "unknown",
+            "arka.llm.attempts": max(1, attempts),
+            "arka.llm.from_provider": from_provider[:40] if from_provider else "",
+        },
+    )
 
 
 def record_llm_tokens(

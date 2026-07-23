@@ -109,16 +109,25 @@ def cmd_status() -> int:
     id_key, sec_key = oauth.credentials_source()
     if id_key:
         print(f"OAuth credentials loaded from {id_key}" + (f" + {sec_key}" if sec_key else ""))
-    tokens = oauth.load_tokens()
-    if not tokens:
+    accounts = oauth.list_linked_accounts()
+    if not accounts:
         print("Not signed in.")
         print("Run: arka google login")
+        print("Add another account: arka google login --add")
         print(f"Redirect URI for Google Cloud: {oauth.redirect_uri()}")
         return 1
-    email = tokens.get("email") or "unknown"
-    print(f"Signed in as {email}")
+    print(f"Linked Google account(s): {len(accounts)}")
+    for row in accounts:
+        email = row.get("email") or "unknown"
+        alias = str(row.get("alias") or "").strip()
+        legacy = " (primary)" if row.get("legacy") else ""
+        alias_note = f" [{alias}]" if alias else ""
+        print(f"  • {email}{alias_note}{legacy}")
     print("Scopes: Gmail (read/compose/send), Calendar (read/events)")
-    print(f"Token file: {oauth._token_file()}")
+    print("Unified inbox: arka google inbox --summarize --unread --all")
+    print("Single email: arka google summarize --latest")
+    print("Auto-draft replies: arka google auto-draft enable")
+    print(f"Token dir: {oauth._cache()}")
     return 0
 
 
@@ -126,8 +135,15 @@ def cmd_login(args: argparse.Namespace) -> int:
     if not oauth.credentials_configured():
         _missing_credentials_message(open_console=not args.no_browser)
         return 1
+    account = str(getattr(args, "account", None) or "").strip() or None
+    add_account = bool(getattr(args, "add", False))
     try:
-        merged = oauth.run_login(open_browser=not args.no_browser, timeout=args.timeout)
+        merged = oauth.run_login(
+            open_browser=not args.no_browser,
+            timeout=args.timeout,
+            account=account,
+            add_account=add_account or bool(account),
+        )
     except RuntimeError as exc:
         err = str(exc)
         print(f"Sign-in failed: {err}", file=sys.stderr)
@@ -160,14 +176,27 @@ def cmd_login(args: argparse.Namespace) -> int:
         return 1
     email = merged.get("email") or "your Google account"
     print(f"✓ Signed in as {email}")
+    if add_account or account:
+        print("Add another account anytime: arka google login --add")
     print("Try: arka google gmail --unread")
+    print("     arka google inbox --summarize --unread --all")
     print("     arka google calendar --today")
     return 0
 
 
-def cmd_logout() -> int:
-    oauth.clear_tokens()
-    print("Signed out of Google (local tokens removed).")
+def cmd_logout(args: argparse.Namespace) -> int:
+    account = str(getattr(args, "account", None) or "").strip() or None
+    if getattr(args, "all", False):
+        oauth.clear_all_tokens()
+        print("Signed out of all Google accounts (local tokens removed).")
+        return 0
+    if account:
+        oauth.clear_tokens(account)
+        print(f"Signed out of Google account {account} (local tokens removed).")
+        return 0
+    oauth.clear_tokens(None)
+    print("Signed out of Google (primary local tokens removed).")
+    print("Other linked accounts remain — use: arka google logout --all")
     return 0
 
 
@@ -400,6 +429,9 @@ def _format_gmail_for_summary(row: dict[str, Any]) -> str:
 
 _GMAIL_DIGEST_SECTIONS: tuple[tuple[str, str], ...] = (
     ("overview", "Overview"),
+    ("summary", "Summary"),
+    ("key details", "Key details"),
+    ("suggested reply", "Suggested reply"),
     ("worth your attention", "Worth your attention"),
     ("needs action", "Worth your attention"),
     ("attention", "Worth your attention"),
@@ -642,6 +674,7 @@ _DRAFT_TRIGGER = re.compile(
     r"(?i)(?:"
     r"\b(?:draft|compose|write)\s+(?:an?\s+)?email\b"
     r"|\bemail\s+(?:to|for)\s+"
+    r"|\bemail\s+[a-z][\w-]{0,31}\s+(?:about|regarding)\b"
     r"|\bsend\s+(?:an?\s+)?(?:email\s+)?to\s+"
     r")"
 )
@@ -694,17 +727,43 @@ def _draft_intent_template(about: str, *, sender_email: str = "") -> tuple[str, 
     return None
 
 
+def _draft_recipient_token(t: str) -> tuple[str, str | None]:
+    """Return ``(to_email, contact_name)`` for a draft NL request."""
+    emails = _EMAIL_ADDR.findall(t)
+    if emails:
+        to_addr = emails[0]
+        contact_name: str | None = None
+        try:
+            from arka.integrations.email_contacts import extract_contact_name_from_text, resolve_contact
+
+            alias = extract_contact_name_from_text(t)
+            if alias and resolve_contact(alias) == to_addr:
+                contact_name = alias
+        except ImportError:
+            pass
+        return to_addr, contact_name
+
+    try:
+        from arka.integrations.email_contacts import resolve_recipient_from_text
+
+        resolved = resolve_recipient_from_text(t)
+        if resolved:
+            return resolved
+    except ImportError:
+        pass
+    return "", None
+
+
 def parse_gmail_draft_request(text: str) -> dict[str, str] | None:
-    """Parse NL like ``draft an email to a@b.com about …``."""
+    """Parse NL like ``draft an email to a@b.com about …`` or ``send to ceo …``."""
     t = text.strip()
     if not t or not _DRAFT_TRIGGER.search(t):
         return None
     if re.search(r"(?i)\b(?:unread|inbox|summarize|check\s+(?:my\s+)?(?:mail|email|gmail))\b", t):
         return None
-    emails = _EMAIL_ADDR.findall(t)
-    if not emails:
+    to_addr, contact_name = _draft_recipient_token(t)
+    if not to_addr:
         return None
-    to_addr = emails[0]
     about = ""
     for pat in (
         r"(?i)\b(?:about|regarding|re:|on the topic of)\s+(.+)",
@@ -714,6 +773,17 @@ def parse_gmail_draft_request(text: str) -> dict[str, str] | None:
         if match:
             about = match.group(1).strip()
             break
+    if not about and contact_name:
+        for pat in (
+            r"(?i)\b(?:to|for)\s+" + re.escape(contact_name) + r"\s+(?:about|regarding)\s+(.+)",
+            r"(?i)\b(?:to|for)\s+" + re.escape(contact_name) + r"\s+(.+)",
+            r"(?i)\bemail\s+" + re.escape(contact_name) + r"\s+(?:about|regarding)\s+(.+)",
+            r"(?i)\bsend\s+(?:an?\s+)?(?:email\s+)?to\s+" + re.escape(contact_name) + r"\s+(.+)",
+        ):
+            match = re.search(pat, t)
+            if match:
+                about = match.group(1).strip()
+                break
     if not about:
         for pat in (
             r"(?i)\b(?:to|for)\s+" + re.escape(to_addr) + r"\s+(.+)",
@@ -725,10 +795,19 @@ def parse_gmail_draft_request(text: str) -> dict[str, str] | None:
     if not about:
         about = _DRAFT_TRIGGER.sub("", t).strip()
         about = re.sub(r"(?i)\bto\s+" + re.escape(to_addr) + r"\b", "", about).strip()
+        if contact_name:
+            about = re.sub(
+                r"(?i)\b(?:to|for)\s+" + re.escape(contact_name) + r"\b",
+                "",
+                about,
+            ).strip()
     about = about.strip(" .,-")
     if len(about) < 3:
         return None
-    return {"to": to_addr, "about": about}
+    result = {"to": to_addr, "about": about}
+    if contact_name:
+        result["contact_name"] = contact_name
+    return result
 
 
 def build_gmail_draft_argv_from_nl(text: str) -> list[str]:
@@ -770,6 +849,13 @@ def _parse_compose_output(text: str) -> tuple[str, str]:
 
 def compose_draft_email(*, to: str, about: str, sender_email: str = "") -> tuple[str, str, str]:
     about = _normalize_draft_about(about)
+    history_context = ""
+    try:
+        from arka.integrations.email_contacts import compose_history_context
+
+        history_context = compose_history_context(to=to, about=about)
+    except ImportError:
+        pass
     templated = _draft_intent_template(about, sender_email=sender_email)
     if templated:
         return templated[0], templated[1], "built-in template (no LLM)"
@@ -786,11 +872,18 @@ def compose_draft_email(*, to: str, about: str, sender_email: str = "") -> tuple
         "Rules: no markdown, no essay, no text after the body. Under 200 words unless needed. "
         "Do not change or ignore the user's topic."
     )
+    if history_context:
+        system += (
+            "\nIf prior drafts to this recipient are listed below, do not repeat the same wording "
+            "or send an identical message — add new detail or a clearly different angle."
+        )
     user = (
         f"To: {to}\n"
         f"From: {sender}\n"
         f"Write an email about this topic (subject and body must match it): {about}"
     )
+    if history_context:
+        user += f"\n\n{history_context}"
     raw = llm_complete(system, user, temperature=0.3, task="summarize").strip()
     subject, body = _parse_compose_output(raw)
     if not subject:
@@ -850,22 +943,58 @@ def cmd_gmail_draft(args: argparse.Namespace) -> int:
     subject = str(getattr(args, "subject", None) or "").strip()
     body = str(getattr(args, "body", None) or "").strip()
     nl_text = " ".join(getattr(args, "draft_text", []) or []).strip()
+    contact_name = ""
 
     if not to and nl_text:
         parsed = parse_gmail_draft_request(nl_text)
         if parsed:
             to = parsed["to"]
             about = parsed["about"]
+            contact_name = str(parsed.get("contact_name") or "")
     if not to:
+        unknown = ""
+        try:
+            from arka.integrations.email_contacts import extract_contact_name_from_text
+
+            alias = extract_contact_name_from_text(nl_text)
+            if alias:
+                unknown = (
+                    f"\nUnknown contact {alias!r}. Save it with:\n"
+                    f"  arka email_contacts add {alias} {alias}@example.com\n"
+                    f"Or: remember {alias} email is {alias}@example.com"
+                )
+        except ImportError:
+            pass
         print(
             "Usage: arka google gmail --draft --to EMAIL --about \"topic\"\n"
-            "       arka google gmail --draft \"email to you@example.com about …\"",
+            "       arka google gmail --draft \"email to you@example.com about …\"\n"
+            "       arka google gmail --draft \"send to ceo about project update\""
+            + unknown,
             file=sys.stderr,
         )
         return 1
     if not about and not body:
         print("Provide --about or --body for the draft content.", file=sys.stderr)
         return 1
+
+    if not contact_name:
+        try:
+            from arka.integrations.email_contacts import extract_contact_name_from_text, resolve_contact
+
+            alias = extract_contact_name_from_text(nl_text) or ""
+            if alias and resolve_contact(alias) == to:
+                contact_name = alias
+        except ImportError:
+            pass
+
+    try:
+        from arka.integrations.email_contacts import find_similar_draft, format_duplicate_warning
+
+        similar = find_similar_draft(to=to, about=about)
+        if similar:
+            print(format_duplicate_warning(similar))
+    except ImportError:
+        pass
 
     email = oauth.signed_in_email() or ""
     composer = ""
@@ -877,6 +1006,8 @@ def cmd_gmail_draft(args: argparse.Namespace) -> int:
 
     if getattr(args, "dry_run", False):
         print(f"To: {to}")
+        if contact_name:
+            print(f"Contact: {contact_name}")
         print(f"Subject: {subject}")
         if composer:
             print(f"Composer: {composer}")
@@ -885,8 +1016,24 @@ def cmd_gmail_draft(args: argparse.Namespace) -> int:
         return 0
 
     draft_id = create_gmail_draft(to=to, subject=subject, body=body, sender=email)
+    try:
+        from arka.integrations.email_contacts import record_draft_history
+
+        record_draft_history(
+            to=to,
+            subject=subject,
+            about=about,
+            body=body,
+            draft_id=draft_id,
+            account=email,
+            contact_name=contact_name or None,
+        )
+    except ImportError:
+        pass
     print(f"✓ Gmail draft saved (id: {draft_id})")
     print(f"  To: {to}")
+    if contact_name:
+        print(f"  Contact: {contact_name}")
     print(f"  Subject: {subject}")
     if composer:
         print(f"  Composer: {composer}")
@@ -1392,9 +1539,20 @@ def main(argv: list[str] | None = None) -> int:
     p_login = sub.add_parser("login", help="Sign in with Google (opens browser URL)")
     p_login.add_argument("--no-browser", action="store_true", help="Print URL only; do not open browser")
     p_login.add_argument("--timeout", type=int, default=180, help="Seconds to wait for callback")
+    p_login.add_argument(
+        "--add",
+        action="store_true",
+        help="Link an additional Google account (stored separately from primary login)",
+    )
+    p_login.add_argument(
+        "--account",
+        help="Optional account alias for --add (e.g. student, personal, work)",
+    )
 
     sub.add_parser("status", help="Show sign-in status")
-    sub.add_parser("logout", help="Remove stored Google tokens")
+    p_logout = sub.add_parser("logout", help="Remove stored Google tokens")
+    p_logout.add_argument("--account", help="Remove one linked account by alias/email key")
+    p_logout.add_argument("--all", action="store_true", help="Remove all linked Google tokens")
 
     p_gmail = sub.add_parser("gmail", help="List Gmail messages")
     p_gmail.add_argument("--unread", action="store_true", help="Unread only")
@@ -1443,9 +1601,65 @@ def main(argv: list[str] | None = None) -> int:
         help="Natural-language draft request when using --draft without --to/--about",
     )
 
+    p_inbox = sub.add_parser(
+        "inbox",
+        aliases=["unified-inbox", "unified_inbox"],
+        help="Unified unread inbox across all linked Google accounts",
+    )
+    p_inbox.add_argument("--unread", action="store_true", help="Unread only")
+    p_inbox.add_argument("--today", action="store_true", help="From the last 24 hours")
+    p_inbox.add_argument("--days", type=int, default=0, help="Messages from the last N calendar days")
+    p_inbox.add_argument("--hours", type=int, default=0, help="Messages from the last N hours")
+    p_inbox.add_argument(
+        "--rolling",
+        action="store_true",
+        help="Use rolling newer_than window instead of calendar days",
+    )
+    p_inbox.add_argument("-q", "--query", help="Extra Gmail search query")
+    p_inbox.add_argument(
+        "--all",
+        action="store_true",
+        help="Fetch all matching messages (paginated, up to GMAIL_MAX)",
+    )
+    p_inbox.add_argument("-n", "--limit", type=int, default=10, help="Max messages per account")
+    p_inbox.add_argument("--snippet", action="store_true", help="Show snippet preview")
+    p_inbox.add_argument(
+        "--summarize",
+        action="store_true",
+        help="Summarize matching emails with AI across all linked accounts",
+    )
+    p_inbox.add_argument(
+        "--focus",
+        help="Focus for --summarize (default: unified inbox summary)",
+    )
+
     p_parse_draft = sub.add_parser("parse-draft", help="Parse NL → gmail --draft args (internal)")
     p_parse_draft.add_argument("text", nargs="+")
     p_parse_draft.set_defaults(func=cmd_parse_draft)
+
+    p_parse_email = sub.add_parser(
+        "parse-email-summary",
+        help="Parse NL → summarize args (internal)",
+    )
+    p_parse_email.add_argument("text", nargs="+")
+
+    p_auto = sub.add_parser(
+        "auto-draft",
+        aliases=["auto_draft"],
+        help="Auto-draft Gmail replies when new inbound mail arrives",
+    )
+    p_auto.add_argument("auto_args", nargs=argparse.REMAINDER)
+
+    p_sum = sub.add_parser("summarize", help="Summarize a single Gmail message with AI")
+    p_sum.add_argument("message_id", nargs="?", help="Gmail message ID")
+    p_sum.add_argument("--latest", action="store_true", help="Most recent inbox message")
+    p_sum.add_argument("--latest-unread", action="store_true", help="Most recent unread message")
+    p_sum.add_argument("--thread", help="Gmail thread ID")
+    p_sum.add_argument("--from", dest="sender", help="Sender name or email")
+    p_sum.add_argument("--about", help="Subject/body search terms")
+    p_sum.add_argument("-q", "--query", help="Extra Gmail search query")
+    p_sum.add_argument("--account", help="Linked account alias or email key")
+    p_sum.add_argument("--focus", help="Optional focus for the summary")
 
     p_cal = sub.add_parser("calendar", aliases=["cal"], help="List calendar events")
     p_cal.add_argument("--today", action="store_true", help="Events today (default)")
@@ -1480,6 +1694,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "parse-draft":
         return cmd_parse_draft(args)
+    if args.cmd == "parse-email-summary":
+        from arka.integrations.gmail_email_summarize import cmd_parse_email_summary
+
+        return cmd_parse_email_summary(args)
 
     if args.cmd == "setup":
         _setup_instructions(open_console=not getattr(args, "no_browser", False))
@@ -1489,10 +1707,31 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "login":
         return cmd_login(args)
     if args.cmd == "logout":
-        return cmd_logout()
+        return cmd_logout(args)
+    if args.cmd in ("inbox", "unified-inbox", "unified_inbox"):
+        from arka.integrations.gmail_unified import cmd_unified_inbox
+
+        try:
+            return cmd_unified_inbox(args)
+        except RuntimeError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+    if args.cmd in ("auto-draft", "auto_draft"):
+        from arka.integrations.gmail_auto_draft import main as auto_draft_main
+
+        auto_args = [a for a in (getattr(args, "auto_args", None) or []) if a != "--"]
+        return auto_draft_main(auto_args or None)
     if args.cmd == "gmail":
         try:
             return cmd_gmail(args)
+        except RuntimeError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+    if args.cmd == "summarize":
+        from arka.integrations.gmail_email_summarize import cmd_gmail_email_summarize
+
+        try:
+            return cmd_gmail_email_summarize(args)
         except RuntimeError as exc:
             print(str(exc), file=sys.stderr)
             return 1

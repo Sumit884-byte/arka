@@ -1,0 +1,16 @@
+{
+  "name": "component_screenshots",
+  "description": "Capture full-page and per-component screenshots from a URL or local HTML page",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "screenshot all components",
+    "capture component screenshots",
+    "photograph ui components",
+    "screenshot every component",
+    "document ui components"
+  ],
+  "permissions": ["read", "write"]
+}

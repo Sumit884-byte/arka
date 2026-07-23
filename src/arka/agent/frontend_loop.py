@@ -24,7 +24,22 @@ FRONTEND_REVIEW_PROMPT = (
     "Be strict about hierarchy, spacing, typography, alignment, contrast, visual balance, "
     "spacing consistency, and obvious layout bugs. If the UI is ready to ship, verdict must be 'good'."
     " Recommend layout changes only; preserve the existing button order and interaction order exactly."
+    " Flag user-visible copy that exposes tech stack, internal tools, profit/non-profit status, or ops details."
 )
+
+
+def _review_prompt(prompt: str = FRONTEND_REVIEW_PROMPT) -> str:
+    try:
+        from arka.core.design_guides import read_guides
+
+        guide = read_guides(max_chars=1200, coding=True)
+        if guide:
+            return (
+                f"{prompt}\n\nApply these UI design guides when judging layout, tokens, and copy:\n{guide}"
+            )
+    except ImportError:
+        pass
+    return prompt
 
 
 def _normalize(text: str) -> str:
@@ -135,7 +150,7 @@ def review_frontend(source: str, *, prompt: str = FRONTEND_REVIEW_PROMPT) -> Rev
     last_error: Exception | None = None
     for attempt in range(2):
         try:
-            text = describe_source(source, prompt)
+            text = describe_source(source, _review_prompt(prompt))
             break
         except Exception as exc:
             last_error = exc

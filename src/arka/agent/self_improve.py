@@ -14,11 +14,13 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-DEFAULT_MAX_ROUNDS = int(os.environ.get("SELF_IMPROVE_MAX_ROUNDS", "3"))
-DEFAULT_MAX_STEPS = int(os.environ.get("SELF_IMPROVE_MAX_STEPS", "15"))
-CONTEXT_LIMIT = int(os.environ.get("SELF_IMPROVE_CONTEXT_LIMIT", "10000"))
-DIAG_TIMEOUT = int(os.environ.get("SELF_IMPROVE_DIAG_TIMEOUT", "120"))
-GIT_LOG_LIMIT = int(os.environ.get("SELF_IMPROVE_GIT_LOG_LIMIT", "15"))
+from arka.env import env_int
+
+DEFAULT_MAX_ROUNDS = env_int("SELF_IMPROVE_MAX_ROUNDS", 3)
+DEFAULT_MAX_STEPS = env_int("SELF_IMPROVE_MAX_STEPS", 15)
+CONTEXT_LIMIT = env_int("SELF_IMPROVE_CONTEXT_LIMIT", 10000)
+DIAG_TIMEOUT = env_int("SELF_IMPROVE_DIAG_TIMEOUT", 120)
+GIT_LOG_LIMIT = env_int("SELF_IMPROVE_GIT_LOG_LIMIT", 15)
 MEMORY_MAX_ATTEMPTS = 100
 
 

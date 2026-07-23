@@ -55,7 +55,17 @@ def platform_label() -> str:
 
 
 def docker_cli_path() -> str | None:
-    return shutil.which("docker")
+    found = shutil.which("docker")
+    if found:
+        return found
+    for candidate in (
+        Path("/usr/local/bin/docker"),
+        Path("/Applications/Docker.app/Contents/Resources/bin/docker"),
+        Path.home() / ".docker" / "bin" / "docker",
+    ):
+        if candidate.is_file():
+            return str(candidate)
+    return None
 
 
 def docker_daemon_running(*, timeout: float = 30.0) -> bool:
@@ -321,11 +331,11 @@ def run_foundry(
     if gauge_only or not cast:
         cmd = [ctl, "gauge", "-f", str(casting)]
         print(f"→ {' '.join(cmd)}", file=sys.stderr)
-        return subprocess.run(cmd).returncode
+        return subprocess.run(cmd, cwd=str(casting.resolve().parent)).returncode
 
     cmd = [ctl, "cast", "-f", str(casting)]
     print(f"→ {' '.join(cmd)}", file=sys.stderr)
-    return subprocess.run(cmd).returncode
+    return subprocess.run(cmd, cwd=str(casting.resolve().parent)).returncode
 
 
 def signoz_ui_setup_status(ui_url: str | None = None) -> str:
@@ -406,4 +416,15 @@ def cmd_setup(args: argparse.Namespace) -> int:
         print("Skipped cast. Run later: foundryctl cast -f casting.yaml", file=sys.stderr)
         return 0
 
-    return run_foundry(casting, cast=True)
+    rc = run_foundry(casting, cast=True)
+    if rc == 0 and bool(getattr(args, "autostart", False)):
+        from arka.telemetry.signoz_autostart import install_autostart, signoz_autostart_enabled
+
+        if signoz_autostart_enabled():
+            install_autostart(casting=casting)
+        else:
+            print(
+                "  skipped autostart: SIGNOZ_AUTOSTART is disabled in .env",
+                file=sys.stderr,
+            )
+    return rc

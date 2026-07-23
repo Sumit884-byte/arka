@@ -256,6 +256,40 @@ def _extract_path_candidate(text: str) -> str | None:
 
 
 _NON_PATH_WORDS = frozenset({"this", "that", "the", "my", "a", "an", "current"})
+_PROVIDER_PATH_BLOCKLIST = frozenset(
+    {
+        "claude",
+        "anthropic",
+        "openai",
+        "chatgpt",
+        "gpt",
+        "codex",
+        "gemini",
+        "google",
+        "groq",
+        "mistral",
+        "meta",
+        "llama",
+        "ollama",
+        "openrouter",
+        "cohere",
+        "deepseek",
+        "xai",
+        "grok",
+        "perplexity",
+        "together",
+        "fireworks",
+        "bedrock",
+    }
+)
+_LLM_MODEL_QUERY_RE = re.compile(
+    r"(?i)\b(?:models?|llms?|claude|chatgpt|codex|gemini|groq|anthropic|openai)\b"
+    r".*\b(?:free|no[- ]cost|zero[- ]cost|use|access|available|tier|credits?)\b"
+    r"|"
+    r"\b(?:free|no[- ]cost|zero[- ]cost)\b.*\b(?:models?|llms?)\b"
+    r"|"
+    r"\b(?:which|what|list|show)\s+(?:\w+\s+){0,4}models?\b"
+)
 _TZ_PATH_BLOCKLIST = frozenset(
     {
         "utc",
@@ -298,7 +332,7 @@ def extract_directory_path(text: str) -> str | None:
             if re.search(rf"\.(?:{_DATA_EXT})$", candidate, re.I):
                 continue
             base = candidate.rstrip("/").split("/")[-1].lower()
-            if base in _NON_PATH_WORDS or base in _TZ_PATH_BLOCKLIST:
+            if base in _NON_PATH_WORDS or base in _TZ_PATH_BLOCKLIST or base in _PROVIDER_PATH_BLOCKLIST:
                 continue
             return candidate.rstrip("/")
     return None
@@ -803,6 +837,8 @@ def parse_request(text: str) -> tuple[str | None, str, list[str] | None]:
 def wants_data_ask(text: str) -> bool:
     clean = (text or "").strip()
     if not clean:
+        return False
+    if _LLM_MODEL_QUERY_RE.search(clean):
         return False
     try:
         from arka.integrations.timezone_convert import wants_timezone_convert

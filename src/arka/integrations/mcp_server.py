@@ -22,6 +22,17 @@ ARKA_MCP_SERVER_KEY = "arka"
 
 ToolHandler = Callable[[dict[str, Any]], str]
 
+
+def _mcp_int(value: Any, default: int) -> int:
+    """Parse MCP tool integer args; Cursor may send \"\" for optional number fields."""
+    if value is None or value == "":
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 MCP_DEFAULT_DISABLED_TOOLS = {
     "arka_spotify",
 }
@@ -170,7 +181,7 @@ def _handle_arka_recall(arguments: dict[str, Any]) -> str:
     goal = str(arguments.get("goal") or arguments.get("query") or "").strip()
     if not goal:
         raise ValueError("goal is required")
-    limit_chars = int(arguments.get("limit_chars") or 3500)
+    limit_chars = _mcp_int(arguments.get("limit_chars"), 3500)
     try:
         from arka.core.unified_memory import recall
 
@@ -248,7 +259,7 @@ def _handle_arka_route(arguments: dict[str, Any]) -> str:
 
 
 def _handle_arka_repo_map(arguments: dict[str, Any]) -> str:
-    depth = int(arguments.get("depth") or 2)
+    depth = _mcp_int(arguments.get("depth"), 2)
     include_symbols = bool(arguments.get("symbols", True))
     path_arg = str(arguments.get("path") or "").strip()
     try:
@@ -636,6 +647,46 @@ def _handle_arka_project_rules(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"project_rules unavailable: {exc}") from exc
 
 
+def _resolve_markdown_path(path: str) -> str:
+    """Resolve bundled guide aliases (e.g. frontend-content-guide, google-design) for MCP reads."""
+    raw = path.strip().strip("'\"")
+    try:
+        from arka.core.design_guides import resolve_markdown_alias
+
+        resolved = resolve_markdown_alias(raw)
+        if resolved:
+            return resolved
+    except ImportError:
+        pass
+    return raw
+
+
+def _handle_arka_markdown(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "context").strip().lower()
+    path = _resolve_markdown_path(str(arguments.get("path") or arguments.get("file") or ""))
+    if not path:
+        raise ValueError("path is required")
+    try:
+        from arka.agent.md_doc import ask_markdown, context_block, read_markdown
+
+        if action == "read":
+            return read_markdown(path, max_chars=int(arguments.get("max_chars") or 120_000))
+        if action == "context":
+            limit_chars = int(arguments.get("limit_chars") or arguments.get("max_chars") or 8000)
+            text = context_block(path, limit_chars=max(200, limit_chars))
+            return text or "(empty markdown file)"
+        if action == "ask":
+            question = str(arguments.get("question") or arguments.get("query") or "").strip()
+            if not question:
+                raise ValueError("question is required when action=ask")
+            return ask_markdown(path, question)
+        raise ValueError("action must be read, context, or ask")
+    except (FileNotFoundError, ValueError) as exc:
+        raise ValueError(str(exc)) from exc
+    except ImportError as exc:
+        raise RuntimeError(f"md_doc unavailable: {exc}") from exc
+
+
 def _handle_arka_view_data(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "preview").strip().lower()
     try:
@@ -657,6 +708,62 @@ def _handle_arka_view_data(arguments: dict[str, Any]) -> str:
         raise ValueError(str(exc)) from exc
     except ImportError as exc:
         raise RuntimeError(f"view_data unavailable: {exc}") from exc
+
+
+def _handle_arka_share(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "last").strip().lower()
+    fmt = str(arguments.get("format") or "markdown").strip().lower()
+    if fmt not in {"markdown", "json"}:
+        raise ValueError("format must be markdown or json")
+    copy = bool(arguments.get("copy", False))
+    try:
+        from arka.llm.share import (
+            build_share_bundle,
+            copy_share_to_clipboard,
+            format_llm_share_bundle,
+            record_from_overrides,
+        )
+
+        overrides = {
+            "output": arguments.get("output"),
+            "provider": arguments.get("provider"),
+            "model_id": arguments.get("model"),
+            "task": arguments.get("task"),
+            "skill": arguments.get("skill"),
+            "latency_ms": arguments.get("latency_ms"),
+            "prompt_tokens": arguments.get("prompt_tokens"),
+            "completion_tokens": arguments.get("completion_tokens"),
+        }
+        overrides = {k: v for k, v in overrides.items() if v is not None}
+
+        if action == "last":
+            record = record_from_overrides(**overrides)
+        elif action == "format":
+            output = str(arguments.get("output") or "").strip()
+            if not output:
+                raise ValueError("output is required when action=format")
+            format_overrides = {k: v for k, v in overrides.items() if k != "output"}
+            record = record_from_overrides(output=output, **format_overrides)
+        else:
+            raise ValueError("action must be last or format")
+
+        if copy:
+            ok, message = copy_share_to_clipboard(record, fmt=fmt)  # type: ignore[arg-type]
+            if not ok:
+                raise RuntimeError(message)
+            payload = {
+                "copied": True,
+                "format": fmt,
+                "bundle": build_share_bundle(record),
+                "text": format_llm_share_bundle(record, fmt=fmt),
+            }
+            return json.dumps(payload, indent=2)
+
+        if fmt == "json":
+            return json.dumps(build_share_bundle(record), indent=2)
+        return format_llm_share_bundle(record, fmt=fmt)
+    except ImportError as exc:
+        raise RuntimeError(f"llm share unavailable: {exc}") from exc
 
 
 def _handle_arka_clipboard(arguments: dict[str, Any]) -> str:
@@ -1054,6 +1161,25 @@ def _handle_arka_github(arguments: dict[str, Any]) -> str:
                 or ""
             ).strip()
             return json.dumps(gh_mod.resolve_repo_payload(query), indent=2)
+        if action == "resume":
+            from arka.agent import github_resume as resume_mod
+
+            username = str(
+                arguments.get("username")
+                or arguments.get("user")
+                or arguments.get("query")
+                or ""
+            ).strip() or None
+            output = str(arguments.get("output") or "").strip() or None
+            style = str(arguments.get("style") or "modern").strip().lower()
+            write_markdown = bool(arguments.get("markdown") or arguments.get("write_markdown"))
+            payload = resume_mod.resume_payload(
+                username,
+                output=Path(output).expanduser() if output else None,
+                style=style,
+                write_markdown=write_markdown,
+            )
+            return json.dumps(payload, indent=2)
         if action == "activity":
             owner = str(arguments.get("owner") or "").strip()
             repo = str(arguments.get("repo") or "").strip()
@@ -1072,12 +1198,12 @@ def _handle_arka_github(arguments: dict[str, Any]) -> str:
                     owner, _, repo = owner.partition("/")
             if not owner or not repo:
                 raise ValueError("owner and repo are required (or provide query)")
-            days = int(arguments.get("days") or 7)
+            days = _mcp_int(arguments.get("days"), 7)
             return json.dumps(
                 gh_mod.activity_payload(owner, repo, days=days),
                 indent=2,
             )
-        raise ValueError("action must be activity or resolve")
+        raise ValueError("action must be activity, resolve, or resume")
     except ValueError:
         raise
     except ImportError as exc:
@@ -1268,6 +1394,22 @@ def _handle_arka_agent_hub(arguments: dict[str, Any]) -> str:
             return json.dumps(agent_hub.detect_agents(), indent=2)
         if action == "doctor":
             return json.dumps(agent_hub.doctor(), indent=2)
+        if action == "memory_sources":
+            return json.dumps(agent_hub.list_memory_sources(), indent=2)
+        if action == "import_memory":
+            path = str(arguments.get("path") or "").strip()
+            source = str(
+                arguments.get("source") or arguments.get("agent") or arguments.get("ide") or ""
+            ).strip()
+            all_sources = bool(arguments.get("all") or arguments.get("all_sources"))
+            if path:
+                return json.dumps(agent_hub.import_memory(Path(path)), indent=2)
+            if source or all_sources:
+                return json.dumps(
+                    agent_hub.import_ide_memory(source=source or None, all_sources=all_sources),
+                    indent=2,
+                )
+            raise ValueError("import_memory requires path, source/ide/agent, or all=true")
         if action in ("list", "agents"):
             return json.dumps(
                 [
@@ -1280,7 +1422,9 @@ def _handle_arka_agent_hub(arguments: dict[str, Any]) -> str:
                 ],
                 indent=2,
             )
-        raise ValueError("action must be status, adapters, detect, doctor, or list")
+        raise ValueError(
+            "action must be status, adapters, detect, doctor, list, memory_sources, or import_memory"
+        )
     except ImportError as exc:
         raise RuntimeError(f"agent_hub unavailable: {exc}") from exc
 
@@ -1809,6 +1953,43 @@ def _build_tools() -> list[ArkaMcpTool]:
             handler=_handle_arka_webhook,
         ),
         ArkaMcpTool(
+            name="arka_markdown",
+            description=(
+                "Read or ask about any local .md/.mdx file without document ingest. "
+                "Alias paths `frontend-content-guide` and `google-design` / `design.md` load "
+                "Arka's bundled UI guides (also auto-injected for frontend/UI goals via memory_context)."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["read", "context", "ask"],
+                        "default": "context",
+                        "description": "read: full text; context: agent block; ask: LLM Q&A over file",
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": (
+                            "Path to a .md, .mdx, or .markdown file, or alias "
+                            "frontend-content-guide / google-design / design.md"
+                        ),
+                    },
+                    "question": {
+                        "type": "string",
+                        "description": "Required when action=ask",
+                    },
+                    "limit_chars": {
+                        "type": "integer",
+                        "description": "Max chars for read/context",
+                        "default": 8000,
+                    },
+                },
+                "required": ["path"],
+            },
+            handler=_handle_arka_markdown,
+        ),
+        ArkaMcpTool(
             name="arka_view_data",
             description="Preview CSV/TSV tables as plain text (csvlook-style) for agents.",
             input_schema={
@@ -1872,6 +2053,46 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_clipboard,
+        ),
+        ArkaMcpTool(
+            name="arka_share",
+            description=(
+                "Share the last LLM response in one bundle with model, provider, tokens, "
+                "latency, task/skill, and output text (markdown or JSON)."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["last", "format"],
+                        "default": "last",
+                        "description": "Share last completion or format explicit output",
+                    },
+                    "output": {
+                        "type": "string",
+                        "description": "Response text (required for action=format)",
+                    },
+                    "provider": {"type": "string", "description": "Override provider slug"},
+                    "model": {"type": "string", "description": "Override model id"},
+                    "task": {"type": "string", "description": "Override task profile"},
+                    "skill": {"type": "string", "description": "Override skill name"},
+                    "latency_ms": {"type": "number", "description": "Override latency in ms"},
+                    "prompt_tokens": {"type": "integer"},
+                    "completion_tokens": {"type": "integer"},
+                    "format": {
+                        "type": "string",
+                        "enum": ["markdown", "json"],
+                        "default": "markdown",
+                    },
+                    "copy": {
+                        "type": "boolean",
+                        "description": "Copy formatted bundle to system clipboard",
+                        "default": False,
+                    },
+                },
+            },
+            handler=_handle_arka_share,
         ),
         ArkaMcpTool(
             name="arka_remind",
@@ -2298,22 +2519,45 @@ def _build_tools() -> list[ArkaMcpTool]:
             name="arka_github",
             description=(
                 "GitHub repo activity — resolve owner/repo from text or fetch recent "
-                "commits and modified files (local git or gh API)."
+                "commits and modified files (local git or gh API). "
+                "Use action=resume to build a resume PDF from a GitHub profile."
             ),
             input_schema={
                 "type": "object",
                 "properties": {
                     "action": {
                         "type": "string",
-                        "enum": ["activity", "resolve"],
+                        "enum": ["activity", "resolve", "resume"],
                         "default": "activity",
-                        "description": "activity: commits/files; resolve: parse owner/repo",
+                        "description": "activity: commits/files; resolve: parse owner/repo; resume: profile PDF",
                     },
                     "owner": {"type": "string", "description": "GitHub owner/org"},
                     "repo": {"type": "string", "description": "Repository name or owner/repo"},
                     "query": {
                         "type": "string",
-                        "description": "Free text containing a GitHub repo reference",
+                        "description": "Free text containing a GitHub repo reference or username",
+                    },
+                    "username": {
+                        "type": "string",
+                        "description": "GitHub username for action=resume",
+                    },
+                    "user": {
+                        "type": "string",
+                        "description": "Alias for username (resume action)",
+                    },
+                    "output": {
+                        "type": "string",
+                        "description": "Output PDF path for action=resume",
+                    },
+                    "style": {
+                        "type": "string",
+                        "enum": ["modern", "classic"],
+                        "description": "Resume style for action=resume",
+                    },
+                    "markdown": {
+                        "type": "boolean",
+                        "description": "Also write markdown when action=resume",
+                        "default": False,
                     },
                     "days": {
                         "type": "integer",
@@ -2532,23 +2776,57 @@ def _build_tools() -> list[ArkaMcpTool]:
         ArkaMcpTool(
             name="arka_agent_hub",
             description=(
-                "Agent Hub inspection — status, adapters, detect installed agents, "
-                "or doctor checks (Hermes/OpenClaw multi-agent unification)."
+                "Agent Hub — status, adapters, detect installed agents, doctor checks, "
+                "list IDE memory sources, or import memory from hub/IDE exports."
             ),
             input_schema={
                 "type": "object",
                 "properties": {
                     "action": {
                         "type": "string",
-                        "enum": ["status", "adapters", "detect", "doctor", "list"],
+                        "enum": [
+                            "status",
+                            "adapters",
+                            "detect",
+                            "doctor",
+                            "list",
+                            "memory_sources",
+                            "import_memory",
+                        ],
                         "default": "status",
                         "description": (
                             "status: hub paths and sync timestamps; "
                             "adapters: MCP merge status per agent; "
                             "detect: which agent configs exist; "
                             "doctor: health checks; "
-                            "list: registered launch agents"
+                            "list: registered launch agents; "
+                            "memory_sources: importable IDE/agent memory files; "
+                            "import_memory: ingest JSON/markdown from path or IDE source"
                         ),
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "When action=import_memory: explicit JSON/markdown path",
+                    },
+                    "source": {
+                        "type": "string",
+                        "description": (
+                            "When action=import_memory: IDE source id "
+                            "(e.g. cursor, arka_session, agent:openclaw)"
+                        ),
+                    },
+                    "ide": {
+                        "type": "string",
+                        "description": "Alias for source when action=import_memory",
+                    },
+                    "agent": {
+                        "type": "string",
+                        "description": "Alias for source when action=import_memory",
+                    },
+                    "all": {
+                        "type": "boolean",
+                        "description": "When action=import_memory: import every detected source",
+                        "default": False,
                     },
                 },
             },
@@ -2622,7 +2900,8 @@ def mcp_server_launch_spec() -> dict[str, Any]:
         return {"command": arka_cmd, "args": ["mcp", "serve"]}
     from arka.paths import python_executable
 
-    return {"command": python_executable(), "args": ["-m", "arka", "mcp", "serve"]}
+    # Direct module entry avoids CLI side effects (auto-refetch, mode load) on stdio startup.
+    return {"command": python_executable(), "args": ["-m", "arka.integrations.mcp_server"]}
 
 
 def install_config_snippet(*, agent: str = "cursor") -> str:
@@ -2656,6 +2935,28 @@ def ensure_arka_self_in_config() -> bool:
 
 class ArkaMcpServer:
     """Minimal newline-delimited JSON-RPC MCP server over stdio."""
+
+    @staticmethod
+    def _observe_request(
+        method: str,
+        *,
+        tool_name: str = "",
+        success: bool = True,
+        duration_ms: int = 0,
+        error: str = "",
+    ) -> None:
+        try:
+            from arka.telemetry.mcp_obs import observe_mcp_server_request
+
+            observe_mcp_server_request(
+                method=method,
+                tool_name=tool_name,
+                success=success,
+                duration_ms=duration_ms,
+                error=error,
+            )
+        except ImportError:
+            pass
 
     def __init__(
         self,
@@ -2695,12 +2996,14 @@ class ArkaMcpServer:
 
         if method == "initialize":
             self._initialized = True
+            duration_ms = int((time.monotonic() - started) * 1000)
             try:
                 from arka.integrations.mcp_logs import log_mcp_event
 
                 log_mcp_event("server.initialize", method=method, status="ok")
             except ImportError:
                 pass
+            self._observe_request("initialize", duration_ms=duration_ms)
             return {
                 "jsonrpc": "2.0",
                 "id": request_id,
@@ -2712,12 +3015,14 @@ class ArkaMcpServer:
             }
 
         if method == "tools/list":
+            duration_ms = int((time.monotonic() - started) * 1000)
             try:
                 from arka.integrations.mcp_logs import log_mcp_event
 
                 log_mcp_event("server.tools_list", method=method, status="ok", tools=len(self._tools))
             except ImportError:
                 pass
+            self._observe_request("tools/list", duration_ms=duration_ms)
             return {
                 "jsonrpc": "2.0",
                 "id": request_id,
@@ -2731,15 +3036,38 @@ class ArkaMcpServer:
                 arguments = {}
             tool = self._tools.get(name)
             if not tool:
+                duration_ms = int((time.monotonic() - started) * 1000)
                 try:
                     from arka.integrations.mcp_logs import log_mcp_event
 
                     log_mcp_event("server.tools_call", method=method, tool=name, status="unknown_tool")
                 except ImportError:
                     pass
+                self._observe_request(
+                    "tools/call",
+                    tool_name=name,
+                    success=False,
+                    duration_ms=duration_ms,
+                    error="unknown_tool",
+                )
                 return self._error_response(request_id, -32602, f"Unknown tool: {name}")
             try:
-                text = tool.handler(arguments)
+                from arka.telemetry.mcp_obs import trace_mcp_server_tool_call
+            except ImportError:
+                trace_mcp_server_tool_call = None  # type: ignore[assignment,misc]
+
+            try:
+                if trace_mcp_server_tool_call is not None:
+                    with trace_mcp_server_tool_call(tool_name=name):
+                        text = tool.handler(arguments)
+                else:
+                    text = tool.handler(arguments)
+                    self._observe_request(
+                        "tools/call",
+                        tool_name=name,
+                        duration_ms=int((time.monotonic() - started) * 1000),
+                    )
+                duration_ms = int((time.monotonic() - started) * 1000)
                 try:
                     from arka.integrations.mcp_logs import log_mcp_event
 
@@ -2748,7 +3076,7 @@ class ArkaMcpServer:
                         method=method,
                         tool=name,
                         status="ok",
-                        duration_ms=int((time.monotonic() - started) * 1000),
+                        duration_ms=duration_ms,
                     )
                 except ImportError:
                     pass
@@ -2758,6 +3086,7 @@ class ArkaMcpServer:
                     "result": _text_result(text),
                 }
             except (Exception, SystemExit) as exc:
+                duration_ms = int((time.monotonic() - started) * 1000)
                 try:
                     from arka.integrations.mcp_logs import log_mcp_event
 
@@ -2767,10 +3096,18 @@ class ArkaMcpServer:
                         tool=name,
                         status="error",
                         error=str(exc),
-                        duration_ms=int((time.monotonic() - started) * 1000),
+                        duration_ms=duration_ms,
                     )
                 except ImportError:
                     pass
+                if trace_mcp_server_tool_call is None:
+                    self._observe_request(
+                        "tools/call",
+                        tool_name=name,
+                        success=False,
+                        duration_ms=duration_ms,
+                        error=str(exc),
+                    )
                 return {
                     "jsonrpc": "2.0",
                     "id": request_id,
@@ -2878,3 +3215,6 @@ __all__ = [
     "mcp_server_launch_spec",
     "serve_stdio",
 ]
+
+if __name__ == "__main__":
+    raise SystemExit(main())
