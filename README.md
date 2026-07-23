@@ -16,6 +16,8 @@
 - **Secure by default:** Prompt-injection checks, risky-action prompts, and hard blocks on destructive shell patterns.
 - **Local-first:** Skills run on your machine; LLM calls failover across Gemini, Groq, Ollama, and 20+ other providers.
 
+If Arka looks useful, a star on GitHub helps others discover the project and signals that it's worth a look.
+
 ## Supported platforms
 
 | Platform | Support |
