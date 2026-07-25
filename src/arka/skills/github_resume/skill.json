@@ -15,6 +15,16 @@
   "permissions": ["read", "write", "network"],
   "metadata": {
     "output_dir": "~/arka-generated",
-    "env": ["GITHUB_USERNAME", "GITHUB_USER", "GITHUB_TOKEN", "GH_TOKEN", "github_token", "RESUME_NAME"]
+    "env": [
+      "GITHUB_USERNAME",
+      "GITHUB_USER",
+      "GITHUB_TOKEN",
+      "GH_TOKEN",
+      "github_token",
+      "RESUME_NAME",
+      "RESUME_EMAIL",
+      "RESUME_PHONE",
+      "RESUME_LINKEDIN"
+    ]
   }
 }

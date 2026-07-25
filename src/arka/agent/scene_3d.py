@@ -5,15 +5,21 @@ import argparse
 import json
 from pathlib import Path
 
-HTML = """<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>{title}</title><style>html,body{{margin:0;height:100%;overflow:hidden;background:#080b18}}#info{{position:fixed;z-index:2;color:white;padding:16px;font:14px system-ui}}canvas{{display:block}}</style><script type="importmap">{{"imports":{{"three":"https://unpkg.com/three@0.170.0/build/three.module.js"}}}}</script></head><body><div id="info">{title} · drag to orbit · scroll to zoom</div><script type="module">
-import * as THREE from 'https://unpkg.com/three@0.170.0/build/three.module.js';import {{OrbitControls}} from 'https://unpkg.com/three@0.170.0/examples/jsm/controls/OrbitControls.js';import {{GLTFLoader}} from 'https://unpkg.com/three@0.170.0/examples/jsm/loaders/GLTFLoader.js';
-const scene=new THREE.Scene();scene.background=new THREE.Color(0x080b18);const camera=new THREE.PerspectiveCamera(45,innerWidth/innerHeight,.1,1000);camera.position.set(4,3,7);const renderer=new THREE.WebGLRenderer({{antialias:true}});renderer.setPixelRatio(devicePixelRatio);renderer.setSize(innerWidth,innerHeight);document.body.append(renderer.domElement);const controls=new OrbitControls(camera,renderer.domElement);controls.target.set(0,1,0);controls.update();scene.add(new THREE.HemisphereLight(0xbad7ff,0x182038,2));const key=new THREE.DirectionalLight(0xffffff,3);key.position.set(4,8,5);scene.add(key);
-const loader=new GLTFLoader();const assets={assets};for(const asset of assets)loader.load(asset.url,g=>{{g.scene.position.set(...(asset.position||[0,0,0]));g.scene.scale.setScalar(asset.scale||1);scene.add(g.scene);if(asset.animate&&g.animations.length){{const mixer=new THREE.AnimationMixer(g.scene);mixer.clipAction(g.animations[0]).play();g.mixer=mixer}}}},undefined,e=>console.warn('model load failed',asset.url,e));
-const clock=new THREE.Clock();function animate(){{requestAnimationFrame(animate);const dt=clock.getDelta();scene.traverse(o=>o.mixer?.update(dt));renderer.render(scene,camera)}}animate();addEventListener('resize',()=>{{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)}});
-</script></body></html>"""
+from arka.media.scene_3d_template import build_spec, render_html
+from arka.media.scene_layout import camera_from_orientation, infer_preset, layout_from_plan, simple_layout
+from arka.media.scene_assets import localize_asset, resolve_assets
 
 
-def create(title: str, assets: list[dict], output: str) -> dict[str, object]:
+def create(
+    title: str,
+    assets: list[dict],
+    output: str,
+    *,
+    preset: str = "studio",
+    camera: dict | None = None,
+    plan: dict | None = None,
+    intent: str = "",
+) -> dict[str, object]:
     if not assets:
         raise ValueError("at least one real .glb/.gltf asset URL or local path is required")
     root = Path(output).expanduser()
@@ -21,8 +27,30 @@ def create(title: str, assets: list[dict], output: str) -> dict[str, object]:
     target = root / "index.html"
     if target.exists():
         raise FileExistsError(f"refusing to overwrite existing file: {target}")
-    target.write_text(HTML.format(title=title or "Arka 3D Scene", assets=json.dumps(assets)), encoding="utf-8")
-    return {"output": str(target), "assets": len(assets), "renderer": "three.js", "models": assets}
+
+    # Localize any local model paths into the output directory
+    localized: list[dict] = []
+    for asset in assets:
+        item = dict(asset)
+        item["url"] = localize_asset(str(item["url"]), root)
+        localized.append(item)
+
+    if plan:
+        localized = layout_from_plan(plan, localized)
+    else:
+        localized = simple_layout(localized)
+
+    text = f"{title} {intent}".strip()
+    cam = camera or camera_from_orientation(text)
+    spec = build_spec(title=title, assets=localized, preset=preset, camera=cam)
+    target.write_text(render_html(spec), encoding="utf-8")
+    return {
+        "output": str(target),
+        "assets": len(localized),
+        "renderer": "three.js",
+        "preset": preset,
+        "models": localized,
+    }
 
 
 def plan_scene(title: str, intent: str = "") -> dict[str, object]:
@@ -46,6 +74,10 @@ def plan_scene(title: str, intent: str = "") -> dict[str, object]:
         context, roles = "desk workspace", ["seated character", "desk", "keyboard", "monitor", "chair"]
     elif "eat" in text or "dinner" in text:
         context, roles = "dining room", ["seated character", "table", "plate", "chair"]
+    elif any(w in text for w in ("gallery", "museum", "exhibit")):
+        context, roles = "gallery", ["primary character", "environment markers"]
+    elif any(w in text for w in ("space", "cosmos", "starfield")):
+        context, roles = "space", ["primary character", "environment"]
     dimensions = {
         "bed": {"width_m": 1.6, "depth_m": 2.0, "height_m": 0.55},
         "desk": {"width_m": 1.4, "depth_m": 0.7, "height_m": 0.75},
@@ -109,27 +141,73 @@ def describe_model(path: str) -> str:
         return f"Model description unavailable: {exc}"
 
 
+def _build_assets_from_models(models: list[str], plan: dict) -> list[dict]:
+    roles = list(plan.get("roles") or [])
+    assets: list[dict] = []
+    for i, model in enumerate(models):
+        role = roles[i] if i < len(roles) else f"asset_{i}"
+        assets.append({"url": model, "role": role, "animate": True})
+    return assets
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="arka scene-3d")
     p.add_argument("title")
-    p.add_argument("--model", action="append", required=True, help="GLB/GLTF URL or local path; repeat for multiple models")
+    p.add_argument("--model", action="append", help="GLB/GLTF URL or local path; repeat for multiple models")
+    p.add_argument("--auto", action="store_true", help="Auto-resolve assets from plan roles (curated catalog, optional search/generation)")
+    p.add_argument("--no-generate", action="store_true", help="With --auto, never call AI mesh backends")
+    p.add_argument("--preset", choices=("gallery", "studio", "outdoor", "racing", "interior", "space", "museum"), help="Visual preset (default: infer from plan)")
     p.add_argument("--out", default="arka-scene")
     p.add_argument("--json", action="store_true")
     p.add_argument("--intent", default="", help="Action/context, e.g. 'typing while sleeping' (used for planning)")
     p.add_argument("--plan", action="store_true", help="Print the contextual model plan before generation")
     p.add_argument("--describe-model", help="Describe a local model preview image with the configured vision/vLLM backend")
     args = p.parse_args(argv)
+
+    if not args.model and not args.auto:
+        p.error("provide --model URL/path(s) or use --auto to resolve assets")
+
     plan = plan_scene(args.title, args.intent)
     if args.plan:
         print(json.dumps(plan, indent=2))
     if args.describe_model:
         print(json.dumps({"model_description": describe_model(args.describe_model)}, indent=2))
-    assets = [{"url": model, "position": [i * 2, 0, 0], "scale": 1, "animate": True} for i, model in enumerate(args.model)]
+
+    out_path = Path(args.out).expanduser()
+    warnings: list[str] = []
+
+    if args.model:
+        assets = _build_assets_from_models(args.model, plan)
+    else:
+        assets, warnings = resolve_assets(
+            plan,
+            title=args.title,
+            intent=args.intent,
+            allow_generate=not args.no_generate,
+            output_dir=out_path,
+        )
+
+    preset = args.preset or infer_preset(plan, f"{args.title} {args.intent}")
+    camera = camera_from_orientation(f"{args.title} {args.intent}")
+
     try:
-        result = create(args.title, assets, args.out)
+        result = create(
+            args.title,
+            assets,
+            args.out,
+            preset=preset,
+            camera=camera,
+            plan=plan,
+            intent=args.intent,
+        )
     except (OSError, ValueError) as exc:
         p.error(str(exc))
-    print(json.dumps(result, indent=2) if args.json else f"Created Three.js scene: {result['output']} ({result['assets']} model assets)")
+
+    if warnings:
+        for w in warnings:
+            print(f"Warning: {w}", flush=True)
+
+    print(json.dumps(result, indent=2) if args.json else f"Created Three.js scene: {result['output']} ({result['assets']} model assets, preset={preset})")
     return 0
 
 

@@ -236,17 +236,29 @@ def record_routing_decision(
     decision: str,
     source: str = "",
     latency_ms: float | None = None,
+    execution_kind: str = "",
+    llm_used: bool | None = None,
+    rule: str = "",
+    skill: str = "",
 ) -> None:
     _setup()
     counter = _counters.get("routing")
     if counter is None:
         return
-    attrs: dict[str, str | float] = {
+    attrs: dict[str, str | float | bool] = {
         "arka.route.decision": decision[:40] or "unknown",
         "arka.route.source": source[:40] or "unknown",
     }
     if latency_ms is not None:
         attrs["arka.route.latency_ms"] = round(latency_ms, 2)
+    if execution_kind:
+        attrs["arka.execution.kind"] = execution_kind[:40]
+    if llm_used is not None:
+        attrs["arka.llm.used"] = llm_used
+    if rule:
+        attrs["arka.route.rule"] = rule[:120]
+    if skill:
+        attrs["arka.skill.name"] = skill[:120]
     counter.add(1, attrs)
 
 
@@ -255,13 +267,19 @@ def record_skill_dispatch(
     skill: str,
     duration_ms: float,
     exit_code: int,
+    execution_kind: str = "",
+    llm_used: bool | None = None,
 ) -> None:
     _setup()
-    attrs = {
+    attrs: dict[str, str | bool] = {
         "arka.skill.name": skill[:120] or "unknown",
         "arka.skill.success": exit_code == 0,
         "arka.skill.exit_code": exit_code,
     }
+    if execution_kind:
+        attrs["arka.execution.kind"] = execution_kind[:40]
+    if llm_used is not None:
+        attrs["arka.llm.used"] = llm_used
     counter = _counters.get("skill_dispatch")
     if counter is not None:
         counter.add(1, attrs)

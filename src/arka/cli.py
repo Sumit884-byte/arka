@@ -298,6 +298,11 @@ def main(argv: list[str] | None = None) -> int:
 
         return lint_main([args[0].replace("-", "_"), *args[1:]])
 
+    if args[0] in ("qa", "qa_engineering", "qa-engineering"):
+        from arka.agent.qa_engineering import main as qa_main
+
+        return qa_main(args[1:])
+
     if args[0] == "llm":
         from arka.agent.repo_context import main as repo_context_main
 
@@ -467,6 +472,12 @@ def main(argv: list[str] | None = None) -> int:
         if not rest:
             return run_script("arka_remind.py", ["status"])
         return run_script("arka_remind.py", rest)
+
+    if args[0] in ("alert", "email_alert", "email-alert"):
+        rest = args[1:]
+        if not rest:
+            return run_script("arka_alert.py", ["status"])
+        return run_script("arka_alert.py", rest)
 
     if args[0] in ("ascii", "ascii_art"):
         return run_script("arka_ascii_art.py", args[1:])
@@ -656,7 +667,13 @@ def _run_portable(text: str, routed=None) -> int:
         request_span = None  # type: ignore[assignment,misc]
 
     ctx = (
-        request_span("arka ask", attributes={"arka.request.text": text[:500]})
+        request_span(
+            "arka",
+            attributes={
+                "arka.request.text": text[:500],
+                "arka.request.kind": "nl",
+            },
+        )
         if request_span is not None
         else _cli_null_context()
     )
@@ -683,7 +700,20 @@ def _execute_request(text: str, routed=None) -> int:
     from arka.dispatch import run_shell
     from arka.router import route
 
+    try:
+        from arka.integrations.email_alert import maybe_auto_alert
+
+        maybe_auto_alert(text, quiet=True)
+    except ImportError:
+        pass
+
     r = routed if routed is not None else route(text)
+    try:
+        from arka.telemetry.symbolic_obs import annotate_request_span
+
+        annotate_request_span(r)
+    except ImportError:
+        pass
     if get_mode() == "debug":
         print_debug_route(text, r)
 
@@ -724,6 +754,12 @@ def _execute_request(text: str, routed=None) -> int:
 
     from arka.skills import run_chat_ask
 
+    try:
+        from arka.telemetry.symbolic_obs import annotate_request_span
+
+        annotate_request_span(None)
+    except ImportError:
+        pass
     print("→ ask")
     return run_chat_ask(text)
 

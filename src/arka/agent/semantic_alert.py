@@ -10,6 +10,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("event", nargs="+")
     p.add_argument("--at", help="Verified ISO datetime, e.g. 2026-08-01T17:00:00")
     p.add_argument("--source", help="URL or citation containing the deadline")
+    p.add_argument("--email", action="store_true", help="Also send email alert at deadline")
     p.add_argument("--json", action="store_true")
     args = p.parse_args(argv)
     event = " ".join(args.event).strip()
@@ -23,7 +24,12 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     try:
         from arka.integrations.remind import _add_reminder, start_daemon
-        reminder, _ = _add_reminder(f"{event} deadline", at=args.at)
+        reminder, _ = _add_reminder(
+            f"{event} deadline",
+            at=args.at,
+            email=bool(args.email),
+            category="studies",
+        )
         start_daemon()
     except (ImportError, OSError, SystemExit, ValueError) as exc:
         p.error(str(exc))

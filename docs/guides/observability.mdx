@@ -52,12 +52,15 @@ OTEL_SERVICE_NAME=arka
 ## What gets traced
 
 - LLM provider calls (model, latency, tokens, failover events)
-- Skill dispatch and routing decisions
+- **Symbolic / deterministic routing** — offline rule matches, matched `route_*` handler, sub-ms route latency, and `arka.llm.used=false`
+- **Deterministic skill execution** — local skills (password, calc, convert, help, etc.) with `arka.execution.kind=deterministic`
+- Skill dispatch and routing decisions (linked under `arka.request` for natural-language CLI input)
 - MCP client calls
 - Supermemory operations
 
-Every dispatched skill records a bounded skill name, duration, exit status, and
-error state. Secrets and full user prompts are not added to these attributes.
+Every dispatched skill records a bounded skill name, duration, exit status, execution kind
+(`deterministic`, `llm_skill`, `llm_routed`, `fish`, or `shell`), and whether an LLM was used.
+Secrets and full user prompts are not added to these attributes.
 This makes failures in long-running loops and MCP-backed skills visible without
 turning exported logs into a copy of the user's code or credentials.
 
@@ -65,6 +68,13 @@ Structured logs include `trace_id` and `span_id` when emitted inside an active
 span — use SigNoz log ↔ trace correlation to jump from a skill failure log to
 its trace. Metrics `arka.routing.decisions`, `arka.skill.duration`, and
 `arka.llm.failover` complement span attributes in the Metrics explorer.
+
+Useful SigNoz trace filters:
+
+- `name = 'arka.request'` — full NL request waterfall (route → skill)
+- `name = 'arka.route' AND arka.route.decision = 'symbolic'` — offline symbolic routes only
+- `arka.execution.kind = 'deterministic'` — local skills with no LLM
+- `arka.llm.used = false` — any span where no LLM participated
 
 ## SigNoz dashboard
 

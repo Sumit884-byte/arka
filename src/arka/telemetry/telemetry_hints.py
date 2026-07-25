@@ -69,6 +69,8 @@ def agent_observability_guide() -> dict[str, Any]:
         ],
         "sigNoz_filters": {
             "e2e_request": "service.name = 'arka' AND name = 'arka.request'",
+            "deterministic": "service.name = 'arka' AND arka.execution.kind = 'deterministic'",
+            "routing": "service.name = 'arka' AND name = 'arka.route'",
             "skills": "service.name = 'arka' AND name LIKE 'arka.skill.%'",
             "llm": "service.name = 'arka' AND name = 'arka.llm.attempt'",
             "mcp_server": "service.name = 'arka' AND name = 'arka.mcp.server.tool'",

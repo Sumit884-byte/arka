@@ -1,0 +1,17 @@
+{
+  "name": "human_docs",
+  "description": "Write human-sounding README and markdown docs to files instead of dumping them in chat",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "write readme",
+    "human sounding readme",
+    "draft changelog",
+    "write contributing guide",
+    "sound human markdown",
+    "write documentation file"
+  ],
+  "permissions": ["write", "network"]
+}

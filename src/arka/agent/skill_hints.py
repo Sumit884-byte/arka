@@ -12,6 +12,7 @@ _HINTS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("repo_health", ("repo health", "repository health", "health check")),
     ("lint_project", ("lint", "format code", "static analysis")),
     ("pr_check", ("pull request", "pr check", "ci failure", "why did ci fail")),
+    ("qa_engineering", ("qa checklist", "run qa", "test strategy", "triage test", "exploratory testing")),
     ("route_audit", ("route audit", "routing parity", "nl routing")),
     ("design_from_screenshot", ("from screenshot", "screenshot to", "design screenshot")),
     ("component_screenshots", ("screenshot all components", "component screenshots", "photograph ui components")),

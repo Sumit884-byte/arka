@@ -25,6 +25,17 @@ Run tests:
 pytest
 ```
 
+### Repository hygiene (editable checkouts)
+
+Runtime JSON, email contacts, MCP logs, and session state belong under
+**`.arka/`** in a git clone (or `~/.config/arka/` for installs) — not the repo
+root. Running `arka doctor` migrates scattered root files automatically.
+
+Do not commit `.env`, `your-secret-here` placeholders, `logs/`, `tmp/`, or
+ad-hoc `*-bug.md` reports. See
+[`docs/architecture/repository-layout.md`](docs/architecture/repository-layout.md)
+for the full layout.
+
 Refresh after pulling upstream:
 
 ```bash

@@ -189,7 +189,23 @@ def _notify(title: str, body: str) -> None:
 
 def _fire(rem: dict, *, kind: str) -> None:
     label = "Reminder" if kind == "at_time" else "Reminder (you're back)"
-    _notify(label, str(rem.get("text") or ""))
+    body = str(rem.get("text") or "")
+    wants_email = bool(rem.get("email"))
+    if not wants_email:
+        try:
+            from arka.integrations.email_alert import auto_alert_enabled
+
+            wants_email = auto_alert_enabled()
+        except ImportError:
+            pass
+    if wants_email:
+        try:
+            from arka.integrations.email_alert import deliver_scheduled_reminder
+
+            deliver_scheduled_reminder(rem, kind=kind)
+        except Exception:
+            pass
+    _notify(label, body)
     log = _log_file()
     log.parent.mkdir(parents=True, exist_ok=True)
     with log.open("a", encoding="utf-8") as fh:
@@ -331,7 +347,14 @@ def _normalize_add_argv(argv: list[str]) -> str:
     return re.sub(r"^(?:please\s+)?(?:remind(?:\s+me)?|me)\s+", "", text, flags=re.I).strip()
 
 
-def _add_reminder(text: str, *, at: str | None = None, in_spec: str | None = None) -> tuple[dict, bool]:
+def _add_reminder(
+    text: str,
+    *,
+    at: str | None = None,
+    in_spec: str | None = None,
+    email: bool = False,
+    category: str | None = None,
+) -> tuple[dict, bool]:
     due_at, message, used_default = _parse_due(text, at=at, in_spec=in_spec)
     rem = {
         "id": uuid.uuid4().hex[:8],
@@ -342,6 +365,8 @@ def _add_reminder(text: str, *, at: str | None = None, in_spec: str | None = Non
         "on_active_fired": False,
         "pending_active": False,
         "cancelled": False,
+        "email": bool(email),
+        "category": (category or "").strip() or None,
     }
     items = _load_reminders()
     items.append(rem)
@@ -360,6 +385,8 @@ def _reminder_row(rem: dict) -> dict[str, object]:
         "cancelled": bool(rem.get("cancelled")),
         "done": _is_done(rem),
         "pending_active": bool(rem.get("pending_active")),
+        "email": bool(rem.get("email")),
+        "category": rem.get("category"),
     }
 
 
@@ -378,6 +405,15 @@ def list_reminders(*, include_done: bool = False, limit: int = 50) -> list[dict[
         if len(out) >= max(1, min(int(limit or 50), 200)):
             break
     return out
+
+
+def _default_reminder_email() -> bool:
+    try:
+        from arka.integrations.email_alert import auto_alert_enabled
+
+        return auto_alert_enabled()
+    except ImportError:
+        return False
 
 
 def add_reminder(
@@ -399,7 +435,12 @@ def add_reminder(
             return None, gate.reason
     except ImportError:
         pass
-    rem, used_default = _add_reminder(message, at=at, in_spec=in_spec)
+    rem, used_default = _add_reminder(
+        message,
+        at=at,
+        in_spec=in_spec,
+        email=_default_reminder_email(),
+    )
     if start:
         try:
             start_daemon()

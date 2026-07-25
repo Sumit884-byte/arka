@@ -32,6 +32,7 @@ def test_list_tool_definitions_schema(monkeypatch):
     assert "arka_clipboard" in names
     assert "arka_share" in names
     assert "arka_remind" in names
+    assert "arka_alert" in names
     assert "arka_bookmarks" in names
     assert "arka_docker" in names
     assert "arka_disk" in names
@@ -52,6 +53,7 @@ def test_list_tool_definitions_schema(monkeypatch):
     assert "arka_timekit" in names
     assert "arka_jsonkit" in names
     assert "arka_repo_health" in names
+    assert "arka_qa" in names
     assert "arka_agent_hub" in names
     assert "arka_team_run" in names
     for tool in tools:
@@ -1339,6 +1341,18 @@ def test_handle_arka_repo_health_scan(tmp_path):
     assert payload["path"] == str(tmp_path.resolve())
     assert payload["count"] >= 1
     assert any(c["category"] in ("test", "lint") for c in payload["checks"])
+
+
+def test_handle_arka_qa_plan(tmp_path):
+    from arka.integrations.mcp_server import _handle_arka_qa
+
+    (tmp_path / "pyproject.toml").write_text("[project]\nname='demo'\n", encoding="utf-8")
+    (tmp_path / "tests").mkdir()
+    payload = json.loads(
+        _handle_arka_qa({"action": "plan", "path": str(tmp_path), "feature": "login"})
+    )
+    assert payload["feature"] == "login"
+    assert any(layer["layer"] == "smoke" for layer in payload["layers"])
 
 
 def test_doctor_spawns_client(monkeypatch):

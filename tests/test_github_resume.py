@@ -424,6 +424,125 @@ def test_github_token_falls_back_to_gh_auth(monkeypatch):
     assert gr._github_token() == "gh-token-from-cli"
 
 
+def test_normalize_linkedin_accepts_handle_and_urls():
+    from arka.agent.github_resume import normalize_linkedin
+
+    assert normalize_linkedin("sumitmishra") == "https://www.linkedin.com/in/sumitmishra"
+    assert normalize_linkedin("in/sumitmishra") == "https://www.linkedin.com/in/sumitmishra"
+    assert normalize_linkedin("linkedin.com/in/sumitmishra") == "https://linkedin.com/in/sumitmishra"
+    assert (
+        normalize_linkedin("https://www.linkedin.com/in/sumitmishra")
+        == "https://www.linkedin.com/in/sumitmishra"
+    )
+
+
+def test_resolve_contact_info_prefers_env_over_github(monkeypatch):
+    from arka.agent import github_resume as gr
+    from arka.agent.github_resume import GitHubProfile, resolve_contact_info
+
+    profile = GitHubProfile(
+        login="devuser",
+        name="Dev User",
+        bio="",
+        location="San Francisco",
+        company="Acme",
+        blog="https://dev.example",
+        email="github@example.com",
+        html_url="https://github.com/devuser",
+        public_repos=2,
+        followers=0,
+        created_at="2018-05-01T00:00:00Z",
+    )
+    monkeypatch.setattr(gr, "load_env_file", lambda: None)
+    monkeypatch.setenv("RESUME_EMAIL", "resume@example.com")
+    monkeypatch.setenv("RESUME_PHONE", "+91 98765 43210")
+    monkeypatch.setenv("RESUME_LINKEDIN", "sumitmishra")
+
+    contact = resolve_contact_info(profile)
+    assert contact.email == "resume@example.com"
+    assert contact.email_source == "RESUME_EMAIL"
+    assert contact.phone == "+91 98765 43210"
+    assert contact.phone_source == "RESUME_PHONE"
+    assert contact.linkedin == "https://www.linkedin.com/in/sumitmishra"
+    assert contact.linkedin_source == "RESUME_LINKEDIN"
+    assert contact.location == "San Francisco"
+    assert contact.company == "Acme"
+    assert contact.blog == "https://dev.example"
+
+
+def test_build_markdown_uses_dedicated_contact_line(monkeypatch):
+    from arka.agent import github_resume as gr
+    from arka.agent.github_resume import ContactInfo, GitHubProfile, GitHubRepo, build_markdown
+
+    monkeypatch.setattr(gr, "load_env_file", lambda: None)
+
+    profile = GitHubProfile(
+        login="devuser",
+        name="Dev User",
+        bio="Building tools with Python.",
+        location="San Francisco",
+        company="Acme",
+        blog="https://dev.example",
+        email="dev@example.com",
+        html_url="https://github.com/devuser",
+        public_repos=12,
+        followers=42,
+        created_at="2018-05-01T00:00:00Z",
+    )
+    repos = [
+        GitHubRepo(
+            name="arka",
+            full_name="devuser/arka",
+            description="Agent toolkit",
+            html_url="https://github.com/devuser/arka",
+            language="Python",
+            stargazers_count=120,
+            forks_count=8,
+            topics=("agents", "cli"),
+            updated_at="2026-01-01T00:00:00Z",
+        )
+    ]
+    contact = ContactInfo(
+        email="resume@example.com",
+        phone="+1 555 0100",
+        linkedin="https://www.linkedin.com/in/devuser",
+        location="San Francisco",
+        company="Acme",
+        blog="https://dev.example",
+        email_source="RESUME_EMAIL",
+        phone_source="RESUME_PHONE",
+        linkedin_source="RESUME_LINKEDIN",
+    )
+    md = build_markdown(profile, repos, contact=contact)
+    lines = md.splitlines()
+    github_idx = lines.index("GitHub: [devuser](https://github.com/devuser)")
+    assert lines[github_idx + 1] == (
+        "resume@example.com | +1 555 0100 | https://www.linkedin.com/in/devuser"
+    )
+    assert lines[github_idx + 2] == "San Francisco | Acme | https://dev.example"
+
+
+def test_generate_resume_includes_contact_payload(monkeypatch, tmp_path):
+    pytest.importorskip("reportlab")
+    from arka.agent import github_resume as gr
+
+    monkeypatch.setattr(gr, "_github_get", _fake_github_get)
+    monkeypatch.setattr(gr, "generated_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(gr, "load_env_file", lambda: None)
+    monkeypatch.setenv("RESUME_EMAIL", "resume@example.com")
+    monkeypatch.setenv("RESUME_PHONE", "+1 555 0100")
+    monkeypatch.setenv("RESUME_LINKEDIN", "devuser")
+
+    result = gr.generate_resume("devuser", write_markdown=True)
+
+    assert result["contact"]["email"] == "resume@example.com"
+    assert result["contact"]["email_source"] == "RESUME_EMAIL"
+    assert result["contact"]["phone"] == "+1 555 0100"
+    assert result["contact"]["linkedin"] == "https://www.linkedin.com/in/devuser"
+    md_text = Path(result["markdown_path"]).read_text(encoding="utf-8")
+    assert "resume@example.com | +1 555 0100 | https://www.linkedin.com/in/devuser" in md_text
+
+
 def test_resolve_display_name_prefers_env(monkeypatch):
     from arka.agent import github_resume as gr
     from arka.agent.github_resume import GitHubProfile

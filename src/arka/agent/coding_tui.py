@@ -1046,6 +1046,14 @@ def llm_plan(goal: str, root: Path) -> str | None:
     except ImportError:
         pass
     try:
+        from arka.core.human_docs import context_for as human_docs_context
+
+        human = human_docs_context(goal, coding=True, limit_chars=2000)
+        if human and human not in (mem or ""):
+            plan_user += human + "\n"
+    except ImportError:
+        pass
+    try:
         from arka.agent.design_memory import context as design_context
 
         design_mem = design_context()
@@ -1184,6 +1192,12 @@ def coding_tui_system_extra(root: Path, goal: str) -> str:
                 )
         else:
             edit_hint = "- Make concrete file edits under src/ and tests/; verify with pytest on changed modules."
+    readme_hint = ""
+    if re.search(r"(?i)\b(?:readme|changelog|contributing|docs?/|\.mdx?\b|markdown file)\b", lowered):
+        readme_hint = (
+            "- README/docs deliverable: write or update the markdown file on disk; "
+            "do not dump the full document in chat. Use natural, human prose.\n"
+        )
     return (
         f"Coding TUI context: working directory is already {root}. Never use cd.\n"
         "- Do not run git init, git pull, git commit, or other git commands unless the user explicitly asked for git.\n"
@@ -1191,6 +1205,7 @@ def coding_tui_system_extra(root: Path, goal: str) -> str:
         "- Prefer existing Arka tools (repo_health, lint_project, review, ci) over raw shell when applicable.\n"
         f"{tui_hint}"
         f"{short_goal_hint}"
+        f"{readme_hint}"
         f"{edit_hint}"
     )
 

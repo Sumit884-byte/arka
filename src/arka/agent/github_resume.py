@@ -61,6 +61,19 @@ class GitHubProfile:
 
 
 @dataclass(frozen=True)
+class ContactInfo:
+    email: str
+    phone: str
+    linkedin: str
+    location: str
+    company: str
+    blog: str
+    email_source: str = ""
+    phone_source: str = ""
+    linkedin_source: str = ""
+
+
+@dataclass(frozen=True)
 class ResolvedUsername:
     login: str
     source: str
@@ -209,6 +222,90 @@ def resolve_display_name(profile: GitHubProfile) -> str:
         if value and value.strip():
             return value.strip()
     return profile.name.strip() or profile.login
+
+
+def _first_env_value(*keys: str) -> tuple[str, str]:
+    for key in keys:
+        value = env_get(key)
+        if value and value.strip():
+            return value.strip(), key
+    return "", ""
+
+
+def normalize_linkedin(value: str) -> str:
+    raw = value.strip()
+    if not raw:
+        return ""
+    if raw.startswith(("http://", "https://")):
+        return raw
+    lowered = raw.lower()
+    if lowered.startswith("www.linkedin.com/"):
+        return f"https://{raw}"
+    if lowered.startswith("linkedin.com/"):
+        return f"https://{raw}"
+    if lowered.startswith("in/"):
+        return f"https://www.linkedin.com/{raw.lstrip('/')}"
+    handle = raw.lstrip("@").strip("/")
+    if not handle:
+        return ""
+    if "/" in handle:
+        return f"https://www.linkedin.com/{handle}"
+    return f"https://www.linkedin.com/in/{handle}"
+
+
+def resolve_contact_info(profile: GitHubProfile) -> ContactInfo:
+    """ATS contact fields; env overrides GitHub profile email when set."""
+    load_env_file()
+    email, email_source = _first_env_value("RESUME_EMAIL", "USER_EMAIL", "EMAIL")
+    if not email:
+        email = profile.email.strip()
+        email_source = "github" if email else ""
+
+    phone, phone_source = _first_env_value("RESUME_PHONE", "USER_PHONE", "PHONE")
+
+    linkedin_raw, linkedin_source = _first_env_value(
+        "RESUME_LINKEDIN",
+        "LINKEDIN_URL",
+        "LINKEDIN_PROFILE",
+    )
+    linkedin = normalize_linkedin(linkedin_raw) if linkedin_raw else ""
+
+    return ContactInfo(
+        email=email,
+        phone=phone,
+        linkedin=linkedin,
+        location=profile.location.strip(),
+        company=profile.company.strip(),
+        blog=profile.blog.strip(),
+        email_source=email_source,
+        phone_source=phone_source,
+        linkedin_source=linkedin_source,
+    )
+
+
+def ats_contact_line(contact: ContactInfo) -> str:
+    return " | ".join(bit for bit in (contact.email, contact.phone, contact.linkedin) if bit)
+
+
+def profile_meta_line(contact: ContactInfo, *, separator: str = " | ") -> str:
+    return separator.join(bit for bit in (contact.location, contact.company, contact.blog) if bit)
+
+
+def contact_result_payload(contact: ContactInfo) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    if contact.email:
+        payload["email"] = contact.email
+        if contact.email_source:
+            payload["email_source"] = contact.email_source
+    if contact.phone:
+        payload["phone"] = contact.phone
+        if contact.phone_source:
+            payload["phone_source"] = contact.phone_source
+    if contact.linkedin:
+        payload["linkedin"] = contact.linkedin
+        if contact.linkedin_source:
+            payload["linkedin_source"] = contact.linkedin_source
+    return payload
 
 
 def _gh_binary() -> str | None:
@@ -522,8 +619,10 @@ def build_markdown(
     authenticated_as: str | None = None,
     project_count: int | None = None,
     display_name: str | None = None,
+    contact: ContactInfo | None = None,
 ) -> str:
     heading = display_name or resolve_display_name(profile)
+    contact = contact or resolve_contact_info(profile)
     if about_me is None:
         about_me, _ = resolve_about_me(
             profile,
@@ -536,9 +635,12 @@ def build_markdown(
         "",
         f"GitHub: [{profile.login}]({profile.html_url})",
     ]
-    contact_bits = [bit for bit in (profile.location, profile.company, profile.email, profile.blog) if bit]
-    if contact_bits:
-        lines.append(" | ".join(contact_bits))
+    contact_line = ats_contact_line(contact)
+    if contact_line:
+        lines.append(contact_line)
+    meta_line = profile_meta_line(contact)
+    if meta_line:
+        lines.append(meta_line)
     lines.append("")
     lines.extend(["## About Me", "", about_me, ""])
 
@@ -594,6 +696,7 @@ def render_pdf(
     authenticated_as: str | None = None,
     project_count: int | None = None,
     display_name: str | None = None,
+    contact: ContactInfo | None = None,
 ) -> Path:
     try:
         return _render_pdf_reportlab(
@@ -605,6 +708,7 @@ def render_pdf(
             authenticated_as=authenticated_as,
             project_count=project_count,
             display_name=display_name,
+            contact=contact,
         )
     except ImportError as exc:
         raise GitHubResumeError("reportlab is required; pip install reportlab") from exc
@@ -620,6 +724,7 @@ def _render_pdf_reportlab(
     authenticated_as: str | None = None,
     project_count: int | None = None,
     display_name: str | None = None,
+    contact: ContactInfo | None = None,
 ) -> Path:
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import letter
@@ -688,14 +793,18 @@ def _render_pdf_reportlab(
     )
 
     heading = display_name or resolve_display_name(profile)
+    contact = contact or resolve_contact_info(profile)
     story: list[Any] = [
         Paragraph(_escape_pdf_text(heading), title_style),
         Paragraph(_escape_pdf_text(profile.html_url), subtitle_style),
     ]
 
-    contact_bits = [bit for bit in (profile.location, profile.company, profile.email, profile.blog) if bit]
-    if contact_bits:
-        story.append(Paragraph(_escape_pdf_text(" · ".join(contact_bits)), subtitle_style))
+    contact_line = ats_contact_line(contact)
+    if contact_line:
+        story.append(Paragraph(_escape_pdf_text(contact_line), subtitle_style))
+    meta_line = profile_meta_line(contact, separator=" · ")
+    if meta_line:
+        story.append(Paragraph(_escape_pdf_text(meta_line), subtitle_style))
 
     stats = profile_stats_lines(profile, member_prefix="member since", project_count=project_count)
     if stats:
@@ -765,6 +874,7 @@ def generate_resume(
     project_count = len(all_repos)
     repos = all_repos if repo_limit is None else all_repos[:repo_limit]
     display_name = resolve_display_name(profile)
+    contact = resolve_contact_info(profile)
     about_me, about_me_source = resolve_about_me(
         profile,
         repos,
@@ -785,6 +895,7 @@ def generate_resume(
         authenticated_as=authenticated_as,
         project_count=project_count,
         display_name=display_name,
+        contact=contact,
     )
 
     result: dict[str, Any] = {
@@ -792,6 +903,7 @@ def generate_resume(
         "username": user,
         "name": display_name,
         "github_name": profile.name,
+        "contact": contact_result_payload(contact),
         "pdf_path": str(pdf_path),
         "repo_count": len(repos),
         "public_repos": project_count,
@@ -819,6 +931,7 @@ def generate_resume(
                 authenticated_as=authenticated_as,
                 project_count=project_count,
                 display_name=display_name,
+                contact=contact,
             ),
             encoding="utf-8",
         )

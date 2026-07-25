@@ -721,6 +721,15 @@ def route_email_contacts(cmd: str) -> str | None:
     return route or None
 
 
+def route_email_alert(cmd: str) -> str | None:
+    try:
+        from arka.integrations.email_alert import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
+
+
 def route_gmail_draft(cmd: str) -> str | None:
     try:
         from arka.integrations.google_workspace import build_gmail_draft_argv_from_nl
@@ -824,15 +833,47 @@ def route_competitions(cmd: str) -> str | None:
     return route or None
 
 
+def _extract_scene_title(cmd: str) -> tuple[str, str]:
+    """Return (title, intent) from a natural-language scene command."""
+    quoted = re.search(r'"([^"]+)"|\'([^\']+)\'', cmd)
+    if quoted:
+        title = (quoted.group(1) or quoted.group(2) or "").strip()
+        intent = cmd.replace(quoted.group(0), " ", 1).strip()
+        return title or "3D Scene", intent
+    stripped = re.sub(
+        r"(?i)^(?:arka\s+)?(?:please\s+)?(?:create|build|generate|compose|make)\s+"
+        r"(?:an?\s+)?(?:impressive\s+)?(?:interactive\s+)?(?:animated\s+)?"
+        r"(?:3d\s+)?(?:scene|world|gallery|environment)\s+(?:of|for|with|about|called|named)?\s*",
+        "",
+        cmd,
+    ).strip()
+    if stripped:
+        title = re.split(r"[.!?]", stripped, maxsplit=1)[0][:80].strip()
+        return title or "3D Scene", cmd
+    return "3D Scene", cmd
+
+
 def route_scene_3d(cmd: str) -> str | None:
-    if not re.search(r"(?i)\b(?:scene|environment|world)\b", cmd) or not re.search(r"(?i)\b(?:3d|three\.js|model|human|character|asset)\b", cmd):
-        return None
-    if not re.search(r"(?i)\b(?:create|build|generate|compose|use|place)\b", cmd):
+    has_action = re.search(r"(?i)\b(?:create|build|generate|compose|use|place|make)\b", cmd)
+    has_3d = re.search(r"(?i)\b(?:3d|three\.js|threejs|model|human|character|asset|gallery|interactive)\b", cmd)
+    has_scene = (
+        re.search(r"(?i)\b(?:scene|environment|world|gallery)\b", cmd)
+        or re.search(r"(?i)\b(?:impressive|interactive|animated)\b.*\b(?:3d|scene|gallery|world)\b", cmd)
+        or re.search(r"(?i)\b3d\b.*\b(?:scene|gallery|world|environment)\b", cmd)
+    )
+    if not has_action or not has_3d or not has_scene:
         return None
     models = re.findall(r"(?:https?://[^\s]+|[^\s]+\.(?:glb|gltf))", cmd, re.I)
-    if not models:
-        return None
-    return "scene_3d " + shlex.quote(cmd) + (" --model " + " --model ".join(shlex.quote(m) for m in models) if models else "")
+    title, intent = _extract_scene_title(cmd)
+    parts = ["scene_3d", shlex.quote(title)]
+    if intent.strip():
+        parts.extend(["--intent", shlex.quote(intent.strip())])
+    if models:
+        for model in models:
+            parts.extend(["--model", shlex.quote(model)])
+    else:
+        parts.append("--auto")
+    return " ".join(parts)
 
 
 def route_rig_3d(cmd: str) -> str | None:
@@ -1004,6 +1045,15 @@ def route_jsonkit(cmd: str) -> str | None:
 def route_markdown_style(cmd: str) -> str | None:
     try:
         from arka.core.markdown_style import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
+
+
+def route_human_docs(cmd: str) -> str | None:
+    try:
+        from arka.agent.human_docs import route_command
     except ImportError:
         return None
     route = route_command(cmd)
@@ -1336,6 +1386,22 @@ def route_interesting_fact(cmd: str) -> str | None:
     if is_interesting_fact_request(cmd):
         return f"interesting_fact {cmd.strip()}"
     return None
+
+
+def route_nudge(cmd: str) -> str | None:
+    try:
+        from arka.routing.nudge import route_command
+    except ImportError:
+        return None
+    return route_command(cmd)
+
+
+def route_contextual_answer(cmd: str) -> str | None:
+    try:
+        from arka.core.contextual_answer import route_command
+    except ImportError:
+        return None
+    return route_command(cmd)
 
 
 def route_fugu(cmd: str) -> str | None:
@@ -1737,6 +1803,15 @@ def route_lint_project(cmd: str) -> str | None:
     return route or None
 
 
+def route_qa_engineering(cmd: str) -> str | None:
+    try:
+        from arka.agent.qa_engineering import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd.strip())
+    return route or None
+
+
 def route_coding_tui(cmd: str) -> str | None:
     try:
         from arka.agent.coding_tui import route_command
@@ -1878,8 +1953,8 @@ def route_integration_setup(cmd: str) -> str | None:
     return None
 
 
-def route_offline_extras(cmd: str) -> str | None:
-    """Try supplemental NL routes not always available via fish bridge."""
+def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
+    """Try supplemental NL routes; return (skill line, route_* function name)."""
     from arka.core.skill_settings import is_disabled
 
     def allowed(route: str) -> bool:
@@ -1951,10 +2026,12 @@ def route_offline_extras(cmd: str) -> str | None:
         route_mode,
         route_urlkit,
         route_lint_project,
+        route_qa_engineering,
         route_heartbeat,
         route_background_processes,
         route_jsonkit,
         route_markdown_style,
+        route_human_docs,
         route_agent_hub,
         route_mcp,
         route_clipboard_history,
@@ -2020,6 +2097,8 @@ def route_offline_extras(cmd: str) -> str | None:
         route_habitat,
         route_life_sciences,
         route_interesting_fact,
+        route_nudge,
+        route_contextual_answer,
         route_platform_howto,
         route_fugu,
         route_gemini_cli,
@@ -2038,6 +2117,7 @@ def route_offline_extras(cmd: str) -> str | None:
         route_batch,
         route_config_share,
         route_semantic_alert,
+        route_email_alert,
         route_bi_dashboard,
         route_usage_dashboard,
         route_symbolic_image,
@@ -2073,5 +2153,11 @@ def route_offline_extras(cmd: str) -> str | None:
     ):
         hit = fn(cmd)
         if hit and allowed(hit):
-            return hit
+            return hit, fn.__name__
     return None
+
+
+def route_offline_extras(cmd: str) -> str | None:
+    """Try supplemental NL routes not always available via fish bridge."""
+    matched = route_offline_extras_with_rule(cmd)
+    return matched[0] if matched else None

@@ -1,0 +1,17 @@
+{
+  "name": "nudge",
+  "description": "Arka Nudge — benefits-only purchase nudges; switches to fair comparison when you name alternatives or existing habits",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "arka nudge",
+    "nudge me",
+    "should i buy",
+    "is it worth buying",
+    "worth getting",
+    "nudge mode"
+  ],
+  "permissions": ["network"]
+}

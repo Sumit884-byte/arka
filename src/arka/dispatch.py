@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import time
+from typing import Any
 
 from arka.paths import arka_home, bundled_dir, cache_dir, config_dir, python_executable, script_path
 
@@ -135,10 +136,18 @@ def run_skill(skill_line: str) -> int:
         span = None  # type: ignore[assignment,misc]
     from contextlib import nullcontext
 
+    skill_attrs: dict[str, Any] = {"arka.skill.name": head, "arka.skill.line": skill_line[:500]}
+    try:
+        from arka.telemetry.symbolic_obs import skill_obs_attrs
+
+        skill_attrs.update(skill_obs_attrs(skill=head))
+    except ImportError:
+        pass
+
     skill_ctx = (
         span(
             f"arka.skill.{head}",
-            attributes={"arka.skill.name": head, "arka.skill.line": skill_line[:500]},
+            attributes=skill_attrs,
         )
         if span is not None
         else nullcontext()
@@ -170,6 +179,14 @@ def run_skill(skill_line: str) -> int:
             else:
                 print("Could not get a fact (check LLM API keys)", file=sys.stderr)
                 code = 1
+        elif head in ("nudge", "arka-nudge", "arka_nudge"):
+            from arka.agent.nudge import main as nudge_main
+
+            code = nudge_main(rest)
+        elif head in ("contextual_answer", "contextual-answer", "context_answer", "with_context"):
+            from arka.agent.contextual_answer import main as contextual_main
+
+            code = contextual_main(rest)
         elif head == "web_answer":
             code = run_chat_ask(" ".join(rest))
         elif head == "deep_web_answer":
@@ -303,6 +320,10 @@ def run_skill(skill_line: str) -> int:
             from arka.core.markdown_style import main as markdown_style_main
 
             code = markdown_style_main(rest or ["style", "-"])
+        elif head in ("human_docs", "human-docs", "write_readme", "human-readme"):
+            from arka.agent.human_docs import main as human_docs_main
+
+            code = human_docs_main(rest or ["guide"])
         elif head in ("coding_workflow", "coding-workflow", "workflow"):
             from arka.agent.coding_workflows import main as workflow_main
             code = workflow_main(rest)
@@ -353,6 +374,8 @@ def run_skill(skill_line: str) -> int:
             code = run_script("arka_google.py", rest)
         elif head in ("email_contacts", "email-contacts"):
             code = run_script("arka_email_contacts.py", rest)
+        elif head in ("alert", "email_alert", "email-alert"):
+            code = run_script("arka_alert.py", rest)
         elif head == "code":
             from arka.core.code_project import main as code_main
 
@@ -669,7 +692,7 @@ def run_skill(skill_line: str) -> int:
         elif head in ("visual_diagnose", "visual-diagnose", "visual_qa"):
             from arka.agent.visual_diagnose import main as visual_main
             code = visual_main(rest)
-        elif head in ("semantic_alert", "semantic-alert", "alert"):
+        elif head in ("semantic_alert", "semantic-alert"):
             from arka.agent.semantic_alert import main as alert_main
             code = alert_main(rest)
         elif head in ("symbolic_image", "symbolic-image", "image_compose"):
@@ -722,6 +745,10 @@ def run_skill(skill_line: str) -> int:
             from arka.agent.lint_project import main as lint_main
 
             code = lint_main([head.replace("-", "_"), *rest])
+        elif head in ("qa_engineering", "qa-engineering", "qa"):
+            from arka.agent.qa_engineering import main as qa_main
+
+            code = qa_main(rest)
         elif head.endswith(".py") and script_path(head).is_file():
             code = run_script(head, rest)
         else:

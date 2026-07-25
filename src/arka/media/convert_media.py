@@ -145,6 +145,92 @@ def _formats_for_type(media_type: MediaType) -> tuple[str, ...]:
     return SLIDE_FORMATS
 
 
+def capabilities_catalog() -> dict[str, object]:
+    """Supported input families and output formats for MCP/API discovery."""
+    return {
+        "image": {
+            "inputs": sorted(IMAGE_EXTS),
+            "outputs": list(IMAGE_FORMATS),
+        },
+        "video": {
+            "inputs": sorted(VIDEO_EXTS),
+            "outputs": list(VIDEO_FORMATS) + list(AUDIO_FORMATS),
+        },
+        "audio": {
+            "inputs": sorted(AUDIO_EXTS),
+            "outputs": list(AUDIO_FORMATS),
+        },
+        "slides": {
+            "inputs": sorted(SLIDE_EXTS),
+            "outputs": list(SLIDE_FORMATS),
+        },
+        "special": {"all": "Export every output format for the detected media type"},
+    }
+
+
+def media_info(path: str | Path) -> dict[str, object]:
+    """Describe a local file's media type and convertible output formats."""
+    input_path = Path(path).expanduser().resolve()
+    if not input_path.is_file():
+        raise FileNotFoundError(f"Input not found: {input_path}")
+    try:
+        media_type = detect_media_type(input_path)
+    except SystemExit as exc:
+        raise ValueError(str(exc)) from exc
+    outputs = list(_formats_for_type(media_type))
+    return {
+        "input": str(input_path),
+        "name": input_path.name,
+        "suffix": input_path.suffix.lower(),
+        "media_type": media_type,
+        "output_formats": outputs,
+        "convert_all_formats": outputs,
+    }
+
+
+def convert_media_result(
+    input_path: str | Path,
+    *,
+    target: str = "all",
+    output: str | Path | None = None,
+    quality: int | None = None,
+    width: int | None = None,
+    height: int | None = None,
+    trim_start: float | None = None,
+    trim_duration: float | None = None,
+) -> dict[str, object]:
+    """Convert media and return structured output paths (raises ValueError on failure)."""
+    src = Path(input_path).expanduser().resolve()
+    if not src.is_file():
+        raise FileNotFoundError(f"Input not found: {src}")
+    try:
+        media_type = detect_media_type(src)
+        formats = parse_target_formats(target, media_type)
+    except SystemExit as exc:
+        raise ValueError(str(exc)) from exc
+    out_path = Path(output).expanduser() if output else None
+    try:
+        saved = convert_media(
+            src,
+            target_formats=formats,
+            output=out_path,
+            quality=quality,
+            width=width,
+            height=height,
+            trim_start=trim_start,
+            trim_duration=trim_duration,
+        )
+    except SystemExit as exc:
+        raise ValueError(str(exc)) from exc
+    return {
+        "input": str(src),
+        "media_type": media_type,
+        "target_formats": formats,
+        "outputs": [str(p) for p in saved],
+        "count": len(saved),
+    }
+
+
 def _normalize_target_format(name: str, media_type: MediaType) -> str:
     raw = (name or "").strip().lower().lstrip(".")
     if raw == "all":

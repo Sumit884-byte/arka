@@ -33,6 +33,28 @@ pours/
 # Runtime cache (user machine, not repo)
 .cache/
 .arka/
+.arka-index
+.local/
+tmp/
+
+# Email / MCP debug state (live under config_dir() — .arka/ in editable checkouts)
+email_contacts.json
+email_draft_history.json
+logs/
+
+# Env placeholder files and ad-hoc bug tickets from local QA
+your-secret-here
+*-bug.md
+
+# Regeneratable demo recording build output (see recordings/*.py)
+recordings/_demo_build/
+recordings/live-demo-ui/run-*/
+
+# Empty legacy top-level module dirs (real code is under src/arka/)
+/agent/
+/llm/
+/stock/
+/personas/
 platform.json
 platform.env
 last-refetch

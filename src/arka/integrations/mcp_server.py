@@ -626,6 +626,118 @@ def _handle_arka_webhook(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"webhook unavailable: {exc}") from exc
 
 
+def _handle_arka_convert_media(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "convert").strip().lower()
+    try:
+        from arka.media.convert_media import (
+            capabilities_catalog,
+            cmd_check,
+            convert_media_result,
+            media_info,
+            nl_to_argv,
+        )
+
+        if action == "capabilities":
+            return json.dumps(capabilities_catalog(), indent=2)
+        if action == "check":
+            import argparse
+            import io
+            from contextlib import redirect_stderr, redirect_stdout
+
+            buf = io.StringIO()
+            with redirect_stdout(buf), redirect_stderr(buf):
+                code = cmd_check(argparse.Namespace())
+            return json.dumps({"exit_code": code, "report": buf.getvalue().strip()}, indent=2)
+        if action == "detect":
+            path = str(arguments.get("path") or arguments.get("file") or arguments.get("input") or "").strip()
+            if not path:
+                raise ValueError("path is required when action=detect")
+            return json.dumps(media_info(path), indent=2)
+        if action == "formats":
+            path = str(arguments.get("path") or arguments.get("file") or arguments.get("input") or "").strip()
+            if not path:
+                raise ValueError("path is required when action=formats")
+            info = media_info(path)
+            return json.dumps(
+                {
+                    "input": info["input"],
+                    "media_type": info["media_type"],
+                    "formats": info["output_formats"],
+                },
+                indent=2,
+            )
+        if action == "parse":
+            text = str(arguments.get("text") or arguments.get("query") or arguments.get("goal") or "").strip()
+            if not text:
+                raise ValueError("text is required when action=parse")
+            argv = nl_to_argv(text)
+            return json.dumps({"argv": argv, "command": "convert_media " + " ".join(argv) if argv else ""}, indent=2)
+        if action == "convert":
+            path = str(arguments.get("path") or arguments.get("file") or arguments.get("input") or "").strip()
+            if not path:
+                raise ValueError("path is required when action=convert")
+            target = str(
+                arguments.get("to")
+                or arguments.get("format")
+                or arguments.get("target")
+                or arguments.get("formats")
+                or "all"
+            ).strip()
+            output = str(arguments.get("output") or arguments.get("out") or "").strip() or None
+            quality = arguments.get("quality")
+            width = arguments.get("width")
+            height = arguments.get("height")
+            trim_start = arguments.get("trim_start")
+            trim_duration = arguments.get("trim_duration")
+            result = convert_media_result(
+                path,
+                target=target,
+                output=output,
+                quality=int(quality) if quality is not None else None,
+                width=int(width) if width is not None else None,
+                height=int(height) if height is not None else None,
+                trim_start=float(trim_start) if trim_start is not None else None,
+                trim_duration=float(trim_duration) if trim_duration is not None else None,
+            )
+            return json.dumps(result, indent=2)
+        raise ValueError("action must be convert, detect, formats, capabilities, check, or parse")
+    except (FileNotFoundError, ValueError) as exc:
+        raise ValueError(str(exc)) from exc
+    except ImportError as exc:
+        raise RuntimeError(f"convert_media unavailable: {exc}") from exc
+
+
+def _handle_arka_human_docs(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "context").strip().lower()
+    try:
+        from arka.core.human_docs import context_for, read_guide, status
+        from arka.agent.human_docs import write_doc
+
+        if action == "guide":
+            return read_guide()
+        if action == "status":
+            return json.dumps(status(), indent=2)
+        if action == "context":
+            goal = str(arguments.get("goal") or arguments.get("query") or "").strip()
+            limit_chars = int(arguments.get("limit_chars") or 4000)
+            text = context_for(goal, limit_chars=max(200, limit_chars))
+            return text or "(human docs bias disabled)"
+        if action == "write":
+            prompt = str(arguments.get("prompt") or arguments.get("goal") or "").strip()
+            if not prompt:
+                raise ValueError("prompt is required when action=write")
+            out = str(arguments.get("out") or arguments.get("path") or "").strip() or None
+            apply = bool(arguments.get("apply", False))
+            context_path = str(arguments.get("context") or "").strip() or None
+            result = write_doc(prompt, out=out, apply=apply, context_path=context_path)
+            if apply:
+                return f"Wrote {result['path']} ({result['bytes']} bytes)"
+            return json.dumps(result, indent=2)
+        raise ValueError("action must be guide, status, context, or write")
+    except ImportError as exc:
+        raise RuntimeError(f"human_docs unavailable: {exc}") from exc
+
+
 def _handle_arka_project_rules(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "context").strip().lower()
     root_raw = str(arguments.get("root") or "").strip()
@@ -830,6 +942,60 @@ def _handle_arka_remind(arguments: dict[str, Any]) -> str:
         raise ValueError("action must be list, add, or cancel")
     except ImportError as exc:
         raise RuntimeError(f"remind unavailable: {exc}") from exc
+
+
+def _handle_arka_alert(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "status").strip().lower()
+    try:
+        from arka.integrations import email_alert as alerts
+
+        if action == "status":
+            return json.dumps(alerts.status_payload(), indent=2)
+        if action == "list":
+            limit = _mcp_int(arguments.get("limit"), 20)
+            return json.dumps(alerts.list_history(limit=limit), indent=2)
+        if action == "send":
+            text = str(arguments.get("text") or arguments.get("message") or "").strip()
+            title = str(arguments.get("title") or text[:120] or "Arka alert").strip()
+            body = str(arguments.get("body") or text).strip()
+            category = str(arguments.get("category") or "").strip().lower() or None
+            source = str(arguments.get("source") or "").strip() or None
+            if not body and not title:
+                raise ValueError("text or message is required for send")
+            row = alerts.send_alert(title, body, category=category, source=source)
+            return json.dumps(row, indent=2)
+        if action == "schedule":
+            text = str(arguments.get("text") or arguments.get("message") or "").strip()
+            at = str(arguments.get("at") or "").strip() or None
+            in_spec = str(arguments.get("in") or arguments.get("in_spec") or "").strip() or None
+            category = str(arguments.get("category") or "").strip().lower() or None
+            start = bool(arguments.get("start", False))
+            row, err = alerts.schedule_alert(
+                text,
+                at=at,
+                in_spec=in_spec,
+                category=category,
+                start=start,
+            )
+            if err or row is None:
+                raise RuntimeError(err or "failed to schedule alert")
+            return json.dumps(row, indent=2)
+        if action == "test":
+            row = alerts.send_alert(
+                "Test alert",
+                "Arka email alerts are working.",
+                category="general",
+            )
+            return json.dumps(row, indent=2)
+        if action == "config":
+            if "auto" in arguments:
+                enabled = str(arguments.get("auto")).strip().lower() not in {"0", "false", "no", "off"}
+                alerts.set_auto_alert(enabled)
+                return json.dumps({"auto": enabled, **alerts.status_payload()}, indent=2)
+            return json.dumps(alerts.status_payload(), indent=2)
+        raise ValueError("action must be status, list, send, schedule, test, or config")
+    except ImportError as exc:
+        raise RuntimeError(f"email_alert unavailable: {exc}") from exc
 
 
 def _handle_arka_bookmarks(arguments: dict[str, Any]) -> str:
@@ -1381,6 +1547,44 @@ def _handle_arka_repo_health(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"repo_health unavailable: {exc}") from exc
 
 
+def _handle_arka_qa(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "plan").strip().lower()
+    try:
+        from arka.agent import qa_engineering as qa
+
+        path = str(arguments.get("path") or arguments.get("root") or "").strip() or None
+        feature = str(arguments.get("feature") or "").strip() or None
+        base = str(arguments.get("base") or "").strip() or None
+        if action == "plan":
+            return json.dumps(qa.plan_payload(path, feature=feature), indent=2)
+        if action == "checklist":
+            return json.dumps(qa.checklist_payload(path, feature=feature, base=base), indent=2)
+        if action == "triage":
+            return json.dumps(qa.triage_payload(path, base=base), indent=2)
+        if action == "coverage":
+            return json.dumps(qa.coverage_payload(path), indent=2)
+        if action == "report":
+            return json.dumps(
+                qa.report_payload(
+                    title=str(arguments.get("title") or "Bug report"),
+                    steps=str(arguments.get("steps") or ""),
+                    expected=str(arguments.get("expected") or ""),
+                    actual=str(arguments.get("actual") or ""),
+                    severity=str(arguments.get("severity") or "medium"),
+                    from_failure=bool(arguments.get("from_failure")),
+                    root=path,
+                ),
+                indent=2,
+            )
+        if action == "explore":
+            return json.dumps(qa.explore_payload(feature=feature), indent=2)
+        raise ValueError("action must be plan, checklist, triage, coverage, report, or explore")
+    except ValueError:
+        raise
+    except ImportError as exc:
+        raise RuntimeError(f"qa_engineering unavailable: {exc}") from exc
+
+
 def _handle_arka_agent_hub(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "status").strip().lower()
     try:
@@ -1577,7 +1781,7 @@ def _build_tools() -> list[ArkaMcpTool]:
             name="arka_skill",
             description=(
                 "Invoke any Arka skill or routed command by name—not only design. "
-                "Supports repo_health, lint_project, pr_check, review, route_audit, "
+                "Supports repo_health, lint_project, pr_check, qa_engineering, review, route_audit, "
                 "self_improve, design_from_screenshot, compose_slides, urlkit, mcp, "
                 "agent_hub, frontend_loop, sandbox, text, web_screenshot, spline, "
                 "multi_llm, data collection, media transforms, races, reusable blocks, "
@@ -1937,6 +2141,90 @@ def _build_tools() -> list[ArkaMcpTool]:
             handler=_handle_arka_project_rules,
         ),
         ArkaMcpTool(
+            name="arka_human_docs",
+            description=(
+                "Human-sounding README/markdown bias — writing guide, prompt context, "
+                "or generate docs to files instead of chat."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["guide", "status", "context", "write"],
+                        "default": "context",
+                    },
+                    "goal": {"type": "string", "description": "Goal for context ranking or write prompt"},
+                    "prompt": {"type": "string", "description": "Write prompt when action=write"},
+                    "out": {"type": "string", "description": "Output path when action=write"},
+                    "apply": {
+                        "type": "boolean",
+                        "description": "Write file to disk when action=write",
+                        "default": False,
+                    },
+                    "context": {
+                        "type": "string",
+                        "description": "Existing markdown path to revise when action=write",
+                    },
+                    "limit_chars": {
+                        "type": "integer",
+                        "description": "Max characters when action=context",
+                        "default": 4000,
+                    },
+                },
+            },
+            handler=_handle_arka_human_docs,
+        ),
+        ArkaMcpTool(
+            name="arka_convert_media",
+            description=(
+                "Convert images, video/audio, and slide decks between formats. "
+                "Use action=convert with to=all for every supported output format."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["convert", "detect", "formats", "capabilities", "check", "parse"],
+                        "default": "convert",
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "Input file path (convert, detect, formats)",
+                    },
+                    "to": {
+                        "type": "string",
+                        "description": "Target format, comma-separated formats, or all (default: all)",
+                        "default": "all",
+                    },
+                    "output": {
+                        "type": "string",
+                        "description": "Optional output path (single format or stem for multi-export)",
+                    },
+                    "quality": {
+                        "type": "integer",
+                        "description": "JPEG/WebP quality 1-100 (images)",
+                    },
+                    "width": {"type": "integer", "description": "Resize width (images)"},
+                    "height": {"type": "integer", "description": "Resize height (images)"},
+                    "trim_start": {
+                        "type": "number",
+                        "description": "Trim start seconds (video/audio)",
+                    },
+                    "trim_duration": {
+                        "type": "number",
+                        "description": "Trim duration seconds (video/audio)",
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "Natural language for action=parse",
+                    },
+                },
+            },
+            handler=_handle_arka_convert_media,
+        ),
+        ArkaMcpTool(
             name="arka_webhook",
             description="OpenClaw/Hermes-style webhook gateway — status or health (no serve via MCP).",
             input_schema={
@@ -2140,6 +2428,64 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_remind,
+        ),
+        ArkaMcpTool(
+            name="arka_alert",
+            description=(
+                "Email alerts — send or schedule cross-platform notifications for selections, "
+                "credits, hackathons, and study deadlines."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["status", "list", "send", "schedule", "test"],
+                        "default": "status",
+                        "description": "status, list, send, schedule, or test",
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "Alert message for send/schedule",
+                    },
+                    "title": {
+                        "type": "string",
+                        "description": "Optional subject/title for action=send",
+                    },
+                    "body": {
+                        "type": "string",
+                        "description": "Optional email body for action=send",
+                    },
+                    "category": {
+                        "type": "string",
+                        "enum": ["selection", "credits", "hackathon", "studies", "general"],
+                        "description": "Alert category (auto-detected when omitted)",
+                    },
+                    "source": {
+                        "type": "string",
+                        "description": "Optional source URL or citation for action=send",
+                    },
+                    "at": {
+                        "type": "string",
+                        "description": "Absolute deadline for action=schedule",
+                    },
+                    "in": {
+                        "type": "string",
+                        "description": "Relative delay for action=schedule (30m, 2h)",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max rows when action=list",
+                        "default": 20,
+                    },
+                    "start": {
+                        "type": "boolean",
+                        "description": "Start remind daemon after schedule (default: false for MCP)",
+                        "default": False,
+                    },
+                },
+            },
+            handler=_handle_arka_alert,
         ),
         ArkaMcpTool(
             name="arka_bookmarks",
@@ -2772,6 +3118,51 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_repo_health,
+        ),
+        ArkaMcpTool(
+            name="arka_qa",
+            description=(
+                "QA Engineering — test strategy plan, PR/feature checklists, coverage analysis, "
+                "CI test failure triage, bug report drafts, and exploratory testing guidance."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["plan", "checklist", "triage", "coverage", "report", "explore"],
+                        "default": "plan",
+                        "description": "QA workflow action",
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "Optional project root (default: git root / cwd)",
+                    },
+                    "feature": {
+                        "type": "string",
+                        "description": "Feature or area under test",
+                    },
+                    "base": {
+                        "type": "string",
+                        "description": "Base branch for checklist/triage (default: main/master)",
+                    },
+                    "title": {"type": "string", "description": "Bug report title when action=report"},
+                    "steps": {"type": "string", "description": "Reproduction steps when action=report"},
+                    "expected": {"type": "string", "description": "Expected behavior when action=report"},
+                    "actual": {"type": "string", "description": "Actual behavior when action=report"},
+                    "severity": {
+                        "type": "string",
+                        "enum": ["low", "medium", "high", "critical"],
+                        "default": "medium",
+                    },
+                    "from_failure": {
+                        "type": "boolean",
+                        "description": "Seed bug report from latest CI test failure",
+                        "default": False,
+                    },
+                },
+            },
+            handler=_handle_arka_qa,
         ),
         ArkaMcpTool(
             name="arka_agent_hub",

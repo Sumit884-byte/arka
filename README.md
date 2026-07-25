@@ -5,9 +5,10 @@
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![PyPI](https://img.shields.io/pypi/v/arka-agent.svg)](https://pypi.org/project/arka-agent/)
+[![GitHub](https://img.shields.io/github/stars/Sumit884-byte/arka?style=social)](https://github.com/Sumit884-byte/arka)
 [![Docs](https://img.shields.io/badge/docs-Mintlify-6366F1)](https://arka-agent.mintlify.site)
 
-**Documentation:** [arka-agent.mintlify.site](https://arka-agent.mintlify.site)
+**Documentation:** [arka-agent.mintlify.site](https://arka-agent.mintlify.site) · **Repository:** [github.com/Sumit884-byte/arka](https://github.com/Sumit884-byte/arka)
 
 ## Why Arka?
 
@@ -16,7 +17,36 @@
 - **Secure by default:** Prompt-injection checks, risky-action prompts, and hard blocks on destructive shell patterns.
 - **Local-first:** Skills run on your machine; LLM calls failover across Gemini, Groq, Ollama, and 20+ other providers.
 
-If Arka looks useful, a star on GitHub helps others discover the project and signals that it's worth a look.
+If Arka looks useful, **star the upstream repo** — it helps others discover the project and signals that it's worth a look:
+
+```bash
+gh repo star Sumit884-byte/arka
+```
+
+Or open [github.com/Sumit884-byte/arka](https://github.com/Sumit884-byte/arka) and click **Star**.
+
+## Privacy
+
+Arka is designed so **you stay in control of your data**:
+
+- **Runs on your machine** — Skills execute locally. There is no hosted Arka account and no shared demo instance; your terminal, files, and config stay on your system.
+- **Local-first routing** — 120+ symbolic rules handle many requests with **zero LLM tokens**, so common tasks never leave your machine.
+- **You choose where prompts go** — LLM calls use only the providers you configure (Gemini, Groq, Ollama, etc.). For sensitive work, force a local-only boundary:
+
+  ```bash
+  arka run-only-local-llm "summarize this repo"
+  arka hybrid config local-only
+  ```
+
+  With `local-only`, hosted providers are not used as fallbacks.
+
+- **Secrets stay local** — API keys and `.env` live under your user config directory (`~/.config/arka/` on Linux, `~/Library/Application Support/arka/` on macOS). `arka integration setup` never prints secret values.
+- **Memory stays local by default** — Long-term memory uses a local cache unless you add a Supermemory key (`MEMORY=auto` falls back to local). Set `MEMORY=local` to keep recall entirely on disk.
+- **Web content is sanitized** — Search results and scraped pages are stripped of suspicious injection patterns before they reach the model (`SECURITY_SANITIZE=1` by default).
+- **Risky actions need confirmation** — Installs, deletes, downloads, and automation prompt `[y/N]` unless you explicitly auto-confirm (`SECURITY_ACTIONS=1` by default).
+- **Telemetry is opt-in** — OpenTelemetry export to SigNoz or other backends is off until you enable `OTEL_TRACES_ENABLED` and set an endpoint.
+
+Details: [Security model](https://arka-agent.mintlify.site/concepts/security) · [Memory](https://arka-agent.mintlify.site/guides/memory) · [Hybrid local/hosted routing](https://arka-agent.mintlify.site/guides/integrations#local-and-hosted-models-together)
 
 ## Supported platforms
 
@@ -60,12 +90,32 @@ arka doctor
 
 **From a git clone** (best for contributors or tracking `main`):
 
+Upstream (canonical):
+
 ```bash
 git clone https://github.com/Sumit884-byte/arka.git
 cd arka
 ./scripts/refetch.sh --install
 arka setup
 arka doctor
+```
+
+**Working from a fork** (recommended if you do not have push access to upstream):
+
+```bash
+gh repo fork Sumit884-byte/arka --clone
+cd arka
+./scripts/refetch.sh --install
+pip install -e ".[chat,dev]"
+arka setup
+arka doctor
+```
+
+Example active fork: [sumitmishra884byte-cpu/arka](https://github.com/sumitmishra884byte-cpu/arka) (fork of upstream). Sync your fork before opening a PR:
+
+```bash
+gh repo sync --source Sumit884-byte/arka
+git push origin main
 ```
 
 **Configure API keys** (at least one cloud key or local Ollama):
@@ -146,6 +196,18 @@ Judges can reproduce the full path with `pipx install "arka-agent[chat]"`, `arka
 ## Contributing
 
 We welcome contributions of all sizes! Please read our [Contribution Guidelines](CONTRIBUTING.md) to get started with the local development workflow.
+
+**Quick fork workflow with GitHub CLI:**
+
+```bash
+gh repo view Sumit884-byte/arka          # upstream metadata
+gh repo fork Sumit884-byte/arka --clone  # your fork + local clone
+cd arka
+pip install -e ".[chat,dev]"
+pytest
+# push to your fork, then open a PR back to Sumit884-byte/arka
+gh pr create --repo Sumit884-byte/arka
+```
 
 Look for the **good first issue** label on [GitHub Issues](https://github.com/Sumit884-byte/arka/issues?q=label%3A%22good+first+issue%22) to find a welcoming entry point.
 

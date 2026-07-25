@@ -1,0 +1,21 @@
+{
+  "name": "qa_engineering",
+  "description": "QA Engineering — test strategy, PR checklists, coverage analysis, CI test triage, bug reports, and exploratory testing guidance",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "run qa on this",
+    "qa checklist for feature",
+    "triage test failures",
+    "test coverage analysis",
+    "bug report for",
+    "exploratory testing",
+    "test strategy plan",
+    "smoke test plan",
+    "regression test plan"
+  ],
+  "permissions": ["read"],
+  "docs": "Subcommands: plan, checklist, triage, coverage, report, explore. CLI: arka qa <subcommand>. MCP: arka_qa or arka_skill qa_engineering."
+}

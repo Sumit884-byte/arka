@@ -62,6 +62,8 @@ SKILL_TASK_MAP: dict[str, str] = {
     # Chat / Q&A
     "platform_howto": "chat",
     "interesting_fact": "chat",
+    "nudge": "chat",
+    "contextual_answer": "chat",
     "flow": "flow",
     "elon": "chat",
     "talk_to_elon": "chat",

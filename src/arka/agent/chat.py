@@ -59,6 +59,8 @@ Do not explain."""
 
 ASSISTANT_SYSTEM = f"""You are a direct, concise assistant. Today is {CURRENT_DATE}. Year: {YEAR}.
 - For coding tasks, inspect and reuse Arka's preexisting skills, MCP tools, and integration libraries; integrate the relevant tool instead of recreating it.
+- Human-facing docs (README, CHANGELOG, CONTRIBUTING, docs/*.md): write to files, not chat; in chat confirm path + one-line summary only. Sound human—no AI filler.
+- For explanatory or decision questions, add brief **Context** and **Related options** (alternatives the user may not know to ask about) after the direct answer when helpful.
 - If using web search results, start with: [FROM SEARCH]
 - If answering from general knowledge only, start with: [FROM MEMORY]
 - For simple questions: 2-4 short sentences; state the direct answer first.
@@ -141,6 +143,12 @@ def session_append(role: str, content: str) -> None:
             from arka.agent.core import memory_auto_detect
 
             memory_auto_detect(content, quiet=True)
+        except ImportError:
+            pass
+        try:
+            from arka.integrations.email_alert import maybe_auto_alert
+
+            maybe_auto_alert(content, quiet=True)
         except ImportError:
             pass
         try:
@@ -1937,10 +1945,21 @@ def answer_question(
     deep: bool = False,
     use_session: bool = True,
     cleanup: bool = True,
+    contextual: bool | None = None,
 ) -> tuple[str, str]:
     """Returns (provenance, answer_text). provenance: search|memory|calc|weather|error"""
     question = normalize_question(" ".join(question.split()))
     word_limit = detect_word_limit(question)
+    contextual_hint = ""
+    try:
+        from arka.core.contextual_answer import answer_instructions
+
+        if contextual is True:
+            contextual_hint = answer_instructions(question, force=True)
+        elif contextual is not False:
+            contextual_hint = answer_instructions(question)
+    except ImportError:
+        pass
     channel_ctx = _begin_channel_session(question, use_session=use_session)
     try:
         from arka.core.security import sanitize_web_context, verify_web_query
@@ -2097,7 +2116,7 @@ def answer_question(
                 list_extra
                 or headline_extra
                 or "\nGive a direct answer using the search results."
-            ) + memory_hint
+            ) + memory_hint + contextual_hint
             page_label = "SEARCH RESULTS"
         user = (
             f"{context_block}\n\n"
@@ -2120,7 +2139,7 @@ def answer_question(
         user = f"{context_block}\n\n"
         if snippet:
             user += f"Web snippet:\n{snippet}\n\n"
-        length_hint = (list_extra or ("\nAnswer in at most %d words." % word_limit if word_limit else "\nAnswer clearly and completely.")) + memory_hint
+        length_hint = (list_extra or ("\nAnswer in at most %d words." % word_limit if word_limit else "\nAnswer clearly and completely.")) + memory_hint + contextual_hint
         user += f"Question: {question}\n{length_hint}\nStart with [FROM MEMORY] unless snippet was decisive."
         answer = llm_complete(system, user, task="chat")
         prov = "memory"
@@ -2158,7 +2177,7 @@ def answer_question(
                     list_extra
                     or headline_extra
                     or "\nGive a direct answer using the search results."
-                ) + memory_hint
+                ) + memory_hint + contextual_hint
                 user = (
                     f"{context_block}\n\n"
                     f"SEARCH RESULTS:\n---\n{fallback_ctx}\n---\n\n"

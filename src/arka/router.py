@@ -21,6 +21,8 @@ class Route:
     skill: str
     source: str = "offline"
     kind: str = "skill"
+    rule: str = ""
+    decision: str = ""
 
 
 def _route_mode() -> str:
@@ -107,11 +109,12 @@ def route(text: str) -> Route | None:
                     _finish_route_span(current, github_route, decision="symbolic", start=route_start)
                 return github_route
             try:
-                from arka.routing.symbolic import route_offline_extras
+                from arka.routing.symbolic import route_offline_extras_with_rule
 
-                extra = route_offline_extras(cmd)
-                if extra:
-                    sym_route = Route(extra, source="offline")
+                matched = route_offline_extras_with_rule(cmd)
+                if matched:
+                    extra, rule = matched
+                    sym_route = Route(extra, source="offline", rule=rule)
                     if span is not None:
                         _finish_route_span(
                             current,
@@ -278,18 +281,10 @@ def _finish_route_span(
     start: float,
 ) -> None:
     try:
-        from arka.telemetry import mark_ok
-        from arka.telemetry.metrics import record_routing_decision
-        from arka.telemetry.tracing import duration_ms
+        from arka.telemetry.symbolic_obs import finish_route_obs
     except ImportError:
         return
-    elapsed = duration_ms(start)
-    current.set_attribute("arka.route.source", route_result.source)
-    current.set_attribute("arka.route.skill", route_result.skill[:500])
-    current.set_attribute("arka.route.decision", decision)
-    current.set_attribute("arka.route.latency_ms", elapsed)
-    record_routing_decision(decision=decision, source=route_result.source, latency_ms=elapsed)
-    mark_ok(current)
+    finish_route_obs(current, route_result, decision=decision, start=start)
 
 
 def _route_ai_only_integrations(cmd: str) -> Route | None:
@@ -586,11 +581,12 @@ def _route_offline(cmd: str) -> Route | None:
         return Route(f"deep_web_answer {forced}")
 
     try:
-        from arka.routing.symbolic import route_offline_extras
+        from arka.routing.symbolic import route_offline_extras_with_rule
 
-        extra = route_offline_extras(cmd)
-        if extra:
-            return Route(extra, source="offline")
+        matched = route_offline_extras_with_rule(cmd)
+        if matched:
+            extra, rule = matched
+            return Route(extra, source="offline", rule=rule)
     except ImportError:
         chart_route = _route_chart(cmd)
         if chart_route:

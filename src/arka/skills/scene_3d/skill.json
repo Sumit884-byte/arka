@@ -1,10 +1,19 @@
 {
   "name": "scene_3d",
-  "description": "Compose Three.js scenes from real GLB/GLTF model assets with lighting, camera, placement, and animation",
-  "version": "1.0.0",
+  "description": "Compose impressive interactive Three.js scenes from GLB assets with auto-resolution, presets, lighting, and post-processing",
+  "version": "2.0.0",
   "author": "Arka",
   "type": "python",
   "entry": "run.py",
-  "triggers": ["create 3d scene", "build three js scene", "place 3d models", "create human 3d scene"],
+  "triggers": [
+    "create 3d scene",
+    "build three js scene",
+    "place 3d models",
+    "create human 3d scene",
+    "impressive 3d scene",
+    "interactive 3d world",
+    "animated 3d gallery",
+    "build a 3d gallery"
+  ],
   "permissions": ["write", "network"]
 }

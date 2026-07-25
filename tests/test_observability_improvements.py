@@ -101,6 +101,8 @@ def test_agent_observability_guide():
     assert "arka signoz autostart install" in guide["commands"]
     assert "arka signoz demo" in guide["commands"]
     assert "arka.mcp.server.tool" in guide["sigNoz_filters"]["mcp_server"]
+    assert "deterministic" in guide["sigNoz_filters"]
+    assert "routing" in guide["sigNoz_filters"]
 
 
 def test_skill_dispatch_failure_alert_loads():

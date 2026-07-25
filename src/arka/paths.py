@@ -84,6 +84,8 @@ def checkout_state_dir() -> Path | None:
 _RUNTIME_JSON_FILES = (
     "code-project.json",
     "council-memory.json",
+    "email_contacts.json",
+    "email_draft_history.json",
     "mcp.json",
     "personalize.json",
     "platform.json",
@@ -162,6 +164,22 @@ def _migrate_hub_runtime(src_hub: Path, dst_hub: Path, *, moved: list[str]) -> N
         _move_dir_if_missing(src_hub / name, dst_hub / name, moved=moved)
 
 
+def _migrate_logs_runtime(src_logs: Path, dst_logs: Path, *, moved: list[str]) -> None:
+    """Move repo-root ``logs/`` (legacy MCP debug output) into ``config_dir()/logs/``."""
+    if not src_logs.is_dir():
+        return
+    dst_logs.mkdir(parents=True, exist_ok=True)
+    for item in sorted(src_logs.iterdir()):
+        if not item.is_file():
+            continue
+        _move_if_missing(item, dst_logs / item.name, moved=moved)
+    try:
+        if not any(src_logs.iterdir()):
+            src_logs.rmdir()
+    except OSError:
+        pass
+
+
 def migrate_scattered_state(*, target: Path | None = None) -> list[str]:
     """Move dev runtime state from repo root into ``config_dir()`` (``.arka/`` in checkouts)."""
     root = checkout_root()
@@ -186,6 +204,7 @@ def migrate_scattered_state(*, target: Path | None = None) -> list[str]:
         _move_dir_if_missing(root / name, target / name, moved=moved)
 
     _migrate_hub_runtime(root / "hub", target / "hub", moved=moved)
+    _migrate_logs_runtime(root / "logs", target / "logs", moved=moved)
 
     return moved
 

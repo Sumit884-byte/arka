@@ -386,6 +386,12 @@ def voice_session_record(user_text: str, assistant_text: str) -> None:
             memory_auto_detect(user_text, quiet=True)
         except ImportError:
             pass
+        try:
+            from arka.integrations.email_alert import maybe_auto_alert
+
+            maybe_auto_alert(user_text, quiet=True)
+        except ImportError:
+            pass
     data = voice_session_load()
     if not data.get("active"):
         data = {"active": True, "started": time.time(), "turns": []}

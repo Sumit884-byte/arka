@@ -7,6 +7,7 @@ import argparse
 import json
 import re
 import shlex
+import shutil
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -63,16 +64,36 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
-def _contacts_path() -> Path:
-    path = config_dir() / _CONTACTS_FILE
+def _legacy_checkout_file(filename: str) -> Path | None:
+    try:
+        from arka.paths import checkout_root
+    except ImportError:
+        return None
+    root = checkout_root()
+    if root is None:
+        return None
+    legacy = root / filename
+    return legacy if legacy.is_file() else None
+
+
+def _resolve_state_file(filename: str) -> Path:
+    """Config-scoped state file; lazily migrate legacy repo-root copies."""
+    path = config_dir() / filename
     path.parent.mkdir(parents=True, exist_ok=True)
+    if path.is_file():
+        return path
+    legacy = _legacy_checkout_file(filename)
+    if legacy is not None:
+        shutil.move(str(legacy), str(path))
     return path
+
+
+def _contacts_path() -> Path:
+    return _resolve_state_file(_CONTACTS_FILE)
 
 
 def _history_path() -> Path:
-    path = config_dir() / _HISTORY_FILE
-    path.parent.mkdir(parents=True, exist_ok=True)
-    return path
+    return _resolve_state_file(_HISTORY_FILE)
 
 
 def _load_contacts() -> list[dict]:

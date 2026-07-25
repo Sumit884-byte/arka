@@ -18,7 +18,7 @@ def finish_skill_dispatch(
     """Attach duration/exit attrs, record metrics, and emit a correlated log."""
     elapsed = duration_ms(start)
     success = exit_code == 0
-    attrs = {
+    attrs: dict[str, Any] = {
         "arka.skill.name": skill[:120],
         "arka.skill.duration_ms": elapsed,
         "arka.skill.exit_code": exit_code,
@@ -26,6 +26,13 @@ def finish_skill_dispatch(
     }
     if skill_line:
         attrs["arka.skill.line"] = skill_line[:500]
+
+    try:
+        from arka.telemetry.symbolic_obs import clear_route_context, skill_obs_attrs
+
+        attrs.update(skill_obs_attrs(skill=skill))
+    except ImportError:
+        pass
 
     if span_obj is not None:
         set_span_attributes(span_obj, attrs)
@@ -37,21 +44,35 @@ def finish_skill_dispatch(
     try:
         from arka.telemetry.metrics import record_skill_dispatch
 
-        record_skill_dispatch(skill=skill, duration_ms=elapsed, exit_code=exit_code)
+        record_skill_dispatch(
+            skill=skill,
+            duration_ms=elapsed,
+            exit_code=exit_code,
+            execution_kind=str(attrs.get("arka.execution.kind", "")),
+            llm_used=attrs.get("arka.llm.used"),
+        )
     except ImportError:
         pass
 
     try:
         from arka.telemetry.logs import emit_log
 
+        exec_kind = attrs.get("arka.execution.kind", "unknown")
         emit_log(
-            f"skill {skill} exit {exit_code} ({elapsed}ms)",
+            f"skill {skill} ({exec_kind}) exit {exit_code} ({elapsed:.1f}ms)",
             level="info" if success else "warn",
             attributes={
                 **attrs,
                 "arka.event": "skill.dispatch",
             },
         )
+    except ImportError:
+        pass
+
+    try:
+        from arka.telemetry.symbolic_obs import clear_route_context
+
+        clear_route_context()
     except ImportError:
         pass
 

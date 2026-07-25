@@ -1,0 +1,17 @@
+{
+  "name": "contextual_answer",
+  "description": "Answers with proactive context and related-option comparisons—even when the user did not ask for them",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "with context",
+    "explain with context",
+    "contextual answer",
+    "what else should I know",
+    "related options",
+    "compare to alternatives"
+  ],
+  "permissions": ["network"]
+}

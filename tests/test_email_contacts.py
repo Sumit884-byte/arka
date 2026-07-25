@@ -98,6 +98,18 @@ class EmailContactsStoreTests(unittest.TestCase):
             self.assertIn("project timeline", ctx)
             self.assertIn("avoid repeating", ctx.lower())
 
+    def test_lazy_migrate_legacy_repo_root_history(self) -> None:
+        config = self.root / ".arka"
+        legacy = self.root / ec._HISTORY_FILE
+        legacy.write_text("[]\n", encoding="utf-8")
+
+        with mock.patch.object(ec, "config_dir", return_value=config):
+            with mock.patch.object(ec, "_legacy_checkout_file", return_value=legacy):
+                path = ec._resolve_state_file(ec._HISTORY_FILE)
+                self.assertEqual(path, config / ec._HISTORY_FILE)
+                self.assertTrue(path.is_file())
+                self.assertFalse(legacy.exists())
+
 
 class GmailDraftContactParseTests(unittest.TestCase):
     def setUp(self) -> None:

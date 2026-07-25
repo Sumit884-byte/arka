@@ -267,7 +267,21 @@ def memory_context_for(goal: str, *, limit: int = 3) -> str:
         frontend = design_guides_context(goal, limit_chars=2000)
     except ImportError:
         pass
-    parts = [part for part in (rules, frontend, body) if part]
+    human_docs = ""
+    try:
+        from arka.core.human_docs import context_for as human_docs_context
+
+        human_docs = human_docs_context(goal, limit_chars=2000)
+    except ImportError:
+        pass
+    contextual = ""
+    try:
+        from arka.core.contextual_answer import context_for as contextual_answer_context
+
+        contextual = contextual_answer_context(goal, limit_chars=800)
+    except ImportError:
+        pass
+    parts = [part for part in (rules, frontend, human_docs, contextual, body) if part]
     return "\n\n".join(parts)
 
 

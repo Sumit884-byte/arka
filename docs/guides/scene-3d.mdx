@@ -1,6 +1,6 @@
 ---
 title: "3D scene composition"
-description: "Compose Three.js scenes from real model assets."
+description: "Compose impressive interactive Three.js scenes from real model assets."
 icon: "cubes"
 ---
 
@@ -10,14 +10,54 @@ Use real GLB/GLTF assets instead of primitive geometry:
 arka scene-3d "Museum visitors" \
   --model https://example.com/human.glb \
   --model https://example.com/robot.glb \
-  --out museum-scene
+  --out museum-scene \
+  --preset museum
 ```
 
-The generated scene includes OrbitControls, responsive lighting, model
-placement, and animation playback when clips are present. Arka does not invent
-asset URLs: provide a verified local path or URL and check its license.
+## One-shot impressive scenes (no URLs required)
 
-Plan contextual scenes before generation:
+Arka can auto-resolve verified free assets from the curated three.js examples catalog:
+
+```bash
+arka scene-3d "Animated robot gallery" --auto --preset gallery --out arka-scenes/robot-gallery
+```
+
+Or from natural language:
+
+```bash
+arka create an impressive interactive 3d robot gallery scene
+```
+
+Resolution order: user-provided models → curated catalog → optional `threejs` MCP search → local generation (procedural / HF Shap-E) unless `--no-generate` is set.
+
+## Visual presets
+
+| Preset | Look |
+|--------|------|
+| `gallery` | Reflective dark floor, rim lights, bloom |
+| `studio` | Neutral sweep, soft shadows (default) |
+| `outdoor` | Warm sun, light fog, large ground |
+| `racing` | Low chase camera, track-style ground |
+| `interior` | Warm ambient, tighter framing |
+| `space` | Starfield, bloom |
+| `museum` | Polished exhibit floor |
+
+If `--preset` is omitted, Arka infers one from the scene plan context.
+
+## Scene features
+
+The generated scene includes:
+
+- OrbitControls with damping and double-click camera reset
+- Shadow maps, ACES tone mapping, and optional bloom
+- Ground plane tuned to the preset
+- Loading overlay while models fetch
+- Animation clip picker when a model has multiple clips
+- Responsive resize handling
+
+Arka does not invent asset URLs: auto mode uses verified catalog entries or configured search providers.
+
+## Plan contextual scenes
 
 ```bash
 arka scene-3d "Person typing" --intent "working at a desk" \
@@ -37,3 +77,14 @@ vehicle racing/game prompts such as “Cybertruck vs Ferrari racing game” use 
 rear three-quarter chase-camera view by default, because racing games usually
 show the back of the player car. Explicit user wording still wins: “front view,”
 “side profile,” “top layout,” or “show the back” override the default.
+
+## Flags
+
+| Flag | Purpose |
+|------|---------|
+| `--auto` | Resolve assets from plan roles |
+| `--no-generate` | Catalog + search only; skip AI mesh generation |
+| `--preset` | Visual environment preset |
+| `--intent` | Action/context for planning and layout |
+| `--plan` | Print the contextual plan JSON |
+| `--out` | Output directory (writes `index.html`) |

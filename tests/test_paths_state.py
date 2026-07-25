@@ -63,6 +63,25 @@ def test_migrate_scattered_state_from_repo_root(checkout):
     assert len(moved) >= 5
 
 
+def test_migrate_email_and_logs_from_repo_root(checkout):
+    from arka.paths import config_dir, migrate_scattered_state
+
+    (checkout / "email_draft_history.json").write_text("[]\n", encoding="utf-8")
+    (checkout / "email_contacts.json").write_text("[]\n", encoding="utf-8")
+    (checkout / "logs").mkdir()
+    (checkout / "logs" / "mcp.jsonl").write_text('{"event":"test"}\n', encoding="utf-8")
+
+    moved = migrate_scattered_state()
+    target = config_dir()
+
+    assert (target / "email_draft_history.json").is_file()
+    assert (target / "email_contacts.json").is_file()
+    assert (target / "logs" / "mcp.jsonl").is_file()
+    assert not (checkout / "email_draft_history.json").exists()
+    assert not (checkout / "logs").exists()
+    assert len(moved) >= 3
+
+
 def test_migrate_is_idempotent(checkout):
     from arka.paths import migrate_scattered_state
 
