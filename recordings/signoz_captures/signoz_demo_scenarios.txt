@@ -1,0 +1,10 @@
+Enable tracing first:
+  OTEL_TRACES_ENABLED=1 SIGNOZ_ENDPOINT=http://localhost:4318
+Enable tracing first:
+  OTEL_TRACES_ENABLED=1 SIGNOZ_ENDPOINT=http://localhost:4318
+Enable tracing first:
+  OTEL_TRACES_ENABLED=1 SIGNOZ_ENDPOINT=http://localhost:4318
+Enable tracing first:
+  OTEL_TRACES_ENABLED=1 SIGNOZ_ENDPOINT=http://localhost:4318
+Inference demo sent. Open http://localhost:8080/traces — filter arka.demo.scenario = vllm-vs-cloud-latency
+Compare arka.llm.ttft_ms and arka.llm.duration_ms on vllm-cloud vs cloud provider spans.

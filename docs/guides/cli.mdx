@@ -7,6 +7,10 @@ icon: "terminal"
 
 The `arka` command is the main entry point. `agent` is an alias for the same router.
 
+<Note>
+  **Always prefix with `arka`.** Subcommands, skills, and natural-language requests all go through `arka …` or `arka "…"`. Fish-only shortcuts (`chart`, `stock news`, `route_learn`) work in a Fish shell, but every doc example uses `arka` for consistency.
+</Note>
+
 ## Install the CLI (no build from source)
 
 You do not need to clone the repo to use `arka` from your terminal. Install the **`arka-agent`** package:
@@ -39,8 +43,65 @@ Then open a new terminal and run `arka help`. Only clone the repo if you are [co
 | `arka setup` | Seed config dirs and dependencies |
 | `arka doctor` | Install diagnostics |
 | `arka reload` | Re-read `.env` and `config.fish` |
+| `arka backup all` | Compressed backup of all config + cache files (includes `.env`) |
 | `arka refetch --install` | Git pull \+ sync \+ reinstall |
 | `arka help` | Skill overview |
+
+## Web dashboard
+
+Full guide: [Web dashboard](/guides/web-dashboard)
+
+| Command | Description |
+| --- | --- |
+| `arka serve` | Start remote API on port 8765 |
+| `arka backend status` | Check local or hosted backend health |
+| `arka backend ask "<prompt>"` | Call `/v1/agent` from the terminal |
+| `cd web && python3 bridge.py` | Bridge + session history on port 8766 |
+| `cd web && npm run dev` | Vite dev UI on port 5173 |
+
+Session history for the dashboard uses channel `web`:
+
+```bash
+arka session list
+arka session resume web <chat-id>
+arka session reset web <chat-id>
+```
+
+## Media capture
+
+See [Browser video capture](/guides/video-capture) and [Meme templates](/guides/meme-templates).
+
+| Command | Description |
+| --- | --- |
+| `arka capture video <url>` | Record walkthrough WebM + step PNGs |
+| `arka capture video --walkthrough` | Preset for the web dashboard |
+| `arka meme vibe-coding` | Built-in meme preset |
+| `arka meme drake --reject "…" --accept "…"` | Drake hotline bling layout |
+| `arka generate music "lo-fi beat"` | AI music (instrumental or with `--lyrics`) |
+
+See [Generate music](/guides/generate-music).
+
+## Charts and prediction
+
+Full guide: [Charts](/guides/charts)
+
+| Command | Description |
+| --- | --- |
+| `arka chart line AAPL --range 1y` | Stock line chart |
+| `arka chart predict AAPL --days 30` | Stock price forecast chart |
+| `arka chart models --type scatter` | LLM latency vs benchmark score |
+| `arka chart table sales.csv` | Render CSV/TSV/JSON as PNG table image |
+| `arka predict future "…" --chart` | Weather, rainfall, Kaggle, CSV forecasts |
+| `arka benchmark run --dry-run` | Populate data for `arka chart models` |
+
+Natural language (always prefix with `arka`):
+
+```bash
+arka "compare Apple and Tesla stock last year"
+arka "predict monsoon rainfall in Mumbai next 2 weeks"
+arka "chart AI model characteristics with data points"
+arka "forecast kaggle dataset heptapod/titanic next 30 days"
+```
 
 ## Developer tools
 
@@ -85,12 +146,12 @@ See the full [Stock intelligence guide](/guides/stocks).
 
 | Command | Description |
 | --- | --- |
-| `stock news` | Market news feeds |
-| `stock prices [TICKER…]` | Live prices |
-| `stock analyze TICKER` | AI backtest \+ ML signal |
-| `stock fundamentals TICKER…` | Ratios vs peers |
-| `stock invest <question>` | Deep investment research |
-| `predictions --domain stocks <topic>` | Opportunity analysis |
+| `arka stock news` | Market news feeds |
+| `arka stock prices [TICKER…]` | Live prices |
+| `arka stock analyze TICKER` | AI backtest \+ ML signal |
+| `arka stock fundamentals TICKER…` | Ratios vs peers |
+| `arka stock invest <question>` | Deep investment research |
+| `arka predictions --domain stocks <topic>` | Opportunity analysis |
 
 ## Voice and services
 

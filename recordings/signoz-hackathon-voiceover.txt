@@ -1,0 +1,17 @@
+[0:00] Meet Arka plus SigNoz — full observability for AI agents. When your agent chains LLM calls, invokes tools, and fails over across providers, you need one trace waterfall — not fragmented logs. This is our submission for Agents of SigNoz, Track Zero One: AI and Agent Observability.
+
+[0:10] The problem is simple: AI agents are a black box. Latency spikes, runaway token costs, and silent failures are impossible to debug when you cannot see each step end to end.
+
+[0:22] We deploy SigNoz with Foundry in one command. arka signoz setup minus y reads casting dot yaml from the repo — SigNoz, OTLP ingester, and MCP server on port eight thousand — reproducible for every judge.
+
+[0:38] arka signoz status shows what's wired: traces, metrics, and logs pipelines, plus verify queries for routing spans, LLM attempts, and MCP tool calls. OpenTelemetry ships with the arka-agent observability extra.
+
+[0:52] Run arka signoz demo-scenarios minus minus synthetic to emit realistic agent traces without a live LLM — inference latency comparison, RAG retrieval, router decisions, and end-to-end goal loops. Each scenario tags arka dot demo dot scenario so you can filter in SigNoz.
+
+[0:66] In SigNoz Traces Explorer, filter service dot name equals arka. You see real spans — arka dot llm dot attempt, arka dot route, arka dot demo dot inference compare — the full agent lifecycle in one view.
+
+[0:78] The Services view shows arka P99 latency, error rate, and ops per second — live OpenTelemetry metrics for the agent, no custom dashboard required.
+
+[0:90] Structured logs correlate with the same trace IDs — LLM failover, quota errors, and provider four twenty nine recovery in the Logs Explorer.
+
+[1:02] Everything is reproducible: casting dot yaml plus lock at repo root, foundryctl cast, then arka signoz demo. GitHub: Sumit884-byte slash arka. Arka plus SigNoz — see inside your agents.

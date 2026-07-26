@@ -1,0 +1,11 @@
+usage: signoz_cli.py setup [-h] [-y] [--skip-cast] [--check-only]
+                           [--autostart]
+
+options:
+  -h, --help    show this help message and exit
+  -y, --yes     Auto-approve installs and foundryctl cast (or
+                ARKA_AUTO_INSTALL=1)
+  --skip-cast   Install prerequisites and run foundryctl gauge only
+  --check-only  Report prerequisite status and exit (no installs)
+  --autostart   Install login autostart after a successful cast (macOS launchd
+                / Linux systemd; respects SIGNOZ_AUTOSTART in .env)

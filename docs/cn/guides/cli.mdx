@@ -7,6 +7,10 @@ icon: "terminal"
 
 `arka` 命令是主入口。`agent` 是同一路由器的别名。
 
+<Note>
+  **请始终在命令前加 `arka`。** 子命令、技能与自然语言请求均通过 `arka …` 或 `arka "…"` 运行。Fish 快捷方式（如 `chart`、`stock news`）仅在 Fish 中可用，但文档示例统一使用 `arka`。
+</Note>
+
 ## 安装 CLI（无需从源码构建）
 
 无需克隆仓库即可在终端使用 `arka`。安装 **`arka-agent`** 包：
@@ -55,12 +59,33 @@ pipx install "arka-agent[chat] @ git+https://github.com/Sumit884-byte/arka.git"
 
 | 命令 | 说明 |
 | ---- | ---- |
-| `stock news` | 市场新闻源 |
-| `stock prices [TICKER…]` | 实时价格 |
-| `stock analyze TICKER` | AI 回测 + ML 信号 |
-| `stock fundamentals TICKER…` | 与同行的比率对比 |
-| `stock invest <question>` | 深度投资研究 |
-| `predictions --domain stocks <topic>` | 机会分析 |
+| `arka stock news` | 市场新闻源 |
+| `arka stock prices [TICKER…]` | 实时价格 |
+| `arka stock analyze TICKER` | AI 回测 + ML 信号 |
+| `arka stock fundamentals TICKER…` | 与同行的比率对比 |
+| `arka stock invest <question>` | 深度投资研究 |
+| `arka predictions --domain stocks <topic>` | 机会分析 |
+
+## 图表与预测
+
+完整指南：[图表](/cn/guides/charts)
+
+| 命令 | 说明 |
+| ---- | ---- |
+| `arka chart line AAPL --range 1y` | 股票折线图 |
+| `arka chart predict AAPL --days 30` | 股价预测图 |
+| `arka chart models --type scatter` | LLM 延迟 vs 基准分数 |
+| `arka predict future "…" --chart` | 天气、降雨、Kaggle、CSV 预测 |
+| `arka benchmark run --dry-run` | 为 `arka chart models` 填充数据 |
+
+自然语言（始终加 `arka` 前缀）：
+
+```bash
+arka "compare Apple and Tesla stock last year"
+arka "predict monsoon rainfall in Mumbai next 2 weeks"
+arka "chart AI model characteristics with data points"
+arka "forecast kaggle dataset heptapod/titanic next 30 days"
+```
 
 ## 语音与服务
 

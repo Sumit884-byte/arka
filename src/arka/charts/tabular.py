@@ -135,7 +135,11 @@ def resolve_columns(
         value_col = numeric_cols[0] if numeric_cols else None
     if not label_col:
         label_col = text_cols[0] if text_cols else None
-        if not label_col and len(columns) >= 2:
+        if not label_col and len(numeric_cols) >= 2:
+            label_col = numeric_cols[0]
+            if not value_col or value_col == label_col:
+                value_col = numeric_cols[1]
+        elif not label_col and len(columns) >= 2:
             label_col = columns[0]
             if value_col is None:
                 value_col = columns[1]
@@ -168,6 +172,28 @@ def aggregate_rows(
     labels = list(totals.keys())
     values = [totals[lbl] for lbl in labels]
     return labels, values
+
+
+def series_pairs(
+    rows: list[dict[str, str]],
+    x_col: str,
+    y_col: str,
+) -> tuple[list[float], list[float]]:
+    xs: list[float] = []
+    ys: list[float] = []
+    for row in rows:
+        xraw = row.get(x_col, "").strip()
+        yraw = row.get(y_col, "").strip()
+        if not xraw or not yraw:
+            continue
+        try:
+            xs.append(parse_numeric_value(xraw))
+            ys.append(parse_numeric_value(yraw))
+        except ValueError:
+            continue
+    if len(xs) < 3:
+        raise SystemExit(f"Need at least 3 numeric ({x_col}, {y_col}) pairs for scatter")
+    return xs, ys
 
 
 def labels_look_temporal(labels: list[str]) -> bool:

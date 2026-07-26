@@ -1,0 +1,41 @@
+enabled	false
+configured	false
+endpoint	
+service	arka
+metrics_enabled	false
+metrics_configured	false
+metrics_endpoint	
+logs_enabled	false
+logs_configured	false
+logs_endpoint	
+collector_reachable	false
+packages_installed	true
+verify_traces_skill	service.name = 'arka' AND name LIKE 'arka.skill.%'
+verify_traces_route	service.name = 'arka' AND name = 'arka.route'
+verify_traces_llm	service.name = 'arka' AND name = 'arka.llm.attempt'
+verify_metrics_routing	metric_name = 'arka.routing.decisions'
+verify_metrics_skill	metric_name = 'arka.skill.duration'
+verify_metrics_mcp	metric_name = 'arka.mcp.ops'
+verify_traces_mcp_server	service.name = 'arka' AND name = 'arka.mcp.server.tool'
+verify_traces_mcp_client	service.name = 'arka' AND name = 'arka.mcp.call_tool'
+verify_logs_correlation	logs with trace_id attribute matching active trace
+docker_cli	ok
+docker_daemon	stopped
+foundryctl	ok
+casting_yaml	/Users/sumitmishra/dev/arka/casting.yaml
+supermemory_mode	auto
+supermemory_api_key	set
+supermemory_container	arka
+supermemory_local_entries	200
+supermemory_api_enabled	true
+supermemory_backend	api+local
+mcp_signoz_url	http://localhost:8000/mcp
+mcp_signoz_api_key	set
+mcp_signoz_livez	unreachable
+vllm_cloud_configured	false
+signoz_setup	unreachable
+signoz_mcp	unreachable
+ui	http://localhost:8080/traces
+mcp	http://localhost:8000/mcp
+hint	SigNoz MCP missing — ensure mcp.spec.enabled: true in casting.yaml and re-run: arka signoz setup -y
+hint	missing: Docker — run: arka signoz setup

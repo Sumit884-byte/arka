@@ -5,7 +5,11 @@ keywords: ["charts", "matplotlib", "graph", "plot"]
 icon: "chart-column"
 ---
 
-将数字转化为 PNG 图表。通过离线 NL 解析支持七种图表类型 —— 大多数请求无需 LLM。
+将数字转化为 PNG 图表。通过离线 NL 解析支持多种图表类型 —— 大多数请求无需 LLM。
+
+<Note>
+  **请始终在命令前加 `arka`。** 下文所有示例均为 `arka …` 或 `arka "自然语言"`。Fish 中也可使用 `chart …` 等快捷方式，但文档与复制粘贴示例统一使用 `arka`。
+</Note>
 
 ```bash
 pip install "arka-agent[charts]"
@@ -13,21 +17,54 @@ pip install "arka-agent[charts]"
 
 ## 图表类型
 
-| 类型 | CLI | 自然语言示例 |
-| ---- | --- | ---------- |
-| line | `arka chart line AAPL TSLA --range 1y` | `compare Apple and Tesla stock last year` |
-| bar | `arka chart bar --data "A:1,B:2"` | `phone sales Apple 230 Samsung 210` |
-| pie | `arka chart pie --data "A:40,B:30"` | `pie chart traffic organic 400 direct 300` |
-| scatter | `arka chart scatter --data "100:200,120:190"` | `scatter ad spend vs revenue 100 200 120 190` |
-| histogram | `arka chart histogram --data "12,15,18,22"` | `histogram response times 12 15 18 22` |
-| pareto | `arka chart pareto --data "A:45,B:28"` | `pareto defects Scratches 45 Dents 28` |
+| 类型 | CLI | 自然语言（通过 `arka`） |
+| ---- | --- | ---------------------- |
+| line | `arka chart line AAPL TSLA --range 1y` | `arka "compare Apple and Tesla stock last year"` |
+| bar | `arka chart bar --data "A:1,B:2"` | `arka "phone sales Apple 230 Samsung 210"` |
+| pie | `arka chart pie --data "A:40,B:30"` | `arka "pie chart traffic organic 400 direct 300"` |
+| scatter | `arka chart scatter --data "100:200,120:190"` | `arka "scatter ad spend vs revenue 100 200 120 190"` |
+| histogram | `arka chart histogram --data "12,15,18,22"` | `arka "histogram response times 12 15 18 22"` |
+| pareto | `arka chart pareto --data "A:45,B:28"` | `arka "pareto defects Scratches 45 Dents 28"` |
+| prediction | `arka chart predict AAPL --days 30` | `arka "predict AAPL stock price chart next 30 days"` |
+| model traits | `arka chart models --type scatter` | `arka "chart AI model characteristics scatter"` |
+| table image | `arka chart table sales.csv --title "Q1"` | `arka "render metrics.csv as table png"` |
+| from file | `arka chart from metrics.csv --type line` | `arka "chart ~/data/metrics.csv as line"` |
+
+## 自然语言示例
+
+将整句作为引号参数传给 `arka`：
+
+```bash
+arka "make a chart of training loss"
+arka "chart training loss 1:0.8 2:0.5 3:0.3"
+arka "visualize metrics.csv"
+```
 
 ## 直接使用 CLI
 
 ```bash
 arka chart line AAPL TSLA --range 1y
+arka chart predict RELIANCE.NS --days 30 --range 1y
 arka chart bar --data "Apple:230,Samsung:210,Xiaomi:140" --title "Phone sales"
 arka chart pie --data "Organic:400,Direct:300,Referral:300" --title "Traffic"
+arka chart table sales.csv --title "Q1 销售"
+```
+
+## 表格 PNG
+
+将 CSV/TSV/JSON 渲染为带表头的 PNG 表格：
+
+```bash
+arka chart table sales.csv
+arka "render metrics.csv as table png"
+```
+
+## 未来预测
+
+```bash
+arka predict future "rainfall in Mumbai next 2 weeks" --chart
+arka predict future "from kaggle heptapod/titanic next 30 days" --chart
+arka chart models --type scatter
 ```
 
 ## 图表默认值

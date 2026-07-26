@@ -1,0 +1,84 @@
+---
+title: "Meme templates"
+description: "Reusable meme layouts with local Pillow composition — no AI tokens required."
+icon: "image"
+---
+
+Compose common meme formats locally with Pillow. Templates work with **your own
+images** or **text-only panels** (solid backgrounds with wrapped labels). Output
+defaults to `~/Pictures/arka-generated/` (override with `IMAGE_OUTPUT_DIR`).
+
+## Templates
+
+| Template | CLI subcommand | Description |
+| -------- | -------------- | ----------- |
+| Comparison | `comparison` | Side-by-side panels with titles |
+| Drake | `drake` | Reject (top) vs accept (bottom) |
+| Caption | `caption` | Classic top/bottom text meme |
+| Expanding brain | `expanding-brain` | Four escalating panels |
+| Two button | `two-button` | Dilemma with two red buttons |
+| Vibe coding preset | `vibe-coding` | Built-in architecture comparison |
+
+## Examples
+
+Text-only comparison (no image assets needed):
+
+```bash
+arka meme comparison \
+  --left-title "VIBE CODING" --right-title "SOFTWARE ENGINEERING" \
+  --left-label "Ship fast\nSkip tests" \
+  --right-label "Design first\nTests & review" \
+  --output ~/Pictures/arka-generated/vibe-vs-engineering.png
+```
+
+Built-in preset for the vibe-coding vs software-engineering meme:
+
+```bash
+arka meme vibe-coding
+```
+
+Drake hotline bling layout:
+
+```bash
+arka meme drake \
+  --reject "Deploy on Friday" \
+  --accept "Merge with tests green"
+```
+
+Caption meme over an existing image:
+
+```bash
+arka meme caption \
+  --image photo.jpg \
+  --top "WHEN THE BUILD PASSES" \
+  --bottom "ON THE FIRST TRY"
+```
+
+Expanding brain (four `--label` flags):
+
+```bash
+arka meme expanding-brain \
+  --label "console.log()" \
+  --label "debugger" \
+  --label "unit tests" \
+  --label "distributed tracing"
+```
+
+Two-button choice:
+
+```bash
+arka meme two-button \
+  --dilemma "Production is on fire" \
+  --left "Rollback" --right "Hotfix in prod" \
+  --highlight left
+```
+
+## Natural language
+
+Phrases like **make a drake meme**, **comparison meme**, **expanding brain meme**,
+and **vibe coding vs software engineering meme** route to `arka meme …` automatically.
+
+## Related
+
+For side-by-side layouts that always require image files, see
+[Symbolic image composition](/guides/symbolic-images).

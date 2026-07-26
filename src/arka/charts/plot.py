@@ -78,6 +78,25 @@ PARETO_BAR = "#2563eb"
 PARETO_LINE = "#dc2626"
 PIE_INLINE_PCT_MIN = 5.0
 
+_DATA_EXT = r"(?:csv|tsv|json)"
+_DATA_FILE_RE = re.compile(
+    rf"(?i)(?:['\"]([^'\"]+\.(?:{_DATA_EXT}))['\"]"
+    rf"|([~./][^\s'\"]+\.(?:{_DATA_EXT}))"
+    rf"|([^\s'\"/\\]+\.(?:{_DATA_EXT}))\b)"
+)
+_TRAINING_WORDS = re.compile(
+    r"(?i)\b(?:training|train|validation|val)\s+loss\b|\bloss\b.*\b(?:epoch|step)s?\b|\b(?:epoch|step)s?\b.*\bloss\b"
+)
+_AXIS_OVER = re.compile(r"(?i)\b([a-z][a-z0-9\s-]{0,20}?)\s+over\s+([a-z][a-z0-9\s-]{0,20}?)(?:\s|$|[,.:])")
+_LINE_CHART_WORDS = re.compile(r"(?i)\bline\s+(?:chart|graph|plot)\b|\b(?:chart|graph|plot)\s+.*\bline\b")
+_TICKER_SKIP = frozenset(
+    {"AI", "US", "UK", "NS", "BO", "IPO", "ETF", "GDP", "CEO", "API", "PNG", "PDF", "X", "Y"}
+)
+_EXCHANGE_TICKER = re.compile(
+    r"\b([A-Z][A-Z0-9&.-]{0,20}\.(?:NS|BO|L|HK|KS|TO|AX|LON|SW|PA|DE|MI))\b",
+    re.I,
+)
+
 
 @dataclass
 class PriceSeries:
@@ -179,9 +198,14 @@ def extract_tickers(text: str) -> list[str]:
 
     for m in re.finditer(r"\$([A-Za-z][A-Za-z0-9.-]{0,11})", text):
         add(m.group(1))
+    for m in _EXCHANGE_TICKER.finditer(text):
+        add(m.group(1))
+    covered = set(found)
     for m in re.finditer(r"\b([A-Z]{1,5}(?:\.[A-Z]{1,3})?(?:-[A-Z])?)\b", text):
         tok = m.group(1)
-        if tok in {"AI", "US", "UK", "IPO", "ETF", "GDP", "CEO", "API", "PNG", "PDF"}:
+        if tok in _TICKER_SKIP or len(tok) <= 1:
+            continue
+        if any(tok in sym or sym.endswith(f".{tok}") for sym in covered):
             continue
         add(tok)
     lower = text.lower()
@@ -201,11 +225,75 @@ def _has_bar_sales_context(text: str) -> bool:
     )
 
 
+def extract_data_file_path(text: str) -> str:
+    match = _DATA_FILE_RE.search(text or "")
+    if not match:
+        return ""
+    return next(g for g in match.groups() if g)
+
+
+def has_inline_series_pairs(text: str) -> bool:
+    return len(re.findall(r"\b(\d+(?:\.\d+)?)\s*[:=]\s*(\d+(?:\.\d+)?)\b", text or "")) >= 2
+
+
+def is_axis_plot_request(text: str) -> bool:
+    if not _AXIS_OVER.search(text or ""):
+        return False
+    return has_inline_series_pairs(text) or bool(_TRAINING_WORDS.search(text or ""))
+
+
+def parse_inline_series(text: str) -> tuple[list[str], list[float], str, str, str]:
+    """Parse numeric x:y / epoch:loss series from NL (e.g. epoch 1:0.5 2:0.3)."""
+    xlabel = ""
+    ylabel = ""
+    axis_m = _AXIS_OVER.search(text)
+    if axis_m:
+        ylabel = re.sub(r"(?i)^(plot|chart|graph|visuali[sz]e)\s+", "", axis_m.group(1)).strip().title()
+        xlabel = axis_m.group(2).strip().title()
+    if _TRAINING_WORDS.search(text):
+        ylabel = ylabel or "Loss"
+        xlabel = xlabel or "Epoch"
+
+    labels: list[str] = []
+    values: list[float] = []
+    for m in re.finditer(r"\b(\d+(?:\.\d+)?)\s*[:=]\s*(\d+(?:\.\d+)?)\b", text):
+        labels.append(m.group(1))
+        values.append(float(m.group(2)))
+    if len(labels) >= 2:
+        if _TRAINING_WORDS.search(text):
+            title = "Training Loss"
+        else:
+            title = _chart_title(
+                text,
+                drop=(
+                    r"(?i)\b(chart|graph|plot|line|bar|pie|scatter|histogram|training|train|validation|loss|epoch|step|of|for|make|a|an|the|from|as|over)\b",
+                    r"\b\d+(?:\.\d+)?(?:\s*[:=]\s*\d+(?:\.\d+)?)+\b",
+                ),
+            )
+            if not title and axis_m:
+                title = f"{ylabel} over {xlabel}" if ylabel and xlabel else ""
+        return labels, values, xlabel, ylabel, title
+    return [], [], xlabel, ylabel, ""
+
+
+def wants_inline_line_chart(text: str) -> bool:
+    if not has_inline_series_pairs(text):
+        return False
+    return bool(
+        _TRAINING_WORDS.search(text)
+        or _AXIS_OVER.search(text)
+        or _LINE_CHART_WORDS.search(text)
+        or re.search(r"(?i)\b(?:chart|graph|plot|visuali[sz]e)\b", text)
+    )
+
+
 def wants_stock_line(text: str, tickers: list[str], labels: list[str]) -> bool:
     """True when NL should route to ``chart line`` (Yahoo Finance), not bar/scatter."""
     if not tickers or len(labels) >= 2:
         return False
     if _has_bar_sales_context(text):
+        return False
+    if is_axis_plot_request(text) or wants_inline_line_chart(text):
         return False
 
     chart_words = r"(?i)\b(chart|graph|plot|visuali[sz]e|diagram)\b"
@@ -513,6 +601,85 @@ def build_default_argv(kind: str, text: str = "") -> list[str] | None:
     return None
 
 
+def build_inline_line_argv(text: str) -> list[str] | None:
+    labels, values, xlabel, ylabel, title = parse_inline_series(text)
+    if len(labels) < 2:
+        return None
+    data = ",".join(f"{lbl}:{val:g}" for lbl, val in zip(labels, values))
+    argv: list[str] = ["line", "--data", data]
+    if title:
+        argv.extend(["--title", title.title()])
+    if xlabel:
+        argv.extend(["--xlabel", xlabel])
+    if ylabel:
+        argv.extend(["--ylabel", ylabel])
+    return argv
+
+
+def build_file_chart_argv(text: str) -> list[str] | None:
+    from arka.charts.dataset_nl import (
+        extract_data_file_path as nl_data_path,
+        parse_dataset_axes,
+        wants_dataset_file_chart,
+    )
+
+    path = nl_data_path(text) or extract_data_file_path(text)
+    if not path or not wants_dataset_file_chart(text):
+        return None
+
+    axes = parse_dataset_axes(text)
+    from arka.charts.dataset_nl import _nl_work_text
+
+    work = _nl_work_text(text)
+    table_cue = re.search(
+        r"(?i)\b(?:table|tabular|grid|spreadsheet)\b.*\b(?:image|png|picture|photo)\b|\bchart\s+table\b|\btable\s+(?:from|of)\b",
+        work,
+    )
+    argv: list[str] = ["from", path]
+    try:
+        from arka.charts.table_image import wants_table_image
+
+        chart_axes = axes and (axes.by or axes.value)
+        if (wants_table_image(text) or table_cue) and not chart_axes:
+            argv = ["table", path]
+    except ImportError:
+        pass
+
+    if argv[0] == "from":
+        ctype = axes.chart_type if axes and axes.chart_type else None
+        if not ctype:
+            try:
+                from arka.charts.data import detect_requested_chart_type
+
+                ctype = detect_requested_chart_type(text)
+            except ImportError:
+                ctype = None
+        if ctype:
+            argv.extend(["--type", ctype])
+
+    if axes:
+        if axes.by and argv[0] == "from":
+            argv.extend(["--by", axes.by])
+        if axes.value and argv[0] == "from":
+            argv.extend(["--value", axes.value])
+
+    title = re.search(r"(?i)\btitle\s+['\"]([^'\"]+)['\"]", text)
+    if title:
+        argv.extend(["--title", title.group(1).strip()])
+    max_rows = re.search(r"(?i)\b(?:max|limit)\s+(\d+)\s+rows?\b", text)
+    if max_rows and argv[0] == "table":
+        argv.extend(["--max-rows", max_rows.group(1)])
+    out = re.search(
+        r"(?i)(?:-o\s+|--output\s+)(\S+\.(?:png|jpe?g|webp))\b|"
+        r"(?:to|as|into|save(?:\s+as)?)\s+(\S+\.(?:png|jpe?g|webp))\b",
+        text,
+    )
+    if out:
+        path_out = out.group(1) or out.group(2)
+        argv.extend(["-o", path_out])
+    return argv
+
+
 def nl_to_argv(text: str) -> list[str]:
     t = unwrap_shell_quotes(text.strip())
     if not t:
@@ -544,6 +711,41 @@ def nl_to_argv(text: str) -> list[str]:
         if is_year_range_pseudo_data(t) and (has_chart_cue(t) or re.search(r"(?i)\b(chart|graph|plot|visuali[sz]e)\b", t)):
             ctype = detect_chart_intent(t) or detect_requested_chart_type(t) or "bar"
             return ["fetch", t, "--type", ctype]
+    except ImportError:
+        pass
+
+    file_argv = build_file_chart_argv(t)
+    if file_argv:
+        return file_argv
+
+    try:
+        from arka.charts.table_image import nl_to_table_argv
+
+        table_argv = nl_to_table_argv(t)
+        if table_argv:
+            return table_argv
+    except ImportError:
+        pass
+
+    inline_line = build_inline_line_argv(t)
+    if inline_line and wants_inline_line_chart(t):
+        return inline_line
+
+    try:
+        from arka.charts.models import nl_to_model_chart_argv
+
+        model_argv = nl_to_model_chart_argv(t)
+        if model_argv:
+            return model_argv
+    except ImportError:
+        pass
+
+    try:
+        from arka.charts.prediction import nl_to_predict_argv
+
+        pred_argv = nl_to_predict_argv(t)
+        if pred_argv:
+            return pred_argv
     except ImportError:
         pass
 
@@ -589,6 +791,21 @@ def nl_to_argv(text: str) -> list[str]:
             )
             title = _chart_title(t, drop=(histogram_words, r"\bchart\b", r"\bgraph\b", r"\bplot\b"))
             argv = ["histogram", "--data", data, "--binned"]
+            if title:
+                argv.extend(["--title", title.title()])
+            return argv
+
+    labeled_labels, labeled_values = parse_labeled_pairs(t)
+    if len(labeled_labels) >= 2:
+        data = ",".join(
+            f"{lbl}:{int(val) if val == int(val) else val:g}"
+            for lbl, val in zip(labeled_labels, labeled_values)
+        )
+        if re.search(pie_words, t) or (
+            re.search(r"(?i)\bdistribution\b", t) and not re.search(histogram_words, t)
+        ):
+            title = _chart_title(t, drop=(pie_words, r"\bchart\b", r"\bgraph\b", r"\bplot\b"))
+            argv = ["pie", "--data", data]
             if title:
                 argv.extend(["--title", title.title()])
             return argv
@@ -1448,7 +1665,112 @@ def cmd_pareto(args: argparse.Namespace) -> int:
     return 0
 
 
+def chart_from_file(
+    data_path: Path,
+    *,
+    output: Path | None = None,
+    chart_type: str = "auto",
+    by: str | None = None,
+    value: str | None = None,
+    title: str | None = None,
+) -> Path:
+    from arka.charts.tabular import aggregate_rows, load_rows, resolve_columns, suggest_chart_type
+
+    rows = load_rows(data_path)
+    label_col, value_col = resolve_columns(rows, by=by, value=value)
+    labels, values = aggregate_rows(rows, label_col, value_col)
+    kind = chart_type.lower().strip() if chart_type else "auto"
+    if kind == "auto":
+        kind = suggest_chart_type(labels, values)
+    if kind == "table":
+        from arka.charts.table_image import table_from_file
+
+        return table_from_file(
+            data_path,
+            output=output,
+            title=title,
+            max_rows=5000,
+        )
+    if kind == "scatter":
+        from arka.charts.tabular import series_pairs
+
+        xs, ys = series_pairs(rows, label_col, value_col)
+        chart_title = title or f"{value_col} vs {label_col}"
+        slug = re.sub(r"[^a-z0-9]+", "-", chart_title.lower())[:40] or "scatter-chart"
+        out = output.expanduser().resolve() if output else default_output(slug)
+        saved = plot_scatter(
+            xs,
+            ys,
+            title=chart_title,
+            output=out,
+            xlabel=label_col,
+            ylabel=value_col,
+        )
+        return saved
+    if kind not in {"bar", "line", "pie"}:
+        raise SystemExit(f"Unsupported chart type for tabular data: {kind}")
+
+    chart_title = title or f"{data_path.stem} — {value_col}"
+    slug = re.sub(r"[^a-z0-9]+", "-", chart_title.lower())[:40] or "file-chart"
+    out = output.expanduser().resolve() if output else default_output(slug)
+
+    if kind == "pie":
+        saved = plot_pie(labels, values, title=chart_title, output=out, source=data_path.name)
+    elif kind == "line":
+        years = [int(lbl) if str(lbl).isdigit() else idx for idx, lbl in enumerate(labels)]
+        saved = plot_indicator_lines(
+            [(value_col, years, values)],
+            title=chart_title,
+            ylabel=value_col,
+            output=out,
+            source=data_path.name,
+        )
+    else:
+        saved = plot_bar(
+            labels,
+            values,
+            title=chart_title,
+            ylabel=value_col,
+            output=out,
+            source=data_path.name,
+        )
+    return saved
+
+
+def cmd_from(args: argparse.Namespace) -> int:
+    saved = chart_from_file(
+        Path(args.data).expanduser(),
+        output=Path(args.output).expanduser() if args.output else None,
+        chart_type=args.type or "auto",
+        by=args.by or None,
+        value=args.value or None,
+        title=args.title or None,
+    )
+    print(f"Saved chart: {saved}")
+    open_image(saved)
+    return 0
+
+
 def cmd_line(args: argparse.Namespace) -> int:
+    data = str(getattr(args, "data", "") or "").strip()
+    if data:
+        labels, values = parse_data_arg(data)
+        title = args.title or "Trend"
+        xlabel = getattr(args, "xlabel", "") or ""
+        ylabel = getattr(args, "ylabel", "") or "Value"
+        slug = re.sub(r"[^a-z0-9]+", "-", title.lower())[:40] or "line-chart"
+        out = Path(args.output).expanduser() if args.output else default_output(slug)
+        years = [int(lbl) if lbl.isdigit() else idx for idx, lbl in enumerate(labels)]
+        saved = plot_indicator_lines(
+            [("Series", years, values)],
+            title=title,
+            ylabel=ylabel or xlabel or "Value",
+            output=out,
+        )
+        print(f"Saved chart: {saved}")
+        open_image(saved)
+        return 0
+
     tickers = [t.upper() for t in args.tickers]
     if not tickers:
         print("Usage: chart line TICKER [TICKER...] [--range 3mo]", file=sys.stderr)
@@ -1822,12 +2144,32 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Draw line, bar, pie, and scatter charts")
     sub = p.add_subparsers(dest="cmd")
 
-    p_line = sub.add_parser("line", help="Line chart from Yahoo Finance tickers")
-    p_line.add_argument("tickers", nargs="+", help="Ticker symbols (e.g. AAPL TSLA RELIANCE.NS)")
+    p_line = sub.add_parser("line", help="Line chart from Yahoo Finance tickers or inline x:y data")
+    p_line.add_argument("tickers", nargs="*", help="Ticker symbols (e.g. AAPL TSLA RELIANCE.NS)")
+    p_line.add_argument(
+        "--data",
+        default="",
+        help='Inline label:value pairs for a series line chart, e.g. "1:0.5,2:0.3,3:0.2"',
+    )
     p_line.add_argument("--range", default="3mo", help="Yahoo range: 1mo, 3mo, 6mo, 1y, …")
     p_line.add_argument("-o", "--output", help="Output PNG path")
     p_line.add_argument("--title", default="", help="Chart title")
+    p_line.add_argument("--xlabel", default="", help="X-axis label (inline data)")
+    p_line.add_argument("--ylabel", default="", help="Y-axis label (inline data)")
     p_line.set_defaults(func=cmd_line)
+
+    p_from = sub.add_parser("from", help="Chart from CSV, TSV, or JSON file")
+    p_from.add_argument("data", help="CSV, TSV, or JSON file path")
+    p_from.add_argument(
+        "--type",
+        default="auto",
+        help="Chart type: auto|bar|line|pie|scatter|table",
+    )
+    p_from.add_argument("-o", "--output", help="Output PNG path")
+    p_from.add_argument("--title", default="", help="Chart title")
+    p_from.add_argument("--by", default="", help="Label/category column name")
+    p_from.add_argument("--value", default="", help="Numeric value column name")
+    p_from.set_defaults(func=cmd_from)
 
     p_bar = sub.add_parser("bar", help="Bar chart from label:value pairs")
     p_bar.add_argument(
@@ -1898,6 +2240,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_pareto.set_defaults(func=cmd_pareto)
 
+    from arka.charts.prediction import add_predict_subparser
+
+    add_predict_subparser(sub)
+
+    from arka.charts.models import add_models_subparser
+
+    add_models_subparser(sub)
+
+    from arka.charts.table_image import add_table_subparser
+
+    add_table_subparser(sub)
 
     p_fetch = sub.add_parser("fetch", help="Fetch external data and render a chart")
     p_fetch.add_argument("text", nargs="+", help="Natural language chart request")
@@ -1986,7 +2339,9 @@ def main(argv: list[str] | None = None) -> int:
     if not argv:
         build_parser().print_help()
         return 0
-    if argv[0] not in {"line", "bar", "pie", "scatter", "histogram", "pareto", "parse", "-h", "--help"}:
+    if argv[0] not in {
+        "line", "bar", "pie", "scatter", "histogram", "pareto", "predict", "models", "table", "from", "parse", "-h", "--help"
+    }:
         nl = nl_to_argv(" ".join(argv))
         if nl:
             argv = nl
@@ -1998,6 +2353,9 @@ def main(argv: list[str] | None = None) -> int:
             print('  chart scatter --data "100:200,120:190,170:280" --xlabel "Spend" --ylabel "Revenue"', file=sys.stderr)
             print('  chart histogram --data "12,15,18,22,25,28,30,35,38,42"', file=sys.stderr)
             print('  chart pareto --data "Scratches:45,Dents:28,Cracks:15"', file=sys.stderr)
+            print("  chart predict AAPL --days 30 --range 1y", file=sys.stderr)
+            print("  chart models --type scatter", file=sys.stderr)
+            print("  chart table sales.csv --title Sales", file=sys.stderr)
             return 1
     parser = build_parser()
     args = parser.parse_args(argv)

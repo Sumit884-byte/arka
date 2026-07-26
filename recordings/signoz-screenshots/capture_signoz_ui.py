@@ -57,23 +57,58 @@ def env_credentials() -> tuple[str, str]:
     return email, password
 
 
-def login(page) -> bool:
-    email, password = env_credentials()
-    if not email or not password:
-        return False
-    if "/login" not in page.url and "Sign in to your workspace" not in page.content():
-        return "/login" not in page.url
+def password_meets_policy(pw: str) -> bool:
+    import re
 
+    if len(pw) < 12:
+        return False
+    if not re.search(r"[A-Z]", pw):
+        return False
+    if not re.search(r"[a-z]", pw):
+        return False
+    if not re.search(r"[0-9]", pw):
+        return False
+    if not re.search(r'[~ !@#$%^&*()_+`\-={}\|\[\\\:"<>?,./]', pw):
+        return False
+    return True
+
+
+def capture_password() -> str:
+    """Password for SigNoz login/signup — must meet SigNoz policy (12+ chars, mixed case, digit, symbol)."""
+    _, env_pw = env_credentials()
+    for candidate in (
+        os.environ.get("SIGNOZ_CAPTURE_PASSWORD", "").strip(),
+        env_pw,
+        "Arka-SigNoz-Capture-2026!",
+    ):
+        if candidate and password_meets_policy(candidate):
+            return candidate
+    return "Arka-SigNoz-Capture-2026!"
+
+
+def _submit_login(page, email: str, password: str) -> bool:
+    page.goto(f"{UI}/login", wait_until="domcontentloaded", timeout=45000)
     page.wait_for_timeout(2000)
-    page.locator('input[type="email"], input[name="email"]').first.fill(email)
-    page.locator('button:has-text("Next")').first.click()
-    page.wait_for_timeout(3000)
+    if "/login" not in page.url:
+        return True
+
+    email_input = page.locator('input[type="email"], input[name="email"]').first
+    email_input.wait_for(state="visible", timeout=10000)
+    email_input.fill(email)
+    page.wait_for_timeout(400)
+    page.get_by_role("button", name="Next").click(timeout=10000)
+    page.wait_for_timeout(2500)
 
     pwd = page.locator('input[type="password"]').first
-    if not pwd.is_visible(timeout=5000):
+    if not pwd.is_visible(timeout=8000):
         return False
     pwd.fill(password)
-    for sel in ('button[type="submit"]', 'button:has-text("Sign in")', 'button:has-text("Log in")'):
+    for sel in (
+        'button:has-text("Sign in with Password")',
+        'button[type="submit"]',
+        'button:has-text("Sign in")',
+        'button:has-text("Log in")',
+    ):
         btn = page.locator(sel).first
         if btn.is_visible(timeout=1500):
             btn.click()
@@ -82,10 +117,48 @@ def login(page) -> bool:
     return "/login" not in page.url
 
 
+def signup(page, email: str, password: str) -> bool:
+    page.goto(f"{UI}/signup", wait_until="domcontentloaded", timeout=45000)
+    page.wait_for_timeout(2000)
+    if "/signup" not in page.url:
+        return "/login" not in page.url
+
+    page.get_by_label("Email", exact=False).fill(email)
+    page.locator("#currentPassword").fill(password)
+    page.locator("#confirmPassword").fill(password)
+    page.get_by_role("button", name="Access My Workspace").click(timeout=10000)
+    page.wait_for_timeout(8000)
+    return "/login" not in page.url and "/signup" not in page.url
+
+
+def login(page) -> bool:
+    email, _ = env_credentials()
+    if not email:
+        return False
+    if "/login" not in page.url and "Sign in to your workspace" not in page.content():
+        return "/login" not in page.url
+    return _submit_login(page, email, capture_password())
+
+
 def ensure_logged_in(page) -> None:
-    page.goto(f"{UI}/login", wait_until="domcontentloaded", timeout=45000)
-    if not login(page):
-        login(page)
+    email, _ = env_credentials()
+    if not email:
+        raise SystemExit("Set SIGNOZ_EMAIL or signoz_gmail in .env for UI capture")
+
+    page.goto(f"{UI}/home", wait_until="domcontentloaded", timeout=45000)
+    page.wait_for_timeout(2000)
+    if "/login" not in page.url and "/signup" not in page.url:
+        return
+
+    password = capture_password()
+    if _submit_login(page, email, password):
+        return
+    if signup(page, email, password):
+        return
+    raise SystemExit(
+        "SigNoz auth failed — check SIGNOZ_EMAIL / SIGNOZ_PASSWORD (12+ chars, mixed case, digit, symbol) "
+        "or set SIGNOZ_CAPTURE_PASSWORD after a fresh foundryctl cast"
+    )
 
 
 def dismiss_quick_filters_modal(page) -> None:
@@ -322,6 +395,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Import bundled dashboard JSON even when a dashboard with the same title exists",
     )
+    parser.add_argument(
+        "--no-dashboard",
+        action="store_true",
+        help="Skip dashboard capture (Track 01 traces/logs demo)",
+    )
     return parser.parse_args(argv)
 
 
@@ -337,7 +415,7 @@ def main(argv: list[str] | None = None) -> int:
         ("home-dashboard.png", f"{UI}/home"),
         ("traces-arka-service.png", f"{UI}/services/arka/traces?relativeTime=30m"),
         ("traces-explorer.png", f"{UI}/traces-explorer?selectedTracesFields=serviceName&selectedTracesFields=name&selectedTracesFields=durationNano&selectedTracesFields=httpMethod&selectedTracesFields=responseStatusCode&selectedTracesFields=traceID&filterServiceName=arka"),
-        ("logs-explorer.png", f"{UI}/logs/logs-explorer?filterServiceName=arka"),
+        ("logs-explorer.png", f"{UI}/logs/logs-explorer"),
         ("services-metrics.png", f"{UI}/services"),
     ]
 
@@ -364,15 +442,16 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 for name, url in views:
                     capture_view(page, url, OUT / name)
-                url = capture_dashboard(
-                    page,
-                    args.dashboard_out,
-                    title=args.dashboard_title,
-                    template_json=args.dashboard_json,
-                    long_screenshot=not args.viewport_dashboard,
-                    replace=args.replace_dashboard,
-                )
-                print(f"url\t{url}")
+                if not args.no_dashboard:
+                    url = capture_dashboard(
+                        page,
+                        args.dashboard_out,
+                        title=args.dashboard_title,
+                        template_json=args.dashboard_json,
+                        long_screenshot=not args.viewport_dashboard,
+                        replace=args.replace_dashboard,
+                    )
+                    print(f"url\t{url}")
         finally:
             browser.close()
     return 0

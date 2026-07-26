@@ -114,7 +114,8 @@
                   "guides/observability",
                   "guides/local-models",
                   "guides/hosted-mode",
-                  "guides/configuration"
+                  "guides/configuration",
+                  "guides/web-dashboard"
                 ]
               },
               {
@@ -150,11 +151,14 @@
                   "guides/vision",
                   "guides/youtube",
                   "guides/ascii-art",
+                  "guides/meme-templates",
+                  "guides/generate-music",
                   "guides/media-transform",
                   "guides/model-to-image",
                   "guides/background-removal",
                   "guides/spline",
                   "guides/web-screenshots",
+                  "guides/video-capture",
                   "guides/pdf-interactive",
                   "guides/media-quiz",
                   "guides/super-replica",
