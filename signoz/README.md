@@ -2,6 +2,20 @@
 
 Submission for [Agents of SigNoz](https://www.wemakedevs.org/hackathons/signoz) (Jul 20–26, 2026) · [Hackathon rules](https://www.wemakedevs.org/hackathons/signoz/rules)
 
+**Documentation:** [arka-agent.mintlify.site/guides/observability](https://arka-agent.mintlify.site/guides/observability) · **Hackathon repo (fork):** [github.com/sumitmishra884byte-cpu/arka](https://github.com/sumitmishra884byte-cpu/arka/tree/main/signoz) · **Upstream:** [github.com/Sumit884-byte/arka](https://github.com/Sumit884-byte/arka/tree/main/signoz)
+
+**Judge pack docs** (markdown not in git — served from the fork release):
+
+| Doc | Public URL |
+| --- | ---------- |
+| Hackathon README (this page) | [signoz/README.md](https://github.com/sumitmishra884byte-cpu/arka/blob/main/signoz/README.md) |
+| Blog / submission narrative | [BLOG.md](https://github.com/sumitmishra884byte-cpu/arka/releases/download/signoz-hackathon-media/BLOG.md) |
+| Four SigNoz pillars | [FOUR_PILLARS.md](https://github.com/sumitmishra884byte-cpu/arka/releases/download/signoz-hackathon-media/FOUR_PILLARS.md) |
+| MCP integration | [MCP_INTEGRATION.md](https://github.com/sumitmishra884byte-cpu/arka/releases/download/signoz-hackathon-media/MCP_INTEGRATION.md) |
+| Cursor Agent Skills | [CURSOR_AGENT_SKILLS.md](https://github.com/sumitmishra884byte-cpu/arka/releases/download/signoz-hackathon-media/CURSOR_AGENT_SKILLS.md) |
+| AWS prize path | [AWS_PRIZE.md](https://github.com/sumitmishra884byte-cpu/arka/releases/download/signoz-hackathon-media/AWS_PRIZE.md) |
+| Demo media (PNG/MP4) | [signoz-hackathon-media release](https://github.com/sumitmishra884byte-cpu/arka/releases/tag/signoz-hackathon-media) |
+
 ## Problem
 
 ### Why we're doing this
@@ -27,7 +41,7 @@ Arka's angle: when a model returns 429, a shell step fails, or failover kicks in
 
 One OTLP trace waterfall in SigNoz shows routing → planning → tools → recovery — agent observability you can reproduce locally with Foundry.
 
-**Four SigNoz pillars** (E2E tracing, log correlation, token/cost analytics, alerts/dashboards): [`FOUR_PILLARS.md`](FOUR_PILLARS.md) · `arka signoz demo-e2e --synthetic`
+**Four SigNoz pillars** (E2E tracing, log correlation, token/cost analytics, alerts/dashboards): [FOUR_PILLARS.md](https://github.com/sumitmishra884byte-cpu/arka/releases/download/signoz-hackathon-media/FOUR_PILLARS.md) · `arka signoz demo-e2e --synthetic`
 
 ## Tech stack
 
@@ -67,8 +81,8 @@ Source: [Agents of SigNoz — Rules](https://www.wemakedevs.org/hackathons/signo
 | ----------- | ---- |
 | Install SigNoz via **Foundry** (SigNoz + MCP in one step) | `arka signoz setup -y` or `foundryctl cast -f casting.yaml` |
 | **Reproducible deploy** — `casting.yaml` + `casting.yaml.lock` in repo | ✅ Repo root |
-| Use **MCP**, **Query Builder**, **dashboards**, **alerts** (recommended) | MCP ✅ · [Cursor Agent Skills plugin](CURSOR_AGENT_SKILLS.md) · dashboards/alerts ✅ |
-| **AWS prize** — [AWS Builder Center](https://builder.aws.com/) signup + **build with AWS** | [AWS_PRIZE.md](AWS_PRIZE.md) (Bedrock path). **$100 AWS credits:** email contact@wemakedevs.org |
+| Use **MCP**, **Query Builder**, **dashboards**, **alerts** (recommended) | MCP ✅ · [Cursor Agent Skills plugin](https://github.com/sumitmishra884byte-cpu/arka/releases/download/signoz-hackathon-media/CURSOR_AGENT_SKILLS.md) · dashboards/alerts ✅ |
+| **AWS prize** — [AWS Builder Center](https://builder.aws.com/) signup + **build with AWS** | [AWS_PRIZE.md](https://github.com/sumitmishra884byte-cpu/arka/releases/download/signoz-hackathon-media/AWS_PRIZE.md) (Bedrock path). **$100 AWS credits:** email contact@wemakedevs.org |
 | **Blog prize** — publish on **AWS Builder Center** | Optional — Bedrock + SigNoz walkthrough |
 
 ---
@@ -94,7 +108,7 @@ Use this before submitting. Judges may re-run Foundry and verify OTel traces in 
 
 | Prize | Requirement | Arka status |
 | ----- | ----------- | ----------- |
-| Best use of AWS | Builder Center signup + build with AWS | [AWS_PRIZE.md](AWS_PRIZE.md) · $100 credits: contact@wemakedevs.org |
+| Best use of AWS | Builder Center signup + build with AWS | [AWS_PRIZE.md](https://github.com/sumitmishra884byte-cpu/arka/releases/download/signoz-hackathon-media/AWS_PRIZE.md) · $100 credits: contact@wemakedevs.org |
 | Best blog | **Publish on AWS Builder Center** (mandatory for prize) | Optional — not started |
 
 ---
@@ -110,7 +124,16 @@ Copy into Devpost / submission form.
 
 **Team:** [Name(s)] (1–4 members)
 
-**Repo:** https://github.com/[org]/arka (branch: `hackathon/signoz-agents-of-signoz`)
+**Repo:** https://github.com/sumitmishra884byte-cpu/arka (branch: `main`)
+
+**Judge pack docs** (public markdown on fork release — not in git):
+
+- README: https://github.com/sumitmishra884byte-cpu/arka/blob/main/signoz/README.md
+- BLOG: https://github.com/sumitmishra884byte-cpu/arka/releases/download/signoz-hackathon-media/BLOG.md
+- FOUR_PILLARS: https://github.com/sumitmishra884byte-cpu/arka/releases/download/signoz-hackathon-media/FOUR_PILLARS.md
+- MCP_INTEGRATION: https://github.com/sumitmishra884byte-cpu/arka/releases/download/signoz-hackathon-media/MCP_INTEGRATION.md
+- CURSOR_AGENT_SKILLS: https://github.com/sumitmishra884byte-cpu/arka/releases/download/signoz-hackathon-media/CURSOR_AGENT_SKILLS.md
+- AWS_PRIZE: https://github.com/sumitmishra884byte-cpu/arka/releases/download/signoz-hackathon-media/AWS_PRIZE.md
 
 **AI tools used (required — nondisclosure disqualifies):**
 - [ ] Cursor — used for [code, docs, debugging, observability wiring, …]
@@ -127,9 +150,9 @@ Copy into Devpost / submission form.
 2. Enable OTEL in `~/.config/arka/.env` (see below)
 3. `arka signoz demo` → synthetic E2E trace
 4. `arka goal -y -n 4 "count lines in README.md"` → live agent waterfall
-5. (Optional) Install [SigNoz Agent Skills for Cursor](CURSOR_AGENT_SKILLS.md) — plugin + `/signoz-mcp-setup http://localhost:8000/mcp`
+5. (Optional) Install [SigNoz Agent Skills for Cursor](https://github.com/sumitmishra884byte-cpu/arka/releases/download/signoz-hackathon-media/CURSOR_AGENT_SKILLS.md) — plugin + `/signoz-mcp-setup http://localhost:8000/mcp`
 
-**Video / screenshots:** [link]
+**Video / screenshots:** https://github.com/sumitmishra884byte-cpu/arka/releases/tag/signoz-hackathon-media
 ```
 
 ---
@@ -159,8 +182,8 @@ curl -fsSL https://signoz.io/foundry.sh | bash
 ### 2. Deploy SigNoz from repo casting
 
 ```bash
-git clone <repo-url> arka && cd arka
-git checkout hackathon/signoz-agents-of-signoz
+git clone https://github.com/sumitmishra884byte-cpu/arka.git arka && cd arka
+git checkout main
 
 foundryctl gauge -f casting.yaml    # validate Docker
 foundryctl cast -f casting.yaml     # forge + deploy (writes pours/, updates lock if needed)
@@ -210,7 +233,7 @@ Open **SigNoz → Traces** → filter `service.name = arka`.
 
 ### 6. (Optional) SigNoz MCP + dashboards
 
-- MCP setup: [MCP_INTEGRATION.md](MCP_INTEGRATION.md)
+- MCP setup: [MCP_INTEGRATION.md](https://github.com/sumitmishra884byte-cpu/arka/releases/download/signoz-hackathon-media/MCP_INTEGRATION.md)
 - Dashboard panels: [dashboards/README.md](dashboards/README.md)
 
 ---
@@ -221,7 +244,7 @@ Open **SigNoz → Traces** → filter `service.name = arka`.
 | ----------------- | --------------------- |
 | **AI agents with E2E observability on SigNoz** | Primary build — `arka.request` → route → goal steps → LLM attempts → tools/skills, all exported via OTLP to SigNoz |
 | **Self-hosted inference observability (vLLM)** | `vllm` / `vllm-cloud` in LLM fallback chain; spans `arka.inference.server.prepare`, `arka.inference.vllm.check`, `arka.inference.vllm.cloud`, `arka.llm.attempt` with `arka.inference.backend=vllm` or `vllm-cloud`; `arka signoz vllm` health check |
-| **SRE Sidekick with SigNoz MCP** | Phase 1: goal agent emits traces you inspect in SigNoz; Phase 2 (stretch): MCP tool to query failed spans — see [MCP_INTEGRATION.md](MCP_INTEGRATION.md) |
+| **SRE Sidekick with SigNoz MCP** | Phase 1: goal agent emits traces you inspect in SigNoz; Phase 2 (stretch): MCP tool to query failed spans — see [MCP_INTEGRATION.md](https://github.com/sumitmishra884byte-cpu/arka/releases/download/signoz-hackathon-media/MCP_INTEGRATION.md) |
 | **n8n workflows with E2E observability** | Arka skills/routines are the workflow layer — same OTel hooks apply to any skill chain (`arka.skill.*`) |
 | **Self-healing infra with SigNoz metrics** | Goal agent retries after failed commands — `agent.self_heal` span events when exit ≠ 0, next step diagnoses from history |
 
@@ -437,7 +460,10 @@ LLM_FALLBACK=vllm-cloud:meta-llama/Llama-3.2-3B-Instruct,gemini:gemini-2.0-flash
 
 ## Related docs
 
-- [MCP_INTEGRATION.md](MCP_INTEGRATION.md) — SigNoz MCP for SRE Sidekick / Cursor
+- **[Observability guide (Mintlify)](https://arka-agent.mintlify.site/guides/observability)** — `arka signoz setup`, demo, dashboards, MCP (primary docs for judges)
+- [FOUR_PILLARS.md](https://github.com/sumitmishra884byte-cpu/arka/releases/download/signoz-hackathon-media/FOUR_PILLARS.md) — traces, metrics, logs, LLM spans walkthrough
+- [MCP_INTEGRATION.md](https://github.com/sumitmishra884byte-cpu/arka/releases/download/signoz-hackathon-media/MCP_INTEGRATION.md) — SigNoz MCP for SRE Sidekick / Cursor
+- [BLOG.md](https://github.com/sumitmishra884byte-cpu/arka/releases/download/signoz-hackathon-media/BLOG.md) — submission narrative + screenshots
 - [dashboards/README.md](dashboards/README.md) — Query Builder panels + alert recipes
 - [SigNoz Foundry docs](https://signoz.io/docs/install/docker/)
 - [SigNoz MCP server docs](https://signoz.io/docs/ai/signoz-mcp-server/)
