@@ -18,7 +18,7 @@ Arka 的聊天引擎可处理事实性问题、深度网络研究、数学、天
 | `set_location` | `set_location Mumbai` |
 | `nearby_places` | `nearby_places Kolkata` |
 | `error_helper` | `error_helper <traceback>` |
-| `chat_reset` | 清除会话 + 位置上下文 |
+| `arka chat_reset` | 清除会话 + 位置上下文 |
 
 ## 强制深度搜索
 
@@ -33,10 +33,10 @@ arka "/who won IPL 2025"
 在后台运行深度搜索：
 
 ```bash
-deep_queue add "who won the last IPL final"
-deep_queue list
-deep_queue run
-deep_queue results
+arka "deep_queue add "who won the last IPL final""
+arka "deep_queue list"
+arka "deep_queue run"
+arka "deep_queue results"
 ```
 
 ## 会话记忆
@@ -45,7 +45,7 @@ deep_queue results
 
 ```bash
 arka facing hair loss          # 路由到带会话的 web_answer
-chat_reset                     # 清除上下文
+arka chat_reset                     # 清除上下文
 ```
 
 ## 位置定位
@@ -53,10 +53,10 @@ chat_reset                     # 清除上下文
 设置位置以获取超本地化结果：
 
 ```bash
-set_location Mumbai
-hyperlocal_weather
-nearby_places
-map_download Kolkata           # 将城市地图缓存到 ~/.cache/arka/maps/
+arka "set_location Mumbai"
+arka "hyperlocal_weather"
+arka "nearby_places"
+arka map_download Kolkata           # 将城市地图缓存到 ~/.cache/arka/maps/
 ```
 
 ## 安装聊天附加组件

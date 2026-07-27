@@ -1,0 +1,111 @@
+---
+title: "Developer loop"
+description: "Unified arka dev workflow — init, test, review, ship, TUI, and PR checks in one surface."
+icon: "repeat"
+---
+
+The **developer loop** is Arka's daily coding workflow: initialize a scoped project, work in the [coding TUI](/guides/coding-tui), run tests and review locally, then ship with confidence before you commit or open a PR.
+
+<Note>
+  **`arka dev`** groups local CI, review, hooks, PR babysitting, and the coding TUI under one entry point. Legacy commands (`arka ci`, `arka review`, `arka coding-tui`) still work as aliases.
+</Note>
+
+## Mental model
+
+```text
+arka dev init .   → scope writes to this repo
+arka dev tui      → plan, edit, test in the TUI
+arka dev test     → run changed-only CI gates
+arka dev review   → staged review + test-gap hints
+arka dev ship     → review + CI before commit
+```
+
+## Commands
+
+| Command | Description |
+| --- | --- |
+| `arka dev init [path]` | Initialize a scoped code project (alias: `arka code init .`) |
+| `arka dev status [path]` | Code project status + repo dev doctor summary |
+| `arka dev test [path]` | Run changed-only CI gates (`--full`, `--fix`, `--json`) |
+| `arka dev review [path]` | Review staged changes (`--fail-on-hints`, `--json`) |
+| `arka dev ship [path]` | **Review staged changes + run changed CI** |
+| `arka dev gaps [path]` | List source files without matching tests |
+| `arka dev doctor [path]` | Repo dev preflight (hooks, ruff, pytest discovery) |
+| `arka dev hooks install` | Install pre-commit hooks |
+| `arka dev pr …` | GitHub PR diff, CI, explain, babysit |
+| `arka dev tui [path]` | Open the coding TUI |
+
+### Ship before commit
+
+`arka dev ship` is the pre-commit gate:
+
+1. Prints a staged review (security, test-gap, and docs hints)
+2. Runs changed-only CI gates (Ruff + targeted tests)
+3. Prints a concise pass/fail summary and suggested next step
+
+```bash
+git add -A
+arka dev ship
+# or skip review hints blocking:
+arka dev ship --no-review
+# or hand CI failures to the goal agent:
+arka dev ship --fix
+```
+
+On success, Arka suggests `git commit` and `arka dev pr babysit` if you are opening a PR.
+
+### Doctor vs dev doctor
+
+| Command | Scope |
+| --- | --- |
+| `arka doctor` | **Platform** install check (Python, fish, bundled scripts) |
+| `arka dev doctor` | **Repository** preflight (git hooks, local CI tooling, project rules) |
+
+## Coding TUI integration
+
+Inside `arka dev tui` (or `arka coding-tui .`):
+
+| Slash command | Behavior |
+| --- | --- |
+| `/ship` | Same as `arka dev ship` (staged review + changed CI) |
+| `/ship --fix` | Ship with goal-agent fix on CI failure |
+| `/ci` | **Run** changed-only CI gates |
+| `/ci preview` | Preview gate list without executing |
+| `/review` | Staged review with test-gap hints |
+| `/review --fail` | Exit the TUI if review hints are present |
+| `/test --max-fixes 2` | Up to two auto-fix passes on test failure |
+
+See [Coding TUI](/guides/coding-tui) for the full command reference.
+
+## Natural language
+
+Arka routes phrases like these to the dev loop:
+
+```bash
+arka "dev ship"
+arka "prepare to commit"
+arka "run dev checks"
+arka "dev test"
+arka "dev review"
+arka "open dev tui"
+```
+
+## JSON output
+
+Script-friendly output for automation:
+
+```bash
+arka dev test --json
+arka dev review --json
+arka dev ship --json
+arka dev gaps --json
+```
+
+Review JSON includes a `test_gaps` array listing changed source files without a matching test file.
+
+## Related guides
+
+- [How to code with Arka](/guides/code-with-arka) — broader coding workflow
+- [CLI reference](/guides/cli) — all top-level commands
+- [Repo health](/guides/repo-health) — generic lint/test detection
+- [GitHub Actions](/guides/github-actions) — CI parity with `arka ci`

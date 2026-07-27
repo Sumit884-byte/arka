@@ -103,6 +103,20 @@ arka "chart AI model characteristics with data points"
 arka "forecast kaggle dataset heptapod/titanic next 30 days"
 ```
 
+## Developer loop
+
+Unified local workflow — see the full [Developer loop](/guides/dev) guide.
+
+| Command | Description |
+| --- | --- |
+| `arka dev init [path]` | Initialize scoped code project |
+| `arka dev test [path]` | Changed-only CI gates (`--fix`, `--json`) |
+| `arka dev review [path]` | Staged review with test-gap hints |
+| `arka dev ship [path]` | Review + CI before commit |
+| `arka dev tui [path]` | Coding TUI workspace |
+| `arka dev doctor [path]` | Repo dev preflight (not platform `arka doctor`) |
+| `arka dev pr babysit` | GitHub PR CI babysit loop |
+
 ## Developer tools
 
 | Command | Description |
@@ -118,14 +132,16 @@ arka "forecast kaggle dataset heptapod/titanic next 30 days"
 Natural language examples:
 
 ```bash
+arka dev ship
+arka dev test --fix
 arka ci
 arka ci --full
-babysit this pr
-check repo health
-review staged
-review vs main
-route audit
-skill new my_tool --template dev
+arka "babysit this pr"
+arka "check repo health"
+arka "review staged"
+arka "review vs main"
+arka route audit
+arka skill new my_tool --template dev
 ```
 
 ## YouTube commands
@@ -137,8 +153,8 @@ See the full [YouTube guide](/guides/youtube).
 | `arka youtube research <query>` | Search \+ transcript research digest |
 | `arka download <id-or-url>` | Download video, Shorts, or playlist |
 | `arka summarize youtube <id>` | Summarize video or playlist |
-| `youtube_download <url>` | Single video download (fish) |
-| `youtube_bulk download <url>` | Bulk playlist/channel download |
+| `arka youtube_download <url>` | Single video download (fish) |
+| `arka youtube_bulk download <url>` | Bulk playlist/channel download |
 
 ## Stock commands
 
@@ -194,8 +210,8 @@ such as X/Twitter, LinkedIn, Instagram, YouTube, Reddit, Discord, and TikTok.
 | `arka ai-skill-model` | Per-skill model configuration |
 | `arka ai-skill-model profiles` | Task profiles (route, chat, summarize) |
 | `arka orchestrate --benchmark <request>` | Route using live benchmark winners for the routed task |
-| `select_model` | Hardware-based model recommendations |
-| `select_model --apply` | Apply recommendations to skill profiles |
+| `arka select_model` | Hardware-based model recommendations |
+| `arka select_model --apply` | Apply recommendations to skill profiles |
 
 See [Hardware-aware model selection](/guides/select-model).
 
@@ -203,11 +219,11 @@ See [Hardware-aware model selection](/guides/select-model).
 
 | Command | Description |
 | --- | --- |
-| `route_learn learn <phrase> <skill>` | Teach a phrase → skill mapping |
-| `route_learn learn --from-trace --correct <skill>` | Fix last routing mistake |
-| `route_learn list` | List learned routes |
-| `route_learn delete <id>` | Remove a learned route |
-| `route_learn test <phrase>` | Preview routing for a phrase |
+| `arka route_learn learn <phrase> <skill>` | Teach a phrase → skill mapping |
+| `arka route_learn learn --from-trace --correct <skill>` | Fix last routing mistake |
+| `arka route_learn list` | List learned routes |
+| `arka route_learn delete <id>` | Remove a learned route |
+| `arka route_learn test <phrase>` | Preview routing for a phrase |
 
 See [Teaching custom routes](/guides/route-learn).
 
@@ -243,9 +259,9 @@ See [Google Gemini CLI integration](/guides/gemini-cli).
 
 | Command | Description |
 | --- | --- |
-| `post_x <url>` | Fetch, shorten, and post to X/Twitter |
-| `ascii_art <text>` | Render ASCII art banner |
-| `ascii_art --image <path>` | Convert image to ASCII |
+| `arka post_x <url>` | Fetch, shorten, and post to X/Twitter |
+| `arka ascii_art <text>` | Render ASCII art banner |
+| `arka ascii_art --image <path>` | Convert image to ASCII |
 
 ## Google Workspace
 
@@ -275,6 +291,15 @@ Full guide: [Arka Council](/guides/council)
 | `council list` | `arka council list` |
 
 ## Learning
+
+Full guide: [Daily reading](/guides/daily-reading)
+
+| Skill | Example |
+| --- | --- |
+| `daily_reading` | `arka daily_reading init "world history"` |
+| `daily_reading` | `arka daily_reading today --minutes 45` |
+| `health_reading` | `arka health_reading today` |
+| `health_reading` | `arka health_reading status` |
 
 Full guide: [Quiz practice](/guides/quiz-practice)
 
@@ -325,7 +350,9 @@ See [Operation modes](/guides/operation-modes).
 arka provider list
 arka provider show
 arka provider set gemini
+arka provider set groq
 arka provider set openrouter --refresh
+arka provider set groq --no-keep-model
 ```
 
 ## Fish shell helpers
@@ -333,9 +360,9 @@ arka provider set openrouter --refresh
 When using fish, these functions are available:
 
 ```fish
-agent_route "play bohemian rhapsody"   # preview routing
-agent_trace                            # last routing decision
-agent_why                              # explain skill choice
+arka route "play bohemian rhapsody"   # preview routing
+arka route # last routing decision
+arka route # explain skill choice
 ```
 
 ## Apply config changes

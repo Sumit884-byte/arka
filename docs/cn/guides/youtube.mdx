@@ -24,8 +24,8 @@ apt install yt-dlp     # Linux
 ```bash
 arka youtube research "how to fix hair loss"
 arka youtube research "python asyncio tutorial" --limit 5
-youtube_research "analyze 3 videos on react hooks"
-youtube_research "IPL 2025 highlights" --index --ask "who scored most runs"
+arka youtube_research "analyze 3 videos on react hooks"
+arka youtube_research "IPL 2025 highlights" --index --ask "who scored most runs"
 ```
 
 | 标志 | 用途 |
@@ -38,8 +38,8 @@ youtube_research "IPL 2025 highlights" --index --ask "who scored most runs"
 **对已索引会话进行后续提问：**
 
 ```bash
-youtube_research list
-youtube_research ask <session-id> "what was the main recommendation"
+arka youtube_research list
+arka youtube_research ask <session-id> "what was the main recommendation"
 ```
 
 别名：`yt_research`、`arka research youtube <query>`。
@@ -56,8 +56,8 @@ youtube_research ask <session-id> "what was the main recommendation"
 | 技能 | 示例 |
 | ----- | ------- |
 | `play_youtube` | `arka play lofi beats on youtube` |
-| `find_videos` | `find_videos swimming tutorial` |
-| `youtube_transcript` | `youtube_transcript <url> --summarize` |
+| `arka find_videos` | `find_videos swimming tutorial` |
+| `arka youtube_transcript` | `youtube_transcript <url> --summarize` |
 
 ## 单视频下载
 
@@ -66,8 +66,8 @@ youtube_research ask <session-id> "what was the main recommendation"
 ```bash
 arka download dQw4w9WgXcQ
 arka download "https://youtube.com/watch?v=dQw4w9WgXcQ"
-youtube_download youtu.be/abc123 --audio
-yt_download <url> --quality 720
+arka youtube_download youtu.be/abc123 --audio
+arka yt_download <url> --quality 720
 ```
 
 | 标志 | 用途 |
@@ -83,7 +83,7 @@ yt_download <url> --quality 720
 ```bash
 arka summarize youtube dQw4w9WgXcQ
 arka summarize youtube PLxxx          # 播放列表 ID
-playlist_summarize <playlist-url>
+arka playlist_summarize <playlist-url>
 ```
 
 有字幕时使用字幕；否则回退到 STT。
@@ -93,13 +93,13 @@ playlist_summarize <playlist-url>
 使用 `http://localhost:5000` 的 Web UI 下载整个播放列表或频道：
 
 ```bash
-youtube_bulk status
-youtube_bulk start
-youtube_bulk open
-youtube_bulk download "https://youtube.com/playlist?list=PLxxx" --wait
-yt_bulk download @mkbhd --channel --limit 5 --audio
-youtube_bulk download PLxxx --range 6-9 --wait
-youtube_bulk library
+arka youtube_bulk status
+arka youtube_bulk start
+arka youtube_bulk open
+arka youtube_bulk download "https://youtube.com/playlist?list=PLxxx" --wait
+arka yt_bulk download @mkbhd --channel --limit 5 --audio
+arka youtube_bulk download PLxxx --range 6-9 --wait
+arka youtube_bulk library
 ```
 
 | 子命令 | 描述 |
@@ -129,8 +129,8 @@ youtube_bulk library
 | -------- | ------- | ------- |
 | `YT_RESEARCH_MAX` | `2` | 研究默认视频数 |
 | `YT_RESEARCH_POOL` | auto | 填充 N 个有字幕视频时的搜索池大小 |
-| `YOUTUBE_DOWNLOAD_DIR` | `~/Videos/YoutubeDownloads/Singles` | 单个下载 |
-| `YOUTUBE_BULK_DOWNLOAD_DIR` | `~/Videos/YoutubeDownloads` | 批量下载 |
+| `arka "YOUTUBE_DOWNLOAD_DIR"` | `~/Videos/YoutubeDownloads/Singles` | 单个下载 |
+| `arka "YOUTUBE_BULK_DOWNLOAD_DIR"` | `~/Videos/YoutubeDownloads` | 批量下载 |
 
 <Tip>
   研究会在 `~/.cache/fish-agent/youtube-research/` 中缓存字幕。重复运行相同查询会更快。

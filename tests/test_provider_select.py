@@ -196,9 +196,106 @@ def test_auto_pick_replaces_stale_openrouter_model(
     ):
         chosen = ps.auto_pick_model_if_needed("openrouter", force=True)
 
-    assert chosen == "meta-llama/llama-3.3-70b-instruct"
+    assert chosen == "anthropic/claude-sonnet-4"
     env_text = (arka_config / ".env").read_text(encoding="utf-8")
-    assert "AI_PREFERRED_MODEL=meta-llama/llama-3.3-70b-instruct" in env_text
+    assert "AI_PREFERRED_MODEL=anthropic/claude-sonnet-4" in env_text
+
+
+def test_set_preferred_provider_keeps_model_on_switch(
+    arka_config: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("AI_PREFERRED_PROVIDER", "gemini")
+    monkeypatch.setenv("AI_PREFERRED_MODEL", "gemini-2.0-flash")
+
+    from importlib import reload
+
+    import arka.llm.provider_select as ps
+
+    reload(ps)
+
+    with patch.object(
+        ps,
+        "detect_provider_models",
+        return_value=(["google/gemini-2.0-flash", "anthropic/claude-sonnet-4"], "live"),
+    ):
+        slug, model, _path = ps.set_preferred_provider("openrouter", keep_model=True)
+
+    assert slug == "openrouter"
+    assert model == "google/gemini-2.0-flash"
+
+
+def test_set_preferred_provider_no_keep_model_uses_default(
+    arka_config: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("AI_PREFERRED_PROVIDER", "gemini")
+    monkeypatch.setenv("AI_PREFERRED_MODEL", "gemini-2.0-flash")
+
+    from importlib import reload
+
+    import arka.llm.provider_select as ps
+
+    reload(ps)
+
+    with patch.object(
+        ps,
+        "detect_provider_models",
+        return_value=(["meta-llama/llama-3.3-70b-instruct"], "live"),
+    ):
+        slug, model, _path = ps.set_preferred_provider("openrouter", keep_model=False)
+
+    assert slug == "openrouter"
+    assert model == "meta-llama/llama-3.3-70b-instruct"
+
+
+def test_resolve_model_on_provider_exact_and_openrouter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from importlib import reload
+
+    import arka.llm.provider_select as ps
+
+    reload(ps)
+
+    models = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
+    assert ps.resolve_model_on_provider("llama-3.3-70b-versatile", "groq", models) == "llama-3.3-70b-versatile"
+
+    or_models = ["google/gemini-2.0-flash", "anthropic/claude-sonnet-4"]
+    assert (
+        ps.resolve_model_on_provider(
+            "gemini-2.0-flash",
+            "openrouter",
+            or_models,
+            from_provider="gemini",
+        )
+        == "google/gemini-2.0-flash"
+    )
+
+
+def test_auto_pick_keeps_model_when_switching_provider(
+    arka_config: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("AI_PREFERRED_PROVIDER", "gemini")
+    monkeypatch.setenv("AI_PREFERRED_MODEL", "gemini-2.0-flash")
+
+    from importlib import reload
+
+    import arka.llm.provider_select as ps
+
+    reload(ps)
+
+    with patch.object(
+        ps,
+        "detect_provider_models",
+        return_value=(["google/gemini-2.0-flash", "anthropic/claude-sonnet-4"], "live"),
+    ):
+        chosen = ps.auto_pick_model_if_needed("openrouter")
+
+    assert chosen == "google/gemini-2.0-flash"
+    env_text = (arka_config / ".env").read_text(encoding="utf-8")
+    assert "AI_PREFERRED_MODEL=google/gemini-2.0-flash" in env_text
 
 
 def test_nl_to_argv_patterns() -> None:

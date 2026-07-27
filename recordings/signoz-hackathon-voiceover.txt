@@ -1,17 +1,21 @@
-[0:00] Meet Arka plus SigNoz — full observability for AI agents. When your agent chains LLM calls, invokes tools, and fails over across providers, you need one trace waterfall — not fragmented logs. This is our submission for Agents of SigNoz, Track Zero One: AI and Agent Observability.
+[0:00] Meet Arka plus SigNoz — full observability for AI agents. When your agent chains LLM calls, invokes tools, queries vector databases, and fails over across providers, you need one trace waterfall — not fragmented logs scattered across three consoles. This is our submission for Agents of SigNoz, Track Zero One: AI and Agent Observability.
 
-[0:10] The problem is simple: AI agents are a black box. Latency spikes, runaway token costs, and silent failures are impossible to debug when you cannot see each step end to end.
+[0:16] The problem is simple: AI agents are a black box. Latency spikes, runaway token costs, and silent failures are impossible to debug when you cannot see each step end to end — routing, retrieval, inference, and tool execution all hidden behind a single user prompt.
 
-[0:22] We deploy SigNoz with Foundry in one command. arka signoz setup minus y reads casting dot yaml from the repo — SigNoz, OTLP ingester, and MCP server on port eight thousand — reproducible for every judge.
+[0:32] We deploy SigNoz with Foundry in one command. Run arka signoz setup minus y — it reads casting dot yaml from the repo and brings up SigNoz, the OTLP ingester, and the MCP server on port eight thousand. Every judge gets the same stack: Docker, foundryctl cast, and a locked casting manifest at the repo root.
 
-[0:38] arka signoz status shows what's wired: traces, metrics, and logs pipelines, plus verify queries for routing spans, LLM attempts, and MCP tool calls. OpenTelemetry ships with the arka-agent observability extra.
+[0:50] arka signoz status shows what is wired: traces, metrics, and logs pipelines, plus built-in verify queries for routing spans, LLM attempts, and MCP tool calls. OpenTelemetry ships with the arka-agent observability extra — no hand-rolled exporters or sidecar proxies.
 
-[0:52] Run arka signoz demo-scenarios minus minus synthetic to emit realistic agent traces without a live LLM — inference latency comparison, RAG retrieval, router decisions, and end-to-end goal loops. Each scenario tags arka dot demo dot scenario so you can filter in SigNoz.
+[1:08] Run arka signoz demo-scenarios minus minus synthetic to emit realistic agent traces without a live LLM. You get inference latency comparison across vLLM and cloud providers, RAG retrieval spans, router decisions, MCP tool calls, and end-to-end goal loops. Each scenario tags arka dot demo dot scenario so you can filter instantly in SigNoz.
 
-[0:66] In SigNoz Traces Explorer, filter service dot name equals arka. You see real spans — arka dot llm dot attempt, arka dot route, arka dot demo dot inference compare — the full agent lifecycle in one view.
+[1:28] Arka instruments four pillars judges care about: distributed traces for the full agent waterfall, metrics for P99 latency and error rate, structured logs correlated by trace ID, and LLM-specific spans with token counts and time-to-first-token.
 
-[0:78] The Services view shows arka P99 latency, error rate, and ops per second — live OpenTelemetry metrics for the agent, no custom dashboard required.
+[1:48] In SigNoz Traces Explorer, filter service dot name equals arka. You see real spans — arka dot llm dot attempt, arka dot route, arka dot demo dot inference compare — the complete agent lifecycle in one view. Click any span to open the waterfall and follow parent-child relationships across skills and tools.
 
-[0:90] Structured logs correlate with the same trace IDs — LLM failover, quota errors, and provider four twenty nine recovery in the Logs Explorer.
+[2:06] The Services view shows arka P99 latency, error rate, and operations per second — live OpenTelemetry metrics emitted from the agent process. No custom dashboard is required for the hackathon demo; the stock SigNoz views are enough to prove the instrumentation works.
 
-[1:02] Everything is reproducible: casting dot yaml plus lock at repo root, foundryctl cast, then arka signoz demo. GitHub: Sumit884-byte slash arka. Arka plus SigNoz — see inside your agents.
+[2:24] Structured logs correlate with the same trace IDs. In Logs Explorer you see LLM failover events, quota errors, and provider four twenty nine recovery on the exact trace as the failing arka dot llm dot attempt span — traces, metrics, and logs tied together.
+
+[2:42] Where to find docs — important for judges. The live guide is at arka-agent dot mintlify dot site slash guides slash observability: setup, demo commands, dashboards, and MCP integration. In the repo, open the signoz folder — README for the judge checklist, four pillars walkthrough, and casting dot yaml.
+
+[2:58] Clone the repo, run arka signoz setup minus y, then demo-scenarios minus minus synthetic. Filter service dot name equals arka in Traces Explorer. GitHub: Sumit884-byte slash arka. Arka plus SigNoz — see inside your agents.

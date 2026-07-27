@@ -22,9 +22,16 @@ def impact(root: Path) -> list[str]:
 
 
 def test_gaps(root: Path) -> list[str]:
-    files = changed(root)
-    tests = {Path(path).stem.replace("test_", "") for path in files if "/tests/" in f"/{path}" or path.startswith("tests/")}
-    gaps = []
+    return test_gaps_for_files(changed(root))
+
+
+def test_gaps_for_files(files: list[str]) -> list[str]:
+    tests = {
+        Path(path).stem.replace("test_", "")
+        for path in files
+        if "/tests/" in f"/{path}" or path.startswith("tests/")
+    }
+    gaps: list[str] = []
     for file in files:
         if file.startswith("src/") and Path(file).suffix in {".py", ".ts", ".tsx", ".js"}:
             stem = Path(file).stem.lower()

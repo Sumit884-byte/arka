@@ -18,7 +18,7 @@ Important: if you type a plain shell command, the shell runs it normally. Arka o
     ```bash
     arka weather
     arka calc 2+2
-    demo_echo hello    # third-party plugin by name
+    arka demo_echo hello    # third-party plugin by name
     ```
   </Step>
   <Step title="Plugin triggers">
@@ -79,9 +79,9 @@ Preview what skill Arka would pick without running it:
 
 ```bash
 arka route "summarize my unread emails"
-agent_route "play bohemian rhapsody on spotify"
-agent_trace          # last routing decision
-agent_why            # explain skill choice
+arka route "play bohemian rhapsody on spotify"
+arka route # last routing decision
+arka route # explain skill choice
 arka help            # full skill list
 arka tell your skills   # voice-friendly summary + active model
 ```

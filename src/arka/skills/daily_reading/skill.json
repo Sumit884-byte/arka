@@ -1,0 +1,16 @@
+{
+  "name": "daily_reading",
+  "description": "Daily non-overlapping reading on any topic — configurable length and tracked concepts",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "daily reading",
+    "daily_reading",
+    "reading lesson",
+    "40 minute reading",
+    "daily lesson on"
+  ],
+  "permissions": ["network"]
+}

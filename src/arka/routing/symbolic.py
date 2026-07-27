@@ -75,18 +75,45 @@ def route_usage_dashboard(cmd: str) -> str | None:
     return None
 
 
+def route_meme(cmd: str) -> str | None:
+    try:
+        from arka.agent.meme_templates import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "meme " + " ".join(shlex.quote(a) for a in argv)
+
+
 def route_symbolic_image(cmd: str) -> str | None:
+    if re.search(r"(?i)\bmeme\b", cmd):
+        return None
     if not re.search(r"(?i)\b(?:comparison|split[- ]panel|before\s+and\s+after|compose)\b", cmd) or not re.search(r"(?i)\b(?:image|visual|graphic|illustration)\b", cmd):
         return None
     return "symbolic_image comparison"
 
 
-def route_chart(cmd: str) -> str | None:
+def route_future_predict(cmd: str) -> str | None:
     try:
-        from arka.charts.plot import nl_to_argv
+        from arka.charts.prediction import wants_prediction_chart
+        from arka.predict.engine import nl_to_future_argv
     except ImportError:
         return None
-    argv = nl_to_argv(cmd.strip())
+    if wants_prediction_chart(cmd):
+        return None
+    argv = nl_to_future_argv(cmd.strip())
+    if not argv:
+        return None
+    return "predict " + " ".join(shlex.quote(a) for a in argv)
+
+
+def route_chart(cmd: str) -> str | None:
+    try:
+        from arka.charts.plot import nl_to_argv, unwrap_shell_quotes
+    except ImportError:
+        return None
+    argv = nl_to_argv(unwrap_shell_quotes(cmd.strip()))
     if not argv:
         return None
     return "chart " + " ".join(shlex.quote(a) for a in argv)
@@ -656,6 +683,37 @@ def route_fact_check(cmd: str) -> str | None:
     return "fact_check " + " ".join(shlex.quote(a) for a in argv)
 
 
+def route_daily_reading(cmd: str) -> str | None:
+    try:
+        from arka.agent.daily_reading import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "daily_reading " + " ".join(shlex.quote(a) for a in argv)
+
+
+def route_health_reading(cmd: str) -> str | None:
+    try:
+        from arka.agent.health_reading import main as _  # noqa: F401 — ensure alias loaded
+        from arka.agent.daily_reading import nl_to_argv, _is_reading_request
+    except ImportError:
+        return None
+    text = cmd.strip()
+    if not _is_reading_request(text):
+        return None
+    # Health-specific phrasing keeps the health track; generic reading uses daily_reading router.
+    if re.search(r"(?i)\b(?:health|wellness|fitness|diet|exercise|nutrition)\b", text):
+        argv = nl_to_argv(text)
+        if not argv:
+            return None
+        if argv[0] == "init":
+            return "daily_reading " + " ".join(shlex.quote(a) for a in argv)
+        return "health_reading " + " ".join(shlex.quote(a) for a in argv)
+    return route_daily_reading(cmd)
+
+
 def route_quiz_practice(cmd: str) -> str | None:
     try:
         from arka.agent.quiz_practice import nl_to_argv
@@ -687,6 +745,30 @@ def route_generate_image(cmd: str) -> str | None:
     if not argv:
         return None
     return "generate_image " + " ".join(shlex.quote(a) for a in argv)
+
+
+def route_generate_music(cmd: str) -> str | None:
+    try:
+        from arka.generate.music import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "generate_music " + " ".join(shlex.quote(a) for a in argv)
+
+
+def route_backup(cmd: str) -> str | None:
+    t = cmd.strip()
+    if not t:
+        return None
+    if re.search(r"(?i)\b(?:backup|back\s*up)\b.*\b(?:all|everything|arka|config)\b", t):
+        return "backup all"
+    if re.search(r"(?i)^(?:backup|back\s*up)\s+(?:all|everything|arka|config)\b", t):
+        return "backup all"
+    if re.search(r"(?i)^arka\s+backup\b", t):
+        return "backup all"
+    return None
 
 
 def route_generate_thumbnail(cmd: str) -> str | None:
@@ -1602,6 +1684,8 @@ def route_component_screenshots(cmd: str) -> str | None:
 def route_web_screenshot(cmd: str) -> str | None:
     if re.search(r"(?i)\bcomponent(?:s)?\b", cmd):
         return None
+    if re.search(r"(?i)\b(?:video|walkthrough|screencast|mp4|recording)\b", cmd):
+        return None
     if not re.search(r"\b(?:screenshot|snapshot|capture)(?:s)?\b.*(?:\b(?:website|site|webpage|url)\b|https?://)|\b(?:website|site|webpage)\b.*\b(?:screenshot|snapshot|capture)\b", cmd, re.I):
         return None
     url = re.search(r"https?://[^\s'\"]+", cmd, re.I)
@@ -1614,6 +1698,26 @@ def route_web_screenshot(cmd: str) -> str | None:
             viewport = name
             break
     return f"web_screenshot {shlex.quote(url.group(0))} --viewport {viewport}"
+
+
+def route_capture_video(cmd: str) -> str | None:
+    if re.search(r"(?i)\b(?:terminal|cli|command\s*line)\b", cmd):
+        return None
+    wants_video = re.search(
+        r"(?i)\b(?:record|capture)\b.*\b(?:video|walkthrough|screencast|screen\s*recording|mp4)\b|\b(?:video|walkthrough|screencast)\b.*\b(?:record|capture)\b",
+        cmd,
+    )
+    if not wants_video:
+        return None
+    url = re.search(r"https?://[^\s'\"]+", cmd, re.I)
+    if url:
+        parts = ["capture", "video", shlex.quote(url.group(0))]
+        if re.search(r"(?i)\b(?:dashboard|arka\s+web|web\s+dashboard)\b", cmd):
+            parts.append("--walkthrough")
+        return " ".join(parts)
+    if re.search(r"(?i)\b(?:dashboard|walkthrough|arka\s+web|web\s+dashboard)\b", cmd):
+        return "capture video --walkthrough"
+    return None
 
 
 def route_spline(cmd: str) -> str | None:
@@ -1712,6 +1816,15 @@ def route_media_quiz(cmd: str) -> str | None:
         return None
     path = re.search(r"[\w./~-]+\.(?:png|jpe?g|webp|gif|mp3|wav|ogg|mp4|webm|mov|pdf)\b", cmd, re.I)
     return "media_quiz " + shlex.quote(path.group(0)) if path else None
+
+
+def route_dev_cli(cmd: str) -> str | None:
+    try:
+        from arka.agent.dev_cli import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd.strip())
+    return route or None
 
 
 def route_dev_tools(cmd: str) -> str | None:
@@ -2001,6 +2114,7 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_ui_copy,
         route_component_screenshots,
         route_web_screenshot,
+        route_capture_video,
         route_app_automation,
         route_spline,
         route_three_js_model,
@@ -2091,6 +2205,7 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_llm_share,
         route_free_credits,
         route_compose_slides,
+        route_dev_cli,
         route_dev_tools,
         route_provider_select,
         route_personalize,
@@ -2120,9 +2235,12 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_email_alert,
         route_bi_dashboard,
         route_usage_dashboard,
+        route_meme,
         route_symbolic_image,
         route_routines,
         route_fact_check,
+        route_health_reading,
+        route_daily_reading,
         route_quiz_practice,
         route_council,
         route_model_to_image,
@@ -2130,6 +2248,7 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_compose_3d,
         route_scene_3d,
         route_three_d,
+        route_future_predict,
         route_chart,
         route_drawing,
         route_generate_thumbnail,
@@ -2137,7 +2256,9 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_astronomy,
         route_metallurgy,
         route_flow,
+        route_backup,
         route_generate_image,
+        route_generate_music,
         route_download,
         route_convert_media,
         route_compose_video,

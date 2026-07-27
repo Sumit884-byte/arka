@@ -486,7 +486,14 @@ def detect_chart_intent(text: str) -> str | None:
         return "pie"
     if re.search(r"(?i)\b(over\s+time|timeline|monthly|yearly|trend(?:s)?)\b", t):
         return "line"
-    if re.search(r"(?i)\b(compare|comparison|versus\s+categor|magnitudes?|columns?)\b", t):
+    if re.search(
+        r"(?i)\b(?:training|train|validation|val)\s+loss\b|\bloss\s+over\s+(?:epoch|step)s?\b|\b(?:epoch|step)s?\b.*\bloss\b",
+        t,
+    ):
+        return "line"
+    if re.search(r"(?i)\b(?:compare|comparison|versus\s+categor|magnitudes?|columns?)\b", t):
+        return "bar"
+    if re.search(r"(?i)\b(?:graph|visuali[sz]e)\s+my\s+data\b", t):
         return "bar"
     return None
 
@@ -495,6 +502,8 @@ def detect_requested_chart_type(text: str) -> str | None:
     low = (text or "").lower()
     if re.search(r"(?i)\b(grouped|group)\s*[- ]?\s*bars?\b|\bbars?\s+group\b|\bbar\s+group\b", low):
         return "grouped_bar"
+    if re.search(r"(?i)\btable\s+(?:image|png|chart)\b|\b(?:render|export|save)\b.*\btable\b.*\b(?:image|png)\b", low):
+        return "table"
     if re.search(r"(?i)\b(pie|donut|doughnut)\b", low):
         return "pie"
     if re.search(r"(?i)\b(scatter|correlation|relationship)\b", low):

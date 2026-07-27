@@ -33,16 +33,18 @@ SLASH_COMMANDS = (
     "/open",
     "/ci",
     "/review",
+    "/ship",
     "/quit",
     "/exit",
 )
 
 HELP = (
     "Commands: /help, /status, /plan <goal>, /run <goal>, /test [path], /scaffold 3d, /history, /clear, "
-    "/diff, /files <pattern>, /open <path>, /ci, /review, /queue, /quit. "
+    "/diff, /files <pattern>, /open <path>, /ci, /ci preview, /review, /ship, /queue, /quit. "
     "/queue add <goal> queues work; /queue list shows it; /queue run executes sequentially; /queue clear removes it. "
-    "/test runs tests read-only, then one auto-fix pass on failure (--no-fix to skip). "
+    "/test runs tests read-only, then auto-fixes on failure (--no-fix, --max-fixes N). "
     "/run tests runs repository tests directly; use --fix to repair failures after the test output is known. "
+    "/ship runs staged review + changed CI; add --fix to hand CI failures to the goal agent. "
     "Pre-existing project files are auto-trusted for run/overwrite prompts once coding-tui starts (baseline snapshot). "
     "/scaffold 3d writes a React + Three.js space scene and runs npm install (trusted template). "
     "Add --run to start the Vite dev server after install. "
@@ -52,8 +54,8 @@ HELP = (
 WELCOME_TIPS = (
     "Tip: /plan <goal> builds a reviewable plan; approve with y to execute immediately.",
     "Tip: /diff, /files <pattern>, /open <path> inspect the repo without leaving the TUI.",
-    "Tip: /test [path] runs tests read-only and auto-fixes once on failure (--no-fix to skip).",
-    "Tip: /ci runs fast gates; /review summarizes staged changes.",
+    "Tip: /test [path] runs tests read-only and auto-fixes on failure (--no-fix, --max-fixes 2).",
+    "Tip: /ship runs review + CI before commit; /ci preview shows gates without running them.",
     "Tip: plain text is shorthand for /plan — approve with y to execute immediately.",
 )
 
@@ -67,15 +69,28 @@ def _normalize_goal_text(text: str) -> str:
     return " ".join((text or "").lower().split()).strip()
 
 
-def _parse_run_request(text: str) -> tuple[str, bool, bool]:
-    """Return (goal, allow_fix, auto_fix) from /run input."""
+def _parse_max_fixes(text: str, default: int = 1) -> int:
+    match = re.search(r"(?:^|\s)--max-fixes(?:=|\s+)(\d+)(?:\s|$)", text or "", re.I)
+    if match:
+        return max(1, int(match.group(1)))
+    return default
+
+
+def _strip_cli_flags(text: str) -> str:
+    cleaned = re.sub(r"(?:^|\s)--fix(?:\s|$)", " ", text or "", flags=re.I)
+    cleaned = re.sub(r"(?:^|\s)--no-fix(?:\s|$)", " ", cleaned, flags=re.I)
+    cleaned = re.sub(r"(?:^|\s)--max-fixes(?:=\d+|\s+\d+)(?:\s|$)", " ", cleaned, flags=re.I)
+    return " ".join(cleaned.split())
+
+
+def _parse_run_request(text: str) -> tuple[str, bool, bool, int]:
+    """Return (goal, allow_fix, auto_fix, max_fixes) from /run input."""
     raw = (text or "").strip()
     allow_fix = bool(re.search(r"(?:^|\s)--fix(?:\s|$)", raw, re.I))
     auto_fix = not bool(re.search(r"(?:^|\s)--no-fix(?:\s|$)", raw, re.I))
-    goal = re.sub(r"(?:^|\s)--fix(?:\s|$)", " ", raw, flags=re.I)
-    goal = re.sub(r"(?:^|\s)--no-fix(?:\s|$)", " ", goal, flags=re.I).strip()
-    goal = " ".join(goal.split())
-    return goal, allow_fix, auto_fix
+    max_fixes = _parse_max_fixes(raw)
+    goal = _strip_cli_flags(raw)
+    return goal, allow_fix, auto_fix, max_fixes
 
 
 def _is_deterministic_short_goal(text: str, *, allow_fix: bool = False) -> bool:
@@ -149,12 +164,13 @@ def _parse_test_scope(text: str) -> str | None:
     return None
 
 
-def _parse_test_command(text: str) -> tuple[str | None, bool]:
-    """Return (scope, auto_fix) from `/test` input."""
+def _parse_test_command(text: str) -> tuple[str | None, bool, int]:
+    """Return (scope, auto_fix, max_fixes) from `/test` input."""
     raw = (text or "").strip()
     auto_fix = not bool(re.search(r"(?:^|\s)--no-fix(?:\s|$)", raw, re.I))
-    cleaned = re.sub(r"(?:^|\s)--no-fix(?:\s|$)", " ", raw, flags=re.I).strip()
-    return _parse_test_scope(cleaned), auto_fix
+    max_fixes = _parse_max_fixes(raw)
+    cleaned = _strip_cli_flags(raw)
+    return _parse_test_scope(cleaned), auto_fix, max_fixes
 
 
 def _parse_pytest_failures(output: str, *, exit_code: int = 0) -> int:
@@ -227,8 +243,8 @@ def _run_discovered_script_checks(
     repo: Path,
     *,
     auto_fix: bool = True,
+    max_fixes: int = 1,
     code_agent=None,
-    after_fix_attempt: bool = False,
 ) -> int:
     """Run verification scripts discovered under scripts/ (read-only)."""
     from arka.agent.script_discovery import discover_script_checks
@@ -238,82 +254,86 @@ def _run_discovered_script_checks(
         print("No verification scripts discovered under scripts/.")
         return 1
 
-    label = f"Verification scripts ({len(checks)} discovered"
-    if after_fix_attempt:
-        label += ", after fix"
-    print(f"○ {label})")
-    worst = 0
-    failure_count = 0
-    combined_output: list[str] = []
-    for check in checks:
-        detail = f" ({'; '.join(check.reasons[:2])})" if check.reasons else ""
-        header = f"\n▶ {check.name}{detail}\n  {' '.join(check.command)}"
-        print(header)
-        combined_output.append(header.strip())
-        proc = subprocess.run(check.command, cwd=repo, check=False, capture_output=True, text=True)
-        output = (proc.stdout or "") + (proc.stderr or "")
-        if output.strip():
-            combined_output.append(output.rstrip())
-        if proc.stdout:
-            end = "" if proc.stdout.endswith("\n") else "\n"
-            print(proc.stdout, end=end)
-        if proc.stderr:
-            end = "" if proc.stderr.endswith("\n") else "\n"
-            print(proc.stderr, end=end, file=sys.stderr)
-        if proc.returncode == 0:
-            print("  ✓ passed")
-        else:
-            print(f"  ✗ failed (exit {proc.returncode})")
-            worst = proc.returncode or 1
-            failure_count += 1
-    failure_summary = "\n\n".join(combined_output)
-    if worst == 0:
-        if after_fix_attempt:
-            print("\n✓ All discovered verification scripts passed (read-only run, after fix)")
-        else:
-            print("\n✓ All discovered verification scripts passed")
-        return 0
+    fix_pass = 0
+    while True:
+        label = f"Verification scripts ({len(checks)} discovered"
+        if fix_pass:
+            label += f", after fix {fix_pass}/{max_fixes}"
+        print(f"○ {label})")
+        worst = 0
+        failure_count = 0
+        combined_output: list[str] = []
+        for check in checks:
+            detail = f" ({'; '.join(check.reasons[:2])})" if check.reasons else ""
+            header = f"\n▶ {check.name}{detail}\n  {' '.join(check.command)}"
+            print(header)
+            combined_output.append(header.strip())
+            proc = subprocess.run(check.command, cwd=repo, check=False, capture_output=True, text=True)
+            output = (proc.stdout or "") + (proc.stderr or "")
+            if output.strip():
+                combined_output.append(output.rstrip())
+            if proc.stdout:
+                end = "" if proc.stdout.endswith("\n") else "\n"
+                print(proc.stdout, end=end)
+            if proc.stderr:
+                end = "" if proc.stderr.endswith("\n") else "\n"
+                print(proc.stderr, end=end, file=sys.stderr)
+            if proc.returncode == 0:
+                print("  ✓ passed")
+            else:
+                print(f"  ✗ failed (exit {proc.returncode})")
+                worst = proc.returncode or 1
+                failure_count += 1
+        failure_summary = "\n\n".join(combined_output)
+        if worst == 0:
+            if fix_pass:
+                print("\n✓ All discovered verification scripts passed (read-only run, after fix)")
+            else:
+                print("\n✓ All discovered verification scripts passed")
+            return 0
 
-    if after_fix_attempt:
-        print("\n✗ Still failing after one fix pass. Use /run tests --fix for another attempt.")
-        return worst
+        if not auto_fix or code_agent is None:
+            print("\n✗ One or more verification scripts failed")
+            if failure_count:
+                print(f"✗ {failure_count} verification script failure(s).")
+            if not auto_fix:
+                print("○ Auto-fix skipped (--no-fix).")
+            else:
+                print("For another fix attempt, use: /run tests --fix")
+            return worst
 
-    if not auto_fix or code_agent is None:
-        print("\n✗ One or more verification scripts failed")
-        if failure_count:
-            print(f"✗ {failure_count} verification script failure(s).")
-        if not auto_fix:
-            print("○ Auto-fix skipped (--no-fix).")
-        else:
-            print("For another fix attempt, use: /run tests --fix")
-        return worst
+        if fix_pass >= max_fixes:
+            print(f"\n✗ Still failing after {max_fixes} fix pass(es).")
+            print("Try: /run tests --fix --max-fixes N or `arka dev test --fix`")
+            return worst
 
-    print(f"○ {failure_count} verification script failure(s) detected — attempting one fix pass…")
-    _auto_fix_once(
-        repo,
-        failure_summary,
-        code_agent,
-        goal_context="Verification scripts under scripts/ failed.",
-        fix_instruction=(
-            "Fix the failing verification scripts reported above. "
-            "Re-run the scripts under scripts/ to verify. "
-            "Only touch files needed for those failures."
-        ),
-        system_extra_goal="fix failing verification scripts",
-    )
-    return _run_discovered_script_checks(
-        repo,
-        auto_fix=False,
-        code_agent=None,
-        after_fix_attempt=True,
-    )
+        fix_pass += 1
+        print(f"○ {failure_count} verification script failure(s) detected — attempting fix pass {fix_pass}/{max_fixes}…")
+        rc = _auto_fix_pass(
+            repo,
+            failure_summary,
+            code_agent,
+            pass_num=fix_pass,
+            max_fixes=max_fixes,
+            goal_context="Verification scripts under scripts/ failed.",
+            fix_instruction=(
+                "Fix the failing verification scripts reported above. "
+                "Re-run the scripts under scripts/ to verify. "
+                "Only touch files needed for those failures."
+            ),
+            system_extra_goal="fix failing verification scripts",
+        )
+        if rc != 0:
+            return rc
 
 
-def _auto_fix_once(
+def _auto_fix_pass(
     repo: Path,
     failure_summary: str,
     code_agent,
     *,
+    pass_num: int,
+    max_fixes: int,
     goal_context: str = "",
     fix_instruction: str = "",
     system_extra_goal: str = "fix failing tests",
@@ -321,7 +341,7 @@ def _auto_fix_once(
     """Run one writable goal-agent pass to repair test failures."""
     from arka.agent.git_changes import format_changed_files, list_changed_files
 
-    print("○ Fix pass 1/1")
+    print(f"○ Fix pass {pass_num}/{max_fixes}")
     before = {row.path for row in list_changed_files(repo)}
     fix_goal = fix_instruction.strip() or (
         "Fix the failing tests reported above. Run pytest to verify. "
@@ -346,75 +366,103 @@ def _auto_fix_once(
     return rc
 
 
+def _auto_fix_once(
+    repo: Path,
+    failure_summary: str,
+    code_agent,
+    *,
+    goal_context: str = "",
+    fix_instruction: str = "",
+    system_extra_goal: str = "fix failing tests",
+) -> int:
+    """Backward-compatible single fix pass."""
+    return _auto_fix_pass(
+        repo,
+        failure_summary,
+        code_agent,
+        pass_num=1,
+        max_fixes=1,
+        goal_context=goal_context,
+        fix_instruction=fix_instruction,
+        system_extra_goal=system_extra_goal,
+    )
+
+
 def _run_direct_tests(
     repo: Path,
     scope: str | None = None,
     *,
     auto_fix: bool = True,
+    max_fixes: int = 1,
     code_agent=None,
     run_label: str | None = "Test run (read-only)",
-    after_fix_attempt: bool = False,
 ) -> int:
     """Run tests directly without the goal agent (strict read-only /test)."""
     if _is_scripts_scope(scope):
         return _run_discovered_script_checks(
             repo,
             auto_fix=auto_fix,
+            max_fixes=max_fixes,
             code_agent=code_agent,
-            after_fix_attempt=after_fix_attempt,
         )
 
-    command = _resolve_test_command(repo, scope)
-    if run_label:
-        print(f"○ {run_label}")
-    print(f"Running tests: {' '.join(command)}")
-    if scope:
-        print(f"Test scope: {scope} (repo {repo})")
-    else:
-        print(f"Test scope: repository at {repo}")
-    try:
-        proc = subprocess.run(command, cwd=repo, check=False, capture_output=True, text=True)
-    except OSError as exc:
-        print(f"Could not start test runner: {exc}")
-        return 1
-    output = (proc.stdout or "") + (proc.stderr or "")
-    if proc.stdout:
-        end = "" if proc.stdout.endswith("\n") else "\n"
-        print(proc.stdout, end=end)
-    if proc.stderr:
-        end = "" if proc.stderr.endswith("\n") else "\n"
-        print(proc.stderr, end=end, file=sys.stderr)
-
-    failures = _parse_pytest_failures(output, exit_code=proc.returncode)
-    if failures == 0:
-        if after_fix_attempt:
-            print("✓ Tests passed (read-only run, after fix)")
+    fix_pass = 0
+    label = run_label
+    while True:
+        command = _resolve_test_command(repo, scope)
+        if label:
+            print(f"○ {label}")
+        print(f"Running tests: {' '.join(command)}")
+        if scope:
+            print(f"Test scope: {scope} (repo {repo})")
         else:
-            print("✓ Tests passed (read-only run)")
-        return 0
+            print(f"Test scope: repository at {repo}")
+        try:
+            proc = subprocess.run(command, cwd=repo, check=False, capture_output=True, text=True)
+        except OSError as exc:
+            print(f"Could not start test runner: {exc}")
+            return 1
+        output = (proc.stdout or "") + (proc.stderr or "")
+        if proc.stdout:
+            end = "" if proc.stdout.endswith("\n") else "\n"
+            print(proc.stdout, end=end)
+        if proc.stderr:
+            end = "" if proc.stderr.endswith("\n") else "\n"
+            print(proc.stderr, end=end, file=sys.stderr)
 
-    if after_fix_attempt:
-        print("✗ Still failing after one fix pass. Use /run tests --fix for another attempt.")
-        return proc.returncode
+        failures = _parse_pytest_failures(output, exit_code=proc.returncode)
+        if failures == 0:
+            if fix_pass:
+                print("✓ Tests passed (read-only run, after fix)")
+            else:
+                print("✓ Tests passed (read-only run)")
+            return 0
 
-    if not auto_fix or code_agent is None:
-        print(f"✗ Tests failed ({failures} test failure(s)).")
-        if not auto_fix:
-            print("○ Auto-fix skipped (--no-fix).")
-        else:
-            print("For another fix attempt, use: /run tests --fix")
-        return proc.returncode
+        if not auto_fix or code_agent is None:
+            print(f"✗ Tests failed ({failures} test failure(s)).")
+            if not auto_fix:
+                print("○ Auto-fix skipped (--no-fix).")
+            else:
+                print("For another fix attempt, use: /run tests --fix")
+            return proc.returncode
 
-    print(f"○ {failures} test failure(s) detected — attempting one fix pass…")
-    _auto_fix_once(repo, output, code_agent)
-    return _run_direct_tests(
-        repo,
-        scope=scope,
-        auto_fix=False,
-        code_agent=None,
-        run_label="Test run (read-only, after fix)",
-        after_fix_attempt=True,
-    )
+        if fix_pass >= max_fixes:
+            print(f"✗ Still failing after {max_fixes} fix pass(es).")
+            print("Try: /run tests --fix --max-fixes N or `arka dev test --fix`")
+            return proc.returncode
+
+        fix_pass += 1
+        print(f"○ {failures} test failure(s) detected — attempting fix pass {fix_pass}/{max_fixes}…")
+        rc = _auto_fix_pass(
+            repo,
+            output,
+            code_agent,
+            pass_num=fix_pass,
+            max_fixes=max_fixes,
+        )
+        if rc != 0:
+            return rc
+        label = "Test run (read-only, after fix)"
 
 
 def _changed_python_files(repo: Path) -> list[str]:
@@ -533,10 +581,12 @@ def _run_flexible_tests(
         return rc
 
     print("○ Test failure(s) detected — attempting one fix pass…")
-    _auto_fix_once(
+    _auto_fix_pass(
         repo,
         f"Readonly test agent run failed with exit code {rc}.",
         code_agent,
+        pass_num=1,
+        max_fixes=1,
         goal_context=goal,
     )
     return _run_direct_tests(
@@ -545,7 +595,6 @@ def _run_flexible_tests(
         auto_fix=False,
         code_agent=None,
         run_label="Test run (read-only, after fix)",
-        after_fix_attempt=True,
     )
 
 
@@ -1475,13 +1524,20 @@ def run(root: str = ".") -> int:
                 code_agent=code_agent,
             )
         elif line == "/test" or line.startswith("/test "):
-            scope, auto_fix = _parse_test_command(line)
-            _run_direct_tests(repo, scope=scope, auto_fix=auto_fix, code_agent=code_agent)
+            scope, auto_fix, max_fixes = _parse_test_command(line)
+            _run_direct_tests(repo, scope=scope, auto_fix=auto_fix, max_fixes=max_fixes, code_agent=code_agent)
+        elif line == "/ship" or line.startswith("/ship "):
+            from arka.agent.dev_cli import run_ship
+
+            fix = bool(re.search(r"(?:^|\s)--fix(?:\s|$)", line, re.I))
+            rc = run_ship(repo, fix=fix)
+            if rc != 0:
+                print(f"✗ Ship checks failed (exit {rc})")
         elif line == "/scaffold 3d" or line.startswith("/scaffold 3d "):
             goal, run_dev = _parse_scaffold_3d_command(line)
             _run_3d_scaffold(repo, goal=goal, run_dev=run_dev)
         elif line == "/run" or line.startswith("/run "):
-            requested_goal, allow_fix, auto_fix = _parse_run_request(line[4:].strip() or (pending_goal or ""))
+            requested_goal, allow_fix, auto_fix, max_fixes = _parse_run_request(line[4:].strip() or (pending_goal or ""))
             if requested_goal and _is_direct_run_test_goal(requested_goal):
                 if allow_fix:
                     print(f"Executing tests with --fix: {requested_goal}")
@@ -1489,6 +1545,7 @@ def run(root: str = ".") -> int:
                     repo,
                     scope=None,
                     auto_fix=allow_fix and auto_fix,
+                    max_fixes=max_fixes,
                     code_agent=code_agent if allow_fix else None,
                     run_label="Test run (read-only)",
                 )
@@ -1524,14 +1581,32 @@ def run(root: str = ".") -> int:
             print(_list_files(repo, line[7:].strip()))
         elif line.startswith("/open "):
             print(_open_file_head(repo, line[6:].strip()))
-        elif line == "/ci":
-            from arka.agent.dev_tools import ci_text
+        elif line == "/ci" or line.startswith("/ci "):
+            stripped = line.strip()
+            if stripped == "/ci preview" or stripped.startswith("/ci preview "):
+                from arka.agent.dev_tools import ci_text
 
-            print(ci_text(repo, changed_only=True))
-        elif line == "/review":
+                print(ci_text(repo, changed_only=True))
+            else:
+                rc = _run_direct_ci(repo)
+                if rc != 0:
+                    print(f"✗ CI gates failed (exit {rc})")
+        elif line == "/review" or line.startswith("/review "):
             from arka.agent.dev_tools import review_text
 
-            print(review_text(repo, staged=True))
+            fail_on_hints = bool(re.search(r"(?:^|\s)--fail(?:\s|$)", line, re.I))
+            report = review_text(repo, staged=True)
+            print(report)
+            hints = [
+                item.strip()
+                for item in report.splitlines()
+                if any(marker in item.lower() for marker in ("security:", "test-gap:", "docs:"))
+            ]
+            if hints and not fail_on_hints:
+                print(f"○ {len(hints)} review hint(s) — use /review --fail to exit on hints")
+            if fail_on_hints and hints:
+                print(f"✗ Review blocked by {len(hints)} hint(s)")
+                return 1
         elif _is_strict_test_request(line):
             _run_direct_tests(repo, auto_fix=True, code_agent=code_agent)
         elif _is_flexible_test_request(line):

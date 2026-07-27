@@ -2,6 +2,7 @@ from arka.agent.coding_tui import status
 
 
 import pytest
+from unittest import mock
 
 
 @pytest.fixture(autouse=True)
@@ -392,11 +393,16 @@ def test_coding_tui_ci_and_review(monkeypatch, tmp_path, capsys):
 
     commands = iter(["/ci", "/review", "/quit"])
     monkeypatch.setattr("builtins.input", lambda _: next(commands))
-    monkeypatch.setattr("arka.agent.dev_tools.ci_text", lambda root, changed_only=False: "CI run: demo")
+    monkeypatch.setattr(
+        "arka.agent.dev_tools.run_ci",
+        lambda root, **kwargs: {"ok": True, "results": [{"name": "ruff", "ok": True, "exit_code": 0}]},
+    )
+    monkeypatch.setattr("arka.agent.dev_tools.ci_text", lambda root, **kwargs: "CI run: demo")
     monkeypatch.setattr("arka.agent.dev_tools.review_text", lambda root, staged=False: "Review scope: staged")
     assert coding_tui.run(str(tmp_path)) == 0
     output = capsys.readouterr().out
     assert "CI run: demo" in output
+    assert "CI run complete" in output
     assert "Review scope: staged" in output
 
 
@@ -538,7 +544,7 @@ def test_direct_tests_auto_fix_on_failure(monkeypatch, tmp_path, capsys):
     )
     monkeypatch.setattr(
         coding_tui,
-        "_auto_fix_once",
+        "_auto_fix_pass",
         lambda repo, summary, agent, **kwargs: calls.append("fix") or 0,
     )
     def fake_agent(*args, **kwargs):
@@ -546,7 +552,7 @@ def test_direct_tests_auto_fix_on_failure(monkeypatch, tmp_path, capsys):
     assert coding_tui._run_direct_tests(tmp_path, auto_fix=True, code_agent=fake_agent) == 0
     output = capsys.readouterr().out
     assert calls == ["fix"]
-    assert "1 test failure(s) detected — attempting one fix pass" in output
+    assert "1 test failure(s) detected — attempting fix pass 1/1" in output
     assert "Tests passed (read-only run, after fix)" in output
 
 
@@ -574,7 +580,7 @@ def test_discovered_script_checks_auto_fix_on_failure(monkeypatch, tmp_path, cap
     )
     monkeypatch.setattr(
         coding_tui,
-        "_auto_fix_once",
+        "_auto_fix_pass",
         lambda repo, summary, agent, **kwargs: calls.append("fix") or 0,
     )
 
@@ -586,11 +592,11 @@ def test_discovered_script_checks_auto_fix_on_failure(monkeypatch, tmp_path, cap
         tmp_path,
         scope="scripts",
         auto_fix=True,
-        code_agent=object(),
+        code_agent=lambda *args, **kwargs: 0,
     ) == 0
     output = capsys.readouterr().out
     assert calls == ["fix"]
-    assert "1 verification script failure(s) detected — attempting one fix pass" in output
+    assert "1 verification script failure(s) detected — attempting fix pass 1/1" in output
     assert "passed (read-only run, after fix)" in output
 
 
@@ -656,7 +662,7 @@ def test_scripts_scope_no_fix_flag_skips_auto_fix(monkeypatch, tmp_path, capsys)
     script.parent.mkdir()
     script.write_text("assert False\n", encoding="utf-8")
 
-    scope, auto_fix = coding_tui._parse_test_command("/test scripts --no-fix")
+    scope, auto_fix, _max_fixes = coding_tui._parse_test_command("/test scripts --no-fix")
     assert scope == "scripts"
     assert auto_fix is False
     assert coding_tui._run_direct_tests(
@@ -715,7 +721,7 @@ def test_test_no_fix_flag_skips_auto_fix(monkeypatch, tmp_path, capsys):
         "_auto_fix_once",
         lambda *args, **kwargs: fix_calls.append("fix") or 0,
     )
-    scope, auto_fix = coding_tui._parse_test_command("/test --no-fix")
+    scope, auto_fix, _max_fixes = coding_tui._parse_test_command("/test --no-fix")
     assert scope is None
     assert auto_fix is False
     assert coding_tui._run_direct_tests(tmp_path, auto_fix=auto_fix, code_agent=object()) == 1
@@ -737,17 +743,17 @@ def test_flexible_tests_auto_fix_on_failure(monkeypatch, tmp_path, capsys):
     )
     monkeypatch.setattr(
         coding_tui,
-        "_auto_fix_once",
+        "_auto_fix_pass",
         lambda *args, **kwargs: fix_calls.append("fix") or 0,
     )
     monkeypatch.setattr(
         coding_tui,
         "_run_direct_tests",
-        lambda repo, **kwargs: direct_calls.append(kwargs.get("after_fix_attempt", False)) or 0,
+        lambda repo, **kwargs: direct_calls.append(kwargs.get("auto_fix", True)) or 0,
     )
-    assert coding_tui._run_flexible_tests("run tests", tmp_path, object(), auto_fix=True) == 0
+    assert coding_tui._run_flexible_tests("run tests", tmp_path, lambda *a, **k: 0, auto_fix=True) == 0
     assert fix_calls == ["fix"]
-    assert direct_calls == [True]
+    assert direct_calls == [False]
     output = capsys.readouterr().out
     assert "Test run (read-only)" in output
     assert "attempting one fix pass" in output
@@ -882,14 +888,63 @@ def test_run_tests_short_goal_is_not_deterministic(monkeypatch, tmp_path):
     assert coding_tui._is_deterministic_short_goal("ci")
     assert not coding_tui._is_deterministic_short_goal("run tests and fix failures")
     assert not coding_tui._is_deterministic_short_goal("tests", allow_fix=True)
-    goal, allow_fix, auto_fix = coding_tui._parse_run_request("tests --fix")
+    goal, allow_fix, auto_fix, max_fixes = coding_tui._parse_run_request("tests --fix")
     assert goal == "tests"
     assert allow_fix is True
     assert auto_fix is True
-    goal, allow_fix, auto_fix = coding_tui._parse_run_request("tests --no-fix")
+    assert max_fixes == 1
+    goal, allow_fix, auto_fix, max_fixes = coding_tui._parse_run_request("tests --no-fix")
     assert goal == "tests"
     assert allow_fix is False
     assert auto_fix is False
+    assert max_fixes == 1
+    _, _, _, max_fixes = coding_tui._parse_run_request("tests --fix --max-fixes 2")
+    assert max_fixes == 2
+
+
+def test_max_fixes_stops_after_n(monkeypatch, tmp_path, capsys):
+    from arka.agent import coding_tui
+
+    class FailResult:
+        returncode = 1
+        stdout = "1 failed, 11 passed\nFAILED tests/test_x.py\n"
+        stderr = ""
+
+    monkeypatch.setattr(coding_tui.subprocess, "run", lambda *args, **kwargs: FailResult())
+    fix_calls: list[int] = []
+
+    def fake_fix(repo, summary, agent, **kwargs):
+        fix_calls.append(kwargs.get("pass_num", 0))
+        return 0
+
+    monkeypatch.setattr(coding_tui, "_auto_fix_pass", fake_fix)
+    rc = coding_tui._run_direct_tests(tmp_path, auto_fix=True, max_fixes=2, code_agent=object())
+    output = capsys.readouterr().out
+    assert rc == 1
+    assert fix_calls == [1, 2]
+    assert "Still failing after 2 fix pass(es)" in output
+
+
+def test_coding_tui_ship(monkeypatch, tmp_path, capsys):
+    from arka.agent import coding_tui
+
+    commands = iter(["/ship", "/quit"])
+    monkeypatch.setattr("builtins.input", lambda _: next(commands))
+    monkeypatch.setattr(
+        "arka.agent.dev_cli.run_ship",
+        lambda root, **kwargs: (print("ship ok") or 0),
+    )
+    assert coding_tui.run(str(tmp_path)) == 0
+    assert "ship ok" in capsys.readouterr().out
+
+
+def test_parse_test_command_max_fixes():
+    from arka.agent import coding_tui
+
+    scope, auto_fix, max_fixes = coding_tui._parse_test_command("/test --max-fixes 3")
+    assert scope is None
+    assert auto_fix is True
+    assert max_fixes == 3
 
 
 def test_run_ci_and_lint_are_deterministic(monkeypatch, tmp_path):

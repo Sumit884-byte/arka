@@ -37,5 +37,5 @@ Set `ARKA_WALKTHROUGH_URL` to target a different base URL. Set
 similar MCP skills get still images, not walkthrough recordings. Use `arka capture video`
 or this script when you need a full UI walkthrough artifact.
 
-Committed polished stills live in `recordings/live-demo-ui/*.png`. The empty
-[`../video/`](../video/) folder is for committed MP4s when explicitly checked in.
+Polished stills and WebM output are **gitignored** under `recordings/live-demo-ui/`.
+[`../video/`](../video/) holds only a README — do not commit MP4s to the repo.

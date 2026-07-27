@@ -1,0 +1,78 @@
+---
+title: "Generate music"
+description: "Create AI music with optional lyrics or instrumental output via Pollinations."
+keywords: ["music", "song", "audio", "lyrics", "instrumental", "pollinations"]
+icon: "music"
+---
+
+Generate original music locally through Arka using the Pollinations **elevenmusic** model.
+Output defaults to `~/Music/arka-generated/` (override with `MUSIC_OUTPUT_DIR`).
+
+## Setup
+
+```bash
+# .env
+POLLINATIONS_API_KEY=pk_...
+```
+
+Get a key at [enter.pollinations.ai](https://enter.pollinations.ai/).
+
+## Examples
+
+arka "Instrumental track:"
+
+```bash
+arka generate music upbeat lo-fi hip hop --instrumental
+arka generate music cinematic orchestral -d 45
+```
+
+With lyrics:
+
+```bash
+arka generate music indie folk --lyrics "Verse one...
+arka "Chorus line...""
+arka generate music pop ballad --lyrics-file lyrics.txt
+```
+
+arka "Prompt-only (model may add vocals from the style description):"
+
+```bash
+arka generate music summer dance pop about sunrise
+arka generate_music "jazz piano lounge" -o ~/Music/demo.mp3
+```
+
+## Flags
+
+| Flag | Description |
+| ---- | ----------- |
+| `--lyrics "…"` | Lyrics to sing |
+| `--lyrics-file path` | Read lyrics from a file |
+| `--instrumental` | No vocals |
+| `-d / --duration` | Length in seconds (3–300, default 30) |
+| `-o / --output` | Output `.mp3` path |
+| `-m / --model` | Pollinations model (`elevenmusic` default) |
+
+## Natural language
+
+These phrases route automatically:
+
+```bash
+arka "generate music calm piano instrumental"
+arka "compose a song about coding with lyrics: build, test, ship"
+arka route "create a lo-fi beat"
+```
+
+## Environment
+
+  | arka "Variable" | arka "Default" | arka "Purpose" | 
+  | -------- | ------- | ------- | 
+  | `POLLINATIONS_API_KEY` | — | arka "Required API key" | 
+  | `MUSIC_DURATION` | `30` | arka "Default duration" | 
+  | `MUSIC_MODEL` | `elevenmusic` | arka "Pollinations audio model" | 
+  | `MUSIC_OUTPUT_DIR` | `~/Music/arka-generated` | arka "Save location" | 
+  | `OPEN_MUSIC` | `1` | Open file after generation (`0` to disable) | 
+
+## Related
+
+- [Browser video capture](/guides/video-capture) — walkthrough recordings
+- [Meme templates](/guides/meme-templates) — local image memes

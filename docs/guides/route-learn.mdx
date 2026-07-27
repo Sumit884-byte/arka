@@ -10,8 +10,8 @@ Arka can learn **persistent natural-language routes** — phrase → skill mappi
 ## Teach a route
 
 ```bash
-route_learn learn "deploy staging" "agent_code run deploy.sh"
-route_learn learn "my dashboard" system_monitor
+arka route_learn learn "deploy staging" "agent_code run deploy.sh"
+arka route_learn learn "my dashboard" system_monitor
 ```
 
 Natural language:
@@ -27,7 +27,7 @@ arka remember route "check disk" as disk_breakdown
 After a request routes incorrectly, fix it from the last trace:
 
 ```bash
-route_learn learn --from-trace --correct "stock news"
+arka route_learn learn --from-trace --correct "stock news"
 ```
 
 This pairs the trace input with the skill you intended.
@@ -36,9 +36,9 @@ This pairs the trace input with the skill you intended.
 
 | Command | Description |
 | --- | --- |
-| `route_learn list` | List all learned routes |
-| `route_learn delete <id-or-phrase>` | Remove a route |
-| `route_learn test <phrase>` | Preview what a phrase would run |
+| `arka route_learn list` | List all learned routes |
+| `arka route_learn delete <id-or-phrase>` | Remove a route |
+| `arka route_learn test <phrase>` | Preview what a phrase would run |
 
 Natural language:
 
@@ -51,7 +51,7 @@ arka list learned routes
 Use `{args}` in the skill line to capture trailing text:
 
 ```bash
-route_learn learn "summarize repo" "github_repo activity {args}"
+arka route_learn learn "summarize repo" "github_repo activity {args}"
 # "summarize repo Sumit884-byte/arka" → github_repo activity Sumit884-byte/arka
 ```
 

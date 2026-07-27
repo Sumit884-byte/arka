@@ -25,6 +25,8 @@ OUT_MP4 = REPO / "recordings" / "arka-signoz-hackathon-demo.mp4"
 OUT_MP3 = REPO / "recordings" / "signoz-hackathon-voiceover.mp3"
 OUT_TXT = REPO / "recordings" / "signoz-hackathon-voiceover.txt"
 WORK = REPO / "recordings" / "_signoz_demo_build"
+MAX_DURATION = 180.0  # Devpost hard limit (3 minutes)
+TARGET_DURATION = 179.0  # Aim for a full ~3 min submission
 
 # Track 01 = traces + logs + services metrics (no dashboards, no synthetic charts).
 BLOCKED_SHOTS = frozenset(
@@ -47,19 +49,19 @@ BLOCKED_SHOTS = frozenset(
 SCREENSHOT_SLOTS = [
     {
         "id": "traces",
-        "start": 66,
+        "start": 108,
         "patterns": ("traces-explorer*.png", "traces-*.png"),
         "caption": "Traces — arka.llm.attempt · arka.route · arka.demo",
     },
     {
         "id": "services",
-        "start": 78,
+        "start": 126,
         "patterns": ("services*.png",),
         "caption": "Services — P99 latency · error rate · ops/sec",
     },
     {
         "id": "logs",
-        "start": 90,
+        "start": 144,
         "patterns": ("logs-explorer*.png", "logs*.png"),
         "caption": "Logs — LLM failover & agent events",
     },
@@ -76,7 +78,7 @@ TITLE_BEATS = [
     },
     {
         "id": "problem",
-        "start": 10,
+        "start": 16,
         "type": "title",
         "title": "The problem",
         "subtitle": "AI agents are a black box",
@@ -84,7 +86,7 @@ TITLE_BEATS = [
     },
     {
         "id": "setup",
-        "start": 22,
+        "start": 32,
         "type": "terminal_anim",
         "scenes": [
             {
@@ -96,7 +98,7 @@ TITLE_BEATS = [
     },
     {
         "id": "status",
-        "start": 38,
+        "start": 50,
         "type": "terminal_anim",
         "scenes": [
             {
@@ -109,7 +111,7 @@ TITLE_BEATS = [
     },
     {
         "id": "demo",
-        "start": 52,
+        "start": 68,
         "type": "terminal_anim",
         "scenes": [
             {
@@ -120,11 +122,27 @@ TITLE_BEATS = [
         ],
     },
     {
+        "id": "pillars",
+        "start": 88,
+        "type": "title",
+        "title": "Four pillars",
+        "subtitle": "Traces · Metrics · Logs · LLM spans",
+        "tagline": "OpenTelemetry built into arka-agent",
+    },
+    {
+        "id": "docs",
+        "start": 162,
+        "type": "title",
+        "title": "Documentation",
+        "subtitle": "arka-agent.mintlify.site/guides/observability",
+        "tagline": "github.com/Sumit884-byte/arka/tree/main/signoz",
+    },
+    {
         "id": "outro",
-        "start": 102,
+        "start": 174,
         "type": "title",
         "title": "Reproducible locally",
-        "subtitle": "foundryctl cast · casting.yaml in repo",
+        "subtitle": "arka signoz setup -y · demo-scenarios --synthetic",
         "tagline": "github.com/Sumit884-byte/arka",
     },
 ]
@@ -272,10 +290,57 @@ def resolve_latest_screenshots() -> list[dict]:
 
 
 def build_vo_beats() -> list[dict]:
-    beats = list(TITLE_BEATS[:5])  # title → demo (terminal segments)
+    beats = list(TITLE_BEATS[:6])  # title → pillars
     beats.extend(resolve_latest_screenshots())
-    beats.append(TITLE_BEATS[5])  # outro
+    beats.extend(TITLE_BEATS[6:8])  # docs + outro
     return beats
+
+
+def pad_audio_to_target(audio: Path, out: Path, *, target: float = TARGET_DURATION) -> Path:
+    """Pad trailing silence so the submission fills ~3 minutes."""
+    dur = tv.probe_duration(audio)
+    if dur >= target - 0.3:
+        if audio.resolve() != out.resolve():
+            shutil.copy(audio, out)
+        return out if audio.resolve() != out.resolve() else audio
+    out.parent.mkdir(parents=True, exist_ok=True)
+    tv.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(audio),
+            "-af",
+            f"apad=whole_dur={target:.3f}",
+            "-t",
+            f"{target:.3f}",
+            "-c:a",
+            "libmp3lame",
+            "-q:a",
+            "2",
+            str(out),
+        ],
+        capture_output=True,
+    )
+    fitted = tv.probe_duration(out)
+    print(f"Padded voiceover {dur:.1f}s → {fitted:.1f}s (target {target:.0f}s)")
+    return out
+
+
+def fit_voiceover(audio: Path, out: Path) -> Path:
+    """Trim (tempo) if over limit, pad if under target — land near 3 minutes."""
+    dur = tv.probe_duration(audio)
+    step = audio
+    if dur > MAX_DURATION:
+        tv.fit_audio_to_limit(audio, out, limit=MAX_DURATION)
+        step = out
+        dur = tv.probe_duration(step)
+    if dur < TARGET_DURATION - 0.5:
+        return pad_audio_to_target(step, out, target=TARGET_DURATION)
+    if step.resolve() != out.resolve():
+        shutil.copy(step, out)
+        return out
+    return step
 
 
 def frame_screenshot(image: Path, out_png: Path, *, caption: str = "") -> None:
@@ -344,6 +409,8 @@ def _patch_tv(vo_beats: list[dict]) -> None:
     tv.OUT_TXT = OUT_TXT
     tv.VO_BEATS = vo_beats
     tv.SEGMENT_LABELS = {**tv.SEGMENT_LABELS, **SEGMENT_LABELS}
+    tv.MAX_DURATION = MAX_DURATION
+    tv.MIN_DURATION = 60.0
 
 
 def screenshot_to_clip(image: Path, duration: float, out_path: Path, *, caption: str = "") -> None:
@@ -385,8 +452,6 @@ def build_visual_segments(target_total: float, vo_beats: list[dict]) -> list[Pat
 
 
 def run_build(*, skip_verify: bool = True) -> Path:
-    tv.MIN_DURATION = 60.0
-
     if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
         raise SystemExit("ffmpeg/ffprobe required")
 
@@ -404,8 +469,18 @@ def run_build(*, skip_verify: bool = True) -> Path:
     asyncio.run(tv.generate_voiceover())
     raw_dur = tv.probe_duration(OUT_MP3)
     print(f"Audio duration: {raw_dur:.1f}s")
-    fitted = tv.fit_audio_to_limit(OUT_MP3, WORK / "voiceover_fitted.mp3")
+    fitted = fit_voiceover(OUT_MP3, WORK / "voiceover_fitted.mp3")
     audio_dur = tv.probe_duration(fitted)
+    if audio_dur > MAX_DURATION + 0.05:
+        raise SystemExit(
+            f"Voiceover still {audio_dur:.1f}s after fit — trim {OUT_TXT.name} "
+            f"to stay under {MAX_DURATION:.0f}s"
+        )
+    if audio_dur < TARGET_DURATION - 2.0:
+        raise SystemExit(
+            f"Voiceover {audio_dur:.1f}s is too short — extend {OUT_TXT.name} "
+            f"or lower TARGET_DURATION (want ~{TARGET_DURATION:.0f}s)"
+        )
 
     print("=== Step 2: Build segments ===")
     clips = build_visual_segments(audio_dur, vo_beats)
@@ -418,8 +493,11 @@ def run_build(*, skip_verify: bool = True) -> Path:
     print(f"\nDone: {OUT_MP4}")
     print(f"Duration: {final_dur:.1f}s ({final_dur / 60:.2f} min)")
     print(f"Size: {size_mb:.1f} MB")
-    if final_dur > 180:
-        print("WARNING: exceeds 3 minute Devpost limit")
+    if final_dur > MAX_DURATION:
+        raise SystemExit(
+            f"Output {final_dur:.1f}s exceeds {MAX_DURATION:.0f}s Devpost limit — shorten voiceover or segments"
+        )
+    print(f"OK: {final_dur:.1f}s (~{final_dur / 60:.1f} min, target {TARGET_DURATION:.0f}s)")
     return OUT_MP4
 
 

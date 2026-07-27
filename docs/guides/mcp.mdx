@@ -53,9 +53,9 @@ arka mcp tools signoz
 Natural language (agent routing):
 
 ```fish
-agent "list mcp servers"
-agent "mcp status"
-agent "list mcp tools from signoz"
+arka "list mcp servers"
+arka "mcp status"
+arka "list mcp tools from signoz"
 ```
 
 ## Config format
@@ -480,9 +480,9 @@ arka mcp call arka arka_repo_health --args '{"path":"/path/to/arka"}'
 arka mcp self-tools
 
 # From fish / NL
-agent "list arka mcp tools"
-agent "show agent heartbeat"
-agent "validate json package.json"
+arka "list arka mcp tools"
+arka "show agent heartbeat"
+arka "validate json package.json"
 ```
 
 When a tool exists on the MCP server but lacks natural-language routing (for example `arka_heartbeat` or `arka_jsonkit`), add:

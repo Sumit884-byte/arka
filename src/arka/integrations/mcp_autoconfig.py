@@ -23,6 +23,7 @@ CATALOG = {
     "brave-search": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-brave-search"], "requires": ("BRAVE_API_KEY",)},
     "slack": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-slack"], "requires": ("SLACK_BOT_TOKEN",)},
     "notion": {"command": "npx", "args": ["-y", "@notionhq/notion-mcp-server"], "requires": ("NOTION_TOKEN",)},
+    "datahub": {"command": "uvx", "args": ["mcp-server-datahub"], "requires": ("DATAHUB_GMS_URL", "DATAHUB_GMS_TOKEN")},
 }
 
 def _path() -> Path:

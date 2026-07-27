@@ -124,8 +124,19 @@ class KaggleCredentialTests(unittest.TestCase):
         self.assertEqual(cred["username"], "alice")
         self.assertEqual(cred["source"], "environment")
 
+    def test_kgat_token_credentials(self) -> None:
+        with mock.patch.dict(
+            "os.environ",
+            {"KAGGLE_USERNAME": "alice", "KAGGLE_KEY": "KGAT_testtoken", "KAGGLE_API_TOKEN": ""},
+            clear=False,
+        ):
+            cred = credential_status()
+        self.assertTrue(cred["configured"])
+        self.assertEqual(cred["username"], "alice")
+        self.assertIn("token", cred["detail"].lower())
+
     def test_kaggle_json_credentials(self) -> None:
-        with mock.patch.dict("os.environ", {"KAGGLE_USERNAME": "", "KAGGLE_KEY": ""}, clear=False):
+        with mock.patch.dict("os.environ", {"KAGGLE_USERNAME": "", "KAGGLE_KEY": "", "KAGGLE_API_TOKEN": ""}, clear=False):
             with mock.patch.object(Path, "is_file", return_value=True):
                 with mock.patch.object(
                     Path,

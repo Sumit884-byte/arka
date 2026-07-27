@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import os
 import shutil
@@ -192,6 +193,32 @@ def _copy_tree(src: Path, dst: Path) -> None:
             shutil.copy2(item, target)
 
 
+def _env_files_for_backup() -> list[tuple[Path, str]]:
+    """Env files Arka may load (deduped), archived under env/<label>/."""
+    from arka.paths import arka_home, checkout_root, config_dir, env_file
+
+    seen: set[Path] = set()
+    rows: list[tuple[Path, str]] = []
+
+    def add(path: Path, label: str) -> None:
+        resolved = path.expanduser().resolve()
+        if resolved in seen or not resolved.is_file():
+            return
+        seen.add(resolved)
+        rows.append((resolved, f"env/{label}/{resolved.name}"))
+
+    add(env_file(), "primary")
+    cfg = config_dir()
+    add(cfg / "platform.env", "config")
+    root = checkout_root()
+    if root:
+        add(root / ".env", "checkout")
+        add(root / "platform.env", "checkout")
+    add(Path.home() / ".config" / "fish" / ".env", "legacy-fish")
+    add(arka_home() / ".env", "install-home")
+    return rows
+
+
 def _cache_files_for_backup() -> list[Path]:
     from arka.paths import cache_dir
 
@@ -211,51 +238,64 @@ def default_backup_path(output: Path | None = None) -> Path:
 
 
 def create_backup(output: Path | None = None) -> dict[str, Any]:
-    config_dir, cache_dir, _ = _load_paths()
-    cfg = config_dir()
+    config_dir_fn, cache_dir_fn, _ = _load_paths()
+    cfg = config_dir_fn()
+    cache_root = cache_dir_fn()
     archive_path = default_backup_path(output)
     archive_path.parent.mkdir(parents=True, exist_ok=True)
 
-    staging = Path(tempfile.mkdtemp(prefix="arka-config-backup-"))
-    manifest: dict[str, Any] = {}
-    try:
-        config_stage = staging / "config"
-        cache_stage = staging / "cache"
-        _copy_tree(cfg, config_stage)
-        cache_stage.mkdir(parents=True, exist_ok=True)
-        for cache_file in _cache_files_for_backup():
-            rel = cache_file.relative_to(cache_dir())
-            dest = cache_stage / rel
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(cache_file, dest)
+    entries: list[tuple[Path, str]] = []
+    env_entries = _env_files_for_backup()
+    cfg_resolved = cfg.resolve()
 
-        manifest = {
-            "version": BACKUP_VERSION,
-            "created_at": _iso_now(),
-            "config_dir": str(cfg),
-            "cache_dir": str(cache_dir()),
-            "files": {
-                "config": sum(1 for _ in config_stage.rglob("*") if _.is_file()),
-                "cache": sum(1 for _ in cache_stage.rglob("*") if _.is_file()),
-            },
-        }
-        (staging / MANIFEST_NAME).write_text(
-            json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
-        )
+    for path, arcname in env_entries:
+        resolved = path.resolve()
+        if cfg_resolved in resolved.parents or resolved.parent == cfg_resolved:
+            continue
+        entries.append((path, arcname))
 
-        if archive_path.is_file():
-            archive_path.unlink()
-        with tarfile.open(archive_path, "w:gz") as tar:
-            for item in staging.iterdir():
-                tar.add(item, arcname=item.name)
-    finally:
-        shutil.rmtree(staging, ignore_errors=True)
+    if cfg.is_dir():
+        for item in cfg.rglob("*"):
+            if not item.is_file() or _should_skip(item):
+                continue
+            rel = item.relative_to(cfg)
+            if _should_skip(rel):
+                continue
+            entries.append((item, f"config/{rel.as_posix()}"))
+
+    for cache_file in _cache_files_for_backup():
+        rel = cache_file.relative_to(cache_root)
+        entries.append((cache_file, f"cache/{rel.as_posix()}"))
+
+    config_count = sum(1 for _, arc in entries if arc.startswith("config/"))
+    cache_count = sum(1 for _, arc in entries if arc.startswith("cache/"))
+    env_count = len(env_entries)
+    manifest: dict[str, Any] = {
+        "version": BACKUP_VERSION,
+        "created_at": _iso_now(),
+        "config_dir": str(cfg),
+        "cache_dir": str(cache_root),
+        "files": {"config": config_count, "cache": cache_count, "env": env_count},
+        "env_files": [str(p) for p, _ in env_entries],
+    }
+
+    if archive_path.is_file():
+        archive_path.unlink()
+
+    with tarfile.open(archive_path, "w:gz") as tar:
+        manifest_bytes = (json.dumps(manifest, indent=2) + "\n").encode("utf-8")
+        info = tarfile.TarInfo(name=MANIFEST_NAME)
+        info.size = len(manifest_bytes)
+        tar.addfile(info, io.BytesIO(manifest_bytes))
+        for path, arcname in entries:
+            tar.add(path, arcname=arcname, recursive=False)
 
     return {
         "ok": True,
         "archive": str(archive_path),
         "bytes": archive_path.stat().st_size,
         "manifest": manifest,
+        "env_files": manifest.get("env_files") or [],
     }
 
 
@@ -270,6 +310,8 @@ def _extract_archive(archive: Path, dest: Path) -> Path:
 
 
 def restore_backup(archive: Path, *, force: bool = False) -> dict[str, Any]:
+    from arka.paths import arka_home, checkout_root
+
     config_dir, cache_dir, _ = _load_paths()
     src = archive.expanduser().resolve()
     if not src.is_file():
@@ -309,6 +351,29 @@ def restore_backup(archive: Path, *, force: bool = False) -> dict[str, Any]:
                     shutil.copytree(item, dest)
                 else:
                     shutil.copy2(item, dest)
+
+        env_root = staging / "env"
+        if env_root.is_dir():
+            for label_dir in env_root.iterdir():
+                if not label_dir.is_dir():
+                    continue
+                for env_file in label_dir.iterdir():
+                    if not env_file.is_file():
+                        continue
+                    target = None
+                    if label_dir.name == "legacy-fish":
+                        target = Path.home() / ".config" / "fish" / env_file.name
+                    elif label_dir.name == "checkout":
+                        root = checkout_root()
+                        if root:
+                            target = root / env_file.name
+                    elif label_dir.name == "install-home":
+                        target = arka_home() / env_file.name
+                    elif label_dir.name in ("primary", "config"):
+                        target = target_cfg / env_file.name
+                    if target is not None:
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(env_file, target)
 
         cache_src = staging / "cache"
         if cache_src.is_dir():
@@ -408,10 +473,17 @@ def cmd_path(args: argparse.Namespace) -> int:
 def cmd_backup(args: argparse.Namespace) -> int:
     output = Path(args.output).expanduser() if args.output else None
     result = create_backup(output)
-    print(f"archive\t{result['archive']}")
-    print(f"bytes\t{result['bytes']}")
-    print(f"config_files\t{result['manifest']['files']['config']}")
-    print(f"cache_files\t{result['manifest']['files']['cache']}")
+    print(f"Backup saved: {result['archive']}")
+    print(f"  size: {result['bytes']:,} bytes")
+    print(f"  config files: {result['manifest']['files']['config']}")
+    print(f"  cache files: {result['manifest']['files']['cache']}")
+    env_files = result.get("env_files") or []
+    if env_files:
+        print(f"  env files: {len(env_files)}")
+        for path in env_files:
+            print(f"    - {path}")
+    else:
+        print("  env files: 0 (no .env found — check CONFIG_DIR / ~/.config/arka/.env)")
     return 0
 
 
@@ -439,6 +511,52 @@ def cmd_init(args: argparse.Namespace) -> int:
     print("")
     print("Add the export lines to your shell profile, then restart shells or run: arka reload")
     return 0
+
+
+def build_backup_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="arka backup",
+        description="Compressed backup of all Arka config and cache files",
+    )
+    sub = parser.add_subparsers(dest="command")
+
+    all_p = sub.add_parser("all", help="Archive entire config dir + cache snippets (default)")
+    all_p.add_argument(
+        "-o",
+        "--output",
+        help="Output .tar.gz path (default: config/backups/arka-config-YYYY-MM-DD.tar.gz)",
+    )
+    all_p.set_defaults(func=cmd_backup)
+
+    backup_p = sub.add_parser("backup", help="Alias for all")
+    backup_p.add_argument("-o", "--output")
+    backup_p.set_defaults(func=cmd_backup)
+
+    sub.add_parser("list", help="List config paths and sizes").set_defaults(func=cmd_list)
+    restore_p = sub.add_parser("restore", help="Restore config from archive")
+    restore_p.add_argument("archive", help="Backup .tar.gz path")
+    restore_p.add_argument("--force", action="store_true", help="Skip confirmation prompt")
+    restore_p.set_defaults(func=cmd_restore)
+
+    return parser
+
+
+def main_backup(argv: list[str] | None = None) -> int:
+    from arka.env import load_env
+
+    load_env()
+    raw = list(argv if argv is not None else sys.argv[1:])
+    if not raw or raw[0] in ("-h", "--help", "help"):
+        build_backup_parser().print_help()
+        return 0
+    if raw[0] not in {"all", "backup", "list", "restore"}:
+        raw = ["all", *raw]
+    parser = build_backup_parser()
+    args = parser.parse_args(raw)
+    if not getattr(args, "func", None):
+        parser.print_help()
+        return 0
+    return args.func(args)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -511,9 +629,10 @@ def _print_help() -> None:
         """Arka config — unified config root, backup, and restore
 
 Usage:
+  arka backup all [-o FILE]         Quick compressed backup (all config files)
+  arka config backup [-o FILE]        Same as arka backup all
   arka config path                  Show config root + export snippet
   arka config list                  List config paths and sizes
-  arka config backup [-o FILE]      Tarball of config dir + cache snippets
   arka config restore ARCHIVE       Restore (prompts unless --force)
   arka config init --dir PATH       Initialize a new config directory
 
@@ -522,7 +641,8 @@ Environment:
   ARKA_CONFIG_BACKUP_ON_UNIFY=1     Auto-backup before agent_hub sync --unify
 
 Examples:
-  arka config path
+  arka backup all
+  arka backup all -o ~/backups/arka-2026-07-26.tar.gz
   arka config backup -o ~/backups/arka-2026-07-11.tar.gz
   arka config restore ~/backups/arka-2026-07-11.tar.gz --force
   arka config init --dir ~/my-arka-config
@@ -539,6 +659,7 @@ __all__ = [
     "format_path",
     "init_config",
     "iter_config_entries",
+    "main_backup",
     "maybe_backup_before_unify",
     "restore_backup",
 ]

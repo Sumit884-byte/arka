@@ -44,6 +44,11 @@ class DevToolsTests(unittest.TestCase):
             payload = dt.run_ci(Path("."), changed_only=True)
         assert payload["path"] == str(Path("."))
 
+    def test_review_file_test_gaps(self) -> None:
+        with mock.patch("arka.agent.dev_workflows.test_gaps_for_files", return_value=["src/arka/foo.py"]):
+            hints = dt._file_test_gap_hints(Path("."), ["src/arka/foo.py"])
+        self.assertTrue(any("src/arka/foo.py" in hint for hint in hints))
+
     def test_review_hints(self) -> None:
         text = dt._security_and_test_gap_hints("shell=True route parser", ["src/arka/cli.py"])
         self.assertTrue(any("security" in hint for hint in text))

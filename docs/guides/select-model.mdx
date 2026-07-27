@@ -20,12 +20,12 @@ arka auto configure models from my hardware --apply
 ## CLI
 
 ```bash
-select_model                    # show recommendations
-select_model --apply            # write to llm-skill-models.json
-select_model --json             # machine-readable output
-select_model probe              # hardware snapshot only
-select_model --local            # choose the strongest installed local model that fits
-select_model --local --run "summarize this repo"  # run a prompt with it via Ollama
+arka select_model                    # show recommendations
+arka select_model --apply            # write to llm-skill-models.json
+arka select_model --json             # machine-readable output
+arka select_model probe              # hardware snapshot only
+arka select_model --local            # choose the strongest installed local model that fits
+arka select_model --local --run "summarize this repo"  # run a prompt with it via Ollama
 ```
 
 ## Hardware tiers
@@ -43,7 +43,7 @@ The advisor checks CPU cores, RAM, GPU (CUDA/MPS/Metal), disk space, battery sta
 ## Apply recommendations
 
 ```bash
-select_model --apply
+arka select_model --apply
 # or
 arka auto apply models for my hardware
 ```

@@ -1,0 +1,124 @@
+---
+title: "Web dashboard"
+description: "Run the React web UI for chat, skills, and status — with session history stored in Arka."
+keywords: ["web", "dashboard", "frontend", "bridge", "chat", "vite"]
+icon: "window-maximize"
+---
+
+<Warning>
+  **Experimental / local only.** The `web/` frontend is not published on PyPI and is
+  intentionally **not tracked in git** (buggy WIP). Use the CLI and MCP for
+  hackathon demos and daily use. This page is for contributors running the UI from a
+  local checkout only.
+</Warning>
+
+The web dashboard is a React app under `web/` in the repo. It talks to your local
+Arka instance through a small Python **bridge** that adds CORS, route preview,
+capabilities, doctor checks, and **session history** endpoints.
+
+## Prerequisites
+
+1. **Arka remote server** — executes chat commands:
+
+```bash
+arka serve
+```
+
+Default URL: `http://127.0.0.1:8765`. Set `REMOTE_TOKEN` in `.env` and paste the
+same token into the dashboard sidebar (or set `VITE_ARKA_TOKEN` for dev).
+
+2. **Bridge server** — local HTTP proxy with extra endpoints:
+
+```bash
+cd web
+python3 bridge.py
+```
+
+Default URL: `http://127.0.0.1:8766`
+
+## Development
+
+Terminal 1 — keep `arka serve` running, then start the bridge:
+
+```bash
+cd web
+python3 bridge.py
+```
+
+Terminal 2 — Vite dev server (proxies `/v1/*` to the bridge):
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+Open [http://localhost:5173](http://localhost:5173).
+
+## Screens
+
+| Screen | Endpoint | Notes |
+| ------ | -------- | ----- |
+| **Chat** | `POST /v1/agent` | Proxied to `arka serve`; route preview from local `/v1/route` |
+| **Skills** | `GET /v1/capabilities` | Lists dispatch modules from `src/arka/agent/` |
+| **Status** | `GET /v1/health` + `GET /v1/doctor` | Health from remote; doctor runs in-process |
+
+## Session history
+
+Chat turns are stored in Arka's [message sessions](/guides/sessions) under channel
+`web` and a per-browser `chat_id` (saved in `localStorage` as `arka.chatId`).
+
+```bash
+arka session list
+arka session resume web <chat-id>
+arka session reset web <chat-id>
+```
+
+arka "Bridge endpoints:"
+
+  | arka "Method" | arka "Path" | arka "Purpose" | 
+  | ------ | ---- | ------- | 
+  | `GET` | `/v1/sessions/resume?channel=web&chat_id=…` | arka "Load conversation for the dashboard" | 
+  | `POST` | `/v1/sessions/reset` | arka "Clear a web session" | 
+  | `POST` | `/v1/agent` | arka "Run command and auto-push user/assistant turns" | 
+
+Files live under `~/.config/arka/message-sessions/` (or `MESSAGE_SESSIONS_DIR`).
+
+## Production preview
+
+```bash
+cd web
+npm run build
+python3 bridge.py
+```
+
+The bridge serves the built app from `dist/` on port **8766**.
+
+## Environment
+
+| Variable | Default | Purpose |
+| -------- | ------- | ------- |
+| `ARKA_BACKEND_URL` | `http://127.0.0.1:8765` | Remote server for agent/health |
+| `ARKA_BRIDGE_PORT` | `8766` | Bridge listen port |
+| `REMOTE_TOKEN` / `ARKA_BACKEND_TOKEN` | — | Auth for `/v1/agent` |
+| `VITE_ARKA_TOKEN` | — | Optional dev token in the frontend |
+| `ARKA_WALKTHROUGH_URL` | `http://127.0.0.1:5173` | URL for dashboard walkthrough capture |
+
+## CLI helpers
+
+```bash
+arka backend status
+arka backend ask "what can you do?"
+arka capture video --walkthrough
+```
+
+See [Browser video capture](/guides/video-capture) for walkthrough recordings.
+
+## Troubleshooting
+
+  | arka "Symptom" | arka "Fix" | 
+  | ------- | --- | 
+  | arka "Chat returns 401" | Paste `REMOTE_TOKEN` from `.env` into Settings | 
+  | arka "History empty after refresh" | Restart bridge (`python3 bridge.py`) — old bridge lacked session routes | 
+  | arka "Bridge port in use" | `lsof -i :8766` then stop the old process | 
+  | `backend status` connection refused | Run `arka serve` first | 

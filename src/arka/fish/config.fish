@@ -179,13 +179,12 @@ end
 function _arka_env_file_lines --description "Non-comment, non-blank lines from an env file (internal)"
     set -l path $argv[1]
     test -f "$path"; or return 1
-    set -l content (read --whole-file "$path")
-    for line in (string split \n -- "$content")
+    while read -l line
         set line (string trim -- "$line")
         test -z "$line"; and continue
         string match -qr '^#' -- "$line"; and continue
         echo $line
-    end
+    end <"$path"
 end
 
 function _arka_uname_s --description "uname -s via PATH or standard locations (internal)"
@@ -2090,7 +2089,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         create_desktop_app fix_graphics_driver install_app install_apt install_brew install_flatpak \
         install_snap install_package install_uv install_stt stock_analysis stock macro emotion \
         auto_click auto_copy decrypt_pdf classify_files cleanup_downloads watch_zip monitor_x post_x \
-        generate_image generate_thumbnail generate_video compose_video compose_slides compose_3d text_to_3d convert_media visual pdf_tools chart ascii_art flow fact_check quiz quiz_practice council astronomy metallurgy youtube_transcript youtube_download yt_download media_transcript transcribe_media summarize_url daily_brief wifi_info \
+        generate_image generate_thumbnail generate_video generate_music compose_video compose_slides compose_3d text_to_3d convert_media visual pdf_tools chart meme ascii_art flow fact_check quiz quiz_practice council astronomy metallurgy youtube_transcript youtube_download yt_download media_transcript transcribe_media summarize_url daily_brief wifi_info \
         folder_summarize playlist_summarize youtube_research yt_research find_videos codebase_ingest \
         agent_remember agent_recall agent_memory agent_trace agent_why agent_last \
         agent_resume agent_research agent_nudge agent_watch agent_routine agent_fanout \
@@ -2665,6 +2664,8 @@ function skills --description "Show what commands the agent can auto-run"
                 echo (set_color green)"  harvard_ark    "(set_color normal)"install|list|chat — Harvard ARK KG CLI (PrimeKG; external, not Arka itself)"
             case generate_video
                 echo (set_color green)"  generate_video "(set_color normal)"<prompt> — real AI video (Pollinations/Gemini; needs API key or billing)"
+            case generate_music
+                echo (set_color green)"  generate_music "(set_color normal)"<prompt> [--lyrics \"...\"] [--instrumental] — AI music (Pollinations)"
             case compose_video
                 echo (set_color green)"  compose_video   "(set_color normal)"--topic '…' [--llm] — YouTube info video (Unsplash + ffmpeg + TTS)"
             case compose_slides
@@ -3375,25 +3376,48 @@ function ai-pref --description "Set preferred AI provider and model"
         echo (set_color green)"✓ Preference cleared and removed from $_ARKA_CFG/.env permanently"(set_color normal)
         return 0
     end
+
+    if test (count $argv) -ge 2
+        set model $argv[2]
+    end
     
     set -l py (_arka_python)
-    set -l script (_arka_py_script arka_llm.py)
-    set -l def ""
-    if test -f "$script"
-        set -l row ($py $script providers 2>/dev/null | string match -r "^$arg1\t")
-        if test -n "$row"
-            set -l parts (string split \t "$row")
-            if test (count $parts) -ge 4
-                set provider $parts[1]
-                set model $argv[2]
-                test -z "$model"; and set model $parts[4]
-            end
-        end
-    end
-    if test -z "$provider"
-        echo (set_color red)"Unknown provider: $arg1"(set_color normal)
-        echo "Run ai-models for supported slugs."
-        return 1
+    if test -z "$model"
+        set -l saved ($py -c '
+import sys
+from arka.llm.provider_select import set_preferred_provider, normalize_provider_slug
+slug = normalize_provider_slug(sys.argv[1])
+try:
+    provider_slug, model_id, _path = set_preferred_provider(slug, keep_model=True)
+except ValueError as exc:
+    print(str(exc), file=sys.stderr)
+    raise SystemExit(1)
+print(f"{provider_slug}\t{model_id}")
+' $arg1 2>&1)
+        if test $status -ne 0
+            echo (set_color red)"$saved"(set_color normal)
+            return 1
+        set provider (echo $saved | cut -f1)
+        set model (echo $saved | cut -f2)
+    else
+        set provider $arg1
+        set -l saved ($py -c '
+import sys
+from arka.llm.provider_select import set_preferred_provider, normalize_provider_slug
+slug = normalize_provider_slug(sys.argv[1])
+model_id = sys.argv[2]
+try:
+    provider_slug, chosen, _path = set_preferred_provider(slug, model=model_id, autodetect=False)
+except ValueError as exc:
+    print(str(exc), file=sys.stderr)
+    raise SystemExit(1)
+print(f"{provider_slug}\t{chosen}")
+' $arg1 $model 2>&1)
+        if test $status -ne 0
+            echo (set_color red)"$saved"(set_color normal)
+            return 1
+        set provider (echo $saved | cut -f1)
+        set model (echo $saved | cut -f2)
     end
 
     set -gx AI_PREFERRED_PROVIDER "$provider"
@@ -6313,6 +6337,39 @@ function chart --description "Draw line, bar, pie, scatter, histogram, or pareto
     return $status
 end
 
+function predict --description "Future forecasts: weather, ISRO rainfall, stocks, ISS, CSV trends"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        echo "Usage: predict future <query> [--chart] [--days N]"
+        echo "       predict future rainfall in Mumbai next 2 weeks --chart"
+        echo "       predict future weather in Delhi next 7 days"
+        echo "       predict future ISS pass over Bangalore"
+        echo ""
+        echo "Stock charts: chart predict AAPL --days 30"
+        echo "ISRO MOSDAC archives: set MOSDAC_USER and MOSDAC_PASSWORD in .env"
+        return 1
+    end
+    $py (_arka_py_script arka_predict.py) $argv
+    return $status
+end
+
+function meme --description "Reusable meme layouts (Drake, comparison, vibe-coding, …) → PNG"
+    set -l py (_arka_python)
+    if test (count $argv) -eq 0
+        echo "Usage: meme vibe-coding"
+        echo "       meme drake --reject 'skip tests' --accept 'write tests'"
+        echo "       meme comparison --left-title A --right-title B"
+        echo ""
+        echo "NL: arka make a drake meme"
+        echo "    arka vibe coding vs software engineering meme"
+        echo ""
+        echo "Saves to ~/Pictures/arka-generated/ (or IMAGE_OUTPUT_DIR)"
+        return 1
+    end
+    $py (_arka_py_script arka_meme.py) $argv
+    return $status
+end
+
 function ascii_art --description "Render text or images as ASCII art (figlet / pyfiglet)"
     set -l py (_arka_python)
     if test (count $argv) -eq 0
@@ -6569,6 +6626,42 @@ function generate_video --description "Generate real AI video (Pollinations or G
     set -l prompt (string join ' ' -- $prompt_parts)
     set -l py (_arka_python)
     $py (_arka_py_script arka_generate_video.py) $flags -- "$prompt"
+end
+
+function generate_music --description "Generate AI music (Pollinations elevenmusic — optional lyrics or instrumental)"
+    set -l prompt_parts
+    set -l flags
+    set -l i 1
+    set -l argc (count $argv)
+    while test $i -le $argc
+        switch $argv[$i]
+            case -o --output -d --duration -m --model --lyrics --lyrics-file
+                set -a flags $argv[$i]
+                set i (math $i + 1)
+                if test $i -le $argc
+                    set -a flags $argv[$i]
+                end
+            case --instrumental
+                set -a flags $argv[$i]
+            case '-*'
+                set -a flags $argv[$i]
+            case '*'
+                set -a prompt_parts $argv[$i]
+        end
+        set i (math $i + 1)
+    end
+    if test (count $prompt_parts) -eq 0
+        echo "Usage: generate_music <prompt> [--lyrics \"...\"] [--instrumental] [-d 30] [-o out.mp3]"
+        echo "Example: generate_music 'upbeat lo-fi hip hop'"
+        echo "Example: generate_music 'indie folk' --lyrics \"Verse one...\""
+        echo "Example: generate_music 'cinematic orchestral' --instrumental"
+        echo ""
+        echo "Requires POLLINATIONS_API_KEY — https://enter.pollinations.ai/"
+        return 1
+    end
+    set -l prompt (string join ' ' -- $prompt_parts)
+    set -l py (_arka_python)
+    $py (_arka_py_script arka_generate_music.py) $flags -- "$prompt"
 end
 
 function compose_video --description "Compose YouTube/info videos — Unsplash images, ffmpeg, edge-tts narration"
@@ -11220,6 +11313,12 @@ function _agent_is_knowledge_question --description "True if user wants a factua
     if _agent_is_elon_request "$argv[1]"
         return 1
     end
+    if _agent_is_meme_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_chart_request "$argv[1]"
+        return 1
+    end
     if _agent_is_route_learn_request "$argv[1]"
         return 1
     end
@@ -11417,7 +11516,10 @@ function _agent_is_general_chat --description "True if plain conversational inpu
     if _agent_is_platform_howto_question "$argv[1]"
         return 1
     end
-    if _agent_is_interesting_fact_request "$argv[1]"
+    if _agent_is_interesting_fact_request "$cmd"
+        return 1
+    end
+    if _agent_is_meme_request "$argv[1]"
         return 1
     end
     if _agent_is_system_info_question "$argv[1]"
@@ -11737,6 +11839,9 @@ function _agent_is_kalshi_request --description "True if user wants Kalshi predi
 end
 
 function _agent_is_kaggle_request --description "True if user wants Kaggle dataset download/search (internal)"
+    if _agent_is_predict_future_request "$argv[1]"
+        return 1
+    end
     set -l clean (string lower (string trim -- "$argv[1]"))
     if string match -qr '(?i)\bcompetitions?\b' "$clean"
         return 1
@@ -11895,6 +12000,10 @@ function _agent_offline_route_cmd --description "Full symbolic NL to skill comma
     end
     if _agent_is_chart_request "$cmd"
         echo (_agent_build_chart_cmd "$cmd")
+        return 0
+    end
+    if _agent_is_meme_request "$cmd"
+        echo (_agent_build_meme_cmd "$cmd")
         return 0
     end
     if _agent_is_preferred_model_set_request "$cmd"
@@ -12127,6 +12236,19 @@ function _agent_is_chart_request --description "True if user wants a data chart 
     test -n "$(_agent_build_chart_cmd "$argv[1]")"
 end
 
+function _agent_build_meme_cmd --description "Build meme args from NL (internal)"
+    set -l cmd "$argv[1]"
+    set -l py (_arka_python)
+    set -l rest ($py -c 'import sys, shlex; from arka.agent.meme_templates import nl_to_argv; argv=nl_to_argv(" ".join(sys.argv[1:])); print(" ".join(shlex.quote(a) for a in argv) if argv else "", end="")' (string escape --style=script -- $cmd) 2>/dev/null)
+    if test -n "$rest"
+        echo "meme $rest"
+    end
+end
+
+function _agent_is_meme_request --description "True if user wants a meme template (internal)"
+    test -n "$(_agent_build_meme_cmd "$argv[1]")"
+end
+
 function _agent_build_preferred_model_cmd --description "Build provider set --model from NL (internal)"
     set -l py (_arka_python)
     set -l cmd "$argv[1]"
@@ -12170,6 +12292,19 @@ function _agent_build_chart_cmd --description "Build chart args from NL (interna
     if test (count $rest) -gt 0
         echo "chart $rest"
     end
+end
+
+function _agent_build_predict_future_cmd --description "Build predict future args from NL (internal)"
+    set -l cmd "$argv[1]"
+    set -l py (_arka_python)
+    set -l rest ($py (_arka_py_script arka_predict.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
+    if test (count $rest) -gt 0
+        echo "predict $rest"
+    end
+end
+
+function _agent_is_predict_future_request --description "True if user wants a live future forecast (weather/rainfall/ISS/etc.)"
+    test -n "$(_agent_build_predict_future_cmd "$argv[1]")"
 end
 
 function _agent_is_ascii_art_request --description "True if user wants ASCII art (internal)"
@@ -15038,6 +15173,13 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
             return
         end
     end
+    if _agent_is_meme_request "$cmd"
+        set -l parts (_agent_build_meme_cmd "$cmd")
+        if test -n "$parts"
+            echo "skill|$parts|Local meme template compositor (Drake, comparison, vibe-coding, …)"
+            return
+        end
+    end
     if _agent_is_preferred_model_set_request "$cmd"
         set -l parts (_agent_build_preferred_model_cmd "$cmd")
         if test -n "$parts"
@@ -16073,6 +16215,10 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
     end
     if _agent_is_interesting_fact_request "$cmd"
         echo "skill|interesting_fact $cmd|Surprising trivia fact via LLM"
+        return
+    end
+    if _agent_is_meme_request "$cmd"
+        echo "skill|"(_agent_build_meme_cmd "$cmd")"|Local meme template compositor"
         return
     end
     if _agent_is_general_chat "$cmd"
@@ -18624,6 +18770,12 @@ function agent --description "Run commands safely: executes safe commands automa
         end
     end
 
+    if test "$first_word" = meme; or test "$first_word" = meme-template; or test "$first_word" = meme_template
+        set -l py (_arka_python)
+        $py -m arka meme $argv[2..-1]
+        return $status
+    end
+
     # 2. Direct Skill Execution
     if contains -- "$first_word" $available_skills
         $argv
@@ -18707,6 +18859,11 @@ function agent --description "Run commands safely: executes safe commands automa
 
     if test -z "$interpreted"; and _agent_is_chart_request "$cmd"
         set interpreted (_agent_build_chart_cmd "$cmd")
+        set route_source offline
+    end
+
+    if test -z "$interpreted"; and _agent_is_meme_request "$cmd"
+        set interpreted (_agent_build_meme_cmd "$cmd")
         set route_source offline
     end
 
@@ -19106,9 +19263,13 @@ function agent --description "Run commands safely: executes safe commands automa
         and not _agent_is_jsonkit_request "$cmd"
         set -l stock_ticker (string upper (string match -r '(?i)([A-Z][A-Z0-9.-]{1,12})\s*$' "$cmd")[2])
         set interpreted "stock analyze $stock_ticker"
+    else if _agent_is_predict_future_request "$cmd"
+        set interpreted (_agent_build_predict_future_cmd "$cmd")
+        set route_source offline
     else if string match -qr '(?i)(predict|prediction|forecast|opportunit).*(antique|stock|market|strategy|invest|collectible|portfolio)|^(predict|forecast)\s+' "$clean_cmd"
         and not _agent_is_kalshi_request "$cmd"
         and not _agent_is_kaggle_request "$cmd"
+        and not _agent_is_predict_future_request "$cmd"
         set -l pred_topic (string replace -r -i '^(?:predict|prediction|forecast|find|analyze|show)\s+(?:opportunities?\s+(?:in|for|about)\s+)?' '' "$cmd" | string trim)
         set -l pred_flags ""
         if string match -qr '(?i)\bantique|collectible|auction|vintage\b' "$clean_cmd"
@@ -19165,6 +19326,13 @@ function agent --description "Run commands safely: executes safe commands automa
     else if _agent_is_compose_video_request "$clean_cmd"
         set interpreted (_agent_build_compose_video_cmd "$cmd")
         set route_source offline
+    else if string match -qr '(?i)^(generate|create|make|compose|produce)\s+(?:an?\s+)?(?:music|song|track|tune|melody|beat)\b' "$clean_cmd"
+        set -l rest ((_arka_python) (_arka_py_script arka_generate_music.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
+        if test -n "$rest"
+            set interpreted "generate_music $rest"
+        else
+            set interpreted "generate_music"
+        end
     else if string match -qr '(?i)^(generate|create|make|render|produce|animate|film)\s+(?:an?\s+)?(?:video|clip|animation|movie|animated\s+video)\b|^(animate|film)\s+' "$clean_cmd"
         set -l vid_prompt (_agent_parse_video_prompt "$cmd")
         if test -n "$vid_prompt"
@@ -19894,6 +20062,10 @@ function agent --description "Run commands safely: executes safe commands automa
         set -l chart_cmd (_agent_build_chart_cmd "$cmd")
         echo (set_color yellow)"💡 [Chart → $chart_cmd]"(set_color normal)
         _agent_dispatch_one "$chart_cmd"
+    else if _agent_is_meme_request "$cmd"
+        set -l meme_cmd (_agent_build_meme_cmd "$cmd")
+        echo (set_color yellow)"💡 [Meme → $meme_cmd]"(set_color normal)
+        _agent_dispatch_one "$meme_cmd"
     else if _agent_is_preferred_model_set_request "$cmd"
         set -l model_cmd (_agent_build_preferred_model_cmd "$cmd")
         echo (set_color yellow)"💡 [Model select → $model_cmd]"(set_color normal)

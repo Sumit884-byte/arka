@@ -223,6 +223,10 @@ def run_skill(skill_line: str) -> int:
             code = fact_check(" ".join(rest))
         elif head in ("quiz_practice", "quiz-practice", "quiz"):
             code = run_script("arka_quiz_practice.py", rest)
+        elif head in ("health_reading", "health-reading", "wellness_reading", "wellness-reading"):
+            code = run_script("arka_health_reading.py", rest)
+        elif head in ("daily_reading", "daily-reading", "reading_track", "reading-track"):
+            code = run_script("arka_daily_reading.py", rest)
         elif head == "council":
             code = run_script("arka_council.py", rest)
         elif head == "convert":
@@ -470,6 +474,12 @@ def run_skill(skill_line: str) -> int:
         elif head in ("chart_from_pdf", "chart-from-pdf", "pdf_chart", "pdf-chart"):
             from arka.charts.chart_from_pdf import main as chart_from_pdf_main
             code = chart_from_pdf_main(rest)
+        elif head == "chart":
+            from arka.charts.plot import main as chart_main
+            code = chart_main(rest)
+        elif head == "predict":
+            from arka.predict.cli import main as predict_main
+            code = predict_main(rest)
         elif head in ("treemap", "tree_map", "tree-map"):
             from arka.charts.treemap import main as treemap_main
             code = treemap_main(rest)
@@ -540,6 +550,10 @@ def run_skill(skill_line: str) -> int:
         elif head in ("dev_workflow", "dev-workflow", "devtool"):
             from arka.agent.dev_workflows import main as dev_workflow_main
             code = dev_workflow_main(rest)
+        elif head == "dev":
+            from arka.agent.dev_cli import main as dev_cli_main
+
+            code = dev_cli_main(rest)
         elif head in ("graphify", "graphify_repo", "graphify-repo"):
             from arka.agent.graphify import main as graphify_main
             code = graphify_main(rest)
@@ -668,6 +682,14 @@ def run_skill(skill_line: str) -> int:
             from arka.agent.component_screenshots import main as component_screenshot_main
 
             code = component_screenshot_main(rest)
+        elif head == "capture" and rest and rest[0] in ("video", "walkthrough"):
+            from arka.agent.video_capture import main as video_capture_main
+
+            code = video_capture_main(rest[1:] if rest[0] == "video" else ["--walkthrough", *rest[1:]])
+        elif head in ("video_capture", "video-capture", "capture_video", "capture-video"):
+            from arka.agent.video_capture import main as video_capture_main
+
+            code = video_capture_main(rest)
         elif head in ("web_screenshot", "web-screenshot", "site_screenshot"):
             from arka.agent.web_screenshot import main as screenshot_main
             code = screenshot_main(rest)
@@ -698,6 +720,25 @@ def run_skill(skill_line: str) -> int:
         elif head in ("symbolic_image", "symbolic-image", "image_compose"):
             from arka.agent.symbolic_image import main as symbolic_image_main
             code = symbolic_image_main(rest)
+        elif head == "backup":
+            from arka.core.config_backup import main_backup
+
+            code = main_backup(rest or ["all"])
+        elif head == "config" and rest and rest[0] in ("backup", "restore", "list", "path", "init"):
+            from arka.core.config_backup import main as config_backup_main
+
+            code = config_backup_main(rest)
+        elif head in ("meme", "meme_template", "meme-template", "meme_templates"):
+            from arka.agent.meme_templates import main as meme_main
+            code = meme_main(rest)
+        elif head in ("generate_music", "generate-music", "music_generate"):
+            from arka.generate.music import main as music_main
+
+            code = music_main(rest)
+        elif head == "generate" and rest and rest[0] == "music":
+            from arka.generate.music import main as music_main
+
+            code = music_main(rest[1:])
         elif head in ("image", "image_generate", "image-generate") and rest and rest[0] == "doctor":
             from arka.agent.local_image_gen import main as local_image_main
             code = local_image_main(rest)

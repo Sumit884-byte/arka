@@ -87,7 +87,7 @@ def open_dataset(slug_or_url: str) -> str:
 def _no_credentials_message(slug: str | None = None) -> str:
     lines = [
         "Kaggle credentials not configured.",
-        "Set KAGGLE_USERNAME/KAGGLE_KEY or ~/.kaggle/kaggle.json — run: kaggle status",
+        "Set KAGGLE_USERNAME/KAGGLE_KEY, KAGGLE_API_TOKEN, or ~/.kaggle/kaggle.json — run: kaggle status",
     ]
     if slug:
         lines.extend(
@@ -117,7 +117,67 @@ def sanitize_search_query(query: str) -> str:
     return raw
 
 
+def _api_token() -> str:
+    token = (os.environ.get("KAGGLE_API_TOKEN") or "").strip()
+    if token:
+        return token
+    key = (os.environ.get("KAGGLE_KEY") or "").strip()
+    if key.startswith("KGAT_"):
+        return key
+    return ""
+
+
+def ensure_kaggle_auth() -> None:
+    """Sync Arka .env credentials into formats the Kaggle CLI/API expect."""
+    try:
+        load_env_file()
+    except Exception:
+        pass
+
+    token = _api_token()
+    if token:
+        os.environ.setdefault("KAGGLE_API_TOKEN", token)
+        kaggle_dir = Path.home() / ".kaggle"
+        kaggle_dir.mkdir(parents=True, exist_ok=True)
+        access = kaggle_dir / "access_token"
+        if not access.is_file() or access.read_text(encoding="utf-8").strip() != token:
+            access.write_text(token + "\n", encoding="utf-8")
+            try:
+                access.chmod(0o600)
+            except OSError:
+                pass
+
+    username = (os.environ.get("KAGGLE_USERNAME") or "").strip()
+    key = (os.environ.get("KAGGLE_KEY") or "").strip()
+    if username and key and not key.startswith("KGAT_"):
+        kaggle_dir = Path.home() / ".kaggle"
+        kaggle_dir.mkdir(parents=True, exist_ok=True)
+        kaggle_json = kaggle_dir / "kaggle.json"
+        payload = {"username": username, "key": key}
+        if not kaggle_json.is_file() or json.loads(kaggle_json.read_text(encoding="utf-8")) != payload:
+            kaggle_json.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+            try:
+                kaggle_json.chmod(0o600)
+            except OSError:
+                pass
+
+
 def credential_status() -> dict[str, Any]:
+    try:
+        load_env_file()
+    except Exception:
+        pass
+
+    token = _api_token()
+    if token:
+        username = (os.environ.get("KAGGLE_USERNAME") or "").strip()
+        return {
+            "configured": True,
+            "username": username or "(token auth)",
+            "source": "environment",
+            "detail": "KAGGLE_API_TOKEN / KAGGLE_KEY (KGAT_…)",
+        }
+
     username = (os.environ.get("KAGGLE_USERNAME") or "").strip()
     key = (os.environ.get("KAGGLE_KEY") or "").strip()
     if username and key:
@@ -127,6 +187,17 @@ def credential_status() -> dict[str, Any]:
             "source": "environment",
             "detail": "KAGGLE_USERNAME + KAGGLE_KEY",
         }
+
+    access = Path.home() / ".kaggle" / "access_token"
+    if access.is_file():
+        file_token = access.read_text(encoding="utf-8").strip()
+        if file_token and not file_token.startswith("{"):
+            return {
+                "configured": True,
+                "username": "(token auth)",
+                "source": "access_token",
+                "detail": str(access),
+            }
 
     kaggle_json = Path.home() / ".kaggle" / "kaggle.json"
     if kaggle_json.is_file():
@@ -170,8 +241,8 @@ def format_status() -> str:
             [
                 "  Configured: no",
                 "",
-                "  Set KAGGLE_USERNAME and KAGGLE_KEY in ~/.config/arka/.env",
-                "  or place credentials in ~/.kaggle/kaggle.json",
+                "  Set KAGGLE_USERNAME + KAGGLE_KEY, or KAGGLE_API_TOKEN (KGAT_… token)",
+                "  in ~/.config/arka/.env or repo .env",
                 "  (create API token at https://www.kaggle.com/settings)",
             ]
         )
@@ -218,6 +289,7 @@ def _unzip_archives(directory: Path) -> list[str]:
 
 
 def _download_via_cli(slug: str, *, output_dir: Path, unzip: bool) -> str:
+    ensure_kaggle_auth()
     cli = find_kaggle_cli()
     if not cli:
         raise RuntimeError("kaggle CLI not found on PATH")
@@ -232,6 +304,7 @@ def _download_via_cli(slug: str, *, output_dir: Path, unzip: bool) -> str:
 
 
 def _download_via_python(slug: str, *, output_dir: Path, unzip: bool) -> str:
+    ensure_kaggle_auth()
     try:
         from kaggle.api.kaggle_api_extended import KaggleApi
     except ImportError as exc:
@@ -282,6 +355,7 @@ def download_dataset(
 
 
 def _search_via_cli(query: str, *, limit: int) -> list[dict[str, str]]:
+    ensure_kaggle_auth()
     cli = find_kaggle_cli()
     if not cli:
         raise RuntimeError("kaggle CLI not found on PATH")
@@ -298,6 +372,7 @@ def _search_via_cli(query: str, *, limit: int) -> list[dict[str, str]]:
 
 
 def _search_via_python(query: str, *, limit: int) -> list[dict[str, str]]:
+    ensure_kaggle_auth()
     try:
         from kaggle.api.kaggle_api_extended import KaggleApi
     except ImportError as exc:

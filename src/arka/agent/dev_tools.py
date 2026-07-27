@@ -189,7 +189,22 @@ def ci_text(root: Path, *, full: bool = False, changed_only: bool = False) -> st
     return "\n".join(lines).strip()
 
 
-def _security_and_test_gap_hints(diff_text: str, files: list[str]) -> list[str]:
+def _file_test_gap_hints(root: Path, files: list[str]) -> list[str]:
+    try:
+        from arka.agent.dev_workflows import test_gaps, test_gaps_for_files
+
+        gaps = test_gaps_for_files(files) if files else test_gaps(root)
+    except ImportError:
+        return []
+    hints: list[str] = []
+    for path in gaps[:8]:
+        hints.append(f"test-gap: {path} changed — no matching test file detected")
+    if len(gaps) > 8:
+        hints.append(f"test-gap: … and {len(gaps) - 8} more file(s) without matching tests")
+    return hints
+
+
+def _security_and_test_gap_hints(diff_text: str, files: list[str], root: Path | None = None) -> list[str]:
     hints: list[str] = []
     lowered = diff_text.lower()
     if any(re.search(r"(?i)(auth|token|secret|password|key|credential)", f) for f in files):
@@ -200,6 +215,8 @@ def _security_and_test_gap_hints(diff_text: str, files: list[str]) -> list[str]:
         hints.append("test-gap: routing/CLI changed without a focused regression test")
     if any(f.endswith(".md") for f in files):
         hints.append("docs: verify docs match the new command surface")
+    if root is not None:
+        hints.extend(_file_test_gap_hints(root, files))
     return hints
 
 
@@ -269,7 +286,7 @@ def review_text(root: Path, *, base: str | None = None, staged: bool = False) ->
             text = stat
         scope = f"vs {base_ref}"
 
-    hints = _security_and_test_gap_hints(text, files)
+    hints = _security_and_test_gap_hints(text, files, root)
     project_rules = ""
     try:
         from arka.core.project_rules import context_for
@@ -454,8 +471,21 @@ def cmd_review(args: argparse.Namespace) -> int:
     report = review_text(root, base=args.base or None, staged=args.staged)
     hints = [line.strip() for line in report.splitlines() if any(marker in line.lower() for marker in ("security:", "test-gap:", "docs:"))]
     failed = bool(hints)
+    test_gaps_list: list[str] = []
+    try:
+        from arka.agent.dev_workflows import test_gaps, test_gaps_for_files
+        from arka.agent.pr_check import _run
+
+        if args.staged:
+            _, names_out, _ = _run(["git", "diff", "--cached", "--name-only"], cwd=root)
+            file_list = [ln.strip() for ln in names_out.splitlines() if ln.strip()]
+            test_gaps_list = test_gaps_for_files(file_list) if file_list else []
+        else:
+            test_gaps_list = test_gaps(root)
+    except ImportError:
+        test_gaps_list = []
     if getattr(args, "json", False):
-        print(json.dumps({"path": str(root), "report": report, "hints": hints, "ok": not failed}, indent=2))
+        print(json.dumps({"path": str(root), "report": report, "hints": hints, "test_gaps": test_gaps_list, "ok": not failed}, indent=2))
     else:
         print(report)
     if args.fail_on_hints and failed:

@@ -75,6 +75,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"arka {__version__} ({system()})")
         return 0
 
+    meme_code = _try_meme_subcommand(args)
+    if meme_code is not None:
+        return meme_code
+
     if args[0] == "shell-init":
         return _cmd_shell_init(args[1:])
 
@@ -88,9 +92,18 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_setup(args[1:])
 
     if args[0] == "config":
+        if args[1:] and args[1] in ("backup", "restore", "list", "path", "init"):
+            from arka.core.config_backup import main as config_backup_main
+
+            return config_backup_main(args[1:])
         from arka.core.default_config import main as config_main
 
         return config_main(args[1:])
+
+    if args[0] == "backup":
+        from arka.core.config_backup import main_backup
+
+        return main_backup(args[1:])
 
     if args[0] == "platform":
         return _cmd_platform(args[1:])
@@ -183,11 +196,6 @@ def main(argv: list[str] | None = None) -> int:
 
         return persona_main(args[1:])
 
-    if args[0] == "config":
-        from arka.core.config_backup import main as config_main
-
-        return config_main(args[1:])
-
     if args[0] == "mode":
         from arka.core.mode import main as mode_main
 
@@ -220,6 +228,11 @@ def main(argv: list[str] | None = None) -> int:
         from arka.core.code_project import main as code_main
 
         return code_main(["code", *args[1:]])
+
+    if args[0] == "dev":
+        from arka.agent.dev_cli import main as dev_cli_main
+
+        return dev_cli_main(args[1:])
 
     if args[0] == "batch":
         from arka.agent.batch import main as batch_main
@@ -491,6 +504,12 @@ def main(argv: list[str] | None = None) -> int:
     if args[0] in ("quiz", "quiz_practice", "quiz-practice"):
         return run_script("arka_quiz_practice.py", args[1:])
 
+    if args[0] in ("health_reading", "health-reading", "wellness_reading", "wellness-reading"):
+        return run_script("arka_health_reading.py", args[1:])
+
+    if args[0] in ("daily_reading", "daily-reading", "reading_track", "reading-track"):
+        return run_script("arka_daily_reading.py", args[1:])
+
     if args[0] == "council":
         return run_script("arka_council.py", args[1:])
 
@@ -505,6 +524,50 @@ def main(argv: list[str] | None = None) -> int:
 
     if args[0] in ("open_url", "open", "browse"):
         return run_script("arka_open_url.py", args)
+
+    if args[0] in ("meme", "meme_template", "meme-template", "meme_templates"):
+        code = _try_meme_subcommand(args)
+        return code if code is not None else 1
+
+    if args[0] == "capture":
+        from arka.agent.video_capture import main as video_capture_main
+
+        rest = args[1:]
+        try:
+            if not rest or rest[0] in ("-h", "--help"):
+                return video_capture_main(rest if rest and rest[0] in ("-h", "--help") else ["--help"])
+            if rest[0] == "video":
+                return video_capture_main(rest[1:])
+            if rest[0] == "walkthrough":
+                return video_capture_main(["--walkthrough", *rest[1:]])
+        except SystemExit as exc:
+            return int(exc.code or 0)
+        print("Usage: arka capture video <url> | arka capture video --walkthrough", file=sys.stderr)
+        return 1
+
+    if args[0] == "generate" and len(args) >= 2 and args[1] == "music":
+        from arka.generate.music import main as music_main
+
+        try:
+            return music_main(args[2:])
+        except SystemExit as exc:
+            return int(exc.code or 0)
+
+    if args[0] in ("generate_music", "generate-music", "music_generate"):
+        from arka.generate.music import main as music_main
+
+        try:
+            return music_main(args[1:])
+        except SystemExit as exc:
+            return int(exc.code or 0)
+
+    if args[0] in ("video_capture", "video-capture", "capture_video", "capture-video"):
+        from arka.agent.video_capture import main as video_capture_main
+
+        try:
+            return video_capture_main(args[1:])
+        except SystemExit as exc:
+            return int(exc.code or 0)
 
     if args[0] in ("ask", "web"):
         q = " ".join(args[1:]).strip()
@@ -581,6 +644,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if get_mode() in ("plan", "ask"):
         return _run_portable(text)
+    meme_code = _try_meme_subcommand(args)
+    if meme_code is not None:
+        return meme_code
     if has_full_fish_agent():
         from arka.router import route_preview
 
@@ -594,6 +660,17 @@ def main(argv: list[str] | None = None) -> int:
             return code
 
     return _run_portable(text)
+
+
+def _try_meme_subcommand(args: list[str]) -> int | None:
+    """Handle explicit `arka meme …` before fish delegation or NL web_answer fallbacks."""
+    try:
+        from arka.agent.meme_templates import is_meme_cli_argv, run_meme_cli
+    except ImportError:
+        return None
+    if not is_meme_cli_argv(args):
+        return None
+    return run_meme_cli(args)
 
 
 def _run_convert(rest: list[str]) -> int:
@@ -1276,11 +1353,16 @@ def _cmd_setup(extra: list[str] | None = None) -> int:
         print("    (agno, ddgs, trafilatura, beautifulsoup4, …)")
 
     from arka.integrations.context7_mcp import setup_context7
+    from arka.integrations.datahub_mcp import setup_datahub
     from arka.integrations.mcp_server import ensure_arka_self_in_config
 
     print("\n→ Context7 (library docs MCP)")
     skip_context7 = "--no-context7" in extra
     setup_context7(skip_cli=skip_context7)
+
+    print("\n→ DataHub (metadata platform MCP)")
+    setup_datahub()
+
     if ensure_arka_self_in_config():
         print("  ✓ Arka self-MCP added to ~/.config/arka/mcp.json")
 
@@ -1390,6 +1472,13 @@ def _cmd_doctor() -> int:
         print(line)
     for line in format_doctor_lines():
         print(line)
+    try:
+        from arka.integrations.datahub_mcp import format_doctor_lines as datahub_doctor_lines
+
+        for line in datahub_doctor_lines():
+            print(line)
+    except ImportError:
+        pass
     try:
         from arka.core.network_proxy import doctor_lines as proxy_doctor_lines
 

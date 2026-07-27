@@ -1054,6 +1054,7 @@ CODING_SESSION_DENIED_SKILLS = {
     "generate_image",
     "generate_thumbnail",
     "generate_video",
+    "generate_music",
     "model_to_image",
     "parallax_2d",
     "scene_3d",

@@ -50,8 +50,8 @@ pipx install "arka-agent[chat] @ git+https://github.com/Sumit884-byte/arka.git"
 | `arka youtube research <query>` | 搜索 + 字幕研究摘要 |
 | `arka download <id-or-url>` | 下载视频、Shorts 或播放列表 |
 | `arka summarize youtube <id>` | 总结视频或播放列表 |
-| `youtube_download <url>` | 单个视频下载（fish） |
-| `youtube_bulk download <url>` | 批量下载播放列表/频道 |
+| `arka youtube_download <url>` | 单个视频下载（fish） |
+| `arka youtube_bulk download <url>` | 批量下载播放列表/频道 |
 
 ## 股票命令
 
@@ -104,8 +104,8 @@ arka "forecast kaggle dataset heptapod/titanic next 30 days"
 | `arka ai-models` | 列出提供商与默认模型 |
 | `arka ai-skill-model` | 按技能配置模型 |
 | `arka ai-skill-model profiles` | 任务配置文件（route、chat、summarize） |
-| `select_model` | 基于硬件的模型推荐 |
-| `select_model --apply` | 将推荐应用到技能配置 |
+| `arka select_model` | 基于硬件的模型推荐 |
+| `arka select_model --apply` | 将推荐应用到技能配置 |
 
 参见 [硬件感知的模型选择](/cn/guides/select-model)。
 
@@ -113,11 +113,11 @@ arka "forecast kaggle dataset heptapod/titanic next 30 days"
 
 | 命令 | 说明 |
 | ---- | ---- |
-| `route_learn learn <phrase> <skill>` | 教授短语 → 技能映射 |
-| `route_learn learn --from-trace --correct <skill>` | 修正上一次路由错误 |
-| `route_learn list` | 列出已学习的路由 |
-| `route_learn delete <id>` | 移除已学习的路由 |
-| `route_learn test <phrase>` | 预览短语的路由 |
+| `arka route_learn learn <phrase> <skill>` | 教授短语 → 技能映射 |
+| `arka route_learn learn --from-trace --correct <skill>` | 修正上一次路由错误 |
+| `arka route_learn list` | 列出已学习的路由 |
+| `arka route_learn delete <id>` | 移除已学习的路由 |
+| `arka route_learn test <phrase>` | 预览短语的路由 |
 
 参见 [教授自定义路由](/cn/guides/route-learn)。
 
@@ -153,9 +153,9 @@ arka "forecast kaggle dataset heptapod/titanic next 30 days"
 
 | 命令 | 说明 |
 | ---- | ---- |
-| `post_x <url>` | 抓取、缩短并发布到 X/Twitter |
-| `ascii_art <text>` | 生成 ASCII 艺术横幅 |
-| `ascii_art --image <path>` | 将图片转换为 ASCII |
+| `arka post_x <url>` | 抓取、缩短并发布到 X/Twitter |
+| `arka ascii_art <text>` | 生成 ASCII 艺术横幅 |
+| `arka ascii_art --image <path>` | 将图片转换为 ASCII |
 
 ## Google Workspace
 
@@ -190,9 +190,9 @@ arka goal -y -n 30 debug why nginx fails
 使用 fish 时，可用以下函数：
 
 ```fish
-agent_route "play bohemian rhapsody"   # 预览路由
-agent_trace                            # 上一次路由决策
-agent_why                              # 解释技能选择
+arka route "play bohemian rhapsody"   # 预览路由
+arka route # 上一次路由决策
+arka route # 解释技能选择
 ```
 
 ## 应用配置更改

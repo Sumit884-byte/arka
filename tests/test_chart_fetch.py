@@ -29,6 +29,7 @@ from arka.charts.data import (
     recommend_chart_type,
 )
 from arka.charts.plot import nl_to_argv, parse_bar_pairs, unwrap_shell_quotes
+from arka.routing.symbolic import route_chart
 
 
 class YearRangeParseTests(unittest.TestCase):
@@ -972,6 +973,62 @@ class ParetoPlotTests(unittest.TestCase):
             self.assertFalse(sidecar["cumulative_line"])
             self.assertNotIn("cumulative_pct", sidecar)
             self.assertTrue(out.is_file())
+
+
+class ChartNLExpansionTests(unittest.TestCase):
+    """Expanded natural-language chart routing (files, training loss, axis plots)."""
+
+    def test_training_loss_bare_intent(self) -> None:
+        self.assertEqual(nl_to_argv("make a chart of training loss"), ["line"])
+        self.assertEqual(nl_to_argv("plot loss over epoch"), ["line"])
+
+    def test_training_loss_inline_series(self) -> None:
+        argv = nl_to_argv("chart training loss 1:0.8 2:0.5 3:0.3")
+        self.assertEqual(argv[0], "line")
+        self.assertIn("--data", argv)
+        self.assertIn("1:0.8,2:0.5,3:0.3", argv)
+        self.assertIn("--ylabel", argv)
+        self.assertEqual(argv[argv.index("--ylabel") + 1], "Loss")
+
+    def test_epoch_line_chart_pairs(self) -> None:
+        argv = nl_to_argv("make a line chart of epoch 1:0.5 2:0.3 3:0.2")
+        self.assertEqual(argv[:3], ["line", "--data", "1:0.5,2:0.3,3:0.2"])
+
+    def test_plot_over_axis_not_stock_line(self) -> None:
+        argv = nl_to_argv("plot X over Y 1:10 2:20 3:30")
+        self.assertEqual(argv[0], "line")
+        self.assertIn("--data", argv)
+        self.assertNotIn("X", argv[:4])  # not Yahoo tickers
+
+    def test_file_path_routing(self) -> None:
+        argv = nl_to_argv("chart ~/data/metrics.csv as line")
+        self.assertEqual(argv[:3], ["from", "~/data/metrics.csv", "--type"])
+        self.assertEqual(argv[3], "line")
+
+    def test_chart_from_csv_phrase(self) -> None:
+        argv = nl_to_argv("chart from csv metrics.csv")
+        self.assertEqual(argv[:2], ["from", "metrics.csv"])
+
+    def test_visualize_csv_file(self) -> None:
+        argv = nl_to_argv("visualize metrics.csv")
+        self.assertEqual(argv[:2], ["from", "metrics.csv"])
+
+    def test_graph_my_data_stays_on_chart_path(self) -> None:
+        self.assertEqual(nl_to_argv("graph my data"), ["bar"])
+
+    def test_pie_chart_colon_pairs(self) -> None:
+        argv = nl_to_argv("pie chart Organic:400 Direct:300 Referral:200")
+        self.assertEqual(argv[0], "pie")
+        data = argv[argv.index("--data") + 1]
+        self.assertIn("Organic:400", data)
+        self.assertNotIn("Pie", data)
+
+    def test_route_chart_symbolic(self) -> None:
+        routed = route_chart("make a line chart of epoch 1:0.5 2:0.3 3:0.2")
+        self.assertIsNotNone(routed)
+        assert routed is not None
+        self.assertTrue(routed.startswith("chart line"))
+        self.assertIn("--data", routed)
 
 
 if __name__ == "__main__":

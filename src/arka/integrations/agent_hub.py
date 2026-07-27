@@ -855,6 +855,11 @@ def sync_mcp(*, use_symlink: bool = False) -> dict[str, Any]:
         context7_mcp_launch_spec,
         ensure_context7_in_config,
     )
+    from arka.integrations.datahub_mcp import (
+        DATAHUB_MCP_SERVER_KEY,
+        datahub_mcp_launch_spec,
+        ensure_datahub_in_config,
+    )
     from arka.integrations.mcp_manager import load_mcp_config, mcp_config_path
     from arka.integrations.mcp_server import ARKA_MCP_SERVER_KEY, ensure_arka_self_in_config, mcp_server_launch_spec
 
@@ -865,6 +870,8 @@ def sync_mcp(*, use_symlink: bool = False) -> dict[str, Any]:
 
     if ensure_context7_in_config():
         result["context7_mcp"] = "added_to_source"
+    if ensure_datahub_in_config():
+        result["datahub_mcp"] = "added_to_source"
     if ensure_arka_self_in_config():
         result["arka_self_mcp"] = "added_to_source"
 
@@ -891,6 +898,10 @@ def sync_mcp(*, use_symlink: bool = False) -> dict[str, Any]:
         hub_servers[CONTEXT7_MCP_SERVER_KEY] = context7_mcp_launch_spec()
         changed = True
         result["context7_mcp"] = result.get("context7_mcp", "merged_into_hub")
+    if DATAHUB_MCP_SERVER_KEY not in hub_servers:
+        hub_servers[DATAHUB_MCP_SERVER_KEY] = datahub_mcp_launch_spec()
+        changed = True
+        result["datahub_mcp"] = result.get("datahub_mcp", "merged_into_hub")
     if ARKA_MCP_SERVER_KEY not in hub_servers:
         hub_servers[ARKA_MCP_SERVER_KEY] = mcp_server_launch_spec()
         changed = True

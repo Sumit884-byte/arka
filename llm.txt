@@ -998,6 +998,89 @@ RECENT FILE CHANGES (CHANGELOG)
   - added recordings/_demo_build/terminal_frames/ask/frame_000039.png
   - … and 6426 more files
 
+  --- sync 2026-07-27 15:23 UTC (60f7b335..fe22af4a)
+  - modified .arka-index
+  - modified .env.example
+  - modified .gitignore
+  - modified CONTRIBUTING.md (docs)
+  - modified README.md (docs)
+  - added bin/arka_alert.py (python)
+  - renamed bin/arka_bi_dashboard.py (python)
+  - added bin/arka_email_contacts.py (python)
+  - added bin/arka_github_resume.py (python)
+  - added bin/arka_gmail_auto_draft.py (python)
+  - added bin/arka_markdown_style.py (python)
+  - added bin/arka_network_proxy.py (python)
+  - added bin/arka_qa_engineering.py (python)
+  - added bin/arka_unified_inbox.py (python)
+  - modified docs/architecture/repository-layout.md (docs)
+  - modified docs/cn/concepts/llm.mdx (docs)
+  - modified docs/cn/guides/agent-hub.mdx (docs)
+  - modified docs/cn/guides/agent-teams.mdx (docs)
+  - modified docs/cn/guides/charts.mdx (docs)
+  - modified docs/cn/guides/cli.mdx (docs)
+  - modified docs/cn/guides/hermes-features.mdx (docs)
+  - modified docs/cn/guides/mcp.mdx (docs)
+  - modified docs/cn/guides/memory.mdx (docs)
+  - modified docs/cn/guides/observability.mdx (docs)
+  - modified docs/cn/guides/openclaw-features.mdx (docs)
+  - modified docs/cn/guides/skills.mdx (docs)
+  - modified docs/cn/guides/stocks.mdx (docs)
+  - modified docs/cn/guides/vision.mdx (docs)
+  - modified docs/cn/reference/troubleshooting.mdx (docs)
+  - modified docs/concepts/llm.mdx (docs)
+  - modified docs/docs.json
+  - modified docs/guides/agent-hub.mdx (docs)
+  - modified docs/guides/agent-teams.mdx (docs)
+  - modified docs/guides/charts.mdx (docs)
+  - modified docs/guides/cli.mdx (docs)
+  - modified docs/guides/code-with-arka.mdx (docs)
+  - added docs/guides/frontend-content-guide.md (docs)
+  - added docs/guides/google-design.md (docs)
+  - modified docs/guides/hermes-features.mdx (docs)
+  - modified docs/guides/mcp.mdx (docs)
+  - added docs/guides/meme-templates.mdx (docs)
+  - modified docs/guides/memory.mdx (docs)
+  - modified docs/guides/observability.mdx (docs)
+  - modified docs/guides/openclaw-features.mdx (docs)
+  - modified docs/guides/scene-3d.mdx (docs)
+  - modified docs/guides/skills.mdx (docs)
+  - modified docs/guides/stocks.mdx (docs)
+  - added docs/guides/video-capture.mdx (docs)
+  - modified docs/guides/vision.mdx (docs)
+  - modified docs/index.mdx (docs)
+  - modified docs/llms.txt
+  - modified docs/quickstart.mdx (docs)
+  - modified docs/reference/troubleshooting.mdx (docs)
+  - modified llm.txt
+  - modified pyproject.toml
+  - added recordings/README.md (docs)
+  - added recordings/arka-signoz-hackathon-demo.mp4
+  - added recordings/build_signoz_demo_video.py (python)
+  - added recordings/page-walkthrough/README.md (docs)
+  - added recordings/page-walkthrough/walkthrough.py (python)
+  - added recordings/signoz-hackathon-voiceover.mp3
+  - added recordings/signoz-hackathon-voiceover.txt
+  - modified recordings/signoz-screenshots/capture_signoz_ui.py (python)
+  - added recordings/signoz-screenshots/logs-explorer.png
+  - added recordings/signoz-screenshots/services-metrics.png
+  - added recordings/signoz-screenshots/traces-explorer.png
+  - added recordings/signoz_captures/signoz_demo_scenarios.txt
+  - added recordings/signoz_captures/signoz_setup_help.txt
+  - added recordings/signoz_captures/signoz_status.txt
+  - added recordings/video/README.md (docs)
+  - added signoz/BLOG.md (docs)
+  - modified signoz/README.md (docs)
+  - modified signoz/dashboards/arka-agent-observability.json
+  - modified src/arka/_bootstrap.py (python)
+  - added src/arka/agent/bi_dashboard.py (agent skill)
+  - modified src/arka/agent/chat.py (agent skill)
+  - modified src/arka/agent/coding_tui.py (agent skill)
+  - added src/arka/agent/component_screenshots.py (agent skill)
+  - added src/arka/agent/contextual_answer.py (agent skill)
+  - modified src/arka/agent/core.py (agent skill)
+  - … and 160 more files
+
 ================================================================================
 END — update this file when adding skills, routing rules, or major modules
 ================================================================================

@@ -1,0 +1,37 @@
+---
+title: "Arka — हिंदी दस्तावेज़"
+description: "Arka के लिए हिंदी में चुनिंदा गाइड — दैनिक पढ़ाई, सीखने की आदत, और टर्मिनल स्किल्स।"
+icon: "book-open"
+---
+
+Arka एक **क्रॉस-प्लेटफ़ॉर्म AI टर्मिनल एजेंट** है। आप सादी अंग्रेज़ी या हिंदी में बोल सकते हैं — Arka सही स्थानीय स्किल पर रूट करता है।
+
+## हिंदी में उपलब्ध गाइड
+
+<CardGroup cols={2}>
+  <Card title="दैनिक पढ़ाई" icon="book-open-reader" href="/hi/guides/daily-reading">
+    किसी भी विषय पर संरचित दैनिक पाठ — अवधि सेट करें, अवधारणाएँ दोहराएँ नहीं।
+  </Card>
+  <Card title="English docs" icon="globe" href="/">
+    पूरी अंग्रेज़ी दस्तावेज़ी — इंस्टॉल, MCP, 70+ स्किल्स।
+  </Card>
+</CardGroup>
+
+## त्वरित इंस्टॉल
+
+```bash
+pipx install "arka-agent[chat]"
+arka setup
+arka doctor
+arka ask "Rust क्या है?"
+```
+
+## दैनिक पढ़ाई — एक कमांड
+
+```bash
+arka health_reading today --minutes 40
+arka daily_reading init "भारतीय संविधान के मूल सिद्धांत"
+arka daily_reading today
+```
+
+विस्तृत गाइड: [दैनिक पढ़ाई](/hi/guides/daily-reading)

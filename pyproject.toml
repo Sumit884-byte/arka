@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arka-agent"
-version = "0.1.1"
+version = "0.1.2"
 description = "Cross-platform AI agent — chat, web answers, password vault, and skill routing"
 readme = "README.md"
 license = { text = "GPL-2.0-only" }
@@ -95,8 +95,13 @@ dev = [
 mcp-server = [
     "mcp>=1.0",
 ]
+observability = [
+    "opentelemetry-api>=1.27.0",
+    "opentelemetry-sdk>=1.27.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.27.0",
+]
 all = [
-    "arka-agent[chat,voice,pdf,pdf-tools,whatsapp,charts,drawings,video,3d,3d-ai]",
+    "arka-agent[chat,voice,pdf,pdf-tools,whatsapp,charts,drawings,video,3d,3d-ai,observability]",
 ]
 
 [project.scripts]

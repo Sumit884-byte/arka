@@ -83,10 +83,10 @@ Arka 会追加用户轮次，将先前的会话上下文注入 Agent 提示，�
 为并行工作流生成隔离的后台 Agent：
 
 ```bash
-subagent spawn "Summarize today's git log"
-subagent list
-subagent resume abc123def4
-subagent status
+arka subagent spawn "Summarize today's git log"
+arka subagent list
+arka subagent resume abc123def4
+arka subagent status
 ```
 
 每个子 Agent 通过 Python 聊天引擎运行（并回退到 fish `agent`）。任务记录存储在 `~/.cache/fish-agent/subagents/`。
@@ -96,8 +96,8 @@ subagent status
 | 门禁 | 阻止时机 |
 | ---- | ----------- |
 | `SUBAGENT_SECURITY=1` | 任务未通过 `SECURITY_LLM` 提示验证 |
-| `SUBAGENT_MAX` | 并发运行的 Agent 超过限制 |
-| `SUBAGENT_MAX_CHARS` | 任务文本过长 |
+| `arka "SUBAGENT_MAX"` | 并发运行的 Agent 超过限制 |
+| `arka "SUBAGENT_MAX_CHARS"` | 任务文本过长 |
 
 设置 `SUBAGENT_SYNC=1` 可同步运行（用于测试）。
 
@@ -105,11 +105,11 @@ subagent status
 
 | 变量 | 默认值 | 用途 |
 | -------- | ------- | ------- |
-| `SUBAGENT_ENABLED` | `1` | 启用（`0` 禁用） |
-| `SUBAGENT_DIR` | `~/.cache/fish-agent/subagents` | 存储根目录 |
-| `SUBAGENT_MAX` | `3` | 最大并发后台 Agent 数 |
-| `SUBAGENT_TIMEOUT` | `600` | 每个 Agent 超时时间（秒） |
-| `SUBAGENT_SECURITY` | `1` | 对生成任务应用安全门禁 |
+| `arka "SUBAGENT_ENABLED"` | `1` | 启用（`0` 禁用） |
+| `arka "SUBAGENT_DIR"` | `~/.cache/fish-agent/subagents` | 存储根目录 |
+| `arka "SUBAGENT_MAX"` | `3` | 最大并发后台 Agent 数 |
+| `arka "SUBAGENT_TIMEOUT"` | `600` | 每个 Agent 超时时间（秒） |
+| `arka "SUBAGENT_SECURITY"` | `1` | 对生成任务应用安全门禁 |
 
 旧版 `HERMES_SUBAGENT*` 变量仍作为别名受支持。
 
@@ -124,7 +124,7 @@ subagent status
 `heartbeat status` 报告频道会话和子 Agent 数量：
 
 ```bash
-heartbeat status
+arka heartbeat status
 ```
 
 ## 相关特性

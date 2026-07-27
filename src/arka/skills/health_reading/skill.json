@@ -1,0 +1,17 @@
+{
+  "name": "health_reading",
+  "description": "Daily health reading — alias for daily_reading --track health",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "health reading",
+    "health_reading",
+    "wellness reading",
+    "daily health lesson",
+    "40 minute health reading",
+    "health diet exercise reading"
+  ],
+  "permissions": ["network"]
+}

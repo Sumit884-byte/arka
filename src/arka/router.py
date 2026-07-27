@@ -246,11 +246,28 @@ def route(text: str) -> Route | None:
         return None
 
 
+def _route_explicit_meme(cmd: str) -> Route | None:
+    """Resolve `meme vibe-coding` / `meme drake …` before broad NL chat heuristics."""
+    try:
+        from arka.routing.symbolic import route_meme
+
+        hit = route_meme(cmd.strip())
+        if hit:
+            return Route(hit, source="offline", kind="skill")
+    except ImportError:
+        pass
+    return None
+
+
 def route_preview(text: str) -> Route | None:
     """Fast deterministic preview for `arka route` — Python symbolic only, no fish or LLM."""
     cmd = text.strip()
     if not cmd:
         return None
+
+    meme_route = _route_explicit_meme(cmd)
+    if meme_route:
+        return meme_route
 
     slash_dev = re.match(r"^/(?:dev[-_ ]?tools?|developer[-_ ]?tools?)\b\s*(.*)$", cmd, re.I)
     if slash_dev:
@@ -658,6 +675,10 @@ def _route_offline(cmd: str) -> Route | None:
     ):
         return Route(f"find_files_by_size {cmd}", source="offline")
 
+    meme_route = _route_explicit_meme(cmd)
+    if meme_route:
+        return meme_route
+
     if _is_knowledge_question(clean):
         return Route(f"web_answer {cmd}", source="offline")
 
@@ -863,6 +884,13 @@ def _is_system_advice_question(clean: str) -> bool:
 
 
 def _is_knowledge_question(clean: str) -> bool:
+    try:
+        from arka.agent.meme_templates import nl_to_argv
+
+        if nl_to_argv(clean):
+            return False
+    except ImportError:
+        pass
     try:
         from arka.routing.symbolic import route_daily_brief
 

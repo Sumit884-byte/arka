@@ -13,13 +13,13 @@ Arka renders **ASCII art** from text or images directly in your terminal.
 arka make ascii art HELLO WORLD
 arka ascii banner Arka Agent
 arka figlet "Good morning"
-ascii_art Hello from Arka
+arka ascii_art Hello from Arka
 ```
 
 Optional font (when `figlet` or `pyfiglet` is installed):
 
 ```bash
-ascii_art --font slant "Ship it"
+arka ascii_art --font slant "Ship it"
 ```
 
 Default font: `standard`. List fonts with `figlet -f?` or `pyfiglet -l`.
@@ -29,7 +29,7 @@ Default font: `standard`. List fonts with `figlet -f?` or `pyfiglet -l`.
 ```bash
 arka ascii art from photo.jpg
 arka convert logo.png to ascii
-ascii_art --image screenshot.png
+arka ascii_art --image screenshot.png
 ```
 
 Images are downscaled and mapped to ASCII characters (`@%#*+=-:. `).

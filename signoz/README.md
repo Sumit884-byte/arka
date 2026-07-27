@@ -153,6 +153,9 @@ Copy into Devpost / submission form.
 5. (Optional) Install [SigNoz Agent Skills for Cursor](https://github.com/sumitmishra884byte-cpu/arka/releases/download/signoz-hackathon-media/CURSOR_AGENT_SKILLS.md) — plugin + `/signoz-mcp-setup http://localhost:8000/mcp`
 
 **Video / screenshots:** https://github.com/sumitmishra884byte-cpu/arka/releases/tag/signoz-hackathon-media
+
+**Video description (Devpost / YouTube):**
+Three-minute Track 01 demo — deploy SigNoz with Foundry (`arka signoz setup -y`), emit synthetic agent traces (`arka signoz demo-scenarios --synthetic`), and inspect routing, LLM attempts, RAG retrieval, failover, and tool calls in SigNoz Traces Explorer, Services metrics, and correlated Logs Explorer. OpenTelemetry built into arka-agent; reproducible via `casting.yaml` at repo root. Full text: `recordings/signoz-hackathon-demo-description.txt`.
 ```
 
 ---

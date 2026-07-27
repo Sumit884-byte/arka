@@ -85,10 +85,10 @@ Inbound turns are sanitized — injection patterns and unsafe content are blocke
 Spawn isolated background agents for parallel workstreams:
 
 ```bash
-subagent spawn "Summarize today's git log"
-subagent list
-subagent resume abc123def4
-subagent status
+arka subagent spawn "Summarize today's git log"
+arka subagent list
+arka subagent resume abc123def4
+arka subagent status
 ```
 
 Each sub-agent runs via the Python chat engine (with fish `agent` fallback). Task records live under `~/.cache/fish-agent/subagents/`.
@@ -98,8 +98,8 @@ Each sub-agent runs via the Python chat engine (with fish `agent` fallback). Tas
 | Gate | Blocks when |
 | --- | --- |
 | `SUBAGENT_SECURITY=1` | Task fails `SECURITY_LLM` prompt verification |
-| `SUBAGENT_MAX` | Concurrent running agents exceed limit |
-| `SUBAGENT_MAX_CHARS` | Task text too long |
+| `arka "SUBAGENT_MAX"` | Concurrent running agents exceed limit |
+| `arka "SUBAGENT_MAX_CHARS"` | Task text too long |
 
 Set `SUBAGENT_SYNC=1` to run synchronously (used in tests).
 
@@ -107,11 +107,11 @@ Set `SUBAGENT_SYNC=1` to run synchronously (used in tests).
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `SUBAGENT_ENABLED` | `1` | Enable (`0` to disable) |
-| `SUBAGENT_DIR` | `~/.cache/fish-agent/subagents` | Storage root |
-| `SUBAGENT_MAX` | `3` | Max concurrent background agents |
-| `SUBAGENT_TIMEOUT` | `600` | Per-agent timeout (seconds) |
-| `SUBAGENT_SECURITY` | `1` | Apply security gates to spawn tasks |
+| `arka "SUBAGENT_ENABLED"` | `1` | Enable (`0` to disable) |
+| `arka "SUBAGENT_DIR"` | `~/.cache/fish-agent/subagents` | Storage root |
+| `arka "SUBAGENT_MAX"` | `3` | Max concurrent background agents |
+| `arka "SUBAGENT_TIMEOUT"` | `600` | Per-agent timeout (seconds) |
+| `arka "SUBAGENT_SECURITY"` | `1` | Apply security gates to spawn tasks |
 
 Legacy `HERMES_SUBAGENT*` variables remain supported as aliases.
 
@@ -139,7 +139,7 @@ Plugin gates use `metadata.openclaw`, `metadata.arka`, or `metadata.hermes` — 
 `heartbeat status` reports channel session and sub-agent counts:
 
 ```bash
-heartbeat status
+arka heartbeat status
 ```
 
 ## Related features

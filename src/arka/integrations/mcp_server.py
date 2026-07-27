@@ -33,6 +33,24 @@ def _mcp_int(value: Any, default: int) -> int:
         return default
 
 
+def _mcp_int_optional(value: Any) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _mcp_float_optional(value: Any) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 MCP_DEFAULT_DISABLED_TOOLS = {
     "arka_spotify",
 }
@@ -288,7 +306,7 @@ def _handle_arka_heartbeat(arguments: dict[str, Any]) -> str:
             ping(activity, source="mcp")
             return f"Heartbeat ping: {activity}"
         if action == "history":
-            limit = int(arguments.get("limit") or 20)
+            limit = _mcp_int(arguments.get("limit"), 20)
             return json.dumps(history(limit=max(1, min(limit, 100))), indent=2)
         if action == "status":
             buf = io.StringIO()
@@ -316,14 +334,14 @@ def _handle_arka_sessions(arguments: dict[str, Any]) -> str:
         )
 
         if action == "list":
-            limit = int(arguments.get("limit") or 20)
+            limit = _mcp_int(arguments.get("limit"), 20)
             return json.dumps(list_sessions(limit=max(1, min(limit, 200))), indent=2)
         if action == "status":
             return json.dumps(status(channel, chat_id), indent=2)
         if action == "context":
             if not channel:
                 raise ValueError("channel is required for context")
-            limit_chars = int(arguments.get("limit_chars") or 3000)
+            limit_chars = _mcp_int(arguments.get("limit_chars"), 3000)
             text = context_for(
                 channel,
                 chat_id or "default",
@@ -333,7 +351,7 @@ def _handle_arka_sessions(arguments: dict[str, Any]) -> str:
         if action == "resume":
             if not channel:
                 raise ValueError("channel is required for resume")
-            limit = int(arguments.get("limit") or 12)
+            limit = _mcp_int(arguments.get("limit"), 12)
             return json.dumps(
                 resume_payload(channel, chat_id or "default", limit=limit),
                 indent=2,
@@ -452,7 +470,7 @@ def _handle_arka_session_memory(arguments: dict[str, Any]) -> str:
             return f"Session memory stored: {text[:200]}"
         if action == "search":
             query = str(arguments.get("query") or arguments.get("goal") or "").strip()
-            limit = int(arguments.get("limit") or 8)
+            limit = _mcp_int(arguments.get("limit"), 8)
             rows = search(query, limit=max(1, min(limit, 50)))
             payload = [{"file": rel, "text": body} for rel, body in rows]
             return json.dumps(payload, indent=2)
@@ -460,7 +478,7 @@ def _handle_arka_session_memory(arguments: dict[str, Any]) -> str:
             goal = str(arguments.get("goal") or arguments.get("query") or "").strip()
             if not goal:
                 raise ValueError("goal is required for context")
-            limit_chars = int(arguments.get("limit_chars") or 2500)
+            limit_chars = _mcp_int(arguments.get("limit_chars"), 2500)
             text = context_for(goal, limit_chars=max(200, limit_chars))
             return text or "(no session memory context)"
         if action == "status":
@@ -502,7 +520,7 @@ def _handle_arka_subagent(arguments: dict[str, Any]) -> str:
             assert data is not None
             return json.dumps(data, indent=2)
         if action == "list":
-            limit = int(arguments.get("limit") or 20)
+            limit = _mcp_int(arguments.get("limit"), 20)
             return json.dumps(list_agents(limit=max(1, min(limit, 100))), indent=2)
         if action == "resume":
             agent_id = str(arguments.get("agent_id") or arguments.get("id") or "").strip()
@@ -545,7 +563,7 @@ def _handle_arka_jules(arguments: dict[str, Any]) -> str:
             sync = bool(arguments.get("sync", False))
             if sync:
                 os.environ["JULES_SYNC"] = "1"
-            max_steps = int(arguments.get("max_steps") or 20)
+            max_steps = _mcp_int(arguments.get("max_steps"), 20)
             open_pr = bool(arguments.get("open_pr", False))
             branch = bool(arguments.get("branch", False))
             data, err = assign(
@@ -560,7 +578,7 @@ def _handle_arka_jules(arguments: dict[str, Any]) -> str:
             assert data is not None
             return json.dumps(data, indent=2)
         if action == "issue":
-            issue_number = int(arguments.get("issue_number") or arguments.get("issue") or 0)
+            issue_number = _mcp_int(arguments.get("issue_number") or arguments.get("issue"), 0)
             if issue_number <= 0:
                 raise ValueError("issue_number is required for issue")
             sync = bool(arguments.get("sync", False))
@@ -568,7 +586,7 @@ def _handle_arka_jules(arguments: dict[str, Any]) -> str:
                 os.environ["JULES_SYNC"] = "1"
             repo = str(arguments.get("repo") or "").strip()
             open_pr = bool(arguments.get("open_pr", True))
-            max_steps = int(arguments.get("max_steps") or 20)
+            max_steps = _mcp_int(arguments.get("max_steps"), 20)
             data, err = assign_issue(
                 issue_number,
                 repo=repo,
@@ -581,7 +599,7 @@ def _handle_arka_jules(arguments: dict[str, Any]) -> str:
             assert data is not None
             return json.dumps(data, indent=2)
         if action == "list":
-            limit = int(arguments.get("limit") or 20)
+            limit = _mcp_int(arguments.get("limit"), 20)
             return json.dumps(list_sessions(limit=max(1, min(limit, 100))), indent=2)
         if action == "status":
             session_id = str(arguments.get("session_id") or arguments.get("id") or "").strip()
@@ -693,11 +711,11 @@ def _handle_arka_convert_media(arguments: dict[str, Any]) -> str:
                 path,
                 target=target,
                 output=output,
-                quality=int(quality) if quality is not None else None,
-                width=int(width) if width is not None else None,
-                height=int(height) if height is not None else None,
-                trim_start=float(trim_start) if trim_start is not None else None,
-                trim_duration=float(trim_duration) if trim_duration is not None else None,
+                quality=_mcp_int_optional(quality),
+                width=_mcp_int_optional(width),
+                height=_mcp_int_optional(height),
+                trim_start=_mcp_float_optional(trim_start),
+                trim_duration=_mcp_float_optional(trim_duration),
             )
             return json.dumps(result, indent=2)
         raise ValueError("action must be convert, detect, formats, capabilities, check, or parse")
@@ -719,7 +737,7 @@ def _handle_arka_human_docs(arguments: dict[str, Any]) -> str:
             return json.dumps(status(), indent=2)
         if action == "context":
             goal = str(arguments.get("goal") or arguments.get("query") or "").strip()
-            limit_chars = int(arguments.get("limit_chars") or 4000)
+            limit_chars = _mcp_int(arguments.get("limit_chars"), 4000)
             text = context_for(goal, limit_chars=max(200, limit_chars))
             return text or "(human docs bias disabled)"
         if action == "write":
@@ -751,7 +769,7 @@ def _handle_arka_project_rules(arguments: dict[str, Any]) -> str:
             return json.dumps(status(root=root), indent=2)
         if action == "context":
             goal = str(arguments.get("goal") or arguments.get("query") or "").strip()
-            limit_chars = int(arguments.get("limit_chars") or 4000)
+            limit_chars = _mcp_int(arguments.get("limit_chars"), 4000)
             text = context_for(goal, root=root, limit_chars=max(200, limit_chars))
             return text or "(no project rules found)"
         raise ValueError("action must be list, status, or context")
@@ -782,9 +800,9 @@ def _handle_arka_markdown(arguments: dict[str, Any]) -> str:
         from arka.agent.md_doc import ask_markdown, context_block, read_markdown
 
         if action == "read":
-            return read_markdown(path, max_chars=int(arguments.get("max_chars") or 120_000))
+            return read_markdown(path, max_chars=_mcp_int(arguments.get("max_chars"), 120_000))
         if action == "context":
-            limit_chars = int(arguments.get("limit_chars") or arguments.get("max_chars") or 8000)
+            limit_chars = _mcp_int(arguments.get("limit_chars") or arguments.get("max_chars"), 8000)
             text = context_block(path, limit_chars=max(200, limit_chars))
             return text or "(empty markdown file)"
         if action == "ask":
@@ -808,7 +826,7 @@ def _handle_arka_view_data(arguments: dict[str, Any]) -> str:
             path = str(arguments.get("path") or arguments.get("file") or "").strip()
             if not path:
                 raise ValueError("path is required for preview")
-            max_rows = int(arguments.get("max_rows") or arguments.get("limit") or 50)
+            max_rows = _mcp_int(arguments.get("max_rows") or arguments.get("limit"), 50)
             delimiter = str(arguments.get("delimiter") or "").strip() or None
             plain = bool(arguments.get("plain", True))
             return json.dumps(
@@ -889,7 +907,7 @@ def _handle_arka_clipboard(arguments: dict[str, Any]) -> str:
         )
 
         if action == "list":
-            limit = int(arguments.get("limit") or 20)
+            limit = _mcp_int(arguments.get("limit"), 20)
             return json.dumps(list_entries(limit=limit), indent=2)
         if action == "save":
             text = arguments.get("text")
@@ -899,8 +917,8 @@ def _handle_arka_clipboard(arguments: dict[str, Any]) -> str:
                 raise RuntimeError(err or "clipboard save failed")
             return json.dumps(row, indent=2)
         if action == "get":
-            index = arguments.get("index") or arguments.get("id") or 1
-            row, err = get_entry(int(index))
+            index = _mcp_int(arguments.get("index") or arguments.get("id"), 1)
+            row, err = get_entry(index)
             if err or row is None:
                 raise ValueError(err or "entry not found")
             return json.dumps(row, indent=2)
@@ -919,7 +937,7 @@ def _handle_arka_remind(arguments: dict[str, Any]) -> str:
 
         if action == "list":
             include_done = bool(arguments.get("include_done", False))
-            limit = int(arguments.get("limit") or 50)
+            limit = _mcp_int(arguments.get("limit"), 50)
             return json.dumps(
                 list_reminders(include_done=include_done, limit=max(1, min(limit, 200))),
                 indent=2,
@@ -1005,7 +1023,7 @@ def _handle_arka_bookmarks(arguments: dict[str, Any]) -> str:
 
         if action == "list":
             tag = str(arguments.get("tag") or "").strip() or None
-            limit = int(arguments.get("limit") or 50)
+            limit = _mcp_int(arguments.get("limit"), 50)
             return json.dumps(bm.list_bookmarks(tag=tag, limit=limit), indent=2)
         if action == "save":
             url = str(arguments.get("url") or arguments.get("link") or "").strip()
@@ -1020,13 +1038,13 @@ def _handle_arka_bookmarks(arguments: dict[str, Any]) -> str:
             )
         if action == "search":
             query = str(arguments.get("query") or arguments.get("q") or "").strip()
-            limit = int(arguments.get("limit") or 50)
+            limit = _mcp_int(arguments.get("limit"), 50)
             return json.dumps(bm.search_bookmarks(query, limit=limit), indent=2)
         if action == "get":
-            index = int(arguments.get("index") or arguments.get("id") or 0)
+            index = _mcp_int(arguments.get("index") or arguments.get("id"), 0)
             return json.dumps(bm.get_bookmark(index), indent=2)
         if action == "delete":
-            index = int(arguments.get("index") or arguments.get("id") or 0)
+            index = _mcp_int(arguments.get("index") or arguments.get("id"), 0)
             return json.dumps(bm.delete_bookmark(index), indent=2)
         raise ValueError("action must be list, save, search, get, or delete")
     except ValueError:
@@ -1045,7 +1063,7 @@ def _handle_arka_docker(arguments: dict[str, Any]) -> str:
         if action in ("ps", "containers"):
             return json.dumps(ds.list_containers(), indent=2)
         if action == "images":
-            limit = int(arguments.get("limit") or 50)
+            limit = _mcp_int(arguments.get("limit"), 50)
             return json.dumps(ds.list_images(limit=limit), indent=2)
         if action == "logs":
             name = str(
@@ -1054,7 +1072,7 @@ def _handle_arka_docker(arguments: dict[str, Any]) -> str:
                 or arguments.get("id")
                 or ""
             ).strip()
-            tail = int(arguments.get("tail") or arguments.get("limit") or 50)
+            tail = _mcp_int(arguments.get("tail") or arguments.get("limit"), 50)
             return json.dumps(ds.container_logs(name, tail=tail), indent=2)
         raise ValueError("action must be health, ps, images, or logs")
     except ValueError:
@@ -1074,7 +1092,7 @@ def _handle_arka_jsonkit(arguments: dict[str, Any]) -> str:
         if action == "validate":
             return json.dumps(jk.validate_payload(text), indent=2)
         if action == "pretty":
-            indent = int(arguments.get("indent") or 2)
+            indent = _mcp_int(arguments.get("indent"), 2)
             return json.dumps(jk.pretty_payload(text, indent=indent), indent=2)
         if action == "minify":
             return json.dumps(jk.minify_payload(text), indent=2)
@@ -1152,7 +1170,7 @@ def _handle_arka_urlkit(arguments: dict[str, Any]) -> str:
             )
         if action == "slugify":
             text = str(arguments.get("text") or arguments.get("url") or "").strip()
-            max_length = int(arguments.get("max_length") or 80)
+            max_length = _mcp_int(arguments.get("max_length"), 80)
             return json.dumps(uk.slugify_payload(text, max_length=max_length), indent=2)
         raise ValueError("action must be parse, normalize, or slugify")
     except ValueError:
@@ -1167,7 +1185,7 @@ def _handle_arka_password(arguments: dict[str, Any]) -> str:
         from arka.integrations import password_vault as vault
 
         if action in ("generate", "once"):
-            length = int(arguments.get("length") or 16)
+            length = _mcp_int(arguments.get("length"), 16)
             symbols = arguments.get("symbols")
             if symbols is None:
                 symbols = True
@@ -1210,7 +1228,7 @@ def _handle_arka_textkit(arguments: dict[str, Any]) -> str:
         from arka.core import textkit as tk
 
         if action == "uuid":
-            version = int(arguments.get("version") or 4)
+            version = _mcp_int(arguments.get("version"), 4)
             name = str(arguments.get("name") or "").strip() or None
             namespace = str(arguments.get("namespace") or "url").strip() or "url"
             return json.dumps(
@@ -1275,7 +1293,7 @@ def _handle_arka_personalize(arguments: dict[str, Any]) -> str:
         if action == "status":
             return json.dumps(pers.status_payload(), indent=2)
         if action in ("recommend", "recommendations"):
-            limit = int(arguments.get("limit") or 8)
+            limit = _mcp_int(arguments.get("limit"), 8)
             return json.dumps(pers.recommend_payload(limit=limit), indent=2)
         if action == "quickstart":
             return json.dumps(pers.quickstart_payload(), indent=2)
@@ -1425,7 +1443,7 @@ def _handle_arka_sports(arguments: dict[str, Any]) -> str:
 
         if action in ("scores", "live"):
             query = str(arguments.get("query") or arguments.get("league") or "").strip()
-            limit = int(arguments.get("limit") or arguments.get("limit_per_league") or 3)
+            limit = _mcp_int(arguments.get("limit") or arguments.get("limit_per_league"), 3)
             return json.dumps(
                 sports_mod.scores_payload(query, limit_per_league=max(1, min(limit, 20))),
                 indent=2,
@@ -1667,8 +1685,8 @@ def _handle_arka_self_build(arguments: dict[str, Any]) -> str:
                         target,
                         apply=bool(arguments.get("apply", False)),
                         yes=bool(arguments.get("yes", False)),
-                        max_rounds=int(arguments.get("max_rounds") or 2),
-                        max_steps=int(arguments.get("max_steps") or 15),
+                        max_rounds=_mcp_int(arguments.get("max_rounds"), 2),
+                        max_steps=_mcp_int(arguments.get("max_steps"), 15),
                         auto_init=not bool(arguments.get("no_auto_init", False)),
                         use_jules=bool(arguments.get("use_jules", False)),
                         session_id=str(arguments.get("session_id") or "").strip(),
@@ -1678,7 +1696,7 @@ def _handle_arka_self_build(arguments: dict[str, Any]) -> str:
                 indent=2,
             )
         if action == "list":
-            limit = int(arguments.get("limit") or 20)
+            limit = _mcp_int(arguments.get("limit"), 20)
             return json.dumps(list_sessions(limit=max(1, min(limit, 100))), indent=2)
         if action == "status":
             session_id = str(arguments.get("session_id") or arguments.get("id") or "").strip()
@@ -3385,6 +3403,19 @@ class ArkaMcpServer:
         if method == "notifications/initialized":
             return None
 
+        if method == "ping":
+            duration_ms = int((time.monotonic() - started) * 1000)
+            try:
+                from arka.integrations.mcp_logs import log_mcp_event
+
+                log_mcp_event("server.ping", method=method, status="ok")
+            except ImportError:
+                pass
+            self._observe_request("ping", duration_ms=duration_ms)
+            if request_id is None:
+                return None
+            return {"jsonrpc": "2.0", "id": request_id, "result": {}}
+
         if method == "initialize":
             self._initialized = True
             duration_ms = int((time.monotonic() - started) * 1000)
@@ -3577,6 +3608,8 @@ def doctor(*, timeout: float = 8.0) -> tuple[str, int]:
         tools = client.list_tools()
         server_info = info.get("serverInfo") if isinstance(info, dict) else {}
         lines.append(f"initialize\tok\t{server_info}")
+        ping = client.ping()
+        lines.append(f"ping\tok\t{ping or '{}'}")
         lines.append(f"tools_list\tok\tcount={len(tools)}")
         for tool in tools:
             lines.append(f"tool\t{tool.name}")

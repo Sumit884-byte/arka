@@ -8,8 +8,8 @@ Run independent development tasks concurrently:
 
 ```bash
 arka ultra_fast --iterations 3 \
-  --task 'ui|1|frontend_loop review app.png|src/components|pytest tests/test_ui.py' \
-  --task 'docs|0|update_docs|docs|pytest tests/test_docs.py'
+  --task 'ui|arka "1"|arka "frontend_loop review app.png"|arka "src/components"|pytest tests/test_ui.py' \
+  --task 'docs|arka "0"|arka "update_docs"|arka "docs"|arka "pytest tests/test_docs.py'"
 ```
 
 Task format is `name|priority|build-command|edited-paths|test-command`.

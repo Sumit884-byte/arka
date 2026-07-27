@@ -12,10 +12,10 @@ Arka 包含一个 **kalshi** 技能，用于只读访问 Kalshi 预测市场数�
 ## 快速示例
 
 ```bash
-kalshi search bitcoin
-kalshi market KXBTC-25JUL-T100K
-kalshi trending
-kalshi status
+arka kalshi search bitcoin
+arka kalshi market KXBTC-25JUL-T100K
+arka kalshi trending
+arka kalshi status
 ```
 
 也支持自然语言：
@@ -30,10 +30,10 @@ arka "kalshi trending"
 
 | 命令 | 描述 |
 | ------- | ----------- |
-| `kalshi search <keywords>` | 按标题/ticker 关键字搜索开放市场 |
-| `kalshi market <TICKER>` | 单个市场的完整报价（YES/NO、成交量、收盘时间） |
-| `kalshi trending` | 按 24 小时成交量排序的热门开放市场 |
-| `kalshi status` | Kalshi 交易所/交易状态 |
+| `arka kalshi search <keywords>` | 按标题/ticker 关键字搜索开放市场 |
+| `arka kalshi market <TICKER>` | 单个市场的完整报价（YES/NO、成交量、收盘时间） |
+| `arka kalshi trending` | 按 24 小时成交量排序的热门开放市场 |
+| `arka kalshi status` | Kalshi 交易所/交易状态 |
 
 ## API 方式
 
@@ -60,6 +60,6 @@ KALSHI_API_BASE=https://external-api.kalshi.com/trade-api/v2
 | ----- | ------- |
 | `stock` | `arka stock news` |
 | `currency_convert` | `arka convert 100 USD to INR` |
-| `predictions` | `predictions --domain stocks --deep "banking sector"` |
+| `arka predictions` | `predictions --domain stocks --deep "banking sector"` |
 
 另请参阅：[股票智能](/cn/guides/stocks)

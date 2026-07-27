@@ -43,9 +43,9 @@ arka create a 3d model of a gear
 arka text_to_3d generate "a small robot with rounded limbs"
 arka generate a 3d model from text using hugging face
 arka make 3d vase 10cm tall
-compose 3d model of a coffee mug
-generate stl for phone stand
-compose_3d gear --teeth 16 --format stl
+arka compose 3d model of a coffee mug
+arka generate stl for phone stand
+arka compose_3d gear --teeth 16 --format stl
 ```
 
 ## Text-to-3D providers
@@ -101,8 +101,8 @@ Use `--quality` to control curve smoothness (segment count):
 | `high` | 64 | Smoother gears, vases, humanoids |
 
 ```bash
-compose_3d gear --teeth 16 --quality high
-compose_3d boy --quality high
+arka compose_3d gear --teeth 16 --quality high
+arka compose_3d boy --quality high
 ```
 
 Human figures (`boy`, `girl`, `person`) use procedural capsule-based templates — not raw LLM vertex output — for consistent, printable meshes.
@@ -118,11 +118,11 @@ remain the offline-safe fallback for supported shapes.
 For organic shapes (`dragon`, `vase with floral pattern`, etc.), use external generators before the LLM OBJ fallback:
 
 ```bash
-compose_3d dragon --backend auto          # try best available free backend
-compose_3d dragon --backend tripo         # Tripo AI (300 free credits on signup)
-compose_3d dragon --backend hf-shap-e     # HuggingFace Shap-E Space (free GPU quota)
-compose_3d gear --backend procedural      # force built-in template
-compose_3d check                          # show which backends are configured
+arka compose_3d dragon --backend auto          # try best available free backend
+arka compose_3d dragon --backend tripo         # Tripo AI (300 free credits on signup)
+arka compose_3d dragon --backend hf-shap-e     # HuggingFace Shap-E Space (free GPU quota)
+arka compose_3d gear --backend procedural      # force built-in template
+arka compose_3d check                          # show which backends are configured
 ```
 
 ### Backend priority (`--backend auto`)
@@ -171,8 +171,8 @@ Models save to `~/Models/arka-generated/` by default. Override with `MODEL_3D_OU
 For objects when no free backend is configured, Arka asks your configured LLM to generate OBJ vertex data, then exports STL when faces parse cleanly.
 
 ```bash
-compose_3d "desk organizer with phone slot"
-compose_3d "desk organizer" --backend llm   # force LLM OBJ path
+arka compose_3d "desk organizer with phone slot"
+arka compose_3d "desk organizer" --backend llm   # force LLM OBJ path
 ```
 
 Requires an LLM in `.env` (same stack as chat/compose_slides). Quality is lower than Tripo/HF — use `--backend auto` when possible.
@@ -189,7 +189,7 @@ After generation, Arka prints file paths and tips:
 ## Check setup
 
 ```bash
-compose_3d check
+arka compose_3d check
 ```
 
 ## Related

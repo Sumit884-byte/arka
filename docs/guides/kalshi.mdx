@@ -12,10 +12,10 @@ No trading — quotes and discovery only.
 ## Quick examples
 
 ```bash
-kalshi search bitcoin
-kalshi market KXBTC-25JUL-T100K
-kalshi trending
-kalshi status
+arka kalshi search bitcoin
+arka kalshi market KXBTC-25JUL-T100K
+arka kalshi trending
+arka kalshi status
 ```
 
 Natural language also works:
@@ -30,10 +30,10 @@ arka "kalshi trending"
 
 | Command | Description |
 | --- | --- |
-| `kalshi search <keywords>` | Search open markets by title/ticker keyword |
-| `kalshi market <TICKER>` | Full quote for one market (YES/NO, volume, close time) |
-| `kalshi trending` | Top open markets by 24h volume |
-| `kalshi status` | Kalshi exchange/trading status |
+| `arka kalshi search <keywords>` | Search open markets by title/ticker keyword |
+| `arka kalshi market <TICKER>` | Full quote for one market (YES/NO, volume, close time) |
+| `arka kalshi trending` | Top open markets by 24h volume |
+| `arka kalshi status` | Kalshi exchange/trading status |
 
 ## API approach
 
@@ -60,6 +60,6 @@ KALSHI_API_BASE=https://external-api.kalshi.com/trade-api/v2
 | --- | --- |
 | `stock` | `arka stock news` |
 | `currency_convert` | `arka convert 100 USD to INR` |
-| `predictions` | `predictions --domain stocks --deep "banking sector"` |
+| `arka predictions` | `predictions --domain stocks --deep "banking sector"` |
 
 See also: [Stock intelligence](/guides/stocks)

@@ -13,13 +13,13 @@ Arka 可以直接在终端中从文本或图片生成 **ASCII 艺术**。
 arka make ascii art HELLO WORLD
 arka ascii banner Arka Agent
 arka figlet "Good morning"
-ascii_art Hello from Arka
+arka ascii_art Hello from Arka
 ```
 
 可选字体（在安装了 `figlet` 或 `pyfiglet` 后）：
 
 ```bash
-ascii_art --font slant "Ship it"
+arka ascii_art --font slant "Ship it"
 ```
 
 默认字体：`standard`。使用 `figlet -f?` 或 `pyfiglet -l` 列出字体。
@@ -29,7 +29,7 @@ ascii_art --font slant "Ship it"
 ```bash
 arka ascii art from photo.jpg
 arka convert logo.png to ascii
-ascii_art --image screenshot.png
+arka ascii_art --image screenshot.png
 ```
 
 图片会被缩小并映射为 ASCII 字符（`@%#*+=-:. `）。

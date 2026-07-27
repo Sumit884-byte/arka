@@ -93,6 +93,7 @@
                 "group": "Developer tools",
                 "icon": "code",
                 "pages": [
+                  "guides/dev",
                   "guides/repo-map",
                   "guides/repo-graph",
                   "guides/repo-reverse",
@@ -213,6 +214,7 @@
                   "guides/clipboard-history",
                   "guides/timezone-convert",
                   "guides/quiz-practice",
+                  "guides/daily-reading",
                   "guides/competitions",
                   "guides/professions",
                   "guides/ideate",
@@ -397,6 +399,36 @@
               "cn/reference/configuration",
               "cn/reference/aliases",
               "cn/reference/troubleshooting"
+            ]
+          }
+        ]
+      },
+      {
+        "language": "hi",
+        "tabs": [
+          {
+            "tab": "शुरुआत",
+            "icon": "rocket",
+            "groups": [
+              {
+                "group": "परिचय",
+                "pages": [
+                  "hi/index"
+                ]
+              }
+            ]
+          },
+          {
+            "tab": "गाइड",
+            "icon": "book-open",
+            "groups": [
+              {
+                "group": "सीखना",
+                "icon": "book-open-reader",
+                "pages": [
+                  "hi/guides/daily-reading"
+                ]
+              }
             ]
           }
         ]

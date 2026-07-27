@@ -16,7 +16,7 @@ Arka 将每个请求都通过一个分层管道进行路由。大多数请求根
     ```bash
     arka weather
     arka calc 2+2
-    demo_echo hello    # 通过名称调用的第三方插件
+    arka demo_echo hello    # 通过名称调用的第三方插件
     ```
   </Step>
   <Step title="插件触发器">
@@ -77,9 +77,9 @@ ROUTE_MODE=symbolic
 
 ```bash
 arka route "summarize my unread emails"
-agent_route "play bohemian rhapsody on spotify"
-agent_trace          # 最近一次路由决策
-agent_why            # 解释技能选择原因
+arka route "play bohemian rhapsody on spotify"
+arka route # 最近一次路由决策
+arka route # 解释技能选择原因
 arka help            # 完整技能列表
 arka tell your skills   # 适合语音的摘要 + 当前使用的模型
 ```

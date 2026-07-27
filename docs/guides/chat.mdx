@@ -18,7 +18,7 @@ Arka's chat engine handles factual questions, deep web research, math, weather, 
 | `set_location` | `set_location Mumbai` |
 | `nearby_places` | `nearby_places Kolkata` |
 | `error_helper` | `error_helper <traceback>` |
-| `chat_reset` | Clear session \+ location context |
+| `arka chat_reset` | Clear session \+ location context |
 
 ## Forced deep search
 
@@ -33,10 +33,10 @@ arka "/who won IPL 2025"
 Run background deep searches:
 
 ```bash
-deep_queue add "who won the last IPL final"
-deep_queue list
-deep_queue run
-deep_queue results
+arka "deep_queue add "who won the last IPL final""
+arka "deep_queue list"
+arka "deep_queue run"
+arka "deep_queue results"
 ```
 
 ## Session memory
@@ -45,7 +45,7 @@ Answers are tagged `[FROM SEARCH]` or `[FROM MEMORY]` (stripped for TTS). Chat s
 
 ```bash
 arka facing hair loss          # routes to web_answer with session
-chat_reset                     # clear context
+arka chat_reset                     # clear context
 ```
 
 ## Location grounding
@@ -53,10 +53,10 @@ chat_reset                     # clear context
 Set your location for hyperlocal results:
 
 ```bash
-set_location Mumbai
-hyperlocal_weather
-nearby_places
-map_download Kolkata           # cache city map to ~/.cache/arka/maps/
+arka "set_location Mumbai"
+arka "hyperlocal_weather"
+arka "nearby_places"
+arka map_download Kolkata           # cache city map to ~/.cache/arka/maps/
 ```
 
 ## Install chat extras

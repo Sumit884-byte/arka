@@ -24,9 +24,12 @@ On 429, 401, or timeout, Arka tries the next model. API key rotation (`API_KEY_R
 ```env
 AI_PREFERRED_PROVIDER=gemini
 AI_PREFERRED_MODEL=gemini-2.0-flash
+AI_KEEP_MODEL_ON_PROVIDER_SWITCH=1
 LLM_AUTO_FALLBACK=1
 API_KEY_ROTATION=1
 ```
+
+When you switch providers with `arka provider set groq` (or `ai-pref groq` in fish), Arka tries to **keep the same model** on the new provider before falling back to that provider's default. Disable with `arka provider set groq --no-keep-model` or `AI_KEEP_MODEL_ON_PROVIDER_SWITCH=0`.
 
 ## Per-task profiles
 
@@ -38,9 +41,9 @@ API_KEY_ROTATION=1
 | `research` | Deep web research |
 | `agent` | Goal agent steps |
 | `pdf` | PDF question answering |
-| `predictions` | Stock and forecast analysis |
+| `arka predictions` | Stock and forecast analysis |
 | `compose_video` | Video script generation |
-| `compose_slides` | Presentation slide script generation |
+| `arka compose_slides` | Presentation slide script generation |
 
 Override per task:
 

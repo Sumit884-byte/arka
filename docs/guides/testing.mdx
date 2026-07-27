@@ -31,15 +31,15 @@ From a dev checkout:
 ```bash
 cd arka
 pip install -e ".[dev]"
-pytest tests/
+arka "pytest tests/"
 ```
 
 Run a single file or test:
 
 ```bash
-pytest tests/test_llm_fallback.py
-pytest tests/test_router_show_me.py -v
-pytest tests/test_currency_convert.py::test_specific_case
+arka "pytest tests/test_llm_fallback.py"
+arka "pytest tests/test_router_show_me.py -v"
+arka "pytest tests/test_currency_convert.py::test_specific_case"
 ```
 
 Install dev extras (includes `pytest` and `ruff`):
@@ -121,7 +121,7 @@ For routing tests, use `arka.routing.symbolic` helpers or `arka.router.route()` 
 ## Linting
 
 ```bash
-ruff check src/ tests/
+arka "ruff check src/ tests/"
 ```
 
 `ruff` is included in the `[dev]` extra.

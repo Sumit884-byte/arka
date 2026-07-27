@@ -102,6 +102,36 @@ def test_mcp_server_initialize_and_list_tools():
     assert "complete natural-language" in route_tool["inputSchema"]["properties"]["prompt"]["description"]
 
 
+def test_mcp_server_handles_ping():
+    from arka.integrations.mcp_server import ArkaMcpServer
+
+    server = ArkaMcpServer(stdin=io.StringIO(), stdout=io.StringIO())
+    result = server.handle_message({"jsonrpc": "2.0", "id": 9, "method": "ping", "params": {}})
+    assert result == {"jsonrpc": "2.0", "id": 9, "result": {}}
+    assert server.handle_message({"jsonrpc": "2.0", "method": "ping", "params": {}}) is None
+
+
+def test_mcp_int_parses_empty_string_optional_fields(tmp_path, monkeypatch):
+    from arka.integrations.mcp_server import _handle_arka_clipboard, _handle_arka_heartbeat, _mcp_int
+
+    assert _mcp_int("", 20) == 20
+    assert _mcp_int(None, 7) == 7
+
+    monkeypatch.setattr(
+        "arka.integrations.clipboard_history.get_entry",
+        lambda index: ({"index": index, "text": "hello"}, None),
+    )
+    got = json.loads(_handle_arka_clipboard({"action": "get", "index": ""}))
+    assert got["text"] == "hello"
+
+    monkeypatch.setattr(
+        "arka.integrations.heartbeat.history",
+        lambda limit=20: [{"activity": "mcp.ping", "source": "mcp"}][:limit],
+    )
+    payload = json.loads(_handle_arka_heartbeat({"action": "history", "limit": ""}))
+    assert payload[0]["activity"] == "mcp.ping"
+
+
 def test_mcp_capabilities_names_arka_route_as_umbrella_tool():
     from arka.integrations.mcp_server import ArkaMcpServer
 
@@ -1371,6 +1401,9 @@ def test_doctor_spawns_client(monkeypatch):
         def list_tools(self):
             return [McpTool(name=n) for n in list_tool_names()]
 
+        def ping(self):
+            return {}
+
         def close(self):
             pass
 
@@ -1378,6 +1411,7 @@ def test_doctor_spawns_client(monkeypatch):
     text, code = doctor()
     assert code == 0
     assert "summary\tok" in text
+    assert "ping\tok" in text
 
 
 def test_agent_hub_sync_includes_arka_self(tmp_path, monkeypatch):

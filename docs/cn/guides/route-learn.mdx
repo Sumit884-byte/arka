@@ -10,8 +10,8 @@ Arka 可以学习 **持久化的自然语言路由** —— 短语到技能的�
 ## 教授路由
 
 ```bash
-route_learn learn "deploy staging" "agent_code run deploy.sh"
-route_learn learn "my dashboard" system_monitor
+arka route_learn learn "deploy staging" "agent_code run deploy.sh"
+arka route_learn learn "my dashboard" system_monitor
 ```
 
 自然语言：
@@ -27,7 +27,7 @@ arka remember route "check disk" as disk_breakdown
 当请求被错误路由后，可以基于最近一次 trace 进行修正：
 
 ```bash
-route_learn learn --from-trace --correct "stock news"
+arka route_learn learn --from-trace --correct "stock news"
 ```
 
 这会把 trace 中的输入与你原本想要的技能配对。
@@ -36,9 +36,9 @@ route_learn learn --from-trace --correct "stock news"
 
 | 命令 | 说明 |
 | ---- | ---- |
-| `route_learn list` | 列出所有已学习的路由 |
-| `route_learn delete <id-or-phrase>` | 移除一条路由 |
-| `route_learn test <phrase>` | 预览某个短语将执行什么 |
+| `arka route_learn list` | 列出所有已学习的路由 |
+| `arka route_learn delete <id-or-phrase>` | 移除一条路由 |
+| `arka route_learn test <phrase>` | 预览某个短语将执行什么 |
 
 自然语言：
 
@@ -51,7 +51,7 @@ arka list learned routes
 在技能命令中使用 `{args}` 可捕获尾部文本：
 
 ```bash
-route_learn learn "summarize repo" "github_repo activity {args}"
+arka route_learn learn "summarize repo" "github_repo activity {args}"
 # "summarize repo Sumit884-byte/arka" → github_repo activity Sumit884-byte/arka
 ```
 

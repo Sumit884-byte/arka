@@ -210,9 +210,15 @@ def build_resource():
     from opentelemetry.sdk.resources import Resource
 
     service = os.environ.get("OTEL_SERVICE_NAME", "arka").strip() or "arka"
+    deployment_env = (
+        os.environ.get("OTEL_DEPLOYMENT_ENVIRONMENT")
+        or os.environ.get("DEPLOYMENT_ENVIRONMENT")
+        or "local"
+    ).strip() or "local"
     return Resource.create(
         {
             "service.name": service,
             "service.namespace": os.environ.get("OTEL_SERVICE_NAMESPACE", "arka-agent"),
+            "deployment.environment": deployment_env,
         }
     )

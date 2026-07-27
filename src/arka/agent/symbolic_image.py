@@ -3,44 +3,22 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
+
+from arka.agent.meme_templates import comparison as _comparison
 
 
 def comparison(
     left: str, right: str, *, left_title: str, right_title: str, output: str
 ) -> dict[str, object]:
-    try:
-        from PIL import Image, ImageDraw, ImageFont
-    except ImportError as exc:
-        raise RuntimeError(
-            "symbolic image composition requires Pillow: pip install Pillow"
-        ) from exc
-    assets = [Path(left).expanduser(), Path(right).expanduser()]
-    if not all(path.is_file() for path in assets):
-        missing = next(path for path in assets if not path.is_file())
-        raise ValueError(f"image asset not found: {missing}")
-    images = [Image.open(path).convert("RGB") for path in assets]
-    width = max(image.width for image in images)
-    height = max(image.height for image in images)
-    canvas = Image.new("RGB", (width * 2, height), "white")
-    draw = ImageDraw.Draw(canvas)
-    font = ImageFont.load_default()
-    for index, (image, title) in enumerate(zip(images, (left_title, right_title))):
-        image.thumbnail((width, height))
-        x = index * width + (width - image.width) // 2
-        canvas.paste(image, (x, 0))
-        draw.rectangle((index * width, 0, (index + 1) * width, 48), fill=(10, 22, 40))
-        draw.text((index * width + 18, 16), title, fill="white", font=font)
-    draw.line((width, 0, width, height), fill=(20, 30, 45), width=3)
-    target = Path(output).expanduser()
-    target.parent.mkdir(parents=True, exist_ok=True)
-    canvas.save(target)
-    return {
-        "output": str(target),
-        "template": "comparison",
-        "token_cost": "local-only",
-        "assets": [str(path) for path in assets],
-    }
+    return _comparison(
+        left=left,
+        right=right,
+        left_title=left_title,
+        right_title=right_title,
+        output=output,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -64,8 +42,6 @@ def main(argv: list[str] | None = None) -> int:
         )
     except (OSError, ValueError, RuntimeError) as exc:
         p.error(str(exc))
-    import json
-
     print(
         json.dumps(result, indent=2)
         if args.json

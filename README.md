@@ -66,10 +66,26 @@ PyPI package name is **`arka-agent`** — published at [pypi.org/project/arka-ag
 
 **Recommended (standalone, no clone, no build):**
 
+[uv](https://docs.astral.sh/uv/) installs **`arka-agent` from PyPI** — no separate uv registry or token:
+
+```bash
+uv tool install "arka-agent[chat]"
+arka setup
+arka doctor
+```
+
+Or with pipx:
+
 ```bash
 pipx install "arka-agent[chat]"
 arka setup
 arka doctor
+```
+
+**One-off without global install:**
+
+```bash
+uvx --from "arka-agent[chat]" arka doctor
 ```
 
 Or with pip in a venv:

@@ -13,7 +13,7 @@ Create structured slide decks from a topic. Arka uses presentation-specific prom
 arka make slides about kubernetes networking
 arka pitch deck on AI infrastructure
 arka academic presentation on quantum computing
-compose_slides compose --topic "Python asyncio" --llm --style executive -f pptx
+arka compose_slides compose --topic "Python asyncio" --llm --style executive -f pptx
 ```
 
 ## Style presets
@@ -25,8 +25,8 @@ compose_slides compose --topic "Python asyncio" --llm --style executive -f pptx
 | `academic` | Research talks — methodology, citations | `light` |
 
 ```bash
-compose_slides compose --topic "Series A" --style pitch -f pptx
-compose_slides compose --topic "CRISPR" --style academic -f all
+arka compose_slides compose --topic "Series A" --style pitch -f pptx
+arka compose_slides compose --topic "CRISPR" --style academic -f all
 ```
 
 ## Visual themes
@@ -40,7 +40,7 @@ Control colors and typography with `--theme`:
 | `minimal` | White/neutral, print-friendly |
 
 ```bash
-compose_slides compose --topic "Q4 review" --style executive --theme light -f pptx
+arka compose_slides compose --topic "Q4 review" --style executive --theme light -f pptx
 arka pitch deck on terminal AI agents --theme dark
 ```
 
@@ -64,7 +64,7 @@ Use [plan mode](/guides/operation-modes) to preview the design improvement steps
 arka mode plan
 arka "improve pitch slide design for terminal AI agents"
 arka mode agent
-compose_slides compose --topic "terminal AI agents" --style pitch --theme dark -f pptx
+arka compose_slides compose --topic "terminal AI agents" --style pitch --theme dark -f pptx
 ```
 
 ## Export formats
@@ -86,7 +86,7 @@ Slides save to `~/Documents/arka-slides/` by default.
 ## Convert existing decks
 
 ```bash
-compose_slides convert deck.pptx --format pdf
+arka compose_slides convert deck.pptx --format pdf
 ```
 
 ## Quality bar

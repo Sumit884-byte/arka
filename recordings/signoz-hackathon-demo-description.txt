@@ -1,0 +1,97 @@
+See inside your AI agents — not just that something failed, but which step broke.
+
+Arka is an open-source terminal agent. SigNoz is OpenTelemetry-native observability. Together they trace the full agent lifecycle: routing → LLM attempts → RAG retrieval → tool calls → failover — in one waterfall.
+
+Submission for Agents of SigNoz (Track 01 — AI & Agent Observability).
+
+━━━━━━━━━━━━━━━━━━━━
+HOW WE USE SIGNOZ
+━━━━━━━━━━━━━━━━━━━━
+
+1. DEPLOY — SigNoz runs locally via Foundry (casting.yaml at repo root). One command brings up the SigNoz UI (:8080), OTLP ingester (:4318), and MCP server (:8000):
+   arka signoz setup -y
+
+2. INSTRUMENT — Arka exports OpenTelemetry from src/arka/telemetry/ over OTLP HTTP. Every agent step becomes a span:
+   • arka.request → arka.route → arka.agent.goal → arka.llm.attempt → arka.tool.shell
+   • Metrics: arka.routing.decisions, arka.skill.duration, arka.llm.tokens
+   • Logs: structured agent events with trace_id / span_id correlation
+
+3. EMIT TRACES — Demo scenarios tag spans with arka.demo.scenario so you can filter in SigNoz without guessing:
+   arka signoz demo-scenarios --synthetic
+   (inference latency, RAG cascade, router split, E2E pillars, exception stack traces)
+
+4. DEBUG IN SIGNOZ UI — Stock views, no custom dashboard required for the demo:
+   • Traces Explorer — filter service.name = 'arka' → full agent waterfall
+   • Services — P99 latency, error rate, ops/sec for the arka service
+   • Logs Explorer — LLM failover, 429 recovery, shell events on the same trace IDs
+
+5. VERIFY — arka signoz status confirms Docker, foundryctl, OTLP pipelines, and built-in verify queries.
+
+6. OPTIONAL — Bundled dashboards (arka signoz dashboard install), alerts (arka signoz alert-create), and SigNoz MCP for Cursor (query traces from the IDE).
+
+━━━━━━━━━━━━━━━━━━━━
+WHAT YOU'LL SEE
+━━━━━━━━━━━━━━━━━━━━
+
+• Deploy SigNoz with Foundry in one command (arka signoz setup -y)
+• Verify OTel traces, metrics, and logs pipelines (arka signoz status)
+• Emit synthetic agent traces without a live LLM (arka signoz demo-scenarios --synthetic)
+• Inspect real spans in SigNoz Traces Explorer, Services metrics, and correlated Logs Explorer
+• OpenTelemetry built into arka-agent — no sidecar proxies
+
+━━━━━━━━━━━━━━━━━━━━
+CHAPTERS
+━━━━━━━━━━━━━━━━━━━━
+
+0:00 — Arka + SigNoz intro (Track 01)
+0:16 — The problem: agents are a black box
+0:32 — Deploy SigNoz with Foundry (arka signoz setup -y)
+0:50 — Verify pipelines (arka signoz status)
+1:08 — Synthetic demo scenarios
+1:28 — Four observability pillars
+1:48 — SigNoz Traces Explorer
+2:06 — Services metrics (P99, error rate)
+2:24 — Logs Explorer (failover & 429 recovery)
+2:42 — Docs & judge pack
+2:58 — Reproduce locally
+
+━━━━━━━━━━━━━━━━━━━━
+REPRODUCE IN 10 MINUTES
+━━━━━━━━━━━━━━━━━━━━
+
+git clone https://github.com/Sumit884-byte/arka.git
+cd arka
+pip install -e ".[chat,observability]"
+arka signoz setup -y
+
+# ~/.config/arka/.env
+OTEL_TRACES_ENABLED=1
+OTEL_METRICS_ENABLED=1
+OTEL_LOGS_ENABLED=1
+SIGNOZ_ENDPOINT=http://localhost:4318
+
+arka signoz demo-scenarios --synthetic
+# Open http://localhost:8080 → Traces Explorer → service.name = 'arka'
+
+Or install without cloning:
+uv tool install "arka-agent[chat,observability]"
+
+━━━━━━━━━━━━━━━━━━━━
+LINKS
+━━━━━━━━━━━━━━━━━━━━
+
+GitHub (upstream): https://github.com/Sumit884-byte/arka
+Hackathon judge pack: https://github.com/Sumit884-byte/arka/tree/main/signoz
+Observability docs: https://arka-agent.mintlify.site/guides/observability
+SigNoz hackathon: https://www.wemakedevs.org/hackathons/signoz
+SigNoz docs: https://signoz.io/docs
+
+Blog & screenshots: https://github.com/sumitmishra884byte-cpu/arka/releases/tag/signoz-hackathon-media
+
+━━━━━━━━━━━━━━━━━━━━
+AI DISCLOSURE
+━━━━━━━━━━━━━━━━━━━━
+
+Per hackathon rules: Cursor was used for OpenTelemetry instrumentation, SigNoz wiring, docs, demo video script, and screenshot automation.
+
+#Arka #SigNoz #OpenTelemetry #AIObservability #AIAgents #LLM #DevOps #SRE #Observability #Hackathon

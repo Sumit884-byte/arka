@@ -472,6 +472,12 @@ class McpStdioClient:
         result = self._rpc("tools/list", {}, request_id=self._next_id())
         return _parse_tools(result)
 
+    def ping(self) -> dict[str, Any]:
+        if not self._initialized:
+            self.connect()
+        result = self._rpc("ping", {}, request_id=self._next_id())
+        return result if isinstance(result, dict) else {}
+
     def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> Any:
         if not self._initialized:
             self.connect()

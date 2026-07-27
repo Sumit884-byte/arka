@@ -1,0 +1,106 @@
+---
+title: "Daily reading"
+description: "Structured daily reading on any topic — non-overlapping concepts, configurable length, and built-in health track."
+keywords: ["reading", "learning", "health", "wellness", "curriculum", "daily habit"]
+icon: "book-open-reader"
+---
+
+**Daily reading** delivers a fresh lesson each day on a topic you choose. Concepts never repeat across sessions, length is configurable (about 40–60 minutes by default), and a built-in **health** track covers diet, exercise, and wellness without setup.
+
+## Quick start
+
+```bash
+# Built-in health track
+arka health_reading today
+arka health_reading today --minutes 60
+
+# Any topic — create a track once, then read daily
+arka daily_reading init "machine learning fundamentals"
+arka daily_reading today
+arka daily_reading today --track machine-learning-fundamentals --minutes 45
+
+# Manage tracks
+arka daily_reading list-tracks
+arka daily_reading use rust
+arka daily_reading status
+arka daily_reading upcoming
+arka daily_reading set-default 50
+```
+
+## Natural language
+
+```bash
+arka "daily reading today"
+arka "40 minute reading on stoic philosophy"
+arka "health reading status"
+arka "1 hour wellness reading"
+```
+
+Health or wellness phrasing uses the **health** track. Generic topics auto-**init** a new track when none exists yet.
+
+## How it works
+
+1. **Curriculum** — Each track has pillars and concept IDs. The built-in health track ships with ~45 concepts across nutrition, exercise, and general health. For other topics, `init` asks an LLM to generate a JSON curriculum.
+2. **Session selection** — Each day picks 3–5 concepts based on reading length, rotating across pillars so coverage stays balanced.
+3. **Lesson generation** — An LLM writes markdown for only today's concepts and ends with `CONCEPTS: id1, id2, ...` so progress is recorded.
+4. **Idempotent days** — Running `today` again on the same calendar day returns the saved lesson unless you pass `--force`.
+
+## Commands
+
+| Command | Description |
+| --- | --- |
+| `daily_reading init <topic>` | Create a new reading track (LLM-generated curriculum) |
+| `daily_reading today` | Generate or show today's lesson |
+| `daily_reading list-tracks` | List built-in and custom tracks |
+| `daily_reading use <slug>` | Set the active track |
+| `daily_reading status` | Progress for the current track |
+| `daily_reading upcoming` | Preview the next concepts |
+| `daily_reading reset` | Clear progress and saved lessons for a track |
+| `daily_reading schedule` | Print an `arka routines` command for daily automation |
+| `daily_reading set-default <minutes>` | Default reading length |
+| `health_reading …` | Same as `daily_reading --track health …` |
+
+### Init options
+
+```bash
+arka daily_reading init "Rust programming" --track rust --pillars basics,ownership,async
+arka daily_reading init "nutrition science" --force   # replace existing track file
+```
+
+## Storage
+
+| Path | Purpose |
+| --- | --- |
+| `~/.config/arka/daily-reading/settings.json` | Active track, default minutes |
+| `~/.config/arka/daily-reading/tracks/<slug>/curriculum.json` | Concept map |
+| `~/.config/arka/daily-reading/tracks/<slug>/state.json` | Covered concepts and session log |
+| `~/.config/arka/daily-reading/tracks/<slug>/lessons/<date>.md` | Saved daily lessons |
+
+The **health** built-in curriculum lives in the package; a file under `tracks/health/` overrides it only if you customize it.
+
+## Schedule a daily habit
+
+```bash
+arka daily_reading schedule --when 08:00 --minutes 40
+# Prints: arka routines add daily '08:00' 'daily_reading today --track … --minutes 40' --install
+```
+
+## Routing
+
+```bash
+arka route "40 minute reading on world history"
+# → daily_reading init 'world history'   (if track missing)
+
+arka route "health reading today"
+# → health_reading --track health today
+```
+
+## Health disclaimer
+
+The built-in health track includes a disclaimer in each lesson: **not medical advice**. Consult a clinician for personal health decisions.
+
+## Related
+
+- [Quiz practice](/guides/quiz-practice) — interactive Q&A with per-topic memory
+- [Daily and tech brief](/guides/daily-brief) — morning headlines, not long-form reading
+- [CLI reference](/guides/cli) — all subcommands and aliases

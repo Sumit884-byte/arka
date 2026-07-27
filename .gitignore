@@ -46,9 +46,25 @@ logs/
 your-secret-here
 *-bug.md
 
-# Regeneratable demo recording build output (see recordings/*.py)
+# Regeneratable demo recording output — never commit media (see recordings/README.md)
 recordings/_demo_build/
+recordings/_signoz_demo_build/
+recordings/signoz-demo-assets/
 recordings/live-demo-ui/run-*/
+recordings/live-demo-ui/*.png
+recordings/live-demo-ui/*.webm
+recordings/cli-images/
+recordings/signoz-screenshots/*.png
+recordings/signoz-screenshots/*.json
+recordings/*.mp4
+recordings/*.mp3
+recordings/*.webm
+recordings/*.png
+recordings/*.jpg
+recordings/*.jpeg
+recordings/*voiceover*
+recordings/video/*
+!recordings/video/README.md
 
 # Empty legacy top-level module dirs (real code is under src/arka/)
 /agent/
@@ -75,6 +91,9 @@ hub/skills/
 # Mintlify local dev (run `mint dev` from docs/)
 .mintlify/
 
+# Web dashboard (local WIP — not ready for commit)
+/web/
+
 # Test / coverage (local dev harnesses — not committed)
 /local/
 test.py
@@ -84,6 +103,10 @@ htmlcov/
 .chart-test-output/
 .mpl-cache/
 test-output/
+
+# Local SigNoz hackathon / prize scratch notes (folder README stays tracked)
+signoz/*.md
+!signoz/README.md
 
 # SigNoz Foundry local deploy (not published)
 casting.yaml

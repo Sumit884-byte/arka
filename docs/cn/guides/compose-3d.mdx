@@ -12,9 +12,9 @@ icon: "cube"
 ```bash
 arka create a 3d model of a gear
 arka make 3d vase 10cm tall
-compose 3d model of a coffee mug
-generate stl for phone stand
-compose_3d gear --teeth 16 --format stl
+arka compose 3d model of a coffee mug
+arka generate stl for phone stand
+arka compose_3d gear --teeth 16 --format stl
 ```
 
 ## 程序化形状（无需 LLM）
@@ -45,7 +45,7 @@ compose_3d gear --teeth 16 --format stl
 对于「龙摆件」或「桌面收纳盒」等描述，Arka 会调用 LLM 生成 OBJ 顶点数据，并在面片可解析时导出 STL。
 
 ```bash
-compose_3d "desk organizer with phone slot"
+arka compose_3d "desk organizer with phone slot"
 ```
 
 需要在 `.env` 中配置 LLM（与 chat/compose_slides 相同）。
@@ -59,7 +59,7 @@ compose_3d "desk organizer with phone slot"
 ## 检查环境
 
 ```bash
-compose_3d check
+arka compose_3d check
 ```
 
 ## 相关

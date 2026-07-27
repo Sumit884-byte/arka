@@ -1,0 +1,115 @@
+---
+title: "दैनिक पढ़ाई"
+description: "किसी भी विषय पर संरचित दैनिक पाठ — बिना दोहराव की अवधारणाएँ, लचीली अवधि, और अंतर्निहित स्वास्थ्य ट्रैक।"
+keywords: ["reading", "learning", "health", "wellness", "curriculum", "hindi", "पढ़ाई"]
+icon: "book-open-reader"
+---
+
+**दैनिक पढ़ाई (daily reading)** हर दिन आपके चुने विषय पर एक नया पाठ देती है। सत्रों में **अवधारणाएँ दोहराई नहीं जातीं**, पढ़ने की **अवधि सेट** की जा सकती है (डिफ़ॉल्ट लगभग 40–60 मिनट), और **स्वास्थ्य** के लिए एक तैयार ट्रैक है — आहार, व्यायाम और wellness — बिना अलग से सेटअप किए।
+
+## त्वरित शुरुआत
+
+```bash
+# अंतर्निहित स्वास्थ्य ट्रैक
+arka health_reading today
+arka health_reading today --minutes 60
+
+# कोई भी विषय — पहले ट्रैक बनाएँ, फिर रोज़ पढ़ें
+arka daily_reading init "machine learning fundamentals"
+arka daily_reading today
+arka daily_reading today --track machine-learning-fundamentals --minutes 45
+
+# ट्रैक प्रबंधन
+arka daily_reading list-tracks
+arka daily_reading use rust
+arka daily_reading status
+arka daily_reading upcoming
+arka daily_reading set-default 50
+```
+
+हिंदी में विषय भी दे सकते हैं:
+
+```bash
+arka daily_reading init "भारतीय अर्थव्यवस्था के मूल सिद्धांत"
+arka daily_reading today --minutes 45
+```
+
+## प्राकृतिक भाषा (natural language)
+
+```bash
+arka "daily reading today"
+arka "40 minute reading on stoic philosophy"
+arka "health reading status"
+arka "1 hour wellness reading"
+```
+
+**health** या **wellness** जैसे शब्द स्वास्थ्य ट्रैक चुनते हैं। सामान्य विषयों के लिए, यदि ट्रैक नहीं है तो Arka स्वतः `init` चलाता है।
+
+## यह कैसे काम करता है
+
+1. **पाठ्यक्रम (curriculum)** — हर ट्रैक में स्तंभ (pillars) और concept ID होते हैं। स्वास्थ्य ट्रैक में ~45 अवधारणाएँ हैं — nutrition, exercise, health। दूसरे विषयों के लिए `init` LLM से JSON पाठ्यक्रम बनवाता है।
+2. **सत्र चयन** — अवधि के अनुसार प्रतिदिन 3–5 अवधारणाएँ; स्तंभों के बीच संतुलन रखा जाता है।
+3. **पाठ लेखन** — LLM केवल आज की अवधारणाओं पर markdown लिखता है और अंत में `CONCEPTS: id1, id2, ...` देता है ताकि प्रगति सहेजी जा सके।
+4. **एक दिन, एक पाठ** — उसी कैलेंडर दिन में `today` दोबारा चलाने पर सहेजा पाठ मिलता है; नया चाहिए तो `--force` दें।
+
+## कमांड
+
+| कमांड | विवरण |
+| --- | --- |
+| `daily_reading init <topic>` | नया पढ़ाई ट्रैक (LLM पाठ्यक्रम) |
+| `daily_reading today` | आज का पाठ बनाएँ या दिखाएँ |
+| `daily_reading list-tracks` | सभी ट्रैक |
+| `daily_reading use <slug>` | सक्रिय ट्रैक सेट करें |
+| `daily_reading status` | प्रगति |
+| `daily_reading upcoming` | अगली अवधारणाएँ |
+| `daily_reading reset` | ट्रैक की प्रगति मिटाएँ |
+| `daily_reading schedule` | दैनिक `arka routines` कमांड प्रिंट करें |
+| `daily_reading set-default <minutes>` | डिफ़ॉल्ट पढ़ने की अवधि |
+| `health_reading …` | `daily_reading --track health …` जैसा |
+
+### Init विकल्प
+
+```bash
+arka daily_reading init "Rust programming" --track rust --pillars basics,ownership,async
+arka daily_reading init "nutrition science" --force
+```
+
+## फ़ाइलें कहाँ सहेजी जाती हैं
+
+| पथ | उद्देश्य |
+| --- | --- |
+| `~/.config/arka/daily-reading/settings.json` | सक्रिय ट्रैक, डिफ़ॉल्ट मिनट |
+| `~/.config/arka/daily-reading/tracks/<slug>/curriculum.json` | अवधारणा मानचित्र |
+| `~/.config/arka/daily-reading/tracks/<slug>/state.json` | कवर की गई अवधारणाएँ |
+| `~/.config/arka/daily-reading/tracks/<slug>/lessons/<date>.md` | दैनिक पाठ |
+
+**health** पाठ्यक्रम पैकेज में अंतर्निहित है; `tracks/health/` में फ़ाइल हो तो वह कस्टम संस्करण उपयोग होगा।
+
+## रोज़ की आदत शेड्यूल करें
+
+```bash
+arka daily_reading schedule --when 08:00 --minutes 40
+```
+
+आउटपुट में `arka routines add daily …` कमांड मिलेगा — `--install` से cron/systemd में लगा सकते हैं।
+
+## रूटिंग
+
+```bash
+arka route "40 minute reading on world history"
+# → daily_reading init 'world history'   (यदि ट्रैक नहीं)
+
+arka route "health reading today"
+# → health_reading --track health today
+```
+
+## स्वास्थ्य अस्वीकरण
+
+अंतर्निहित स्वास्थ्य ट्रैक में हर पाठ में यह स्पष्ट होता है: **यह चिकित्सा सलाह नहीं है**। व्यक्तिगत स्वास्थ्य निर्णयों के लिए चिकित्सक से consult करें।
+
+## संबंधित
+
+- [Quiz practice](/guides/quiz-practice) — प्रश्नोत्तरी और स्कोरिंग (English)
+- [Daily and tech brief](/guides/daily-brief) — सुबह की खबरें, लंबा पाठ नहीं (English)
+- [English daily reading](/guides/daily-reading) — same guide in English
+- [CLI reference](/guides/cli) — सभी उप-कमांड (English)

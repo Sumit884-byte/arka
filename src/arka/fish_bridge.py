@@ -65,6 +65,14 @@ def _capture_stdio_enabled() -> bool:
 
 def delegate_to_fish(argv: list[str]) -> int | None:
     """Run `arka <request>` via fish config.fish. Returns exit code, or None if unavailable."""
+    try:
+        from arka.agent.meme_templates import is_meme_cli_argv, run_meme_cli
+
+        if is_meme_cli_argv(argv):
+            return run_meme_cli(argv)
+    except ImportError:
+        pass
+
     cfg = fish_config()
     if cfg is None:
         return None

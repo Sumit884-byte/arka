@@ -47,11 +47,11 @@ Run these once per machine (or per repo) before your daily workflow.
 
     ```bash
     cd ~/dev/myapp
-    arka code init .
-    arka code status
+    arka dev init .
+    arka dev status
     ```
 
-    The goal agent, `self improve --apply`, and other write skills stay inside this folder until you `arka code clear` or init another path.
+    Or use the legacy alias: `arka code init .`. The goal agent, `self improve --apply`, and other write skills stay inside this folder until you `arka code clear` or init another path.
   </Step>
 
   <Step title="Paths with spaces">
@@ -107,7 +107,7 @@ arka repo_map
 | Deterministic skill sequence | `arka coding-workflow feature --task "add rate limiting"` |
 | Targeted text replacement | `arka surgical-edit edit src/app.py "old" "new" --yes` |
 | Layout / hygiene audit | `arka structure .` |
-| Focused TUI workspace | `arka coding-tui .` |
+| Focused TUI workspace | `arka dev tui .` (alias: `arka coding-tui .`) |
 
 The [goal agent](/guides/goal-agent) is best for open-ended tasks (debug, set up env, run tests). [Coding workflows](/guides/coding-workflows) list an explicit skill sequence before execution — useful when you want predictable steps. [Structure](/guides/structure) is read-only; it suggests moves but never relocates files.
 
@@ -116,28 +116,32 @@ The [goal agent](/guides/goal-agent) is best for open-ended tasks (debug, set up
 Catch issues before you commit:
 
 ```bash
-arka review --staged
+arka dev review
+arka dev ship
 arka council "is this API change safe to ship?"
 arka teammate-review .
 ```
 
-`review --staged` checks the diff against project rules. [Council](/guides/council) runs multi-persona deliberation for design decisions. [Teammate review](/guides/teammate-review) flags cross-service impact using workspace discovery.
+`arka dev ship` runs staged review plus changed-only CI in one step. `arka dev review` (or `arka review --staged`) checks the diff against project rules and surfaces **test-gap** hints for changed source files without matching tests. [Council](/guides/council) runs multi-persona deliberation for design decisions. [Teammate review](/guides/teammate-review) flags cross-service impact using workspace discovery.
+
+See the full [Developer loop](/guides/dev) guide.
 
 ### Test and CI
 
 Gate changes locally before opening a PR:
 
 ```bash
+arka dev test
+arka dev test --fix
 arka ci
-arka ci --changed
 arka repo_health run
-arka pr_check babysit
+arka dev pr babysit
 ```
 
-`arka ci` mirrors the repo's GitHub Actions gate (Ruff + targeted pytest for the Arka repo). Use `repo_health` for generic lint/test detection in any project. `pr_check babysit` loops on CI status until the PR is merge-ready. See [Repo health](/guides/repo-health).
+`arka dev test` runs changed-only CI gates (same as `arka ci --changed`). Use `repo_health` for generic lint/test detection in any project. `arka dev pr babysit` loops on GitHub CI until the PR is merge-ready. See [Repo health](/guides/repo-health) and [Developer loop](/guides/dev).
 
 <Note>
-  Install pre-commit hooks for incremental gates: `arka hooks install` runs `arka ci --changed` and `arka review --staged --fail-on-hints` on each commit.
+  Install pre-commit hooks for incremental gates: `arka dev hooks install` runs `arka ci --changed` and `arka review --staged --fail-on-hints` on each commit.
 </Note>
 
 ### Self-improve

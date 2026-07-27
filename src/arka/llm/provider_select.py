@@ -43,6 +43,7 @@ from arka.paths import config_dir, env_file
 
 PREFERRED_PROVIDER_ENV = "AI_PREFERRED_PROVIDER"
 PREFERRED_MODEL_ENV = "AI_PREFERRED_MODEL"
+KEEP_MODEL_ENV = "AI_KEEP_MODEL_ON_PROVIDER_SWITCH"
 
 _SET_PROVIDER_RE = re.compile(
     r"(?i)\b(?:set|choose|select|switch)\s+(?:the\s+)?(?:preferred\s+)?"
@@ -68,6 +69,151 @@ _MODEL_ID_LIKE = re.compile(
     r"(?i)(?:claude|gpt|gemini|llama|qwen|mistral|grok|deepseek|sonnet|haiku|opus|"
     r"mixtral|phi|codestral|command-|sonar|venice|moonshot|kimi|glm|abab|o1|o3|nano)"
 )
+
+_OPENROUTER_VENDOR_BY_PROVIDER: dict[str, str] = {
+    "gemini": "google",
+    "google": "google",
+    "anthropic": "anthropic",
+    "openai": "openai",
+    "xai": "x-ai",
+    "deepseek": "deepseek",
+    "mistral": "mistralai",
+    "cohere": "cohere",
+    "meta": "meta-llama",
+    "groq": "meta-llama",
+    "moonshot": "moonshotai",
+    "zai": "z-ai",
+    "minimax": "minimax",
+    "perplexity": "perplexity",
+    "fireworks": "fireworks",
+    "together": "together",
+}
+
+
+def keep_model_on_switch_enabled() -> bool:
+    raw = (env(KEEP_MODEL_ENV) or "1").strip().lower()
+    return raw not in {"0", "false", "no", "off"}
+
+
+def _dedupe_preserve(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for item in items:
+        key = item.strip()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append(key)
+    return out
+
+
+def _model_stem(model_id: str) -> str:
+    base = (model_id or "").strip().split("/")[-1]
+    base = re.sub(r"[-:]\d{3,}$", "", base)
+    return base.lower()
+
+
+def _model_switch_candidates(
+    model_id: str,
+    *,
+    from_provider: str | None = None,
+    to_provider: str | None = None,
+) -> list[str]:
+    """Build model id variants to try when moving the same model across providers."""
+    mid = (model_id or "").strip()
+    if not mid:
+        return []
+
+    candidates = [mid]
+    tail = mid.split("/", 1)[-1]
+    if tail != mid:
+        candidates.append(tail)
+    candidates.append(re.sub(r"-\d{3}$", "", tail))
+
+    from_slug = normalize_provider_slug(from_provider or "")
+    to_slug = normalize_provider_slug(to_provider or "")
+
+    if to_slug == "openrouter":
+        vendor = _OPENROUTER_VENDOR_BY_PROVIDER.get(from_slug)
+        if not vendor:
+            from arka.llm.fallback import infer_provider_from_model
+
+            inferred = infer_provider_from_model(tail)
+            vendor = _OPENROUTER_VENDOR_BY_PROVIDER.get(inferred or "")
+        if vendor:
+            for base in (tail, re.sub(r"-\d{3}$", "", tail)):
+                candidates.append(f"{vendor}/{base}")
+
+    if from_slug == "openrouter" and "/" in mid:
+        head, _, rest = mid.partition("/")
+        if normalize_provider_slug(head) == to_slug or _OPENROUTER_VENDOR_BY_PROVIDER.get(to_slug) == head:
+            candidates.append(rest)
+        candidates.append(rest)
+
+    if to_slug and to_slug != "openrouter":
+        norm = normalize_model_for_provider(to_slug, tail)
+        if norm:
+            candidates.append(norm)
+
+    return _dedupe_preserve(candidates)
+
+
+def resolve_model_on_provider(
+    model_id: str,
+    provider: str,
+    models: list[str],
+    *,
+    from_provider: str | None = None,
+) -> str | None:
+    """Return a model id on ``provider`` that best matches ``model_id``, if any."""
+    if not model_id or not models:
+        return None
+
+    slug = normalize_provider_slug(provider)
+    exact = {model: model for model in models}
+    lower = {model.lower(): model for model in models}
+
+    for candidate in _model_switch_candidates(
+        model_id,
+        from_provider=from_provider,
+        to_provider=slug,
+    ):
+        normalized = normalize_model_for_provider(slug, candidate)
+        for probe in _dedupe_preserve([candidate, normalized]):
+            if probe in exact:
+                return normalize_model_for_provider(slug, exact[probe])
+            low = probe.lower()
+            if low in lower:
+                return normalize_model_for_provider(slug, lower[low])
+
+    stem = _model_stem(model_id)
+    if stem:
+        for model in models:
+            if _model_stem(model) == stem:
+                return normalize_model_for_provider(slug, model)
+
+    return None
+
+
+def pick_model_for_provider_switch(
+    current_model: str,
+    provider: str,
+    *,
+    from_provider: str | None = None,
+    force_refresh: bool = False,
+) -> tuple[str | None, str]:
+    """Detect models on ``provider`` and pick the best match for ``current_model``."""
+    slug = normalize_provider_slug(provider)
+    models, source = detect_provider_models(slug, force=force_refresh)
+    if not models:
+        return None, source
+    resolved = resolve_model_on_provider(
+        current_model,
+        slug,
+        models,
+        from_provider=from_provider,
+    )
+    return resolved, source
 
 
 @dataclass
@@ -348,16 +494,34 @@ def set_preferred_provider(
     model: str | None = None,
     autodetect: bool = True,
     force_refresh: bool = False,
+    keep_model: bool | None = None,
 ) -> tuple[str, str, Path]:
     slug = normalize_provider_slug(provider)
     spec = get_provider(slug)
     if not spec:
         raise ValueError(f"Unknown provider: {provider!r}")
 
+    current_provider, current_model = get_preferred()
+    retain_model = keep_model_on_switch_enabled() if keep_model is None else keep_model
+
     chosen_model = (model or "").strip()
     if not chosen_model and autodetect:
         models, _source = detect_provider_models(slug, force=force_refresh)
-        chosen_model = pick_default_model(slug, models)
+        if (
+            retain_model
+            and current_model
+            and slug != normalize_provider_slug(current_provider)
+        ):
+            kept = resolve_model_on_provider(
+                current_model,
+                slug,
+                models,
+                from_provider=current_provider,
+            )
+            if kept:
+                chosen_model = kept
+        if not chosen_model:
+            chosen_model = pick_default_model(slug, models)
     if not chosen_model:
         chosen_model = spec.default_model
     if slug == "openrouter" and autodetect and not model:
@@ -387,19 +551,39 @@ def clear_preferred() -> Path:
     )
 
 
-def auto_pick_model_if_needed(provider: str | None = None, *, force: bool = False) -> str | None:
+def auto_pick_model_if_needed(
+    provider: str | None = None,
+    *,
+    force: bool = False,
+    keep_model: bool | None = None,
+) -> str | None:
     pref_provider, pref_model = get_preferred()
     slug = normalize_provider_slug(provider or pref_provider)
     if not slug:
         return None
+    retain_model = keep_model_on_switch_enabled() if keep_model is None else keep_model
+
     if pref_model and (not provider or provider == pref_provider):
         if slug == "openrouter":
             live = fetch_openrouter_models_live(force=force)
             if live and pref_model not in live:
-                chosen = pick_default_model(slug, live)
+                kept = resolve_model_on_provider(pref_model, slug, live, from_provider=pref_provider)
+                chosen = kept or pick_default_model(slug, live)
                 set_env_vars({PREFERRED_MODEL_ENV: chosen})
                 return chosen
         return pref_model
+
+    if pref_model and provider and retain_model:
+        kept, _source = pick_model_for_provider_switch(
+            pref_model,
+            slug,
+            from_provider=pref_provider,
+            force_refresh=force,
+        )
+        if kept:
+            set_env_vars({PREFERRED_MODEL_ENV: kept})
+            return kept
+
     models, _source = detect_provider_models(slug, force=force)
     if not models:
         return None
@@ -583,22 +767,33 @@ def cmd_set(args: argparse.Namespace) -> int:
         print(f"Cleared preferred provider ({path})")
         return 0
 
+    previous_provider, previous_model = get_preferred()
+    keep_model = None if getattr(args, "keep_model", None) is None else bool(args.keep_model)
+
     try:
         slug, model, path = set_preferred_provider(
             raw,
             model=args.model,
             autodetect=not args.model,
             force_refresh=bool(args.refresh),
+            keep_model=keep_model,
         )
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 1
 
     if not args.model:
-        auto_pick_model_if_needed(slug, force=bool(args.refresh))
+        auto_pick_model_if_needed(slug, force=bool(args.refresh), keep_model=keep_model)
 
     models, source = detect_provider_models(slug)
     print(f"Saved preferred provider → {slug} / {model}")
+    if (
+        not args.model
+        and previous_model
+        and model == previous_model
+        and normalize_provider_slug(previous_provider) != slug
+    ):
+        print(f"Kept model across provider switch: {previous_model}")
     print(f"Config: {path}")
     print(f"Detected {len(models)} model(s) ({source})")
     return 0
@@ -640,6 +835,21 @@ def main(argv: list[str] | None = None) -> int:
     p_set.add_argument("provider", help="Provider slug or 'clear'")
     p_set.add_argument("--model", "-m", help="Optional model id")
     p_set.add_argument("--refresh", action="store_true", help="Refresh live model list before autodetect")
+    p_set.add_argument(
+        "--keep-model",
+        dest="keep_model",
+        action="store_const",
+        const=True,
+        default=None,
+        help="When switching provider without --model, keep the current model if available (default)",
+    )
+    p_set.add_argument(
+        "--no-keep-model",
+        dest="keep_model",
+        action="store_const",
+        const=False,
+        help="When switching provider without --model, pick that provider's default model",
+    )
     p_set.set_defaults(func=cmd_set)
 
     args = parser.parse_args(argv)

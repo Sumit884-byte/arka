@@ -93,7 +93,7 @@ git push origin v0.1.0
 ```
 
 4. Watch the **Publish** workflow on GitHub Actions.
-5. Verify: `pipx install "arka-agent[chat]"` and `arka doctor`
+5. Verify: `uv tool install "arka-agent[chat]"` and `arka doctor`
 
 ### Manual publish (fallback)
 
