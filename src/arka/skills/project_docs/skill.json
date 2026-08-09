@@ -1,0 +1,20 @@
+{
+  "name": "project_docs",
+  "description": "Write and sync first-person README and blog-post.md from repo code changes",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "project docs",
+    "repo docs",
+    "update readme",
+    "write blog",
+    "first person readme",
+    "first person blog",
+    "sync docs",
+    "devto post",
+    "auto sync docs"
+  ],
+  "permissions": ["read", "write", "network"]
+}

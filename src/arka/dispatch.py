@@ -227,6 +227,8 @@ def run_skill(skill_line: str) -> int:
             code = run_script("arka_health_reading.py", rest)
         elif head in ("daily_reading", "daily-reading", "reading_track", "reading-track"):
             code = run_script("arka_daily_reading.py", rest)
+        elif head in ("day_research", "day-research", "interval_research", "interval-research", "research_session"):
+            code = run_script("arka_day_research.py", rest)
         elif head == "council":
             code = run_script("arka_council.py", rest)
         elif head == "convert":
@@ -260,7 +262,7 @@ def run_skill(skill_line: str) -> int:
             from arka.llm.model_advisor import main as model_advisor_main
 
             code = model_advisor_main(rest or None)
-        elif head in ("model", "model_host", "model-host") and rest and rest[0] in {"setup", "doctor", "list"}:
+        elif head in ("model", "model_host", "model-host") and rest and rest[0] in {"setup", "doctor", "list", "status"}:
             from arka.llm.model_host_setup import main as model_setup_main
             code = model_setup_main(rest)
         elif head in ("model_optimizer", "model-optimizer") or (head == "model" and rest and rest[0] in {"recommend", "switch"}):
@@ -324,10 +326,26 @@ def run_skill(skill_line: str) -> int:
             from arka.core.markdown_style import main as markdown_style_main
 
             code = markdown_style_main(rest or ["style", "-"])
+        elif head in ("project_docs", "project-docs", "repo_docs", "repo-docs"):
+            from arka.integrations.project_docs import main as project_docs_main
+
+            code = project_docs_main(rest or ["status"])
         elif head in ("human_docs", "human-docs", "write_readme", "human-readme"):
             from arka.agent.human_docs import main as human_docs_main
 
             code = human_docs_main(rest or ["guide"])
+        elif head in (
+            "website_pages",
+            "website-pages",
+            "site_pages",
+            "site-pages",
+            "page_plan",
+            "page-plan",
+            "sitemap",
+        ):
+            from arka.agent.website_pages import main as website_pages_main
+
+            code = website_pages_main(rest or ["guide"])
         elif head in ("coding_workflow", "coding-workflow", "workflow"):
             from arka.agent.coding_workflows import main as workflow_main
             code = workflow_main(rest)
@@ -471,6 +489,12 @@ def run_skill(skill_line: str) -> int:
         elif head in ("terminal_video", "terminal-video", "terminal_demo", "terminal-demo", "cli_demo"):
             from arka.media.terminal_video import main as terminal_video_main
             code = terminal_video_main(rest)
+        elif head in ("noise_remove", "noise-remove", "denoise", "denoise_audio", "denoise_video"):
+            from arka.media.noise_remove import main as noise_remove_main
+            code = noise_remove_main(rest)
+        elif head in ("create_video", "create-video", "make_video", "video_create"):
+            from arka.media.create_video import main as create_video_main
+            code = create_video_main(rest)
         elif head in ("chart_from_pdf", "chart-from-pdf", "pdf_chart", "pdf-chart"):
             from arka.charts.chart_from_pdf import main as chart_from_pdf_main
             code = chart_from_pdf_main(rest)
@@ -486,9 +510,13 @@ def run_skill(skill_line: str) -> int:
         elif head in ("bi_dashboard", "bi-dashboard"):
             from arka.agent.bi_dashboard import main as bi_dashboard_main
             code = bi_dashboard_main(rest)
-        elif head == "dashboard" and rest and rest[0] in ("bi", "bi-dashboard"):
-            from arka.agent.bi_dashboard import main as bi_dashboard_main
-            code = bi_dashboard_main(rest[1:])
+        elif head == "dashboard":
+            if rest and rest[0] in ("bi", "bi-dashboard"):
+                from arka.agent.bi_dashboard import main as bi_dashboard_main
+                code = bi_dashboard_main(rest[1:])
+            else:
+                from arka.agent.usage_dashboard import main as usage_dashboard_main
+                code = usage_dashboard_main(rest, default_action="serve")
         elif head in ("video_evidence", "video-evidence", "video_bug", "video-bug"):
             from arka.agent.video_evidence import main as video_evidence_main
 
@@ -520,6 +548,9 @@ def run_skill(skill_line: str) -> int:
         elif head in ("deploy", "deployment"):
             from arka.agent.deploy import main as deploy_main
             code = deploy_main(rest)
+        elif head in ("signoz_publish", "signoz-publish", "signoz_publish_all", "publish_signoz"):
+            from arka.agent.signoz_publish import main as signoz_publish_main
+            code = signoz_publish_main(rest)
         elif head in ("geo_seo", "geo-seo", "seo_audit"):
             from arka.agent.geo_seo import main as geo_main
             code = geo_main(rest)
@@ -648,6 +679,18 @@ def run_skill(skill_line: str) -> int:
             from arka.agent.self_build import main as self_build_main
 
             code = self_build_main(rest)
+        elif head in ("service_autostart", "service-autostart", "autostart_service"):
+            from arka.integrations.service_autostart import main as service_autostart_main
+
+            code = service_autostart_main(rest)
+        elif head == "webhook":
+            from arka.integrations.webhook import main as webhook_main
+
+            code = webhook_main(rest)
+        elif head == "n8n":
+            from arka.integrations.n8n import main as n8n_main
+
+            code = n8n_main(rest)
         elif head in ("ci", "review", "route_audit", "route-audit", "skill", "security", "doctor", "dev_doctor", "dev-doctor", "dev_tools", "dev-tools", "hooks"):
             from arka.agent.dev_tools import main as dev_tools_main
 
@@ -671,6 +714,10 @@ def run_skill(skill_line: str) -> int:
             from arka.agent.frontend_loop import main as frontend_main
 
             code = frontend_main([head.replace("-", "_"), *rest])
+        elif head in ("duplicate_text", "duplicate-text", "semantic_dedup", "semantic-dedup", "copy_dedup", "copy-dedup"):
+            from arka.agent.duplicate_text import main as duplicate_text_main
+
+            code = duplicate_text_main(rest)
         elif head in ("ui_copy", "ui-copy", "copy_audit", "copy-audit"):
             from arka.agent.ui_copy_audit import main as copy_main
             code = copy_main(rest)
@@ -732,13 +779,25 @@ def run_skill(skill_line: str) -> int:
             from arka.agent.meme_templates import main as meme_main
             code = meme_main(rest)
         elif head in ("generate_music", "generate-music", "music_generate"):
-            from arka.generate.music import main as music_main
+            from arka.media.music_generate import main as music_main
 
             code = music_main(rest)
         elif head == "generate" and rest and rest[0] == "music":
-            from arka.generate.music import main as music_main
+            from arka.media.music_generate import main as music_main
 
             code = music_main(rest[1:])
+        elif head in ("ai_video", "ai-video", "generate_video", "generate-video"):
+            from arka.media.ai_video import main as ai_video_main
+
+            code = ai_video_main(rest)
+        elif head == "generate" and rest and rest[0] == "video":
+            from arka.media.ai_video import main as ai_video_main
+
+            code = ai_video_main(rest[1:])
+        elif head in ("google_flow", "google-flow", "flow_video", "flow-video"):
+            from arka.media.google_flow import main as google_flow_main
+
+            code = google_flow_main(rest)
         elif head in ("image", "image_generate", "image-generate") and rest and rest[0] == "doctor":
             from arka.agent.local_image_gen import main as local_image_main
             code = local_image_main(rest)
@@ -786,6 +845,14 @@ def run_skill(skill_line: str) -> int:
             from arka.agent.lint_project import main as lint_main
 
             code = lint_main([head.replace("-", "_"), *rest])
+        elif head in ("arka_ocr", "ocr_skill"):
+            from arka.agent.ocr_skill import main as ocr_main
+
+            code = ocr_main(rest)
+        elif head in ("arka_rag", "rag_skill"):
+            from arka.agent.rag_skill import main as rag_main
+
+            code = rag_main(rest)
         elif head in ("qa_engineering", "qa-engineering", "qa"):
             from arka.agent.qa_engineering import main as qa_main
 

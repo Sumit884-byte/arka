@@ -37,9 +37,31 @@ def route_routines(cmd: str) -> str | None:
     return "routines " + " ".join(shlex.quote(a) for a in argv)
 
 
+def route_service_autostart(cmd: str) -> str | None:
+    try:
+        from arka.integrations.service_autostart import nl_to_argv, route_command
+    except ImportError:
+        return None
+    line = route_command(cmd.strip())
+    if line:
+        return line
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "service_autostart " + " ".join(shlex.quote(a) for a in argv)
+
+
 def route_batch(cmd: str) -> str | None:
     try:
         from arka.agent.batch import route_command
+    except ImportError:
+        return None
+    return route_command(cmd)
+
+
+def route_parallel_plan(cmd: str) -> str | None:
+    try:
+        from arka.agent.parallel_plan import route_command
     except ImportError:
         return None
     return route_command(cmd)
@@ -100,6 +122,20 @@ def route_future_predict(cmd: str) -> str | None:
         from arka.predict.engine import nl_to_future_argv
     except ImportError:
         return None
+    try:
+        from arka.media.google_flow import _is_google_flow_request
+
+        if _is_google_flow_request(cmd.strip()):
+            return None
+    except ImportError:
+        pass
+    try:
+        from arka.media.compose_video import _is_compose_video_request
+
+        if _is_compose_video_request(cmd.strip()):
+            return None
+    except ImportError:
+        pass
     if wants_prediction_chart(cmd):
         return None
     argv = nl_to_future_argv(cmd.strip())
@@ -537,6 +573,28 @@ def route_convert_media(cmd: str) -> str | None:
     return "convert_media " + " ".join(shlex.quote(a) for a in argv)
 
 
+def route_noise_remove(cmd: str) -> str | None:
+    try:
+        from arka.media.noise_remove import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "noise_remove " + " ".join(shlex.quote(a) for a in argv)
+
+
+def route_create_video(cmd: str) -> str | None:
+    try:
+        from arka.media.create_video import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "create_video " + " ".join(shlex.quote(a) for a in argv)
+
+
 def route_compose_slides(cmd: str) -> str | None:
     try:
         from arka.media.compose_slides import nl_to_argv
@@ -661,7 +719,24 @@ def route_metallurgy(cmd: str) -> str | None:
     return "metallurgy " + " ".join(shlex.quote(a) for a in argv)
 
 
+def route_google_flow(cmd: str) -> str | None:
+    try:
+        from arka.media.google_flow import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "google_flow " + " ".join(shlex.quote(a) for a in argv)
+
+
 def route_flow(cmd: str) -> str | None:
+    try:
+        from arka.media.google_flow import _is_google_flow_request
+    except ImportError:
+        _is_google_flow_request = None  # type: ignore[assignment]
+    if _is_google_flow_request and _is_google_flow_request(cmd.strip()):
+        return None
     try:
         from arka.agent.flow import nl_to_argv
     except ImportError:
@@ -692,6 +767,17 @@ def route_daily_reading(cmd: str) -> str | None:
     if not argv:
         return None
     return "daily_reading " + " ".join(shlex.quote(a) for a in argv)
+
+
+def route_day_research(cmd: str) -> str | None:
+    try:
+        from arka.agent.day_research import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "day_research " + " ".join(shlex.quote(a) for a in argv)
 
 
 def route_health_reading(cmd: str) -> str | None:
@@ -749,13 +835,29 @@ def route_generate_image(cmd: str) -> str | None:
 
 def route_generate_music(cmd: str) -> str | None:
     try:
-        from arka.generate.music import nl_to_argv
+        from arka.media.music_generate import nl_to_argv
     except ImportError:
         return None
     argv = nl_to_argv(cmd.strip())
     if not argv:
         return None
     return "generate_music " + " ".join(shlex.quote(a) for a in argv)
+
+
+def route_ai_video(cmd: str) -> str | None:
+    try:
+        from arka.media.ai_video import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "ai_video " + " ".join(shlex.quote(a) for a in argv)
+
+
+def route_generate_video(cmd: str) -> str | None:
+    """Alias for full AI video — same as route_ai_video."""
+    return route_ai_video(cmd)
 
 
 def route_backup(cmd: str) -> str | None:
@@ -864,6 +966,30 @@ def route_post_x(cmd: str) -> str | None:
     if not argv:
         return None
     return "post_x " + " ".join(shlex.quote(a) for a in argv)
+
+
+def route_post_devto(cmd: str) -> str | None:
+    try:
+        from arka.integrations.devto_post import build_devto_argv_from_nl
+    except ImportError:
+        return None
+    argv = build_devto_argv_from_nl(cmd)
+    if not argv:
+        return None
+    return "post_devto " + " ".join(shlex.quote(a) for a in argv)
+
+
+def route_signoz_publish(cmd: str) -> str | None:
+    try:
+        from arka.agent.signoz_publish import _PUBLISH_TRIGGER, build_signoz_publish_argv_from_nl
+    except ImportError:
+        return None
+    if not _PUBLISH_TRIGGER.search(cmd.strip()):
+        return None
+    argv = build_signoz_publish_argv_from_nl(cmd)
+    if argv:
+        return "signoz_publish " + " ".join(shlex.quote(a) for a in argv)
+    return "signoz_publish"
 
 
 def route_learned(cmd: str) -> str | None:
@@ -1133,9 +1259,27 @@ def route_markdown_style(cmd: str) -> str | None:
     return route or None
 
 
+def route_project_docs(cmd: str) -> str | None:
+    try:
+        from arka.integrations.project_docs import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
+
+
 def route_human_docs(cmd: str) -> str | None:
     try:
         from arka.agent.human_docs import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
+
+
+def route_website_pages(cmd: str) -> str | None:
+    try:
+        from arka.agent.website_pages import route_command
     except ImportError:
         return None
     route = route_command(cmd)
@@ -1495,6 +1639,15 @@ def route_fugu(cmd: str) -> str | None:
     return route or None
 
 
+def route_n8n(cmd: str) -> str | None:
+    try:
+        from arka.integrations.n8n import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
+
+
 def route_gemini_cli(cmd: str) -> str | None:
     try:
         from arka.integrations.gemini_cli import route_command
@@ -1653,6 +1806,15 @@ def route_url_app(cmd: str) -> str | None:
         return None
     url = re.search(r"https?://[^\s'\"]+", cmd, re.I)
     return "url_app " + shlex.quote(url.group(0)) if url else None
+
+
+def route_duplicate_text(cmd: str) -> str | None:
+    try:
+        from arka.agent.duplicate_text import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd.strip())
+    return route or None
 
 
 def route_ui_copy(cmd: str) -> str | None:
@@ -2109,6 +2271,7 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_vision_evidence,
         route_video_evidence,
         route_url_app,
+        route_duplicate_text,
         route_visual_inspection,
         route_visual_diagnose,
         route_ui_copy,
@@ -2145,7 +2308,9 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_background_processes,
         route_jsonkit,
         route_markdown_style,
+        route_project_docs,
         route_human_docs,
+        route_website_pages,
         route_agent_hub,
         route_mcp,
         route_clipboard_history,
@@ -2216,6 +2381,7 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_contextual_answer,
         route_platform_howto,
         route_fugu,
+        route_n8n,
         route_gemini_cli,
         route_harvard_ark,
         route_persona,
@@ -2226,10 +2392,13 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_gmail_email_summarize,
         route_unified_inbox,
         route_post_x,
+        route_post_devto,
+        route_signoz_publish,
         route_find_files_by_size,
         route_kalshi,
         route_remind,
         route_batch,
+        route_parallel_plan,
         route_config_share,
         route_semantic_alert,
         route_email_alert,
@@ -2238,7 +2407,9 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_meme,
         route_symbolic_image,
         route_routines,
+        route_service_autostart,
         route_fact_check,
+        route_day_research,
         route_health_reading,
         route_daily_reading,
         route_quiz_practice,
@@ -2248,6 +2419,8 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_compose_3d,
         route_scene_3d,
         route_three_d,
+        route_google_flow,
+        route_ai_video,
         route_future_predict,
         route_chart,
         route_drawing,
@@ -2261,6 +2434,8 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_generate_music,
         route_download,
         route_convert_media,
+        route_noise_remove,
+        route_create_video,
         route_compose_video,
         route_terminal_video,
         route_timer,

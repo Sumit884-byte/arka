@@ -17,13 +17,15 @@ _HINTS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("design_from_screenshot", ("from screenshot", "screenshot to", "design screenshot")),
     ("component_screenshots", ("screenshot all components", "component screenshots", "photograph ui components")),
     ("frontend_loop", ("frontend", "ui review", "visual regression")),
+    ("duplicate_text", ("duplicate text", "repeating text", "semantically same", "similar copy")),
     ("three_js_model", ("satellite", "spacecraft", "realistic 3d model", "realistic 3d asset", "real world model")),
     ("compose_slides", ("pitch deck", "slides", "presentation")),
     ("urlkit", ("broken links", "repair links", "url validation")),
-    ("self_improve", ("self improve", "improve arka", "improve routing")),
+    ("self_improve", ("self improve", "improve arka", "improve routing", "use arka mcp", "improve mcp")),
     ("self_build", ("self build", "improve self", "mcp self improve")),
     ("unified_inbox", ("unified inbox", "all google accounts unread", "multiple google accounts email")),
     ("gmail_summarize", ("summarize this email", "summarize my latest email", "what does this email say")),
+    ("project_docs", ("first person readme", "sync project docs", "update blog from code changes")),
 )
 
 
