@@ -80,6 +80,8 @@ The package name on PyPI is **`arka-agent`**. Publishing is handled by GitHub Ac
    - (Use *Pending publishers* under account settings only before the project exists on PyPI.)
 3. In GitHub: Settings → Environments → create **`pypi`** (no secrets required when using trusted publishing).
 
+   **Fallback:** add repository secret **`PYPI_API_TOKEN`** (PyPI API token scoped to `arka-agent`) if trusted publishing is not configured yet. The Publish workflow tries trusted publishing first, then falls back to the token.
+
 ### Release checklist
 
 1. Confirm the version is not already on PyPI: `pip index versions arka-agent`
