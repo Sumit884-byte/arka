@@ -26,3 +26,18 @@ def test_symbolic_route() -> None:
         "loop-engineering --iterations 2 fix tests"
     )
 
+
+def test_execute_plan_invokes_goal(monkeypatch) -> None:
+    from arka.agent.loop_engineering import LoopPlan, STAGES, execute_plan
+
+    plan = LoopPlan("fix tests", 1, STAGES, ("repo_health", "ci"), False)
+    calls: list[str] = []
+
+    def fake_goal(goal: str, **kwargs: object) -> int:
+        calls.append(goal)
+        return 0
+
+    monkeypatch.setattr("arka.agent.goal.run_goal", fake_goal)
+    assert execute_plan(plan) == 0
+    assert calls and "fix tests" in calls[0]
+

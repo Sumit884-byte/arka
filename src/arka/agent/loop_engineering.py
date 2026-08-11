@@ -47,11 +47,45 @@ def build_plan(task: str, iterations: int = 1) -> LoopPlan:
     return LoopPlan(task, iterations, STAGES, _skills_for(task))
 
 
+def build_loop_goal(plan: LoopPlan) -> str:
+    lines = [
+        f"Engineering loop task: {plan.task}",
+        f"Iterations: {plan.iterations} (max {MAX_ITERATIONS})",
+        "Stages: " + " → ".join(plan.stages),
+        "Skills to use explicitly: " + ", ".join(plan.skills),
+        "",
+        "For each iteration: observe → plan → implement minimal diff → verify (ci/tests) → review.",
+        "Stop when verification passes or iterations are exhausted.",
+    ]
+    if plan.approval_required:
+        lines.append("Approval: confirm before destructive or broad edits.")
+    return "\n".join(lines)
+
+
+def execute_plan(plan: LoopPlan) -> int:
+    goal = build_loop_goal(plan)
+    try:
+        from arka.agent.goal import run_goal
+
+        return int(
+            run_goal(
+                goal,
+                max_steps=max(12, 10 * plan.iterations),
+                auto_yes=not plan.approval_required,
+                auto_continue=True,
+            )
+            or 0
+        )
+    except ImportError as exc:
+        print(f"goal agent unavailable: {exc}", file=__import__("sys").stderr)
+        return 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Plan a bounded engineering loop")
     parser.add_argument("task", nargs="+", help="task to plan and verify")
     parser.add_argument("--iterations", "-n", type=int, default=1)
-    parser.add_argument("--apply", action="store_true", help="allow a later agent to apply the plan")
+    parser.add_argument("--apply", action="store_true", help="run goal agent to execute the plan")
     parser.add_argument("--json", action="store_true", dest="as_json")
     args = parser.parse_args(argv)
     try:
@@ -68,6 +102,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Iterations: {plan.iterations} (max {MAX_ITERATIONS})")
         print("Stages: " + " → ".join(plan.stages))
         print("Skills: " + ", ".join(plan.skills))
-        print("Approval gate: " + ("required before edits" if plan.approval_required else "accepted; verify every iteration"))
+        print(
+            "Approval gate: "
+            + ("required before edits" if plan.approval_required else "accepted; verify every iteration")
+        )
+    if args.apply:
+        return execute_plan(plan)
     return 0
 
+
+if __name__ == "__main__":
+    raise SystemExit(main())

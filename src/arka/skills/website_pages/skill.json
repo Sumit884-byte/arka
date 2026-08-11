@@ -1,0 +1,19 @@
+{
+  "name": "website_pages",
+  "description": "Plan website information architecture — divide content into pages, sitemap, nav hierarchy, and per-page outlines before building UI",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "organize website pages",
+    "divide content into pages",
+    "site structure",
+    "sitemap",
+    "information architecture",
+    "what pages should",
+    "page plan",
+    "website pages"
+  ],
+  "permissions": ["network"]
+}

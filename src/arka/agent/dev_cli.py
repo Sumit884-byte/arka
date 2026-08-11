@@ -281,6 +281,18 @@ def main(argv: list[str] | None = None) -> int:
     p_gaps.add_argument("path", nargs="?", default=None)
     p_gaps.set_defaults(func=cmd_gaps)
 
+    p_watch = sub.add_parser("watch", help="Watch repo and run changed CI on save")
+    p_watch.add_argument("--debounce", type=float, default=2.0)
+    p_watch.add_argument("path", nargs="?", default=None)
+
+    def cmd_watch(args: argparse.Namespace) -> int:
+        from arka.agent.dev_watch import watch_and_test
+
+        root = _repo_root(args.path)
+        return watch_and_test(root, debounce_sec=max(0.5, args.debounce))
+
+    p_watch.set_defaults(func=cmd_watch)
+
     p_pr = sub.add_parser("pr", help="GitHub PR diff, CI, explain, babysit")
     p_pr.add_argument("pr_argv", nargs=argparse.REMAINDER, help="pr_check subcommand args")
     p_pr.set_defaults(func=cmd_pr)

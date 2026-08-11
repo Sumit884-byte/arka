@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from arka.core import frontend_content, google_design
+from arka.core import ascii_isometric_design, frontend_content, google_design
 
 
 def should_include(goal: str = "", *, coding: bool = False) -> bool:
-    return frontend_content.should_include(goal, coding=coding) or google_design.should_include(
-        goal, coding=coding
+    return (
+        frontend_content.should_include(goal, coding=coding)
+        or google_design.should_include(goal, coding=coding)
+        or ascii_isometric_design.should_include(goal, coding=coding)
     )
 
 
@@ -28,6 +30,10 @@ def context_for(
         block = google_design.context_for(goal, coding=coding, limit_chars=limit_chars)
         if block:
             parts.append(block)
+    if ascii_isometric_design.should_include(goal, coding=coding):
+        block = ascii_isometric_design.context_for(goal, coding=coding, limit_chars=limit_chars)
+        if block:
+            parts.append(block)
     return "\n\n".join(parts)
 
 
@@ -39,6 +45,10 @@ def read_guides(*, max_chars: int = 4000, coding: bool = True) -> str:
             parts.append(body)
     if google_design.should_include("", coding=coding):
         body = google_design.read_guide(max_chars=max_chars)
+        if body:
+            parts.append(body)
+    if ascii_isometric_design.should_include("", coding=coding):
+        body = ascii_isometric_design.read_guide(max_chars=max_chars)
         if body:
             parts.append(body)
     return "\n\n---\n\n".join(parts)
@@ -56,6 +66,14 @@ def resolve_markdown_alias(path: str, *, cwd: Path | None = None) -> str | None:
     if normalized in frontend_aliases or normalized.endswith("frontend-content-guide.md"):
         bundled = frontend_content.guide_path()
         return str(bundled) if bundled is not None else None
+    try:
+        from arka.core import ascii_isometric_design
+
+        alias = ascii_isometric_design.resolve_alias(path, cwd=cwd)
+        if alias:
+            return alias
+    except ImportError:
+        pass
     return google_design.resolve_alias(path, cwd=cwd)
 
 
@@ -63,4 +81,5 @@ def status() -> dict[str, object]:
     return {
         "frontend_content": frontend_content.status(),
         "google_design": google_design.status(),
+        "ascii_isometric_design": ascii_isometric_design.status(),
     }

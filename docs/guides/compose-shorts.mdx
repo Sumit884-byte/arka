@@ -1,0 +1,124 @@
+---
+title: "Compose shorts"
+description: "Make 30–90s vertical shorts with compose_video — terminal tool tips, hybrid B-roll, AI images, and CTA endings."
+icon: "mobile-screen"
+---
+
+Short-form explainers (YouTube Shorts, Reels, TikTok) use the same `compose_video`
+pipeline as long explainers, with tighter scene counts and optional 9:16 output.
+
+**Defaults that work well for shorts:** 4–5 scenes, 30–90s total, `--no-text`
+(voiceover only), hybrid B-roll or `--ai-images-only`.
+
+```bash
+arka compose_video check   # ffmpeg, Pillow, stock keys
+```
+
+See also: [Compose video](/guides/compose-video) for hybrid mode, custom script APIs, and env vars.
+
+## Quick recipe (LLM script)
+
+```bash
+arka compose_video compose \
+  --topic "fzf terminal fuzzy finder for developers" \
+  --llm --scenes 4 --duration 60s \
+  --no-text \
+  -o fzf-short.mp4
+```
+
+Hybrid mode (default) mixes stock **video** and **photo** B-roll per scene. Add
+`--ai-images-only` when you want Gemini/Pollinations images instead of stock photos
+(requires `GEMINI_API_KEY` or `POLLINATIONS_API_KEY`).
+
+```bash
+arka compose_video compose \
+  --topic "fzf terminal fuzzy finder" \
+  --llm --scenes 5 --duration 75s \
+  --no-text --ai-images-only \
+  -o fzf-short-ai.mp4
+```
+
+## Terminal tool short (custom script + CTA)
+
+For repeatable shorts (intro → value → install tip → like/subscribe), use a JSON
+script instead of `--llm`. Keep narration punchy; last scene is your CTA.
+
+`terminal-short-script.json`:
+
+```json
+{
+  "scenes": [
+    {
+      "title": "Meet fzf",
+      "narration": "fzf is a command-line fuzzy finder that makes searching files, history, and processes blazing fast.",
+      "image_query": "terminal fuzzy search developer dark theme",
+      "duration": 8
+    },
+    {
+      "title": "Why devs love it",
+      "narration": "Pipe any list into fzf, type a few letters, and jump exactly where you need.",
+      "image_query": "developer terminal workflow productivity",
+      "duration": 10
+    },
+    {
+      "title": "Try it today",
+      "narration": "Install with your package manager, bind Ctrl-R for history search, and never hunt through output again.",
+      "image_query": "install terminal tool command line",
+      "duration": 8
+    },
+    {
+      "title": "Stay tuned",
+      "narration": "If this helped, like and subscribe for more terminal tips and dev tools.",
+      "image_query": "subscribe like notification",
+      "duration": 10
+    }
+  ]
+}
+```
+
+```bash
+arka compose_video compose \
+  --script terminal-short-script.json \
+  --no-text \
+  -o fzf-short.mp4
+```
+
+Set `media_type` per scene when you want explicit control (`video` for motion B-roll,
+`image` for diagrams or UI stills). See [Compose video](/guides/compose-video#hybrid-mode-default).
+
+## Vertical 9:16 (Shorts / Reels)
+
+`compose_video` has no `--orientation` flag yet. Set env vars for portrait output
+and vertical stock search:
+
+```bash
+VIDEO_ORIENTATION=portrait VIDEO_WIDTH=1080 VIDEO_HEIGHT=1920 \
+  arka compose_video compose \
+  --script terminal-short-script.json \
+  --no-text \
+  -o fzf-short-vertical.mp4
+```
+
+For **full AI video** clips (not stock B-roll), use `ai_video` with `VIDEO_ASPECT=9:16`:
+
+```bash
+VIDEO_ASPECT=9:16 arka ai_video "cinematic terminal hacker desk neon" -d 8 -o clip.mp4
+```
+
+## Useful flags & env
+
+| Flag / env | Shorts use |
+| --- | --- |
+| `--scenes 4` | Override auto scene count (prefer explicit for &lt;90s) |
+| `--duration 60s` | Target runtime (`30s`, `90s`, `1m30s`) |
+| `--no-text` | Voiceover only — default in hybrid mode |
+| `--ai-images-only` | AI-generated scene images |
+| `VIDEO_MODE=hybrid` | Stock video + photos (default) |
+| `VIDEO_SCENE_SEC=5` | Default seconds per scene when duration not set per scene |
+| `PEXELS_API_KEY` / `PIXABAY_API_KEY` | Stock video for hybrid B-roll |
+
+Natural language also routes correctly:
+
+```bash
+arka "make a 60 second video about fzf with no text, 4 scenes"
+```

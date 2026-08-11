@@ -119,8 +119,21 @@ arka_describe_video.py (screen uses fish + describe.py)
 MCP
 ---
 Client: integrations/mcp_client.py, mcp_manager.py, mcp_cli.py — ~/.config/arka/mcp.json
-Server: integrations/mcp_server.py — Arka as stdio MCP (arka_ask, arka_remember, arka_skill, …)
+Server: integrations/mcp_server.py — Arka as stdio MCP (arka_ask, arka_remember, arka_recall,
+  arka_intelligence, arka_skill, …)
 CLI: arka mcp … | bin/arka_mcp.py, bin/arka_mcp_server.py
+
+ARKA INTELLIGENCE (GRAPH MEMORY)
+--------------------------------
+Product vision: live entity/relationship graph — not static vector chunks.
+Module: src/arka/memory/graph_memory.py
+Store: ~/.cache/fish-agent/memory_graph.json (entities + edges distilled on remember)
+Recall: entity match → BFS edge traversal → relational narrative (wired into unified_memory)
+MCP: arka_intelligence (action=status|remember|recall|rebuild|export)
+CLI: python -m arka.memory.graph_memory status|remember|recall|rebuild|export
+Env: ARKA_GRAPH_MEMORY=1 (default on)
+Coexists with: Supermemory (cloud/profile), TurboQuant semantic index, pdf/rag (document chunks).
+Graph layer is relational; document RAG remains chunk/vector-based.
 
 THIRD-PARTY SKILLS
 ------------------
@@ -391,6 +404,7 @@ QUICK REFERENCE: TOP-LEVEL MODULES
   vision/        image, screen, video description
   integrations/  MCP, Google, Spotify, calendar, sports, currency, docker, …
   core/          security, memory, personalize, platform, kits (json/time/url/text)
+  memory/        graph_memory — Arka Intelligence entity/relationship graph (not chunk RAG)
   media/         summarize, compose_video/slides, convert_media
   pdf/           RAG ingest/ask, pdf_tools
   stock/         analysis, predictions, turboquant
@@ -1080,6 +1094,89 @@ RECENT FILE CHANGES (CHANGELOG)
   - added src/arka/agent/contextual_answer.py (agent skill)
   - modified src/arka/agent/core.py (agent skill)
   - … and 160 more files
+
+  --- sync 2026-08-03 19:08 UTC (fe22af4a..e267d555)
+  - modified .gitignore
+  - modified CONTRIBUTING.md (docs)
+  - modified README.md (docs)
+  - added bin/arka_daily_reading.py (python)
+  - added bin/arka_dev_tools.py (python)
+  - added bin/arka_generate_music.py (python)
+  - added bin/arka_health_reading.py (python)
+  - added bin/arka_predict.py (python)
+  - modified docs/cn/concepts/llm.mdx (docs)
+  - modified docs/cn/concepts/routing.mdx (docs)
+  - modified docs/cn/guides/agent-hub.mdx (docs)
+  - modified docs/cn/guides/agent-teams.mdx (docs)
+  - modified docs/cn/guides/ascii-art.mdx (docs)
+  - modified docs/cn/guides/chat.mdx (docs)
+  - modified docs/cn/guides/cli.mdx (docs)
+  - modified docs/cn/guides/compose-3d.mdx (docs)
+  - modified docs/cn/guides/data-ask.mdx (docs)
+  - modified docs/cn/guides/free-credits.mdx (docs)
+  - modified docs/cn/guides/gemini-cli.mdx (docs)
+  - modified docs/cn/guides/hermes-features.mdx (docs)
+  - modified docs/cn/guides/kaggle.mdx (docs)
+  - modified docs/cn/guides/kalshi.mdx (docs)
+  - modified docs/cn/guides/mcp.mdx (docs)
+  - modified docs/cn/guides/openclaw-features.mdx (docs)
+  - modified docs/cn/guides/pdf-rag.mdx (docs)
+  - modified docs/cn/guides/personas.mdx (docs)
+  - modified docs/cn/guides/post-x.mdx (docs)
+  - modified docs/cn/guides/professions.mdx (docs)
+  - modified docs/cn/guides/route-learn.mdx (docs)
+  - modified docs/cn/guides/select-model.mdx (docs)
+  - modified docs/cn/guides/skills.mdx (docs)
+  - modified docs/cn/guides/stocks.mdx (docs)
+  - modified docs/cn/guides/testing.mdx (docs)
+  - modified docs/cn/guides/youtube.mdx (docs)
+  - modified docs/cn/quickstart.mdx (docs)
+  - modified docs/cn/reference/aliases.mdx (docs)
+  - modified docs/concepts/llm.mdx (docs)
+  - modified docs/concepts/routing.mdx (docs)
+  - modified docs/docs.json
+  - modified docs/guides/agent-hub.mdx (docs)
+  - modified docs/guides/agent-teams.mdx (docs)
+  - modified docs/guides/ascii-art.mdx (docs)
+  - modified docs/guides/browser-check.mdx (docs)
+  - modified docs/guides/chat.mdx (docs)
+  - modified docs/guides/cli.mdx (docs)
+  - modified docs/guides/code-with-arka.mdx (docs)
+  - modified docs/guides/coding-tui.mdx (docs)
+  - modified docs/guides/compose-3d.mdx (docs)
+  - modified docs/guides/compose-slides.mdx (docs)
+  - modified docs/guides/council.mdx (docs)
+  - added docs/guides/daily-reading.mdx (docs)
+  - modified docs/guides/data-ask.mdx (docs)
+  - added docs/guides/dev.mdx (docs)
+  - modified docs/guides/free-credits.mdx (docs)
+  - modified docs/guides/gemini-cli.mdx (docs)
+  - added docs/guides/generate-music.mdx (docs)
+  - modified docs/guides/hermes-features.mdx (docs)
+  - modified docs/guides/interesting-fact.mdx (docs)
+  - modified docs/guides/kaggle.mdx (docs)
+  - modified docs/guides/kalshi.mdx (docs)
+  - modified docs/guides/mcp.mdx (docs)
+  - modified docs/guides/openclaw-features.mdx (docs)
+  - modified docs/guides/operation-modes.mdx (docs)
+  - modified docs/guides/pdf-rag.mdx (docs)
+  - modified docs/guides/personas.mdx (docs)
+  - modified docs/guides/post-x.mdx (docs)
+  - modified docs/guides/professions.mdx (docs)
+  - modified docs/guides/quiz-practice.mdx (docs)
+  - modified docs/guides/railway-coding-skills.mdx (docs)
+  - modified docs/guides/route-learn.mdx (docs)
+  - modified docs/guides/select-model.mdx (docs)
+  - modified docs/guides/self-improve.mdx (docs)
+  - modified docs/guides/skills.mdx (docs)
+  - modified docs/guides/stocks.mdx (docs)
+  - modified docs/guides/testing.mdx (docs)
+  - modified docs/guides/timezone-convert.mdx (docs)
+  - modified docs/guides/ultra-fast-development.mdx (docs)
+  - modified docs/guides/video-capture.mdx (docs)
+  - added docs/guides/web-dashboard.mdx (docs)
+  - modified docs/guides/youtube.mdx (docs)
+  - … and 84 more files
 
 ================================================================================
 END — update this file when adding skills, routing rules, or major modules

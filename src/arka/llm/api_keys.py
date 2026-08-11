@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from arka.llm.providers import provider_specs
 
 _PLACEHOLDER_RE = re.compile(
-    r"your_.*_here|^changeme$|^xxx+$|^replace[_-]?me$",
+    r"your[-_].*[-_]here|your[-_]secret[-_]here|^changeme$|^xxx+$|^replace[_-]?me$",
     re.IGNORECASE,
 )
 

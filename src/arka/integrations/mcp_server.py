@@ -89,6 +89,13 @@ def _mcp_disabled_tools() -> set[str]:
         disabled = set(MCP_DEFAULT_DISABLED_TOOLS)
     disabled |= _csv_env("ARKA_MCP_DISABLED_TOOLS")
     disabled -= _csv_env("ARKA_MCP_ENABLED_TOOLS")
+    try:
+        from arka.core.just_ai import JUST_AI_MCP_TOOLS, is_just_ai
+
+        if is_just_ai():
+            disabled |= {tool.name for tool in _build_tools() if tool.name not in JUST_AI_MCP_TOOLS}
+    except ImportError:
+        pass
     return disabled
 
 
@@ -209,18 +216,191 @@ def _handle_arka_recall(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"unified_memory unavailable: {exc}") from exc
 
 
-def _handle_arka_skill(arguments: dict[str, Any]) -> str:
-    skill = str(arguments.get("skill") or arguments.get("name") or "").strip()
-    if not skill:
-        raise ValueError("skill is required")
-    args = arguments.get("args") or []
+def _handle_arka_intelligence(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "status").strip().lower()
+    try:
+        import arka.memory.graph_memory as gr_mod
+    except ImportError as exc:
+        raise RuntimeError(f"graph memory unavailable: {exc}") from exc
+
+    if action == "status":
+        return json.dumps(gr_mod.status(verbose=bool(arguments.get("verbose", True))), indent=2)
+    if action == "remember":
+        text = str(arguments.get("text") or "").strip()
+        if not text:
+            raise ValueError("text is required when action=remember")
+        return json.dumps(gr_mod.graph_remember(text), indent=2)
+    if action == "recall":
+        goal = str(arguments.get("goal") or arguments.get("query") or "").strip()
+        if not goal:
+            raise ValueError("goal is required when action=recall")
+        limit_chars = _mcp_int(arguments.get("limit_chars"), 1200)
+        narrative, meta = gr_mod.graph_recall(goal, limit_chars=max(200, limit_chars))
+        return json.dumps({"narrative": narrative or "(no graph matches)", "meta": meta}, indent=2)
+    if action == "rebuild":
+        return json.dumps(gr_mod.rebuild_from_memory_file(), indent=2)
+    if action == "export":
+        fmt = str(arguments.get("format") or "mermaid").strip().lower()
+        if fmt == "json":
+            return json.dumps(gr_mod.load_graph(), indent=2)
+        return gr_mod.export_mermaid(limit=_mcp_int(arguments.get("limit"), 40))
+    raise ValueError("action must be status, remember, recall, rebuild, or export")
+
+
+def _build_skill_line(skill: str, args: Any) -> str:
+    """Join skill + args safely (paths with spaces stay one token)."""
+    import shlex
+
+    head = str(skill or "").strip()
     if isinstance(args, str):
-        extra = args.split()
+        extra = shlex.split(args) if args.strip() else []
     elif isinstance(args, list):
         extra = [str(a) for a in args]
     else:
         raise ValueError("args must be a string or list")
-    skill_line = " ".join([skill, *extra]).strip()
+    return shlex.join([head, *extra]) if extra else head
+
+
+def _direct_mcp_from_skill(skill: str, args: Any) -> tuple[str, dict[str, Any]] | None:
+    """Route typed skill invocations (batch, rag, ocr) to dedicated MCP handlers."""
+    import shlex
+
+    head = str(skill or "").strip().split(None, 1)[0].lower().replace("-", "_")
+    if isinstance(args, str):
+        parts = shlex.split(args) if args.strip() else []
+    elif isinstance(args, list):
+        parts = [str(a) for a in args]
+    else:
+        parts = []
+
+    if head in {"arka_batch", "batch"}:
+        if not parts:
+            return "arka_batch", {"action": "list"}
+        action = parts[0].lower()
+        payload: dict[str, Any] = {"action": action, "name": "default"}
+        if action == "start":
+            until = ""
+            if "--until" in parts:
+                idx = parts.index("--until")
+                if idx + 1 < len(parts):
+                    until = parts[idx + 1]
+            elif len(parts) > 1:
+                until = parts[1]
+            if not until:
+                raise ValueError("until is required for batch start")
+            payload["until"] = until
+            if "--name" in parts:
+                idx = parts.index("--name")
+                if idx + 1 < len(parts):
+                    payload["name"] = parts[idx + 1]
+        elif action == "add":
+            prompt_parts: list[str] = []
+            i = 1
+            while i < len(parts):
+                if parts[i] in {"--name", "-n"} and i + 1 < len(parts):
+                    payload["name"] = parts[i + 1]
+                    i += 2
+                    continue
+                if parts[i] in {"--until", "-u"} and i + 1 < len(parts):
+                    payload["until"] = parts[i + 1]
+                    i += 2
+                    continue
+                prompt_parts.append(parts[i])
+                i += 1
+            payload["prompt"] = " ".join(prompt_parts).strip()
+            if not payload["prompt"]:
+                raise ValueError("prompt is required for batch add")
+        elif action in {"run", "due", "clear", "list"}:
+            if "--name" in parts:
+                idx = parts.index("--name")
+                if idx + 1 < len(parts):
+                    payload["name"] = parts[idx + 1]
+            if "--print" in parts:
+                payload["print_only"] = True
+            if "--keep" in parts:
+                payload["keep"] = True
+        else:
+            return None
+        return "arka_batch", payload
+
+    if not parts:
+        return None
+
+    if head in {"arka_rag", "rag_skill"}:
+        action = parts[0].lower()
+        payload = {"action": action}
+        if action in {"ingest", "codebase_ingest", "codebase-ingest", "batch_ingest", "batch-ingest"}:
+            if len(parts) < 2:
+                raise ValueError(f"path is required for {action}")
+            payload["path"] = parts[1]
+            if action.startswith("codebase") and "-n" in parts:
+                idx = parts.index("-n")
+                if idx + 1 < len(parts):
+                    payload["name"] = parts[idx + 1]
+        elif action == "ask":
+            doc = None
+            question_parts: list[str] = []
+            i = 1
+            while i < len(parts):
+                if parts[i] in {"-d", "--doc"} and i + 1 < len(parts):
+                    doc = parts[i + 1]
+                    i += 2
+                    continue
+                question_parts.append(parts[i])
+                i += 1
+            payload["document"] = doc
+            payload["question"] = " ".join(question_parts).strip()
+            if not payload["question"]:
+                raise ValueError("question is required for ask")
+        return "arka_rag", payload
+
+    if head in {"arka_ocr", "ocr_skill"}:
+        action = parts[0].lower()
+        if action in {"extract", "pdf", "auto"} and len(parts) >= 2:
+            payload = {"action": action, "path": parts[1]}
+            for i, token in enumerate(parts):
+                if token in {"-o", "--output"} and i + 1 < len(parts):
+                    payload["output"] = parts[i + 1]
+                if token == "--language" and i + 1 < len(parts):
+                    payload["language"] = parts[i + 1]
+            return "arka_ocr", payload
+        if action in {"extract", "pdf", "auto"}:
+            raise ValueError("path is required")
+    return None
+
+
+def _handle_arka_skill(arguments: dict[str, Any]) -> str:
+    skill = str(arguments.get("skill") or arguments.get("name") or "").strip()
+    if not skill:
+        raise ValueError("skill is required")
+    try:
+        from arka.core.skill_requirements import preflight_skill
+
+        head = skill.split()[0].replace("-", "_")
+        ok, msg = preflight_skill(head)
+        if not ok and not arguments.get("force"):
+            raise ValueError(msg)
+    except ImportError:
+        pass
+    args = arguments.get("args") or []
+    routed = _direct_mcp_from_skill(skill, args)
+    if routed is not None:
+        tool_name, tool_args = routed
+        try:
+            from arka.integrations.mcp_logs import log_mcp_event
+
+            log_mcp_event(
+                "server.route_decision",
+                tool="arka_skill",
+                route_via="skill_direct",
+                route_target=tool_name,
+                prompt=skill,
+                args_summary=tool_args,
+            )
+        except ImportError:
+            pass
+        return call_mcp_tool(tool_name, tool_args)
+    skill_line = _build_skill_line(skill, args)
     try:
         code, output = _run_skill_captured(skill_line, allow_browser=bool(arguments.get("allow_browser", False)))
         if code != 0 and not output:
@@ -239,12 +419,31 @@ def _handle_arka_capabilities(arguments: dict[str, Any]) -> str:
         skill_dir = Path(__file__).resolve().parents[1] / "agent"
         names = sorted(path.stem for path in skill_dir.glob("*.py") if path.stem != "__init__")
         tools = sorted(tool.name for tool in _build_tools() if tool.name not in _mcp_disabled_tools())
+        from arka.integrations.mcp_local_files import (
+            LOCAL_FILE_TOOL_NOTICE,
+            MCP_LOCAL_FILE_TOOLS,
+            agent_execution_rules_payload,
+        )
+
         payload = {
             "mcp_tools": tools,
             "dispatch_skills": names,
             "mcp_disabled_by_default": {
                 "tools": sorted(_mcp_disabled_tools()),
                 "skill_heads": sorted(_mcp_disabled_skill_heads()),
+            },
+            "agent_execution_rules": agent_execution_rules_payload(),
+            "local_file_tools": {
+                "tools": sorted(MCP_LOCAL_FILE_TOOLS & set(tools)),
+                "notice": LOCAL_FILE_TOOL_NOTICE,
+                "use_when": (
+                    "Prefer arka_ocr and arka_rag when the agent can read paths on the local machine "
+                    "(e.g. Cursor workspace files). Do not call them from cloud agents without mounted files."
+                ),
+                "verify_with": (
+                    "Follow agent_execution_rules.incremental_verify: demo on one local file first, "
+                    "confirm output, then a second file — only then report verified."
+                ),
             },
             "umbrella_tool": {
                 "name": "arka_route",
@@ -264,10 +463,41 @@ def _handle_arka_route(arguments: dict[str, Any]) -> str:
     if not prompt:
         raise ValueError("prompt is required")
     try:
+        from arka.core.just_ai import is_just_ai
+
+        if is_just_ai():
+            try:
+                from arka.integrations.mcp_logs import log_mcp_event
+
+                log_mcp_event(
+                    "server.route_decision",
+                    tool="arka_route",
+                    route_via="just_ai",
+                    route_target="arka_ask",
+                    prompt=prompt,
+                )
+            except ImportError:
+                pass
+            return _handle_arka_ask(arguments)
+    except ImportError:
+        pass
+    try:
         from arka.router import route
 
         decision = route(prompt)
         skill = getattr(decision, "skill", "") or ""
+        try:
+            from arka.integrations.mcp_logs import log_mcp_event
+
+            log_mcp_event(
+                "server.route_decision",
+                tool="arka_route",
+                route_via="router",
+                route_target=skill or "none",
+                prompt=prompt,
+            )
+        except ImportError:
+            pass
         if not skill:
             return "No Arka route found; use arka_ask for general questions."
         code, output = _run_skill_captured(skill)
@@ -453,6 +683,144 @@ def _handle_arka_routines(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"routines unavailable: {exc}") from exc
 
 
+def _handle_arka_batch(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "list").strip().lower()
+    name = str(arguments.get("name") or arguments.get("batch") or "default").strip() or "default"
+    try:
+        from arka.agent import batch
+
+        if action == "start":
+            until = str(arguments.get("until") or arguments.get("due") or "").strip()
+            if not until:
+                raise ValueError("until is required for start (e.g. '6pm', 'in 1 hour')")
+            try:
+                created = batch.start_batch(name=name, until=until)
+            except ValueError as exc:
+                raise ValueError(str(exc)) from exc
+            return json.dumps(batch.batch_to_dict(created), indent=2)
+        if action == "add":
+            prompt = str(arguments.get("prompt") or arguments.get("text") or "").strip()
+            if not prompt:
+                raise ValueError("prompt is required for add")
+            until = str(arguments.get("until") or arguments.get("due") or "").strip()
+            try:
+                updated = batch.add_to_batch(name=name, prompt=prompt, until=until)
+            except ValueError as exc:
+                raise ValueError(str(exc)) from exc
+            return json.dumps(batch.batch_to_dict(updated), indent=2)
+        if action == "list":
+            rows = batch.batches_to_dict(batch.list_batches())
+            return json.dumps(rows, indent=2)
+        if action == "clear":
+            existed = batch.clear_batch(name=name)
+            return json.dumps({"name": name, "cleared": existed}, indent=2)
+        if action in {"run", "due"}:
+            print_only = bool(arguments.get("print_only", arguments.get("print", False)))
+            keep = bool(arguments.get("keep", False))
+            try:
+                code, message = batch.run_batch(
+                    name=name,
+                    print_only=print_only,
+                    keep=keep,
+                    due_only=action == "due",
+                )
+            except ValueError as exc:
+                raise ValueError(str(exc)) from exc
+            if print_only or "not due yet" in message:
+                return message
+            if code != 0:
+                raise RuntimeError(message)
+            return message
+        raise ValueError("action must be start, add, list, run, due, or clear")
+    except ImportError as exc:
+        raise RuntimeError(f"batch unavailable: {exc}") from exc
+
+
+def _handle_arka_service_autostart(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "list").strip().lower()
+    try:
+        from arka.integrations.service_autostart import (
+            autostart_status,
+            get_service,
+            install_autostart,
+            list_services,
+            run_service,
+            service_add,
+            service_remove,
+            uninstall_autostart,
+        )
+
+        if action == "list":
+            return json.dumps(list_services(), indent=2)
+        if action == "add":
+            service_id = str(arguments.get("id") or arguments.get("name") or "").strip()
+            if not service_id:
+                raise ValueError("id is required for add")
+            command = str(arguments.get("command") or "").strip()
+            script = str(arguments.get("script") or "").strip()
+            description = str(arguments.get("description") or arguments.get("desc") or "").strip()
+            if not command and not script and not description:
+                raise ValueError("command, script, or description is required for add")
+            env_raw = arguments.get("env")
+            env_map: dict[str, str] = {}
+            if isinstance(env_raw, dict):
+                env_map = {str(k): str(v) for k, v in env_raw.items()}
+            entry = service_add(
+                service_id=service_id,
+                name=str(arguments.get("display_name") or arguments.get("label") or "").strip(),
+                command=command,
+                script=script,
+                description=description,
+                workdir=str(arguments.get("workdir") or "").strip(),
+                env=env_map,
+            )
+            return json.dumps(entry, indent=2)
+        if action == "install":
+            service_id = str(arguments.get("id") or arguments.get("name") or "").strip()
+            if not service_id:
+                raise ValueError("id is required for install")
+            with contextlib.redirect_stdout(io.StringIO()):
+                code = install_autostart(service_id)
+            if code != 0:
+                raise RuntimeError(f"install failed with exit code {code}")
+            rows = autostart_status(service_id)
+            return json.dumps(rows[0] if rows else {"id": service_id, "installed": "true"}, indent=2)
+        if action == "uninstall":
+            service_id = str(arguments.get("id") or arguments.get("name") or "").strip()
+            if not service_id:
+                raise ValueError("id is required for uninstall")
+            with contextlib.redirect_stdout(io.StringIO()):
+                code = uninstall_autostart(service_id)
+            if code != 0:
+                raise RuntimeError(f"uninstall failed with exit code {code}")
+            return f"Removed autostart for {service_id}"
+        if action == "remove":
+            service_id = str(arguments.get("id") or arguments.get("name") or "").strip()
+            if not service_id:
+                raise ValueError("id is required for remove")
+            if not service_remove(service_id):
+                raise ValueError(f"No service {service_id}")
+            return f"Removed service {service_id}"
+        if action == "status":
+            service_id = str(arguments.get("id") or arguments.get("name") or "").strip()
+            rows = autostart_status(service_id or None)
+            if service_id and not rows:
+                raise ValueError(f"No service {service_id}")
+            return json.dumps(rows, indent=2)
+        if action == "run":
+            service_id = str(arguments.get("id") or arguments.get("name") or "").strip()
+            if not service_id:
+                raise ValueError("id is required for run")
+            if not get_service(service_id):
+                raise ValueError(f"No service {service_id}")
+            with contextlib.redirect_stdout(io.StringIO()):
+                code = run_service(service_id)
+            return json.dumps({"id": service_id, "exit_code": code}, indent=2)
+        raise ValueError("action must be list, add, install, uninstall, remove, status, or run")
+    except ImportError as exc:
+        raise RuntimeError(f"service_autostart unavailable: {exc}") from exc
+
+
 def _handle_arka_session_memory(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "status").strip().lower()
     try:
@@ -541,6 +909,50 @@ def _handle_arka_subagent(arguments: dict[str, Any]) -> str:
         raise ValueError("action must be spawn, list, status, or resume")
     except ImportError as exc:
         raise RuntimeError(f"subagent unavailable: {exc}") from exc
+
+
+def _handle_arka_parallel(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "plan").strip().lower()
+    try:
+        from arka.agent.parallel_plan import (
+            decompose_parallel,
+            format_plan,
+            load_run,
+            run_parallel_subagents,
+        )
+
+        if action == "plan":
+            goal = str(arguments.get("goal") or arguments.get("task") or "").strip()
+            if not goal:
+                raise ValueError("goal is required for plan")
+            plan = decompose_parallel(goal)
+            if arguments.get("json", True):
+                return json.dumps(plan.to_dict(), indent=2)
+            return format_plan(plan)
+        if action == "run":
+            goal = str(arguments.get("goal") or arguments.get("task") or "").strip()
+            if not goal:
+                raise ValueError("goal is required for run")
+            plan = decompose_parallel(goal)
+            if not plan.tasks:
+                raise ValueError("no tasks produced from goal")
+            record = run_parallel_subagents(
+                plan,
+                sync=bool(arguments.get("sync", False)),
+                plan_id=str(arguments.get("plan_id") or "").strip() or None,
+            )
+            return json.dumps(record, indent=2)
+        if action == "status":
+            plan_id = str(arguments.get("plan_id") or arguments.get("id") or "").strip()
+            if not plan_id:
+                raise ValueError("plan_id is required for status")
+            record = load_run(plan_id)
+            if not record:
+                raise ValueError(f"unknown parallel run: {plan_id}")
+            return json.dumps(record, indent=2)
+        raise ValueError("action must be plan, run, or status")
+    except ImportError as exc:
+        raise RuntimeError(f"parallel_plan unavailable: {exc}") from exc
 
 
 def _handle_arka_jules(arguments: dict[str, Any]) -> str:
@@ -725,6 +1137,442 @@ def _handle_arka_convert_media(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"convert_media unavailable: {exc}") from exc
 
 
+def _handle_arka_noise_remove(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "remove").strip().lower()
+    try:
+        from arka.media.noise_remove import cmd_check, media_info, nl_to_argv, noise_remove_result
+
+        if action == "check":
+            import argparse
+            import io
+            from contextlib import redirect_stderr, redirect_stdout
+
+            buf = io.StringIO()
+            with redirect_stdout(buf), redirect_stderr(buf):
+                code = cmd_check(argparse.Namespace())
+            return json.dumps({"exit_code": code, "report": buf.getvalue().strip()}, indent=2)
+        if action == "detect":
+            path = str(arguments.get("path") or arguments.get("file") or arguments.get("input") or "").strip()
+            if not path:
+                raise ValueError("path is required when action=detect")
+            return json.dumps(media_info(path), indent=2)
+        if action == "parse":
+            text = str(arguments.get("text") or arguments.get("query") or arguments.get("goal") or "").strip()
+            if not text:
+                raise ValueError("text is required when action=parse")
+            argv = nl_to_argv(text)
+            return json.dumps({"argv": argv, "command": "noise_remove " + " ".join(argv) if argv else ""}, indent=2)
+        if action == "remove":
+            path = str(arguments.get("path") or arguments.get("file") or arguments.get("input") or "").strip()
+            if not path:
+                raise ValueError("path is required when action=remove")
+            output = str(arguments.get("output") or arguments.get("out") or "").strip() or None
+            strength = arguments.get("strength")
+            noise_floor = arguments.get("noise_floor")
+            audio_only = bool(arguments.get("audio_only"))
+            result = noise_remove_result(
+                path,
+                output=output,
+                strength=float(strength) if strength is not None else 12,
+                noise_floor=_mcp_float_optional(noise_floor),
+                audio_only=audio_only,
+            )
+            return json.dumps(result, indent=2)
+        raise ValueError("action must be remove, detect, check, or parse")
+    except (FileNotFoundError, ValueError) as exc:
+        raise ValueError(str(exc)) from exc
+    except ImportError as exc:
+        raise RuntimeError(f"noise_remove unavailable: {exc}") from exc
+
+
+def _handle_arka_edit_video(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "trim").strip().lower()
+    try:
+        from arka.media.edit_video import cmd_check, edit_video_result, media_info, nl_to_argv
+
+        if action == "check":
+            import argparse
+            import io
+            from contextlib import redirect_stderr, redirect_stdout
+
+            buf = io.StringIO()
+            with redirect_stdout(buf), redirect_stderr(buf):
+                code = cmd_check(argparse.Namespace())
+            return json.dumps({"exit_code": code, "report": buf.getvalue().strip()}, indent=2)
+        if action == "detect":
+            path = str(arguments.get("path") or arguments.get("file") or arguments.get("input") or "").strip()
+            if not path:
+                raise ValueError("path is required when action=detect")
+            return json.dumps(media_info(path), indent=2)
+        if action == "parse":
+            text = str(arguments.get("text") or arguments.get("query") or arguments.get("goal") or "").strip()
+            if not text:
+                raise ValueError("text is required when action=parse")
+            argv = nl_to_argv(text)
+            return json.dumps({"argv": argv, "command": "edit_video " + " ".join(argv) if argv else ""}, indent=2)
+        if action in {"trim", "concat", "overlay-text", "overlay", "extract-audio", "extract", "crop", "resize", "mux-audio", "mux"}:
+            path = str(arguments.get("path") or arguments.get("file") or arguments.get("input") or "").strip() or None
+            paths_raw = arguments.get("paths") or arguments.get("inputs")
+            paths = [str(p) for p in paths_raw] if isinstance(paths_raw, list) else None
+            output = str(arguments.get("output") or arguments.get("out") or "").strip() or None
+            text = str(arguments.get("text") or "").strip() or None
+            audio = str(arguments.get("audio") or "").strip() or None
+            result = edit_video_result(
+                action,
+                path=path,
+                paths=paths,
+                output=output,
+                start=float(arguments.get("start") or 0),
+                duration=_mcp_float_optional(arguments.get("duration")),
+                end=_mcp_float_optional(arguments.get("end")),
+                text=text,
+                position=str(arguments.get("position") or "bottom"),
+                fontsize=int(arguments.get("fontsize") or 48),
+                color=str(arguments.get("color") or "white"),
+                width=int(arguments["width"]) if arguments.get("width") is not None else None,
+                height=int(arguments["height"]) if arguments.get("height") is not None else None,
+                x=int(arguments.get("x") or 0),
+                y=int(arguments.get("y") or 0),
+                format=str(arguments.get("format") or "mp3"),
+                audio=audio,
+                shortest=not bool(arguments.get("no_shortest")),
+            )
+            return json.dumps(result, indent=2)
+        raise ValueError(
+            "action must be trim, concat, overlay-text, extract-audio, crop, resize, mux-audio, detect, check, or parse"
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        raise ValueError(str(exc)) from exc
+    except ImportError as exc:
+        raise RuntimeError(f"edit_video unavailable: {exc}") from exc
+
+
+def _handle_arka_dub_video(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "dub").strip().lower()
+    try:
+        from arka.media.dub_video import cmd_check, dub_video_result, nl_to_argv
+        from arka.media.edit_video import media_info
+
+        if action == "check":
+            import argparse
+            import io
+            from contextlib import redirect_stderr, redirect_stdout
+
+            buf = io.StringIO()
+            with redirect_stdout(buf), redirect_stderr(buf):
+                code = cmd_check(argparse.Namespace())
+            return json.dumps({"exit_code": code, "report": buf.getvalue().strip()}, indent=2)
+        if action == "detect":
+            path = str(arguments.get("path") or arguments.get("file") or arguments.get("input") or "").strip()
+            if not path:
+                raise ValueError("path is required when action=detect")
+            return json.dumps(media_info(path), indent=2)
+        if action == "parse":
+            text = str(arguments.get("text") or arguments.get("query") or arguments.get("goal") or "").strip()
+            if not text:
+                raise ValueError("text is required when action=parse")
+            argv = nl_to_argv(text)
+            return json.dumps({"argv": argv, "command": "dub_video " + " ".join(argv) if argv else ""}, indent=2)
+        if action == "dub":
+            path = str(arguments.get("path") or arguments.get("file") or arguments.get("input") or "").strip()
+            target = str(arguments.get("target") or arguments.get("target_lang") or arguments.get("language") or "").strip()
+            if not path or not target:
+                raise ValueError("path and target are required when action=dub")
+            from arka.core.skill_requirements import exit_if_blocked, preflight_skill
+
+            need_stt = not (
+                str(arguments.get("script") or arguments.get("script_text") or "").strip()
+                or str(arguments.get("script_path") or "").strip()
+            )
+            checks = ["tts"] if not need_stt else ["stt", "tts"]
+            ok, msg = preflight_skill("dub_video", extra={"checks": checks})
+            if not ok:
+                raise ValueError(msg)
+            output = str(arguments.get("output") or arguments.get("out") or "").strip() or None
+            script = str(arguments.get("script") or arguments.get("script_text") or "").strip() or None
+            script_path = str(arguments.get("script_path") or "").strip()
+            if script_path and not script:
+                script = Path(script_path).expanduser().read_text(encoding="utf-8")
+            result = dub_video_result(
+                path,
+                target_lang=target,
+                output=output,
+                source_lang=str(arguments.get("source") or arguments.get("source_lang") or "auto"),
+                script=script,
+                tts=str(arguments.get("tts") or "auto"),
+                voice=str(arguments.get("voice") or "").strip() or None,
+            )
+            return json.dumps(result, indent=2)
+        raise ValueError("action must be dub, detect, check, or parse")
+    except (FileNotFoundError, ValueError, OSError) as exc:
+        raise ValueError(str(exc)) from exc
+    except ImportError as exc:
+        raise RuntimeError(f"dub_video unavailable: {exc}") from exc
+
+
+def _handle_arka_signoz_publish(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "run").strip().lower()
+    try:
+        import argparse
+        from dataclasses import asdict
+
+        from arka.agent.signoz_publish import (
+            build_plan,
+            cmd_check,
+            nl_to_argv,
+            preflight,
+            run_publish,
+        )
+
+        if action == "check":
+            import io
+            from contextlib import redirect_stderr, redirect_stdout
+
+            buf = io.StringIO()
+            with redirect_stdout(buf), redirect_stderr(buf):
+                code = cmd_check(argparse.Namespace())
+            return json.dumps({"exit_code": code, "report": buf.getvalue().strip(), "preflight": asdict(preflight())}, indent=2)
+        if action == "parse":
+            text = str(arguments.get("text") or arguments.get("query") or arguments.get("goal") or "").strip()
+            if not text:
+                raise ValueError("text is required when action=parse")
+            argv = nl_to_argv(text)
+            return json.dumps({"argv": argv, "command": "signoz_publish " + " ".join(argv) if argv else ""}, indent=2)
+        if action in ("run", "publish", "dry-run"):
+            ns = argparse.Namespace(
+                message=str(arguments.get("message") or arguments.get("commit_message") or "").strip() or None,
+                m=str(arguments.get("message") or arguments.get("commit_message") or "").strip() or None,
+                topic=str(arguments.get("topic") or "").strip() or None,
+                content=str(arguments.get("content") or arguments.get("content_path") or "").strip() or None,
+                content_text=str(arguments.get("content_text") or "").strip() or None,
+                generate_blog=bool(arguments.get("generate_blog")),
+                skip_blog=bool(arguments.get("skip_blog")),
+                skip_git=bool(arguments.get("skip_git")),
+                skip_deploy=bool(arguments.get("skip_deploy")),
+                vercel_dir=str(arguments.get("vercel_dir") or "landing"),
+                production=bool(arguments.get("production")),
+                all_files=bool(arguments.get("all_files")),
+                dry_run=action == "dry-run" or bool(arguments.get("dry_run")),
+                yes=bool(arguments.get("yes") or arguments.get("confirm")),
+                json=True,
+            )
+            if action == "dry-run":
+                ns.yes = False
+                ns.dry_run = True
+                plan = build_plan(ns)
+            elif ns.yes or ns.dry_run:
+                plan = run_publish(ns)
+            else:
+                plan = build_plan(ns)
+            return json.dumps(plan.to_dict(), indent=2)
+        raise ValueError("action must be run, publish, dry-run, check, or parse")
+    except (FileNotFoundError, ValueError) as exc:
+        raise ValueError(str(exc)) from exc
+    except ImportError as exc:
+        raise RuntimeError(f"signoz_publish unavailable: {exc}") from exc
+
+
+def _handle_arka_create_video(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "create").strip().lower()
+    try:
+        from arka.media.create_video import cmd_check, create_video_result, nl_to_argv
+
+        if action == "check":
+            import argparse
+            import io
+            from contextlib import redirect_stderr, redirect_stdout
+
+            buf = io.StringIO()
+            with redirect_stdout(buf), redirect_stderr(buf):
+                code = cmd_check(argparse.Namespace())
+            return json.dumps({"exit_code": code, "report": buf.getvalue().strip()}, indent=2)
+        if action == "parse":
+            text = str(arguments.get("text") or arguments.get("query") or arguments.get("goal") or "").strip()
+            if not text:
+                raise ValueError("text is required when action=parse")
+            argv = nl_to_argv(text)
+            return json.dumps({"argv": argv, "command": "create_video " + " ".join(argv) if argv else ""}, indent=2)
+        if action == "create":
+            mode = str(arguments.get("mode") or "slideshow").strip().lower()
+            sources_raw = arguments.get("sources") or arguments.get("images") or arguments.get("paths")
+            sources = [str(item).strip() for item in sources_raw] if isinstance(sources_raw, list) else None
+            if sources is None:
+                single = str(arguments.get("source") or arguments.get("path") or "").strip()
+                sources = [single] if single else None
+            image = str(arguments.get("image") or "").strip() or None
+            audio = str(arguments.get("audio") or "").strip() or None
+            script = str(arguments.get("script") or "").strip() or None
+            output = str(arguments.get("output") or arguments.get("out") or "").strip() or None
+            slide_duration = arguments.get("slide_duration", arguments.get("duration", 3.0))
+            transparent = bool(arguments.get("transparent") or arguments.get("alpha"))
+            format_name = str(arguments.get("format") or "").strip() or None
+            result = create_video_result(
+                mode,
+                sources=sources,
+                image=image,
+                audio=audio,
+                script=script,
+                output=output,
+                slide_duration=float(slide_duration) if slide_duration is not None else 3.0,
+                transparent=transparent,
+                alpha=bool(arguments.get("alpha")),
+                format_name=format_name,
+            )
+            return json.dumps(result, indent=2)
+        raise ValueError("action must be create, check, or parse")
+    except (FileNotFoundError, ValueError) as exc:
+        raise ValueError(str(exc)) from exc
+    except ImportError as exc:
+        raise RuntimeError(f"create_video unavailable: {exc}") from exc
+
+
+def _handle_arka_music_generate(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "generate").strip().lower()
+    try:
+        from arka.media.music_generate import cmd_check, generate, music_generate_result, nl_to_argv
+
+        if action == "check":
+            import argparse
+            import io
+            from contextlib import redirect_stderr, redirect_stdout
+
+            buf = io.StringIO()
+            with redirect_stdout(buf), redirect_stderr(buf):
+                code = cmd_check(argparse.Namespace())
+            return json.dumps({"exit_code": code, "report": buf.getvalue().strip()}, indent=2)
+        if action == "parse":
+            text = str(arguments.get("text") or arguments.get("query") or arguments.get("goal") or "").strip()
+            if not text:
+                raise ValueError("text is required when action=parse")
+            argv = nl_to_argv(text)
+            return json.dumps(
+                {"argv": argv, "command": "music_generate " + " ".join(argv) if argv else ""},
+                indent=2,
+            )
+        if action == "generate":
+            prompt = str(arguments.get("prompt") or arguments.get("text") or arguments.get("query") or "").strip()
+            if not prompt:
+                raise ValueError("prompt is required when action=generate")
+            output = str(arguments.get("output") or arguments.get("out") or "").strip() or None
+            model = str(arguments.get("model") or "").strip() or None
+            duration = arguments.get("duration")
+            lyrics = str(arguments.get("lyrics") or "").strip()
+            instrumental = bool(arguments.get("instrumental"))
+            result = music_generate_result(
+                prompt,
+                output=output,
+                model=model,
+                duration=int(duration) if duration is not None else None,
+                lyrics=lyrics,
+                instrumental=instrumental,
+            )
+            return json.dumps(result, indent=2)
+        raise ValueError("action must be generate, check, or parse")
+    except (FileNotFoundError, ValueError) as exc:
+        raise ValueError(str(exc)) from exc
+    except ImportError as exc:
+        raise RuntimeError(f"music_generate unavailable: {exc}") from exc
+
+
+def _handle_arka_ai_video(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "generate").strip().lower()
+    try:
+        from arka.media.ai_video import ai_video_result, cmd_check, nl_to_argv
+
+        if action == "check":
+            import argparse
+            import io
+            from contextlib import redirect_stderr, redirect_stdout
+
+            buf = io.StringIO()
+            with redirect_stdout(buf), redirect_stderr(buf):
+                code = cmd_check(argparse.Namespace())
+            return json.dumps({"exit_code": code, "report": buf.getvalue().strip()}, indent=2)
+        if action == "parse":
+            text = str(arguments.get("text") or arguments.get("query") or arguments.get("goal") or "").strip()
+            if not text:
+                raise ValueError("text is required when action=parse")
+            argv = nl_to_argv(text)
+            return json.dumps(
+                {"argv": argv, "command": "ai_video " + " ".join(argv) if argv else ""},
+                indent=2,
+            )
+        if action == "generate":
+            prompt = str(arguments.get("prompt") or arguments.get("text") or arguments.get("query") or "").strip()
+            if not prompt:
+                raise ValueError("prompt is required when action=generate")
+            output = str(arguments.get("output") or arguments.get("out") or "").strip() or None
+            model = str(arguments.get("model") or "").strip() or None
+            aspect = str(arguments.get("aspect") or "").strip() or None
+            duration = arguments.get("duration")
+            audio = arguments.get("audio")
+            result = ai_video_result(
+                prompt,
+                output=output,
+                model=model,
+                aspect=aspect,
+                duration=int(duration) if duration is not None else None,
+                audio=bool(audio) if audio is not None else None,
+            )
+            return json.dumps(result, indent=2)
+        raise ValueError("action must be generate, check, or parse")
+    except (FileNotFoundError, ValueError) as exc:
+        raise ValueError(str(exc)) from exc
+    except ImportError as exc:
+        raise RuntimeError(f"ai_video unavailable: {exc}") from exc
+
+
+def _handle_arka_google_flow(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "generate").strip().lower()
+    try:
+        from arka.media.google_flow import cmd_check, google_flow_result, nl_to_argv, open_flow
+
+        if action == "check":
+            import argparse
+            import io
+            from contextlib import redirect_stderr, redirect_stdout
+
+            buf = io.StringIO()
+            with redirect_stdout(buf), redirect_stderr(buf):
+                code = cmd_check(argparse.Namespace())
+            return json.dumps({"exit_code": code, "report": buf.getvalue().strip()}, indent=2)
+        if action == "parse":
+            text = str(arguments.get("text") or arguments.get("query") or arguments.get("goal") or "").strip()
+            if not text:
+                raise ValueError("text is required when action=parse")
+            argv = nl_to_argv(text)
+            return json.dumps(
+                {"argv": argv, "command": "google_flow " + " ".join(argv) if argv else ""},
+                indent=2,
+            )
+        if action == "open":
+            prompt = str(arguments.get("prompt") or arguments.get("text") or "").strip()
+            return json.dumps(open_flow(prompt=prompt), indent=2)
+        if action == "generate":
+            prompt = str(arguments.get("prompt") or arguments.get("text") or arguments.get("query") or "").strip()
+            if not prompt:
+                raise ValueError("prompt is required when action=generate")
+            output = str(arguments.get("output") or arguments.get("out") or "").strip() or None
+            model = str(arguments.get("model") or "").strip() or None
+            aspect = str(arguments.get("aspect") or "16:9").strip()
+            duration = arguments.get("duration")
+            backend = str(arguments.get("backend") or "").strip() or None
+            result = google_flow_result(
+                prompt,
+                output=output,
+                aspect=aspect,
+                model=model,
+                duration=int(duration) if duration is not None else None,
+                backend=backend,
+            )
+            return json.dumps(result, indent=2)
+        raise ValueError("action must be generate, open, check, or parse")
+    except (FileNotFoundError, ValueError) as exc:
+        raise ValueError(str(exc)) from exc
+    except ImportError as exc:
+        raise RuntimeError(f"google_flow unavailable: {exc}") from exc
+
+
 def _handle_arka_human_docs(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "context").strip().lower()
     try:
@@ -754,6 +1602,34 @@ def _handle_arka_human_docs(arguments: dict[str, Any]) -> str:
         raise ValueError("action must be guide, status, context, or write")
     except ImportError as exc:
         raise RuntimeError(f"human_docs unavailable: {exc}") from exc
+
+
+def _handle_arka_website_pages(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "context").strip().lower()
+    try:
+        from arka.core.website_pages import context_for, read_guide, status
+        from arka.agent.website_pages import plan_pages
+
+        if action == "guide":
+            return read_guide()
+        if action == "status":
+            return json.dumps(status(), indent=2)
+        if action == "context":
+            goal = str(arguments.get("goal") or arguments.get("query") or "").strip()
+            limit_chars = _mcp_int(arguments.get("limit_chars"), 4000)
+            text = context_for(goal, limit_chars=max(200, limit_chars))
+            return text or "(website pages bias disabled)"
+        if action == "plan":
+            prompt = str(arguments.get("prompt") or arguments.get("goal") or "").strip()
+            if not prompt:
+                raise ValueError("prompt is required when action=plan")
+            context_path = str(arguments.get("context") or "").strip() or None
+            site_type = str(arguments.get("site_type") or arguments.get("type") or "").strip() or None
+            result = plan_pages(prompt, context_path=context_path, site_type=site_type)
+            return str(result.get("plan") or "")
+        raise ValueError("action must be guide, status, context, or plan")
+    except ImportError as exc:
+        raise RuntimeError(f"website_pages unavailable: {exc}") from exc
 
 
 def _handle_arka_project_rules(arguments: dict[str, Any]) -> str:
@@ -1436,6 +2312,215 @@ def _handle_arka_config(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"config_backup unavailable: {exc}") from exc
 
 
+def _handle_arka_model(arguments: dict[str, Any]) -> str:
+    """Recommend, inspect, and set LLM models/providers."""
+    action = str(arguments.get("action") or "status").strip().lower()
+    try:
+        from dataclasses import asdict
+
+        from arka.llm import model_advisor as advisor
+        from arka.llm import provider_select as ps
+
+        if action in ("status", "show"):
+            provider, model = ps.get_preferred()
+            models, source = ps.detect_provider_models(provider) if provider else ([], "none")
+            payload: dict[str, Any] = {
+                "provider": provider or None,
+                "model": model or None,
+                "models_detected": len(models),
+                "models_source": source,
+                "model_valid": bool(model and (not models or model in models)),
+            }
+            if models:
+                payload["models"] = models[:40]
+            try:
+                from arka.llm.retired_models import ensure_config_not_retired, is_retired, list_retired
+
+                payload["model_retired"] = bool(provider and model and is_retired(provider, model))
+                remediated = ensure_config_not_retired()
+                if remediated:
+                    provider, model = ps.get_preferred()
+                    payload["provider"] = provider or None
+                    payload["model"] = model or None
+                    payload["auto_remediated"] = remediated
+                payload["retired_models"] = list_retired()[:20]
+            except ImportError:
+                pass
+            return json.dumps(payload, indent=2)
+
+        if action == "probe":
+            hw = advisor.probe_hardware()
+            return json.dumps(asdict(hw), indent=2)
+
+        if action == "recommend":
+            report = advisor.build_report()
+            if bool(arguments.get("local")):
+                limit = max(1, _mcp_int(arguments.get("top"), 1))
+                models = advisor.strongest_runnable_local_models(report.hardware, limit=limit)
+                payload = {
+                    "mode": "local",
+                    "tier": report.tier,
+                    "tier_label": report.tier_label,
+                    "models": [f"ollama/{m}" for m in models],
+                    "hardware": asdict(report.hardware),
+                    "notes": report.notes,
+                }
+            else:
+                payload = report.to_dict()
+            if bool(arguments.get("apply")):
+                if bool(arguments.get("local")) and payload.get("models"):
+                    from arka.llm.skill_models import set_skill_model
+
+                    chosen = str(payload["models"][0])
+                    for profile in advisor.known_task_profiles():
+                        set_skill_model(profile, chosen)
+                    payload["applied"] = {"mode": "local", "model": chosen}
+                else:
+                    path = advisor.apply_recommendations(report)
+                    payload["applied"] = {"mode": "profiles", "path": str(path)}
+            return json.dumps(payload, indent=2)
+
+        if action == "apply":
+            path = advisor.apply_recommendations()
+            return json.dumps({"ok": True, "path": str(path)}, indent=2)
+
+        if action in ("list_providers", "providers"):
+            rows = [
+                {
+                    "slug": row.slug,
+                    "display_name": row.display_name,
+                    "configured": row.configured,
+                    "default_model": row.default_model,
+                    "env_keys": list(row.env_keys),
+                }
+                for row in ps.list_provider_rows()
+            ]
+            return json.dumps({"providers": rows}, indent=2)
+
+        if action in ("list_models", "models"):
+            provider = str(
+                arguments.get("provider")
+                or arguments.get("slug")
+                or ps.get_preferred()[0]
+                or ""
+            ).strip()
+            if not provider:
+                raise ValueError("provider is required when no preferred provider is set")
+            slug = ps.normalize_provider_slug(provider)
+            models, source = ps.detect_provider_models(
+                slug,
+                force=bool(arguments.get("refresh")),
+                include_all=bool(arguments.get("all")),
+            )
+            return json.dumps(
+                {
+                    "provider": slug,
+                    "models": models,
+                    "count": len(models),
+                    "source": source,
+                },
+                indent=2,
+            )
+
+        if action == "set":
+            provider = str(arguments.get("provider") or arguments.get("slug") or "").strip()
+            model = str(arguments.get("model") or arguments.get("model_id") or "").strip() or None
+            if not provider and model:
+                provider, model = ps.resolve_model_set_target(model)
+            if not provider:
+                raise ValueError("provider or model is required for action=set")
+            slug, chosen, path = ps.set_preferred_provider(
+                provider,
+                model=model,
+                autodetect=bool(arguments.get("autodetect", True)),
+                force_refresh=bool(arguments.get("refresh")),
+            )
+            return json.dumps(
+                {
+                    "ok": True,
+                    "provider": slug,
+                    "model": chosen,
+                    "env_file": str(path),
+                },
+                indent=2,
+            )
+
+        if action in ("dashboard", "health"):
+            from arka.llm.credits_usage import build_dashboard_payload
+
+            live = bool(arguments.get("live"))
+            check_balance = bool(arguments.get("balance")) or live
+            include_chain = bool(arguments.get("chain")) or live
+            return json.dumps(
+                build_dashboard_payload(
+                    live=live,
+                    check_balance=check_balance,
+                    include_chain=include_chain,
+                ),
+                indent=2,
+            )
+
+        if action == "arbitrage":
+            from arka.llm import arbitrage as arb
+
+            sub = str(arguments.get("mode") or arguments.get("subaction") or "status").strip().lower()
+            if sub in ("status", "show"):
+                return json.dumps(arb.status_payload(), indent=2)
+            if sub in ("once", "swap", "run"):
+                return json.dumps(
+                    arb.run_once(dry_run=bool(arguments.get("dry_run"))),
+                    indent=2,
+                )
+            if sub == "start":
+                interval = arguments.get("interval")
+                return json.dumps(
+                    arb.start_monitor(
+                        interval=float(interval) if interval is not None else None,
+                        foreground=bool(arguments.get("foreground")),
+                    ),
+                    indent=2,
+                )
+            if sub == "stop":
+                return json.dumps(arb.stop_monitor(), indent=2)
+            raise ValueError("arbitrage mode must be status, once, start, or stop")
+
+        raise ValueError(
+            "action must be status, recommend, apply, probe, list_providers, "
+            "list_models, set, dashboard, or arbitrage"
+        )
+    except ValueError:
+        raise
+    except ImportError as exc:
+        raise RuntimeError(f"model selection unavailable: {exc}") from exc
+
+
+def _handle_arka_tunnel(arguments: dict[str, Any]) -> str:
+    """Expose local Ollama via authenticated proxy and optional public tunnel."""
+    action = str(arguments.get("action") or "status").strip().lower()
+    try:
+        from arka.integrations import ollama_tunnel as tunnel
+
+        if action in ("status", "show"):
+            return json.dumps(tunnel.status_payload(), indent=2)
+        if action == "start":
+            port_raw = arguments.get("port")
+            return json.dumps(
+                tunnel.start_stack(
+                    host=str(arguments.get("host") or "127.0.0.1"),
+                    port=int(port_raw) if port_raw is not None else None,
+                    with_tunnel=not bool(arguments.get("no_tunnel")),
+                ),
+                indent=2,
+            )
+        if action == "stop":
+            return json.dumps(tunnel.stop_stack(), indent=2)
+        raise ValueError("action must be status, start, or stop")
+    except ValueError:
+        raise
+    except ImportError as exc:
+        raise RuntimeError(f"ollama_tunnel unavailable: {exc}") from exc
+
+
 def _handle_arka_sports(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "scores").strip().lower()
     try:
@@ -1538,6 +2623,203 @@ def _handle_arka_disk(arguments: dict[str, Any]) -> str:
         raise
     except ImportError as exc:
         raise RuntimeError(f"disk unavailable: {exc}") from exc
+
+
+def _handle_arka_ocr(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "auto").strip().lower()
+    try:
+        from arka.agent import ocr_skill as ocr
+
+        path = str(arguments.get("path") or arguments.get("file") or "").strip()
+        if action in {"extract", "image", "text"}:
+            if not path:
+                raise ValueError("path is required for extract")
+            return json.dumps(
+                ocr.extract_image_payload(
+                    path,
+                    with_blocks=not bool(arguments.get("no_blocks", False)),
+                    with_zones=bool(arguments.get("zones", False)),
+                ),
+                indent=2,
+            )
+        if action in {"pdf", "searchable"}:
+            if not path:
+                raise ValueError("path is required for pdf")
+            return json.dumps(
+                ocr.pdf_ocr_payload(
+                    path,
+                    output=str(arguments.get("output") or "").strip() or None,
+                    language=str(arguments.get("language") or "eng"),
+                ),
+                indent=2,
+            )
+        if action == "auto":
+            if not path:
+                raise ValueError("path is required")
+            return json.dumps(
+                ocr.ocr_payload(
+                    path,
+                    mode="auto",
+                    output=str(arguments.get("output") or "").strip() or None,
+                    language=str(arguments.get("language") or "eng"),
+                    with_blocks=not bool(arguments.get("no_blocks", False)),
+                    with_zones=bool(arguments.get("zones", False)),
+                ),
+                indent=2,
+            )
+        raise ValueError("action must be auto, extract, or pdf")
+    except ValueError:
+        raise
+    except ImportError as exc:
+        raise RuntimeError(f"ocr_skill unavailable: {exc}") from exc
+
+
+def _handle_arka_rag(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "status").strip().lower()
+    try:
+        from arka.agent import rag_skill as rag
+
+        extensions = arguments.get("extensions")
+        ext_list: list[str] | None = None
+        if isinstance(extensions, list):
+            ext_list = [str(item) for item in extensions if str(item).strip()]
+        elif isinstance(extensions, str) and extensions.strip():
+            ext_list = [part.strip() for part in extensions.split(",") if part.strip()]
+
+        payload = rag.rag_payload(
+            action=action,
+            path=str(arguments.get("path") or arguments.get("file") or "").strip() or None,
+            question=str(arguments.get("question") or arguments.get("query") or "").strip() or None,
+            document=str(arguments.get("document") or arguments.get("doc") or "").strip() or None,
+            name=str(arguments.get("name") or "").strip() or None,
+            extensions=ext_list,
+            recursive=not bool(arguments.get("no_recursive", False)),
+        )
+        return json.dumps(payload, indent=2)
+    except ValueError:
+        raise
+    except ImportError as exc:
+        raise RuntimeError(f"rag_skill unavailable: {exc}") from exc
+
+
+def _handle_arka_ci(arguments: dict[str, Any]) -> str:
+    try:
+        from arka.agent.dev_tools import ci_payload
+
+        path = str(arguments.get("path") or arguments.get("root") or "").strip() or None
+        full = bool(arguments.get("full", False))
+        changed_only = bool(arguments.get("changed_only", arguments.get("changed", False)))
+        payload = ci_payload(path, full=full, changed_only=changed_only)
+        if bool(arguments.get("fix")) and not payload.get("ok", True):
+            from arka.agent.goal import run_goal
+
+            run_goal(
+                "Fix the first failing developer-tools CI gate and re-run verification.",
+                max_steps=8,
+                auto_yes=True,
+                auto_continue=True,
+            )
+            payload = ci_payload(path, full=full, changed_only=changed_only)
+        return json.dumps(payload, indent=2)
+    except ImportError as exc:
+        raise RuntimeError(f"dev_tools unavailable: {exc}") from exc
+
+
+def _handle_arka_review(arguments: dict[str, Any]) -> str:
+    try:
+        from arka.agent.dev_tools import review_payload
+
+        path = str(arguments.get("path") or arguments.get("root") or "").strip() or None
+        payload = review_payload(
+            path,
+            base=str(arguments.get("base") or "").strip() or None,
+            staged=bool(arguments.get("staged", False)),
+        )
+        return json.dumps(payload, indent=2)
+    except ImportError as exc:
+        raise RuntimeError(f"dev_tools unavailable: {exc}") from exc
+
+
+def _handle_arka_repo_context(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "query").strip().lower()
+    try:
+        from arka.agent.repo_context import context_payload
+
+        path = str(arguments.get("path") or arguments.get("root") or "").strip() or None
+        query = str(arguments.get("query") or arguments.get("prompt") or "").strip()
+        payload = context_payload(
+            query,
+            root=path,
+            action=action,
+            limit_chars=_mcp_int(arguments.get("limit_chars"), 12000),
+        )
+        return json.dumps(payload, indent=2)
+    except ValueError:
+        raise
+    except ImportError as exc:
+        raise RuntimeError(f"repo_context unavailable: {exc}") from exc
+
+
+def _handle_arka_pr_check(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "diff").strip().lower()
+    try:
+        from arka.agent.pr_check import pr_check_payload
+
+        path = str(arguments.get("path") or arguments.get("root") or "").strip() or None
+        payload = pr_check_payload(
+            action,
+            root=path,
+            base=str(arguments.get("base") or "").strip() or None,
+            pr=_mcp_int_optional(arguments.get("pr")),
+            run_id=_mcp_int_optional(arguments.get("run_id") or arguments.get("run")),
+            stat_only=bool(arguments.get("stat_only", False)),
+        )
+        return json.dumps(payload, indent=2)
+    except ValueError:
+        raise
+    except ImportError as exc:
+        raise RuntimeError(f"pr_check unavailable: {exc}") from exc
+
+
+def _handle_arka_code_search(arguments: dict[str, Any]) -> str:
+    query = str(arguments.get("query") or arguments.get("pattern") or "").strip()
+    if not query:
+        raise ValueError("query is required")
+    try:
+        from arka.agent.code_search import search_payload
+
+        path = str(arguments.get("path") or arguments.get("root") or "").strip() or None
+        payload = search_payload(
+            query,
+            root=path,
+            glob=str(arguments.get("glob") or "").strip() or None,
+            limit=max(1, min(_mcp_int(arguments.get("limit"), 40), 200)),
+            use_embeddings=bool(arguments.get("use_embeddings", False)),
+        )
+        return json.dumps(payload, indent=2)
+    except ValueError:
+        raise
+    except ImportError as exc:
+        raise RuntimeError(f"code_search unavailable: {exc}") from exc
+
+
+def _handle_arka_apply_patch(arguments: dict[str, Any]) -> str:
+    try:
+        from arka.agent.apply_patch import PatchError, apply_patch_payload
+
+        path = str(arguments.get("path") or arguments.get("root") or "").strip() or None
+        payload = apply_patch_payload(
+            root=path,
+            diff=str(arguments.get("diff") or arguments.get("patch") or ""),
+            file=str(arguments.get("file") or "").strip(),
+            search=str(arguments.get("search") or arguments.get("old") or ""),
+            replace=str(arguments.get("replace") or arguments.get("new") or ""),
+        )
+        return json.dumps(payload, indent=2)
+    except (ValueError, PatchError):
+        raise
+    except ImportError as exc:
+        raise RuntimeError(f"apply_patch unavailable: {exc}") from exc
 
 
 def _handle_arka_repo_health(arguments: dict[str, Any]) -> str:
@@ -1796,6 +3078,50 @@ def _build_tools() -> list[ArkaMcpTool]:
             handler=_handle_arka_recall,
         ),
         ArkaMcpTool(
+            name="arka_intelligence",
+            description=(
+                "Arka Intelligence — live entity/relationship graph memory. "
+                "Distills facts into entities and traverses relational links on recall "
+                "(not vector chunk RAG). Actions: status, remember, recall, rebuild, export."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["status", "remember", "recall", "rebuild", "export"],
+                        "default": "status",
+                    },
+                    "text": {"type": "string", "description": "Fact to ingest when action=remember"},
+                    "goal": {
+                        "type": "string",
+                        "description": "Recall goal when action=recall",
+                    },
+                    "query": {
+                        "type": "string",
+                        "description": "Alias for goal when action=recall",
+                    },
+                    "limit_chars": {
+                        "type": "integer",
+                        "description": "Max chars for recall narrative",
+                        "default": 1200,
+                    },
+                    "format": {
+                        "type": "string",
+                        "enum": ["mermaid", "json"],
+                        "description": "Export format when action=export",
+                        "default": "mermaid",
+                    },
+                    "verbose": {
+                        "type": "boolean",
+                        "description": "Include sample edges when action=status",
+                        "default": True,
+                    },
+                },
+            },
+            handler=_handle_arka_intelligence,
+        ),
+        ArkaMcpTool(
             name="arka_skill",
             description=(
                 "Invoke any Arka skill or routed command by name—not only design. "
@@ -1803,7 +3129,9 @@ def _build_tools() -> list[ArkaMcpTool]:
                 "self_improve, design_from_screenshot, compose_slides, urlkit, mcp, "
                 "agent_hub, frontend_loop, sandbox, text, web_screenshot, spline, "
                 "multi_llm, data collection, media transforms, races, reusable blocks, "
-                "ultra-fast development, and all future dispatch-backed skills."
+                "ultra-fast development, and all future dispatch-backed skills. "
+                "Do not call generate_image for real-world subjects (breeds, places, people) "
+                "or search/research tasks—use search_web, generate_thumbnail (Unsplash), or arka_ask instead."
             ),
             input_schema={
                 "type": "object",
@@ -1982,6 +3310,111 @@ def _build_tools() -> list[ArkaMcpTool]:
             handler=_handle_arka_routines,
         ),
         ArkaMcpTool(
+            name="arka_batch",
+            description=(
+                "Collect prompts until a due time, then run them as one combined coding task. "
+                "Actions: start (open batch), add (queue prompt), list, run, due (run when due), clear."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["start", "add", "list", "run", "due", "clear"],
+                        "default": "list",
+                        "description": "start, add, list, run, due, or clear a prompt batch",
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "Batch name (default: default)",
+                        "default": "default",
+                    },
+                    "until": {
+                        "type": "string",
+                        "description": "Due time for start/add (e.g. '6pm', 'in 1 hour', ISO datetime)",
+                    },
+                    "due": {
+                        "type": "string",
+                        "description": "Alias for until",
+                    },
+                    "prompt": {
+                        "type": "string",
+                        "description": "Prompt text to queue when action=add",
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "Alias for prompt when action=add",
+                    },
+                    "print_only": {
+                        "type": "boolean",
+                        "description": "Return combined prompt without running agent_code when action=run/due",
+                        "default": False,
+                    },
+                    "keep": {
+                        "type": "boolean",
+                        "description": "Keep batch after successful run when action=run/due",
+                        "default": False,
+                    },
+                },
+            },
+            handler=_handle_arka_batch,
+        ),
+        ArkaMcpTool(
+            name="arka_service_autostart",
+            description=(
+                "Register and autostart any service at login — add a command, script, or natural-language "
+                "description (LLM infers command), install via launchd/systemd, list/status/run/uninstall."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["list", "add", "install", "uninstall", "remove", "status", "run"],
+                        "default": "list",
+                    },
+                    "id": {
+                        "type": "string",
+                        "description": "Service id (required for add/install/uninstall/remove/status/run)",
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "Alias for id",
+                    },
+                    "display_name": {
+                        "type": "string",
+                        "description": "Human-readable service name for action=add",
+                    },
+                    "command": {
+                        "type": "string",
+                        "description": "Shell command to run at login for action=add",
+                    },
+                    "script": {
+                        "type": "string",
+                        "description": "Path to an existing start script for action=add",
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Natural-language service description; LLM infers command when command/script omitted",
+                    },
+                    "desc": {
+                        "type": "string",
+                        "description": "Alias for description",
+                    },
+                    "workdir": {
+                        "type": "string",
+                        "description": "Working directory for action=add",
+                    },
+                    "env": {
+                        "type": "object",
+                        "description": "Environment variables for action=add",
+                        "additionalProperties": {"type": "string"},
+                    },
+                },
+            },
+            handler=_handle_arka_service_autostart,
+        ),
+        ArkaMcpTool(
             name="arka_session_memory",
             description="OpenClaw-style markdown session memory — append, search, context, status, or clear.",
             input_schema={
@@ -2071,6 +3504,46 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_subagent,
+        ),
+        ArkaMcpTool(
+            name="arka_parallel",
+            description=(
+                "Symbolically decompose a goal into parallel subtasks and optionally "
+                "spawn sub-agents (plan, run, status)."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["plan", "run", "status"],
+                        "default": "plan",
+                    },
+                    "goal": {
+                        "type": "string",
+                        "description": "Natural-language goal when action=plan or run",
+                    },
+                    "task": {
+                        "type": "string",
+                        "description": "Alias for goal",
+                    },
+                    "plan_id": {
+                        "type": "string",
+                        "description": "Run id when action=status or optional override for run",
+                    },
+                    "sync": {
+                        "type": "boolean",
+                        "description": "Wait for sub-agents when action=run",
+                        "default": False,
+                    },
+                    "json": {
+                        "type": "boolean",
+                        "description": "Return JSON for plan (default true)",
+                        "default": True,
+                    },
+                },
+            },
+            handler=_handle_arka_parallel,
         ),
         ArkaMcpTool(
             name="arka_jules",
@@ -2194,6 +3667,39 @@ def _build_tools() -> list[ArkaMcpTool]:
             handler=_handle_arka_human_docs,
         ),
         ArkaMcpTool(
+            name="arka_website_pages",
+            description=(
+                "Website information architecture — page organization guide, prompt context, "
+                "or generate a sitemap/page plan before building UI."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["guide", "status", "context", "plan"],
+                        "default": "context",
+                    },
+                    "goal": {"type": "string", "description": "Goal for context or plan prompt"},
+                    "prompt": {"type": "string", "description": "Plan prompt when action=plan"},
+                    "context": {
+                        "type": "string",
+                        "description": "File with content to organize when action=plan",
+                    },
+                    "site_type": {
+                        "type": "string",
+                        "description": "Archetype hint: saas, docs, portfolio, app, marketing",
+                    },
+                    "limit_chars": {
+                        "type": "integer",
+                        "description": "Max characters when action=context",
+                        "default": 4000,
+                    },
+                },
+            },
+            handler=_handle_arka_website_pages,
+        ),
+        ArkaMcpTool(
             name="arka_convert_media",
             description=(
                 "Convert images, video/audio, and slide decks between formats. "
@@ -2243,6 +3749,476 @@ def _build_tools() -> list[ArkaMcpTool]:
             handler=_handle_arka_convert_media,
         ),
         ArkaMcpTool(
+            name="arka_noise_remove",
+            description=(
+                "Remove background noise from audio or video files using ffmpeg afftdn. "
+                "Video inputs keep the original video stream and replace the audio track."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["remove", "detect", "check", "parse"],
+                        "default": "remove",
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "Input audio or video file (remove, detect)",
+                    },
+                    "output": {
+                        "type": "string",
+                        "description": "Optional output path",
+                    },
+                    "strength": {
+                        "type": "number",
+                        "description": "Noise reduction strength in dB (0-97, default 12)",
+                        "default": 12,
+                    },
+                    "noise_floor": {
+                        "type": "number",
+                        "description": "Optional afftdn noise floor in dB (-80 to -20)",
+                    },
+                    "audio_only": {
+                        "type": "boolean",
+                        "description": "For video input, export denoised audio only",
+                        "default": False,
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "Natural language for action=parse",
+                    },
+                },
+            },
+            handler=_handle_arka_noise_remove,
+        ),
+        ArkaMcpTool(
+            name="arka_edit_video",
+            description=(
+                "Edit local video/audio with ffmpeg — trim, concat, text overlay, extract audio, "
+                "crop, resize, and mux audio. Use action=parse for natural language, action=detect "
+                "for duration/metadata, action=check for ffmpeg setup."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": [
+                            "trim",
+                            "concat",
+                            "overlay-text",
+                            "extract-audio",
+                            "crop",
+                            "resize",
+                            "mux-audio",
+                            "detect",
+                            "check",
+                            "parse",
+                        ],
+                        "default": "trim",
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "Input media file",
+                    },
+                    "paths": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Input files for concat",
+                    },
+                    "output": {
+                        "type": "string",
+                        "description": "Output path",
+                    },
+                    "start": {
+                        "type": "number",
+                        "description": "Trim start offset in seconds",
+                        "default": 0,
+                    },
+                    "duration": {
+                        "type": "number",
+                        "description": "Trim duration in seconds",
+                    },
+                    "end": {
+                        "type": "number",
+                        "description": "Trim end time in seconds",
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "Overlay caption text, or natural language when action=parse",
+                    },
+                    "position": {
+                        "type": "string",
+                        "enum": ["top", "center", "bottom"],
+                        "default": "bottom",
+                    },
+                    "fontsize": {"type": "integer", "default": 48},
+                    "color": {"type": "string", "default": "white"},
+                    "width": {"type": "integer", "description": "Width for crop/resize"},
+                    "height": {"type": "integer", "description": "Height for crop/resize"},
+                    "x": {"type": "integer", "default": 0, "description": "Crop x offset"},
+                    "y": {"type": "integer", "default": 0, "description": "Crop y offset"},
+                    "format": {
+                        "type": "string",
+                        "description": "Output audio format for extract-audio",
+                        "default": "mp3",
+                    },
+                    "audio": {
+                        "type": "string",
+                        "description": "Audio file for mux-audio action",
+                    },
+                    "no_shortest": {
+                        "type": "boolean",
+                        "description": "For mux-audio, do not trim to shorter stream",
+                        "default": False,
+                    },
+                    "query": {
+                        "type": "string",
+                        "description": "Natural language for action=parse",
+                    },
+                },
+            },
+            handler=_handle_arka_edit_video,
+        ),
+        ArkaMcpTool(
+            name="arka_dub_video",
+            description=(
+                "Dub a local video into another language — transcribe speech, translate, "
+                "synthesize TTS (Edge or Sarvam), and mux onto the video. "
+                "Use action=parse for natural language, action=detect for metadata."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["dub", "detect", "check", "parse"],
+                        "default": "dub",
+                    },
+                    "path": {"type": "string", "description": "Input video file"},
+                    "target": {
+                        "type": "string",
+                        "description": "Target language (hindi, es, tamil, …)",
+                    },
+                    "target_lang": {
+                        "type": "string",
+                        "description": "Alias for target",
+                    },
+                    "output": {"type": "string", "description": "Output video path"},
+                    "source": {
+                        "type": "string",
+                        "description": "Source language code (default auto)",
+                        "default": "auto",
+                    },
+                    "script": {
+                        "type": "string",
+                        "description": "Skip STT — use this narration text directly",
+                    },
+                    "script_path": {
+                        "type": "string",
+                        "description": "Path to narration text file (skip STT)",
+                    },
+                    "tts": {
+                        "type": "string",
+                        "enum": ["auto", "edge", "sarvam"],
+                        "default": "auto",
+                    },
+                    "voice": {"type": "string", "description": "Optional TTS voice id"},
+                    "text": {"type": "string", "description": "Natural language for action=parse"},
+                    "query": {"type": "string", "description": "Natural language for action=parse"},
+                },
+            },
+            handler=_handle_arka_dub_video,
+        ),
+        ArkaMcpTool(
+            name="arka_signoz_publish",
+            description=(
+                "One-shot SigNoz hackathon publish: update signoz/BLOG.md, git push to GitHub, "
+                "deploy landing/ to Vercel. Preview without yes/confirm; pass yes=true to execute."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["run", "publish", "dry-run", "check", "parse"],
+                        "default": "run",
+                    },
+                    "message": {
+                        "type": "string",
+                        "description": "Git commit message (required unless yes=true)",
+                    },
+                    "topic": {
+                        "type": "string",
+                        "description": "Blog update topic for LLM refresh of signoz/BLOG.md",
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "Path to markdown file to write as signoz/BLOG.md",
+                    },
+                    "content_text": {
+                        "type": "string",
+                        "description": "Extra hint for blog generation",
+                    },
+                    "generate_blog": {
+                        "type": "boolean",
+                        "description": "Generate blog from git diff / topic",
+                        "default": False,
+                    },
+                    "skip_blog": {"type": "boolean", "default": False},
+                    "skip_git": {"type": "boolean", "default": False},
+                    "skip_deploy": {"type": "boolean", "default": False},
+                    "vercel_dir": {
+                        "type": "string",
+                        "default": "landing",
+                        "description": "Directory for vercel deploy",
+                    },
+                    "production": {
+                        "type": "boolean",
+                        "description": "Run vercel --prod",
+                        "default": False,
+                    },
+                    "yes": {
+                        "type": "boolean",
+                        "description": "Execute destructive steps (commit, push, deploy)",
+                        "default": False,
+                    },
+                    "confirm": {
+                        "type": "boolean",
+                        "description": "Alias for yes",
+                        "default": False,
+                    },
+                    "dry_run": {
+                        "type": "boolean",
+                        "description": "Simulate without git push or vercel deploy",
+                        "default": False,
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "Natural language for action=parse",
+                    },
+                },
+            },
+            handler=_handle_arka_signoz_publish,
+        ),
+        ArkaMcpTool(
+            name="arka_create_video",
+            description=(
+                "Create local videos with ffmpeg — slideshow from images, still image with audio, "
+                "or simple text slides from JSON. Supports transparent output (webm-alpha, mov-prores, "
+                "mov-png, apng, gif). For AI/topic explainers use compose_video instead."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["create", "check", "parse"],
+                        "default": "create",
+                    },
+                    "mode": {
+                        "type": "string",
+                        "enum": ["slideshow", "image-audio", "text"],
+                        "default": "slideshow",
+                        "description": "slideshow: images/folder; image-audio: one image + audio; text: JSON slides",
+                    },
+                    "sources": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Image files or directories (slideshow mode)",
+                    },
+                    "source": {
+                        "type": "string",
+                        "description": "Single source path (slideshow shorthand)",
+                    },
+                    "image": {
+                        "type": "string",
+                        "description": "Still image path (image-audio mode)",
+                    },
+                    "audio": {
+                        "type": "string",
+                        "description": "Optional audio track",
+                    },
+                    "script": {
+                        "type": "string",
+                        "description": "JSON slide script path or inline JSON (text mode)",
+                    },
+                    "output": {
+                        "type": "string",
+                        "description": "Optional output path (.mp4, .webm, .mov, .apng, .gif)",
+                    },
+                    "transparent": {
+                        "type": "boolean",
+                        "description": "Preserve alpha channel (defaults to webm-alpha)",
+                    },
+                    "alpha": {
+                        "type": "boolean",
+                        "description": "Alias for transparent",
+                    },
+                    "format": {
+                        "type": "string",
+                        "enum": ["mp4", "webm-alpha", "mov-prores", "mov-png", "apng", "gif"],
+                        "description": "Output format; transparent formats preserve PNG alpha",
+                    },
+                    "slide_duration": {
+                        "type": "number",
+                        "description": "Seconds per slide in slideshow mode (default 3)",
+                        "default": 3,
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "Natural language for action=parse",
+                    },
+                },
+            },
+            handler=_handle_arka_create_video,
+        ),
+        ArkaMcpTool(
+            name="arka_music_generate",
+            description=(
+                "Generate original music with Pollinations (elevenmusic) or local ffmpeg tone synthesis. "
+                "Use action=parse for natural language like 'create a song about summer'."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["generate", "check", "parse"],
+                        "default": "generate",
+                    },
+                    "prompt": {
+                        "type": "string",
+                        "description": "Music style or theme (generate)",
+                    },
+                    "output": {
+                        "type": "string",
+                        "description": "Optional output .mp3 path",
+                    },
+                    "duration": {
+                        "type": "integer",
+                        "description": "Length in seconds (3–300, default from MUSIC_DURATION or 30)",
+                    },
+                    "model": {
+                        "type": "string",
+                        "description": "Pollinations model (default elevenmusic)",
+                    },
+                    "lyrics": {
+                        "type": "string",
+                        "description": "Optional lyrics (Pollinations only)",
+                    },
+                    "instrumental": {
+                        "type": "boolean",
+                        "description": "Instrumental only — no vocals (Pollinations only)",
+                        "default": False,
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "Natural language for action=parse or prompt fallback",
+                    },
+                },
+            },
+            handler=_handle_arka_music_generate,
+        ),
+        ArkaMcpTool(
+            name="arka_ai_video",
+            description=(
+                "Full AI text-to-video (Pollinations, Gemini Veo 3.1 chain, Replicate). "
+                "Not compose_video (stock photos) or create_video (ffmpeg slideshows). "
+                "Use action=parse for 'generate full ai video of a sunset'."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["generate", "check", "parse"],
+                        "default": "generate",
+                    },
+                    "prompt": {
+                        "type": "string",
+                        "description": "Video description (generate)",
+                    },
+                    "output": {
+                        "type": "string",
+                        "description": "Optional output .mp4 path",
+                    },
+                    "aspect": {
+                        "type": "string",
+                        "enum": ["16:9", "9:16", "1:1"],
+                        "default": "16:9",
+                    },
+                    "duration": {
+                        "type": "integer",
+                        "description": "Clip length in seconds (2–15)",
+                    },
+                    "model": {
+                        "type": "string",
+                        "description": "Preferred Gemini Veo model (fallback chain applies)",
+                    },
+                    "audio": {
+                        "type": "boolean",
+                        "description": "Pollinations audio track (default true)",
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "Natural language for action=parse",
+                    },
+                },
+            },
+            handler=_handle_arka_ai_video,
+        ),
+        ArkaMcpTool(
+            name="arka_google_flow",
+            description=(
+                "Create AI video with Google Flow (labs.google/fx/tools/flow) via browser automation "
+                "or Gemini Veo API fallback. Use action=parse for natural language like "
+                "'create video in google flow of a sunset'."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["generate", "open", "check", "parse"],
+                        "default": "generate",
+                    },
+                    "prompt": {
+                        "type": "string",
+                        "description": "Video description (generate, open)",
+                    },
+                    "output": {
+                        "type": "string",
+                        "description": "Optional output .mp4 path",
+                    },
+                    "aspect": {
+                        "type": "string",
+                        "enum": ["16:9", "9:16", "1:1"],
+                        "default": "16:9",
+                    },
+                    "duration": {
+                        "type": "integer",
+                        "description": "Clip length in seconds (4–8, gemini backend)",
+                    },
+                    "model": {
+                        "type": "string",
+                        "description": "Gemini Veo model (default GOOGLE_FLOW_VEO_MODEL or veo-2.0-generate-001)",
+                    },
+                    "backend": {
+                        "type": "string",
+                        "enum": ["auto", "browser", "gemini", "open"],
+                        "description": "auto | browser | gemini | open",
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "Natural language for action=parse",
+                    },
+                },
+            },
+            handler=_handle_arka_google_flow,
+        ),
+        ArkaMcpTool(
             name="arka_webhook",
             description="OpenClaw/Hermes-style webhook gateway — status or health (no serve via MCP).",
             input_schema={
@@ -2262,7 +4238,8 @@ def _build_tools() -> list[ArkaMcpTool]:
             name="arka_markdown",
             description=(
                 "Read or ask about any local .md/.mdx file without document ingest. "
-                "Alias paths `frontend-content-guide` and `google-design` / `design.md` load "
+                "Alias paths `frontend-content-guide`, `google-design` / `design.md`, and "
+                "`ascii-isometric-landing-page` load bundled design guides."
                 "Arka's bundled UI guides (also auto-injected for frontend/UI goals via memory_context)."
             ),
             input_schema={
@@ -2278,7 +4255,7 @@ def _build_tools() -> list[ArkaMcpTool]:
                         "type": "string",
                         "description": (
                             "Path to a .md, .mdx, or .markdown file, or alias "
-                            "frontend-content-guide / google-design / design.md"
+                            "frontend-content-guide / google-design / design.md / ascii-isometric-landing-page"
                         ),
                     },
                     "question": {
@@ -2987,6 +4964,152 @@ def _build_tools() -> list[ArkaMcpTool]:
             handler=_handle_arka_config,
         ),
         ArkaMcpTool(
+            name="arka_model",
+            description=(
+                "Select and inspect LLM models — show current provider/model, "
+                "provider health dashboard, recommend models from hardware, list "
+                "providers/models, or set AI_PREFERRED_PROVIDER / AI_PREFERRED_MODEL."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": [
+                            "status",
+                            "dashboard",
+                            "recommend",
+                            "apply",
+                            "probe",
+                            "list_providers",
+                            "list_models",
+                            "set",
+                            "arbitrage",
+                        ],
+                        "default": "status",
+                        "description": (
+                            "status: current provider/model; dashboard: provider health, "
+                            "rate-limit exhaustion, fallback chain; recommend: hardware-based "
+                            "profile suggestions; apply: write recommendations; probe: "
+                            "hardware snapshot; list_providers/list_models: catalogs; "
+                            "set: choose provider and optional model; "
+                            "arbitrage: cost-based provider hot-swap (mode=status|once|start|stop)"
+                        ),
+                    },
+                    "provider": {
+                        "type": "string",
+                        "description": "Provider slug for set/list_models (openrouter, ollama, gemini, …)",
+                    },
+                    "model": {
+                        "type": "string",
+                        "description": "Model id for set (e.g. claude-sonnet-4, openrouter/anthropic/claude-3.5-sonnet)",
+                    },
+                    "apply": {
+                        "type": "boolean",
+                        "description": "When action=recommend, write profile models to llm-skill-models.json",
+                        "default": False,
+                    },
+                    "local": {
+                        "type": "boolean",
+                        "description": "When action=recommend, pick strongest runnable local Ollama model(s)",
+                        "default": False,
+                    },
+                    "top": {
+                        "type": "integer",
+                        "description": "With local recommend, how many models to return",
+                        "default": 1,
+                    },
+                    "refresh": {
+                        "type": "boolean",
+                        "description": "Force-refresh live model catalog from provider API",
+                        "default": False,
+                    },
+                    "autodetect": {
+                        "type": "boolean",
+                        "description": "When action=set without model, pick a default from the provider catalog",
+                        "default": True,
+                    },
+                    "all": {
+                        "type": "boolean",
+                        "description": "When action=list_models, include exhausted/unavailable models",
+                        "default": False,
+                    },
+                    "live": {
+                        "type": "boolean",
+                        "description": "When action=dashboard, live provider probes + balance + chain",
+                        "default": False,
+                    },
+                    "balance": {
+                        "type": "boolean",
+                        "description": "When action=dashboard, fetch OpenRouter balance",
+                        "default": False,
+                    },
+                    "chain": {
+                        "type": "boolean",
+                        "description": "When action=dashboard, include fallback chain candidates",
+                        "default": False,
+                    },
+                    "mode": {
+                        "type": "string",
+                        "enum": ["status", "once", "start", "stop"],
+                        "description": "When action=arbitrage: status, once (swap), start monitor, stop monitor",
+                    },
+                    "subaction": {
+                        "type": "string",
+                        "description": "Alias for mode when action=arbitrage",
+                    },
+                    "interval": {
+                        "type": "number",
+                        "description": "When action=arbitrage and mode=start, poll interval seconds",
+                    },
+                    "foreground": {
+                        "type": "boolean",
+                        "description": "When action=arbitrage and mode=start, run monitor in foreground",
+                        "default": False,
+                    },
+                    "dry_run": {
+                        "type": "boolean",
+                        "description": "When action=arbitrage and mode=once, evaluate without writing .env",
+                        "default": False,
+                    },
+                },
+            },
+            handler=_handle_arka_model,
+        ),
+        ArkaMcpTool(
+            name="arka_tunnel",
+            description=(
+                "Expose local Ollama as a production OpenAI-compatible endpoint — "
+                "start/stop authenticated proxy, optional cloudflared/ngrok tunnel, "
+                "API key management, and rate limiting."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["status", "start", "stop"],
+                        "default": "status",
+                        "description": "status: proxy/tunnel state; start: proxy (+ tunnel); stop: shutdown",
+                    },
+                    "host": {
+                        "type": "string",
+                        "description": "Proxy bind host when action=start (default 127.0.0.1)",
+                    },
+                    "port": {
+                        "type": "integer",
+                        "description": "Proxy port when action=start (default OLLAMA_TUNNEL_PORT or 11435)",
+                    },
+                    "no_tunnel": {
+                        "type": "boolean",
+                        "description": "When action=start, skip cloudflared/ngrok public tunnel",
+                        "default": False,
+                    },
+                },
+            },
+            handler=_handle_arka_tunnel,
+        ),
+        ArkaMcpTool(
             name="arka_sports",
             description=(
                 "Live sports scores (ESPN) — fetch scores by league query "
@@ -3138,6 +5261,133 @@ def _build_tools() -> list[ArkaMcpTool]:
             handler=_handle_arka_repo_health,
         ),
         ArkaMcpTool(
+            name="arka_ci",
+            description="Run repository CI gates (ruff, pytest, or .arka/ci.yaml overrides).",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Optional project root"},
+                    "full": {
+                        "type": "boolean",
+                        "description": "Run full CI suite",
+                        "default": False,
+                    },
+                    "changed_only": {
+                        "type": "boolean",
+                        "description": "Run changed-file gates only",
+                        "default": False,
+                    },
+                    "fix": {
+                        "type": "boolean",
+                        "description": "Hand first failure to goal agent",
+                        "default": False,
+                    },
+                },
+            },
+            handler=_handle_arka_ci,
+        ),
+        ArkaMcpTool(
+            name="arka_review",
+            description="Review git diff with security and test-gap hints.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Optional project root"},
+                    "base": {"type": "string", "description": "Base branch for diff review"},
+                    "staged": {
+                        "type": "boolean",
+                        "description": "Review staged changes only",
+                        "default": False,
+                    },
+                },
+            },
+            handler=_handle_arka_review,
+        ),
+        ArkaMcpTool(
+            name="arka_repo_context",
+            description="Query llm.txt repo context, sync index, or read index status.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["query", "index", "status"],
+                        "default": "query",
+                    },
+                    "query": {"type": "string", "description": "Context question when action=query"},
+                    "path": {"type": "string", "description": "Optional project root"},
+                    "limit_chars": {
+                        "type": "integer",
+                        "description": "Max characters in context response",
+                        "default": 12000,
+                    },
+                },
+            },
+            handler=_handle_arka_repo_context,
+        ),
+        ArkaMcpTool(
+            name="arka_pr_check",
+            description="PR diff, GitHub CI status, failure explanation, and change summary.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["diff", "ci", "explain", "summary"],
+                        "default": "diff",
+                    },
+                    "path": {"type": "string", "description": "Optional git repo root"},
+                    "base": {"type": "string", "description": "Base branch for diff/summary"},
+                    "pr": {"type": "integer", "description": "PR number for CI checks"},
+                    "run_id": {"type": "integer", "description": "Workflow run id for explain"},
+                    "stat_only": {
+                        "type": "boolean",
+                        "description": "Diff stat only when action=diff",
+                        "default": False,
+                    },
+                },
+            },
+            handler=_handle_arka_pr_check,
+        ),
+        ArkaMcpTool(
+            name="arka_code_search",
+            description="Search code in the active project with ripgrep/grep (optional embedding hook).",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Regex or text pattern to search"},
+                    "path": {"type": "string", "description": "Optional project root"},
+                    "glob": {"type": "string", "description": "Optional glob filter (rg --glob)"},
+                    "limit": {"type": "integer", "default": 40},
+                    "use_embeddings": {
+                        "type": "boolean",
+                        "description": "Reserved embedding hook (falls back to ripgrep)",
+                        "default": False,
+                    },
+                },
+                "required": ["query"],
+            },
+            handler=_handle_arka_code_search,
+        ),
+        ArkaMcpTool(
+            name="arka_apply_patch",
+            description="Apply a unified diff or search-replace patch inside the code project scope.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Optional code project root"},
+                    "diff": {"type": "string", "description": "Unified diff to apply via git apply"},
+                    "file": {"type": "string", "description": "Target file for search-replace mode"},
+                    "search": {"type": "string", "description": "Exact text to replace"},
+                    "replace": {"type": "string", "description": "Replacement text"},
+                    "old": {"type": "string", "description": "Alias for search"},
+                    "new": {"type": "string", "description": "Alias for replace"},
+                    "patch": {"type": "string", "description": "Alias for diff"},
+                },
+            },
+            handler=_handle_arka_apply_patch,
+        ),
+        ArkaMcpTool(
             name="arka_qa",
             description=(
                 "QA Engineering — test strategy plan, PR/feature checklists, coverage analysis, "
@@ -3181,6 +5431,107 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_qa,
+        ),
+        ArkaMcpTool(
+            name="arka_ocr",
+            description=(
+                "OCR local images (text + optional coordinates) or scanned PDFs (searchable PDF output). "
+                "Requires local filesystem access to the path you provide — not usable in cloud/sandbox "
+                "agents unless workspace files are mounted. "
+                "Verify incrementally: run one demo file first, inspect the result without waiting for "
+                "full batch logs, then a second file — only then report verified."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["auto", "extract", "pdf"],
+                        "default": "auto",
+                        "description": "auto: image text or PDF searchable; extract: image OCR; pdf: searchable PDF",
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "Local path to an image (.png, .jpg, …) or scanned PDF",
+                    },
+                    "output": {
+                        "type": "string",
+                        "description": "Optional output PDF path when action=pdf or auto on a PDF",
+                    },
+                    "language": {
+                        "type": "string",
+                        "description": "Tesseract language code for PDF OCR",
+                        "default": "eng",
+                    },
+                    "no_blocks": {
+                        "type": "boolean",
+                        "description": "Omit per-word coordinate blocks for image OCR",
+                        "default": False,
+                    },
+                    "zones": {
+                        "type": "boolean",
+                        "description": "Include top/middle/bottom spatial zones for image OCR",
+                        "default": False,
+                    },
+                },
+                "required": ["path"],
+            },
+            handler=_handle_arka_ocr,
+        ),
+        ArkaMcpTool(
+            name="arka_rag",
+            description=(
+                "Document RAG — ingest local files, list ingested docs, and ask questions over them "
+                "(PrivateGPT + optional TurboQuant). Actions ingest, codebase_ingest, and batch_ingest "
+                "require local filesystem access to the given path(s). Not usable in cloud/sandbox "
+                "agents unless workspace files are mounted. "
+                "Verify incrementally: ingest/ask on one local file first, confirm output without "
+                "waiting for full batch logs, then repeat on a second file — only then report verified."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": [
+                            "status",
+                            "list",
+                            "formats",
+                            "ingest",
+                            "ask",
+                            "codebase_ingest",
+                            "batch_ingest",
+                        ],
+                        "default": "status",
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "Local file or directory for ingest/codebase_ingest/batch_ingest",
+                    },
+                    "question": {
+                        "type": "string",
+                        "description": "Question when action=ask",
+                    },
+                    "document": {
+                        "type": "string",
+                        "description": "Optional ingested document name or artifact when action=ask",
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "Short codebase label when action=codebase_ingest",
+                    },
+                    "extensions": {
+                        "description": "File extensions for batch_ingest (e.g. [\".pdf\"] or \".pdf,.md\")",
+                        "oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
+                    },
+                    "no_recursive": {
+                        "type": "boolean",
+                        "description": "Only top-level files for batch_ingest",
+                        "default": False,
+                    },
+                },
+            },
+            handler=_handle_arka_rag,
         ),
         ArkaMcpTool(
             name="arka_agent_hub",
@@ -3353,6 +5704,8 @@ class ArkaMcpServer:
         success: bool = True,
         duration_ms: int = 0,
         error: str = "",
+        prompt: str = "",
+        args_summary: dict[str, Any] | None = None,
     ) -> None:
         try:
             from arka.telemetry.mcp_obs import observe_mcp_server_request
@@ -3363,6 +5716,8 @@ class ArkaMcpServer:
                 success=success,
                 duration_ms=duration_ms,
                 error=error,
+                prompt=prompt,
+                args_summary=args_summary,
             )
         except ImportError:
             pass
@@ -3408,7 +5763,7 @@ class ArkaMcpServer:
             try:
                 from arka.integrations.mcp_logs import log_mcp_event
 
-                log_mcp_event("server.ping", method=method, status="ok")
+                log_mcp_event("server.ping", method=method, status="ok", duration_ms=duration_ms)
             except ImportError:
                 pass
             self._observe_request("ping", duration_ms=duration_ms)
@@ -3422,7 +5777,7 @@ class ArkaMcpServer:
             try:
                 from arka.integrations.mcp_logs import log_mcp_event
 
-                log_mcp_event("server.initialize", method=method, status="ok")
+                log_mcp_event("server.initialize", method=method, status="ok", duration_ms=duration_ms)
             except ImportError:
                 pass
             self._observe_request("initialize", duration_ms=duration_ms)
@@ -3441,7 +5796,13 @@ class ArkaMcpServer:
             try:
                 from arka.integrations.mcp_logs import log_mcp_event
 
-                log_mcp_event("server.tools_list", method=method, status="ok", tools=len(self._tools))
+                log_mcp_event(
+                    "server.tools_list",
+                    method=method,
+                    status="ok",
+                    tools=len(self._tools),
+                    duration_ms=duration_ms,
+                )
             except ImportError:
                 pass
             self._observe_request("tools/list", duration_ms=duration_ms)
@@ -3456,13 +5817,29 @@ class ArkaMcpServer:
             arguments = params.get("arguments") or {}
             if not isinstance(arguments, dict):
                 arguments = {}
+            try:
+                from arka.integrations.mcp_logs import mcp_tool_call_fields
+
+                call_fields = mcp_tool_call_fields(name, arguments)
+            except ImportError:
+                call_fields = {}
+            prompt = str(call_fields.get("prompt") or "")
+            args_summary = call_fields.get("args_summary")
+            if not isinstance(args_summary, dict):
+                args_summary = None
             tool = self._tools.get(name)
             if not tool:
                 duration_ms = int((time.monotonic() - started) * 1000)
                 try:
                     from arka.integrations.mcp_logs import log_mcp_event
 
-                    log_mcp_event("server.tools_call", method=method, tool=name, status="unknown_tool")
+                    log_mcp_event(
+                        "server.tools_call",
+                        method=method,
+                        tool=name,
+                        status="unknown_tool",
+                        **call_fields,
+                    )
                 except ImportError:
                     pass
                 self._observe_request(
@@ -3471,6 +5848,8 @@ class ArkaMcpServer:
                     success=False,
                     duration_ms=duration_ms,
                     error="unknown_tool",
+                    prompt=prompt,
+                    args_summary=args_summary,
                 )
                 return self._error_response(request_id, -32602, f"Unknown tool: {name}")
             try:
@@ -3480,7 +5859,11 @@ class ArkaMcpServer:
 
             try:
                 if trace_mcp_server_tool_call is not None:
-                    with trace_mcp_server_tool_call(tool_name=name):
+                    with trace_mcp_server_tool_call(
+                        tool_name=name,
+                        prompt=prompt,
+                        args_summary=args_summary,
+                    ):
                         text = tool.handler(arguments)
                 else:
                     text = tool.handler(arguments)
@@ -3488,6 +5871,8 @@ class ArkaMcpServer:
                         "tools/call",
                         tool_name=name,
                         duration_ms=int((time.monotonic() - started) * 1000),
+                        prompt=prompt,
+                        args_summary=args_summary,
                     )
                 duration_ms = int((time.monotonic() - started) * 1000)
                 try:
@@ -3499,9 +5884,28 @@ class ArkaMcpServer:
                         tool=name,
                         status="ok",
                         duration_ms=duration_ms,
+                        **call_fields,
                     )
                 except ImportError:
                     pass
+                if trace_mcp_server_tool_call is not None:
+                    try:
+                        from arka.telemetry.tracing import log_response_duration
+
+                        duration_attrs: dict[str, Any] = {
+                            "arka.mcp.method": method,
+                            "arka.mcp.tool_name": name[:200],
+                            "arka.mcp.role": "server",
+                        }
+                        if prompt:
+                            duration_attrs["arka.mcp.prompt"] = prompt[:500]
+                        log_response_duration(
+                            f"mcp tools/call {name}",
+                            elapsed_ms=float(duration_ms),
+                            attributes=duration_attrs,
+                        )
+                    except ImportError:
+                        pass
                 return {
                     "jsonrpc": "2.0",
                     "id": request_id,
@@ -3519,6 +5923,7 @@ class ArkaMcpServer:
                         status="error",
                         error=str(exc),
                         duration_ms=duration_ms,
+                        **call_fields,
                     )
                 except ImportError:
                     pass
@@ -3529,6 +5934,8 @@ class ArkaMcpServer:
                         success=False,
                         duration_ms=duration_ms,
                         error=str(exc),
+                        prompt=prompt,
+                        args_summary=args_summary,
                     )
                 return {
                     "jsonrpc": "2.0",

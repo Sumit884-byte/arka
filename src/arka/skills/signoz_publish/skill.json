@@ -1,0 +1,19 @@
+{
+  "name": "signoz_publish",
+  "description": "One-shot SigNoz hackathon publish — push to GitHub, deploy landing to Vercel, update signoz/BLOG.md",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "signoz publish",
+    "publish signoz",
+    "push github vercel signoz",
+    "deploy signoz blog",
+    "signoz hackathon publish"
+  ],
+  "permissions": ["network", "write", "shell"],
+  "requires": {
+    "bins": ["git"]
+  }
+}

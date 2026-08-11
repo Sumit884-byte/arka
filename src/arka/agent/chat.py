@@ -1389,6 +1389,33 @@ def scrape_search_results(
     per_page_words: int | None = None,
 ) -> str:
     query = normalize_question(query)
+    cache_key = f"{query}|{min_words}|{hard_limit}|{per_page_words}"
+
+    def _fetch() -> str:
+        return _scrape_search_results_impl(
+            query,
+            min_words=min_words,
+            hard_limit=hard_limit,
+            per_page_words=per_page_words,
+        )
+
+    try:
+        from arka.core.fetch_dedup import fetch_dedup_enabled, get_cache
+
+        if fetch_dedup_enabled():
+            return get_cache("web_search").get_or_fetch(cache_key, _fetch, ttl=30.0)
+    except ImportError:
+        pass
+    return _fetch()
+
+
+def _scrape_search_results_impl(
+    query: str,
+    min_words: int = 400,
+    hard_limit: int = 8,
+    *,
+    per_page_words: int | None = None,
+) -> str:
     grounded = ground_search_query(query)
     results = duckduckgo_search(grounded, max_results=hard_limit)
     if not results:

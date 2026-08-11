@@ -10,6 +10,7 @@ import shlex
 import signal
 import subprocess
 import sys
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
@@ -139,6 +140,7 @@ class WebhookHandler(BaseHTTPRequestHandler):
         if path not in ("/v1/inbox", "/v1/webhook", "/v1/agent"):
             self._json(404, {"ok": False, "error": "not found"})
             return
+        started = time.perf_counter()
         try:
             data = json.loads(self._read_body().decode("utf-8"))
         except json.JSONDecodeError:
@@ -188,6 +190,20 @@ class WebhookHandler(BaseHTTPRequestHandler):
                 "chat_id": chat_id,
             },
         )
+        try:
+            from arka.telemetry.tracing import log_response_duration
+
+            log_response_duration(
+                f"http webhook {path}",
+                start=started,
+                attributes={
+                    "arka.http.path": path,
+                    "arka.http.source": source,
+                    "arka.exit_code": code,
+                },
+            )
+        except ImportError:
+            pass
 
 
 def serve() -> int:
@@ -197,6 +213,12 @@ def serve() -> int:
     if not _token():
         print("WEBHOOK_TOKEN (or REMOTE_TOKEN) required.", file=sys.stderr)
         return 1
+    try:
+        from arka.core.api_security import warn_if_insecure_startup
+
+        warn_if_insecure_startup("webhook")
+    except ImportError:
+        pass
     host = os.environ.get("WEBHOOK_HOST", "127.0.0.1")
     port = int(os.environ.get("WEBHOOK_PORT", "8767"))
     server = ThreadingHTTPServer((host, port), WebhookHandler)
@@ -217,7 +239,7 @@ def serve() -> int:
     return 0
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     try:
         from arka.env import load_env
 
@@ -243,7 +265,7 @@ def main() -> int:
         return 0
 
     p.set_defaults(func=_status)
-    args = parser.parse_args()
+    args = parser.parse_args(argv if argv is not None else sys.argv[1:])
     return int(args.func(args))
 
 

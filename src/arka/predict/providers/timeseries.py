@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from arka.charts.prediction import ForecastSeries, _linear_forecast, parse_forecast_days
+from arka.charts.prediction import ForecastSeries, _linear_forecast
 
 
 def build_timeseries_forecast(

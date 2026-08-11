@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
+
 
 def test_record_routing_and_skill_metrics(monkeypatch):
     monkeypatch.setenv("OTEL_TRACES_ENABLED", "1")
@@ -66,19 +68,64 @@ def test_finish_skill_dispatch_noop_span():
     assert 0 <= elapsed < 5000
 
 
+def test_request_span_logs_response_duration(monkeypatch):
+    import time
+
+    from arka.telemetry.tracing import _NoOpSpan, request_span
+
+    logs: list[tuple[str, dict]] = []
+
+    def fake_emit_log(message, *, level="info", attributes=None):
+        logs.append((message, dict(attributes or {})))
+
+    monkeypatch.setattr("arka.telemetry.logs.emit_log", fake_emit_log)
+    monkeypatch.setattr("arka.telemetry.metrics.record_request", lambda **_kwargs: None)
+
+    @contextmanager
+    def fake_span(_name, *, attributes=None):
+        yield _NoOpSpan()
+
+    monkeypatch.setattr("arka.telemetry.tracing.span", fake_span)
+
+    with request_span("arka", attributes={"arka.request.kind": "nl"}):
+        time.sleep(0.01)
+
+    assert any("request: arka" in msg for msg, _attrs in logs)
+    completion = [entry for entry in logs if entry[1].get("arka.event") == "request.complete"]
+    assert len(completion) == 1
+    assert completion[0][1]["arka.request.duration_ms"] >= 5.0
+    assert "completed" in completion[0][0]
+
+
+def test_log_response_duration_accepts_elapsed_ms(monkeypatch):
+    logs: list[tuple[str, dict]] = []
+
+    monkeypatch.setattr(
+        "arka.telemetry.logs.emit_log",
+        lambda message, *, level="info", attributes=None: logs.append((message, dict(attributes or {}))),
+    )
+
+    from arka.telemetry.tracing import log_response_duration
+
+    elapsed = log_response_duration("http remote /v1/agent", elapsed_ms=42.5)
+    assert elapsed == 42.5
+    assert logs[0][0] == "http remote /v1/agent (42.5ms)"
+    assert logs[0][1]["arka.request.duration_ms"] == 42.5
+
+
 def test_current_trace_ids_empty_without_span():
     from arka.telemetry.logs import current_trace_ids
 
     assert current_trace_ids() == ("", "")
 
 
-def test_telemetry_hint_when_endpoint_without_traces(monkeypatch, capsys):
+def test_telemetry_hint_when_traces_explicitly_disabled(monkeypatch, capsys):
     from importlib import reload
 
     import arka.telemetry._otlp as otlp
     import arka.telemetry.telemetry_hints as hints
 
-    monkeypatch.delenv("OTEL_TRACES_ENABLED", raising=False)
+    monkeypatch.setenv("OTEL_TRACES_ENABLED", "0")
     monkeypatch.setenv("SIGNOZ_ENDPOINT", "http://localhost:4318")
     monkeypatch.setenv("ARKA_TELEMETRY_HINT", "1")
     reload(otlp)
@@ -86,7 +133,7 @@ def test_telemetry_hint_when_endpoint_without_traces(monkeypatch, capsys):
 
     hints.maybe_emit_telemetry_setup_hint()
     err = capsys.readouterr().err
-    assert "OTEL_TRACES_ENABLED=1" in err
+    assert "OTEL_TRACES_ENABLED=0" in err
 
     hints.maybe_emit_telemetry_setup_hint()
     assert capsys.readouterr().err == ""
@@ -96,8 +143,8 @@ def test_agent_observability_guide():
     from arka.telemetry.telemetry_hints import agent_observability_guide
 
     guide = agent_observability_guide()
-    assert guide["env"]["OTEL_TRACES_ENABLED"] == "1"
-    assert guide["env"]["SIGNOZ_AUTOSTART"] == "1"
+    assert guide["env"]["SIGNOZ_ENDPOINT"] == "http://localhost:4318"
+    assert guide["disable_env"]["OTEL_SDK_DISABLED"] == "true"
     assert "arka signoz autostart install" in guide["commands"]
     assert "arka signoz demo" in guide["commands"]
     assert "arka.mcp.server.tool" in guide["sigNoz_filters"]["mcp_server"]

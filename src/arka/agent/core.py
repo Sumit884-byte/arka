@@ -274,6 +274,13 @@ def memory_context_for(goal: str, *, limit: int = 3) -> str:
         human_docs = human_docs_context(goal, limit_chars=2000)
     except ImportError:
         pass
+    website_pages = ""
+    try:
+        from arka.core.website_pages import context_for as website_pages_context
+
+        website_pages = website_pages_context(goal, limit_chars=2000)
+    except ImportError:
+        pass
     contextual = ""
     try:
         from arka.core.contextual_answer import context_for as contextual_answer_context
@@ -281,7 +288,18 @@ def memory_context_for(goal: str, *, limit: int = 3) -> str:
         contextual = contextual_answer_context(goal, limit_chars=800)
     except ImportError:
         pass
-    parts = [part for part in (rules, frontend, human_docs, contextual, body) if part]
+    fix_verify = ""
+    try:
+        from arka.core.fix_verify import context_for as fix_verify_context
+
+        fix_verify = fix_verify_context(goal, limit_chars=800)
+    except ImportError:
+        pass
+    parts = [
+        part
+        for part in (rules, fix_verify, frontend, human_docs, website_pages, contextual, body)
+        if part
+    ]
     return "\n\n".join(parts)
 
 
@@ -1054,7 +1072,10 @@ CODING_SESSION_DENIED_SKILLS = {
     "generate_image",
     "generate_thumbnail",
     "generate_video",
+    "ai_video",
     "generate_music",
+    "google_flow",
+    "music_generate",
     "model_to_image",
     "parallax_2d",
     "scene_3d",

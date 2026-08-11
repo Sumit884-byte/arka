@@ -15,7 +15,7 @@ import urllib.request
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 
 from arka.llm.api_keys import (
     apply_provider_key,
@@ -37,7 +37,10 @@ from arka.llm.servers import (
     LOCAL_PROVIDERS,
     LlmServerSession,
     apply_vllm_defaults,
+    ensure_ollama_model,
+    is_ollama_model_missing_error,
     is_reachable,
+    ollama_auto_pull_enabled,
     provider_available_with_servers,
     vllm_explicitly_configured,
 )
@@ -57,10 +60,9 @@ DEFAULT_GROQ_MODELS = [
 ]
 
 DEFAULT_OLLAMA_MODELS = [
-    "minimax-m2.5:cloud",
-    "minimax-m2:cloud",
     "qwen3:8b",
     "llama3.2:1b",
+    "minimax-m2:cloud",
 ]
 
 DEFAULT_OPENROUTER_MODELS = [
@@ -68,6 +70,13 @@ DEFAULT_OPENROUTER_MODELS = [
     "google/gemini-2.0-flash-exp:free",
     "openai/gpt-4o-mini",
     "anthropic/claude-sonnet-4",
+]
+
+DEFAULT_OPENROUTER_FREE_MODELS = [
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "google/gemma-3-27b-it:free",
+    "qwen/qwen3-235b-a22b:free",
+    "google/gemini-2.0-flash-exp:free",
 ]
 
 DEFAULT_LLM_MAX_TOKENS = 4096
@@ -106,10 +115,9 @@ DEFAULT_CHAIN: list[tuple[str, str]] = [
     *(( "gemini", mid) for mid in DEFAULT_GEMINI_MODELS),
     ("groq", "llama-3.3-70b-versatile"),
     ("groq", "llama-3.1-8b-instant"),
-    ("ollama", "minimax-m2.5:cloud"),
-    ("ollama", "minimax-m2:cloud"),
     ("ollama", "qwen3:8b"),
     ("ollama", "llama3.2:1b"),
+    ("ollama", "minimax-m2:cloud"),
 ]
 
 KNOWN_GEMINI = set(DEFAULT_GEMINI_MODELS) | {"gemini-3.5-flash", "gemini-flash-latest", "gemini-pro-latest"}
@@ -135,6 +143,18 @@ _OPENROUTER_LIVE_CACHE: tuple[float, list[str]] | None = None
 _OPENROUTER_META_CACHE: tuple[float, dict[str, dict[str, Any]]] | None = None
 _OPENROUTER_LIVE_LOCK = threading.Lock()
 _OPENROUTER_LIVE_TTL = 600.0
+
+
+def _coalesce_live_fetch(provider: str, fetch: Callable[[], list[str]]) -> list[str]:
+    """Singleflight concurrent live model-list fetches for the same provider."""
+    try:
+        from arka.core.fetch_dedup import fetch_dedup_enabled, get_cache
+
+        if fetch_dedup_enabled():
+            return get_cache("llm_live").singleflight(provider, fetch)
+    except ImportError:
+        pass
+    return fetch()
 
 OPENROUTER_LIST_SKIP_RE = re.compile(
     r"(?i)(embed|embedding|tts|whisper|image|vision|audio|moderation|rerank)",
@@ -200,54 +220,97 @@ class CompletionResult:
     tried: list[str] = field(default_factory=list)
 
 
+def _exhaustion_cooldown_seconds() -> float:
+    try:
+        return max(60.0, float(os.environ.get("LLM_EXHAUSTION_COOLDOWN", "3600")))
+    except (TypeError, ValueError):
+        return 3600.0
+
+
+def _is_gemini_rate_limit_error(low: str) -> bool:
+    return any(
+        x in low
+        for x in (
+            "free_tier",
+            "quota exceeded",
+            "resource_exhausted",
+            "429",
+            "rate limit",
+            "rate_limit",
+            "too many requests",
+        )
+    )
+
+
 @dataclass
 class ExhaustionStore:
     """Session-scoped provider/model exhaustion (shared across skills)."""
 
     _exhausted: set[tuple[str, str]] = field(default_factory=set)
+    _exhausted_at: dict[tuple[str, str], float] = field(default_factory=dict)
     _lock: threading.Lock = field(default_factory=threading.Lock)
 
+    def _mark_timed(self, provider: str, model_id: str, *, now: float | None = None) -> None:
+        key = (provider.lower(), model_id)
+        self._exhausted_at[key] = now if now is not None else time.time()
+
+    def _mark_gemini_rate_limited(self, *, now: float | None = None) -> None:
+        stamp = now if now is not None else time.time()
+        for mid in gemini_model_ids(include_live=False):
+            self._mark_timed("gemini", mid, now=stamp)
+
+    def _purge_expired(self) -> None:
+        cutoff = time.time() - _exhaustion_cooldown_seconds()
+        expired = [key for key, ts in self._exhausted_at.items() if ts < cutoff]
+        for key in expired:
+            del self._exhausted_at[key]
+
     def mark(self, provider: str, model_id: str, exc: Exception) -> None:
-        msg = str(exc).lower()
-        if not is_retryable_error(msg):
+        msg = str(exc)
+        try:
+            from arka.llm.retired_models import is_retired_model_error
+
+            if is_retired_model_error(msg):
+                provider = provider.lower()
+                with self._lock:
+                    self._exhausted.add((provider, model_id))
+                return
+        except ImportError:
+            pass
+        low = msg.lower()
+        if not is_retryable_error(low):
             return
         provider = provider.lower()
+        now = time.time()
         with self._lock:
-            self._exhausted.add((provider, model_id))
-            if provider == "gemini" and any(
-                x in msg for x in ("free_tier", "quota exceeded", "resource_exhausted", "429")
-            ):
-                quota_models = _gemini_models_in_error(msg)
-                if quota_models:
-                    for mid in quota_models:
-                        self._exhausted.add(("gemini", normalize_gemini_model(mid)))
-                elif "perproject" in msg or "per day" in msg or "per minute" in msg:
-                    for mid in gemini_model_ids(include_live=False):
-                        self._exhausted.add(("gemini", mid))
+            self._mark_timed(provider, model_id, now=now)
+            if provider == "gemini" and _is_gemini_rate_limit_error(low):
+                # Gemini rate limits are usually per-project/key; skip all models after one 429.
+                self._mark_gemini_rate_limited(now=now)
             if provider == "groq" and any(
-                x in msg for x in ("429", "rate limit", "quota", "resource_exhausted", "tokens per day")
+                x in low for x in ("429", "rate limit", "quota", "resource_exhausted", "tokens per day")
             ):
-                if any(x in msg for x in ("organization", "account", "org ", "daily token")):
+                if any(x in low for x in ("organization", "account", "org ", "daily token")):
                     for mid in groq_model_ids(include_live=False):
-                        self._exhausted.add(("groq", mid))
+                        self._mark_timed("groq", mid, now=now)
                 else:
-                    self._exhausted.add(("groq", model_id))
-            if provider == "groq" and "invalid api key" in msg:
+                    self._mark_timed("groq", model_id, now=now)
+            if provider == "groq" and "invalid api key" in low:
                 for mid in groq_model_ids(include_live=False):
-                    self._exhausted.add(("groq", mid))
+                    self._mark_timed("groq", mid, now=now)
             if provider == "groq" and any(
-                x in msg for x in ("decommissioned", "model_decommissioned", "model_not_found")
+                x in low for x in ("decommissioned", "model_decommissioned", "model_not_found")
             ):
-                self._exhausted.add(("groq", model_id))
+                self._mark_timed("groq", model_id, now=now)
                 dep = normalize_groq_model(model_id)
                 if dep != model_id:
-                    self._exhausted.add(("groq", dep))
+                    self._mark_timed("groq", dep, now=now)
             if provider == "ollama" and any(
-                x in msg for x in ("model_not_found", "not found", "404", "does not exist", "unknown model")
+                x in low for x in ("model_not_found", "not found", "404", "does not exist", "unknown model")
             ):
-                self._exhausted.add(("ollama", model_id))
+                self._mark_timed("ollama", model_id, now=now)
             if provider == "openrouter" and any(
-                x in msg
+                x in low
                 for x in (
                     "no endpoints found",
                     "endpoints found",
@@ -259,22 +322,29 @@ class ExhaustionStore:
                     "can only afford",
                 )
             ):
-                self._exhausted.add(("openrouter", model_id))
+                self._mark_timed("openrouter", model_id, now=now)
                 aliased = normalize_openrouter_model(model_id)
                 if aliased != model_id:
-                    self._exhausted.add(("openrouter", aliased))
+                    self._mark_timed("openrouter", aliased, now=now)
 
     def exhausted(self, provider: str, model_id: str) -> bool:
+        key = (provider.lower(), model_id)
         with self._lock:
-            return (provider.lower(), model_id) in self._exhausted
+            if key in self._exhausted:
+                return True
+            self._purge_expired()
+            return key in self._exhausted_at
 
     def list_exhausted(self) -> list[tuple[str, str]]:
         with self._lock:
-            return sorted(self._exhausted)
+            self._purge_expired()
+            active = set(self._exhausted) | set(self._exhausted_at)
+            return sorted(active)
 
     def reset(self) -> None:
         with self._lock:
             self._exhausted.clear()
+            self._exhausted_at.clear()
 
 
 EXHAUSTION = ExhaustionStore()
@@ -290,7 +360,7 @@ def _notify_total_exhaustion(message: str) -> None:
     try:
         from arka.paths import cache_dir
         stamp = cache_dir() / "llm-exhaustion-notified"
-        cooldown = max(60, int(float(os.environ.get("LLM_EXHAUSTION_COOLDOWN", "3600"))))
+        cooldown = max(60, int(_exhaustion_cooldown_seconds()))
         if stamp.is_file() and time.time() - stamp.stat().st_mtime < cooldown:
             _EXHAUSTION_NOTIFIED = True
             return
@@ -412,6 +482,8 @@ def infer_provider_from_model(model_id: str) -> str | None:
         return "ollama"
     if low.startswith(("llama-", "llama3", "gemma", "mixtral")):
         return "groq"
+    if low.startswith("apple-fm"):
+        return "apple-fm"
     pref = (env("AI_PREFERRED_PROVIDER") or env("LLM_PROVIDER")).lower()
     return pref or None
 
@@ -453,6 +525,8 @@ def parse_chain(raw: str) -> list[tuple[str, str]]:
                 "perplexity",
                 "huggingface",
                 "hf",
+                "apple-fm",
+                "apple_fm",
             }:
                 provider, model_id = head, tail
             else:
@@ -788,45 +862,50 @@ def fetch_gemini_models_live(*, force: bool = False) -> list[str]:
         if not force and _GEMINI_LIVE_CACHE and now - _GEMINI_LIVE_CACHE[0] < _GEMINI_LIVE_TTL:
             return list(_GEMINI_LIVE_CACHE[1])
 
-    data = None
-    for key in keys:
-        os.environ["GEMINI_API_KEY"] = key
-        os.environ["GOOGLE_API_KEY"] = key
-        url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key}"
-        try:
-            req = urllib.request.Request(url, method="GET")
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                data = json.loads(resp.read().decode())
-            break
-        except urllib.error.HTTPError as exc:
-            if is_key_retryable(str(exc)) and key != keys[-1]:
+    def _fetch() -> list[str]:
+        global _GEMINI_LIVE_CACHE
+        data = None
+        for key in keys:
+            os.environ["GEMINI_API_KEY"] = key
+            os.environ["GOOGLE_API_KEY"] = key
+            url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key}"
+            try:
+                req = urllib.request.Request(url, method="GET")
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    data = json.loads(resp.read().decode())
+                break
+            except urllib.error.HTTPError as exc:
+                if is_key_retryable(str(exc)) and key != keys[-1]:
+                    continue
+            except (urllib.error.URLError, OSError, TimeoutError, json.JSONDecodeError):
+                if key != keys[-1]:
+                    continue
+        if data is None:
+            with _GEMINI_LIVE_LOCK:
+                if _GEMINI_LIVE_CACHE:
+                    return list(_GEMINI_LIVE_CACHE[1])
+            return []
+
+        models: list[str] = []
+        for item in data.get("models") or []:
+            if not isinstance(item, dict):
                 continue
-        except (urllib.error.URLError, OSError, TimeoutError, json.JSONDecodeError):
-            if key != keys[-1]:
+            methods = item.get("supportedGenerationMethods") or []
+            if "generateContent" not in methods:
                 continue
-    if data is None:
+            name = str(item.get("name") or "")
+            if name.startswith("models/"):
+                name = name.split("/", 1)[1]
+            if name:
+                models.append(name)
+
+        models = _filter_gemini_chat_models(models)
+        stamped = time.time()
         with _GEMINI_LIVE_LOCK:
-            if _GEMINI_LIVE_CACHE:
-                return list(_GEMINI_LIVE_CACHE[1])
-        return []
+            _GEMINI_LIVE_CACHE = (stamped, models)
+        return list(models)
 
-    models: list[str] = []
-    for item in data.get("models") or []:
-        if not isinstance(item, dict):
-            continue
-        methods = item.get("supportedGenerationMethods") or []
-        if "generateContent" not in methods:
-            continue
-        name = str(item.get("name") or "")
-        if name.startswith("models/"):
-            name = name.split("/", 1)[1]
-        if name:
-            models.append(name)
-
-    models = _filter_gemini_chat_models(models)
-    with _GEMINI_LIVE_LOCK:
-        _GEMINI_LIVE_CACHE = (now, models)
-    return list(models)
+    return _coalesce_live_fetch("gemini", _fetch)
 
 
 def gemini_model_ids(*, include_live: bool = True) -> list[str]:
@@ -912,45 +991,50 @@ def fetch_groq_models_live(*, force: bool = False) -> list[str]:
         if not force and _GROQ_LIVE_CACHE and now - _GROQ_LIVE_CACHE[0] < _GROQ_LIVE_TTL:
             return list(_GROQ_LIVE_CACHE[1])
 
-    data = None
-    for key in keys:
-        try:
-            req = urllib.request.Request(
-                "https://api.groq.com/openai/v1/models",
-                headers={"Authorization": f"Bearer {key}"},
-                method="GET",
-            )
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                data = json.loads(resp.read().decode())
-            break
-        except urllib.error.HTTPError as exc:
-            if is_key_retryable(str(exc)) and key != keys[-1]:
-                continue
-        except (urllib.error.URLError, OSError, TimeoutError, json.JSONDecodeError):
-            if key != keys[-1]:
-                continue
+    def _fetch() -> list[str]:
+        global _GROQ_LIVE_CACHE
+        data = None
+        for key in keys:
+            try:
+                req = urllib.request.Request(
+                    "https://api.groq.com/openai/v1/models",
+                    headers={"Authorization": f"Bearer {key}"},
+                    method="GET",
+                )
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    data = json.loads(resp.read().decode())
+                break
+            except urllib.error.HTTPError as exc:
+                if is_key_retryable(str(exc)) and key != keys[-1]:
+                    continue
+            except (urllib.error.URLError, OSError, TimeoutError, json.JSONDecodeError):
+                if key != keys[-1]:
+                    continue
 
-    if data is None:
+        if data is None:
+            with _GROQ_LIVE_LOCK:
+                if _GROQ_LIVE_CACHE:
+                    return list(_GROQ_LIVE_CACHE[1])
+            return []
+
+        models: list[str] = []
+        for item in data.get("data") or []:
+            if not isinstance(item, dict):
+                continue
+            mid = str(item.get("id") or "").strip()
+            if not mid or GROQ_LIST_SKIP_RE.search(mid):
+                continue
+            mid = normalize_groq_model(mid)
+            if mid not in models:
+                models.append(mid)
+        models.sort(key=_rank_groq_model)
+
+        stamped = time.time()
         with _GROQ_LIVE_LOCK:
-            if _GROQ_LIVE_CACHE:
-                return list(_GROQ_LIVE_CACHE[1])
-        return []
+            _GROQ_LIVE_CACHE = (stamped, models)
+        return list(models)
 
-    models: list[str] = []
-    for item in data.get("data") or []:
-        if not isinstance(item, dict):
-            continue
-        mid = str(item.get("id") or "").strip()
-        if not mid or GROQ_LIST_SKIP_RE.search(mid):
-            continue
-        mid = normalize_groq_model(mid)
-        if mid not in models:
-            models.append(mid)
-    models.sort(key=_rank_groq_model)
-
-    with _GROQ_LIVE_LOCK:
-        _GROQ_LIVE_CACHE = (now, models)
-    return list(models)
+    return _coalesce_live_fetch("groq", _fetch)
 
 
 def groq_model_ids(*, include_live: bool = True) -> list[str]:
@@ -1011,6 +1095,13 @@ def _rank_ollama_model(model_id: str) -> tuple[int, str]:
     return (tier, mid)
 
 
+def clear_ollama_live_cache() -> None:
+    """Drop cached /api/tags results (e.g. after ollama pull)."""
+    global _OLLAMA_LIVE_CACHE
+    with _OLLAMA_LIVE_LOCK:
+        _OLLAMA_LIVE_CACHE = ()
+
+
 def fetch_ollama_models_live(*, force: bool = False) -> list[str]:
     """List installed Ollama models from /api/tags (cached ~2 min)."""
     global _OLLAMA_LIVE_CACHE
@@ -1023,32 +1114,37 @@ def fetch_ollama_models_live(*, force: bool = False) -> list[str]:
         if not force and _OLLAMA_LIVE_CACHE and now - _OLLAMA_LIVE_CACHE[0] < _OLLAMA_LIVE_TTL:
             return list(_OLLAMA_LIVE_CACHE[1])
 
-    try:
-        req = urllib.request.Request(f"{_ollama_host()}/api/tags", method="GET")
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            data = json.loads(resp.read().decode())
-    except (urllib.error.URLError, OSError, TimeoutError, json.JSONDecodeError):
+    def _fetch() -> list[str]:
+        global _OLLAMA_LIVE_CACHE
+        try:
+            req = urllib.request.Request(f"{_ollama_host()}/api/tags", method="GET")
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = json.loads(resp.read().decode())
+        except (urllib.error.URLError, OSError, TimeoutError, json.JSONDecodeError):
+            with _OLLAMA_LIVE_LOCK:
+                if _OLLAMA_LIVE_CACHE:
+                    return list(_OLLAMA_LIVE_CACHE[1])
+            return []
+
+        models: list[str] = []
+        for item in data.get("models") or []:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("name") or "").strip()
+            if not name or OLLAMA_LIST_SKIP_RE.search(name):
+                continue
+            if name.startswith("gemini-"):
+                continue
+            if name not in models:
+                models.append(name)
+        models.sort(key=_rank_ollama_model)
+
+        stamped = time.time()
         with _OLLAMA_LIVE_LOCK:
-            if _OLLAMA_LIVE_CACHE:
-                return list(_OLLAMA_LIVE_CACHE[1])
-        return []
+            _OLLAMA_LIVE_CACHE = (stamped, models)
+        return list(models)
 
-    models: list[str] = []
-    for item in data.get("models") or []:
-        if not isinstance(item, dict):
-            continue
-        name = str(item.get("name") or "").strip()
-        if not name or OLLAMA_LIST_SKIP_RE.search(name):
-            continue
-        if name.startswith("gemini-"):
-            continue
-        if name not in models:
-            models.append(name)
-    models.sort(key=_rank_ollama_model)
-
-    with _OLLAMA_LIVE_LOCK:
-        _OLLAMA_LIVE_CACHE = (now, models)
-    return list(models)
+    return _coalesce_live_fetch("ollama", _fetch)
 
 
 def ollama_model_ids(*, include_live: bool = True) -> list[str]:
@@ -1076,9 +1172,13 @@ def ollama_model_ids(*, include_live: bool = True) -> list[str]:
         if model not in out:
             out.append(model)
     if not out:
+        try:
+            from arka.llm.retired_models import filter_model_ids as _filter_model_ids
+        except ImportError:
+            return list(live) if live else list(DEFAULT_OLLAMA_MODELS)
         if live:
-            return list(live)
-        return list(DEFAULT_OLLAMA_MODELS)
+            return _filter_model_ids("ollama", list(live))
+        return _filter_model_ids("ollama", list(DEFAULT_OLLAMA_MODELS))
     preferred = {m for m in raw[:4] if m}
     head = [m for m in out if m in preferred]
     tail = sorted([m for m in out if m not in preferred], key=_rank_ollama_model)
@@ -1086,7 +1186,12 @@ def ollama_model_ids(*, include_live: bool = True) -> list[str]:
     for model in head + tail:
         if model not in merged:
             merged.append(model)
-    return merged
+    try:
+        from arka.llm.retired_models import filter_model_ids
+
+        return filter_model_ids("ollama", merged)
+    except ImportError:
+        return merged
 
 
 def _has_groq() -> bool:
@@ -1112,6 +1217,32 @@ def _openrouter_list_enabled() -> bool:
     if env("OPENROUTER_LIST") in {"0", "false", "no", "off"}:
         return False
     return bool(provider_has_keys("openrouter"))
+
+
+def _openrouter_free_only_enabled() -> bool:
+    return _truthy("OPENROUTER_FREE_ONLY", "0")
+
+
+def _is_openrouter_free_model(model_id: str, meta: dict[str, Any] | None = None) -> bool:
+    mid = (model_id or "").strip().lower()
+    if not mid:
+        return False
+    if ":free" in mid:
+        return True
+    if meta is None:
+        meta = openrouter_model_meta(model_id)
+    if meta:
+        return float(meta.get("completion_price", 0.0) or 0.0) <= 0.0
+    return False
+
+
+def _openrouter_effective_defaults() -> list[str]:
+    if _openrouter_free_only_enabled():
+        return list(DEFAULT_OPENROUTER_FREE_MODELS)
+    spec = get_provider("openrouter")
+    if spec and spec.default_models:
+        return list(spec.default_models)
+    return list(DEFAULT_OPENROUTER_MODELS)
 
 
 def _parse_positive_int(raw: str, default: int) -> int:
@@ -1213,7 +1344,12 @@ def _is_openrouter_credit_error(msg: str) -> bool:
 
 def _is_retired_model_error(msg: str) -> bool:
     """Retirement/410 responses are permanent for this model, not key failures."""
-    return bool(re.search(r"(?i)\b410\b|\b(?:retired|deprecated|shut\s*down|no longer available)\b", str(msg or "")))
+    try:
+        from arka.llm.retired_models import is_retired_model_error
+
+        return is_retired_model_error(msg)
+    except ImportError:
+        return bool(re.search(r"(?i)\b410\b|\b(?:retired|deprecated|shut\s*down|no longer available)\b", str(msg or "")))
 
 
 def _is_openrouter_account_credit_failure(err_text: str, attempt_max_tokens: int) -> bool:
@@ -1270,10 +1406,7 @@ def _openrouter_model_routable(item: dict) -> bool:
 
 def _rank_openrouter_model(model_id: str) -> tuple[int, float, str]:
     mid = model_id.lower()
-    defaults = list(DEFAULT_OPENROUTER_MODELS)
-    spec = get_provider("openrouter")
-    if spec and spec.default_models:
-        defaults = list(spec.default_models)
+    defaults = _openrouter_effective_defaults()
     for idx, candidate in enumerate(defaults):
         if candidate.lower() == mid:
             return (0, float(idx), mid)
@@ -1298,6 +1431,8 @@ def _filter_openrouter_chat_models(model_ids: list[str]) -> list[str]:
     out: list[str] = []
     for mid in model_ids:
         if mid not in out:
+            if _openrouter_free_only_enabled() and not _is_openrouter_free_model(mid):
+                continue
             out.append(mid)
     out.sort(key=_rank_openrouter_model)
     return out
@@ -1305,7 +1440,7 @@ def _filter_openrouter_chat_models(model_ids: list[str]) -> list[str]:
 
 def pick_openrouter_default_model(models: list[str]) -> str:
     spec = get_provider("openrouter")
-    defaults = list(spec.default_models) if spec and spec.default_models else list(DEFAULT_OPENROUTER_MODELS)
+    defaults = _openrouter_effective_defaults()
     for candidate in defaults:
         if candidate in models:
             return candidate
@@ -1331,52 +1466,57 @@ def fetch_openrouter_models_live(*, force: bool = False) -> list[str]:
         if not force and _OPENROUTER_LIVE_CACHE and now - _OPENROUTER_LIVE_CACHE[0] < _OPENROUTER_LIVE_TTL:
             return list(_OPENROUTER_LIVE_CACHE[1])
 
-    data = None
-    for key in keys:
-        try:
-            req = urllib.request.Request(
-                "https://openrouter.ai/api/v1/models",
-                headers={"Authorization": f"Bearer {key}"},
-                method="GET",
-            )
-            with urllib.request.urlopen(req, timeout=20) as resp:
-                data = json.loads(resp.read().decode())
-            break
-        except urllib.error.HTTPError as exc:
-            if is_key_retryable(str(exc)) and key != keys[-1]:
-                continue
-        except (urllib.error.URLError, OSError, TimeoutError, json.JSONDecodeError):
-            if key != keys[-1]:
-                continue
+    def _fetch() -> list[str]:
+        global _OPENROUTER_LIVE_CACHE, _OPENROUTER_META_CACHE
+        data = None
+        for key in keys:
+            try:
+                req = urllib.request.Request(
+                    "https://openrouter.ai/api/v1/models",
+                    headers={"Authorization": f"Bearer {key}"},
+                    method="GET",
+                )
+                with urllib.request.urlopen(req, timeout=20) as resp:
+                    data = json.loads(resp.read().decode())
+                break
+            except urllib.error.HTTPError as exc:
+                if is_key_retryable(str(exc)) and key != keys[-1]:
+                    continue
+            except (urllib.error.URLError, OSError, TimeoutError, json.JSONDecodeError):
+                if key != keys[-1]:
+                    continue
 
-    if data is None:
+        if data is None:
+            with _OPENROUTER_LIVE_LOCK:
+                if _OPENROUTER_LIVE_CACHE:
+                    return list(_OPENROUTER_LIVE_CACHE[1])
+            return []
+
+        models: list[str] = []
+        meta_map: dict[str, dict[str, Any]] = {}
+        for item in data.get("data") or []:
+            if not isinstance(item, dict):
+                continue
+            if not _openrouter_model_routable(item):
+                continue
+            mid = str(item.get("id") or "").strip()
+            if mid not in models:
+                models.append(mid)
+                meta_map[mid] = _openrouter_meta_from_item(item)
+
+        models = _filter_openrouter_chat_models(models)
+        default = pick_openrouter_default_model(models)
+        if default and default in models:
+            models.remove(default)
+            models.insert(0, default)
+
+        stamped = time.time()
         with _OPENROUTER_LIVE_LOCK:
-            if _OPENROUTER_LIVE_CACHE:
-                return list(_OPENROUTER_LIVE_CACHE[1])
-        return []
+            _OPENROUTER_LIVE_CACHE = (stamped, models)
+            _OPENROUTER_META_CACHE = (stamped, meta_map)
+        return list(models)
 
-    models: list[str] = []
-    meta_map: dict[str, dict[str, Any]] = {}
-    for item in data.get("data") or []:
-        if not isinstance(item, dict):
-            continue
-        if not _openrouter_model_routable(item):
-            continue
-        mid = str(item.get("id") or "").strip()
-        if mid not in models:
-            models.append(mid)
-            meta_map[mid] = _openrouter_meta_from_item(item)
-
-    models = _filter_openrouter_chat_models(models)
-    default = pick_openrouter_default_model(models)
-    if default and default in models:
-        models.remove(default)
-        models.insert(0, default)
-
-    with _OPENROUTER_LIVE_LOCK:
-        _OPENROUTER_LIVE_CACHE = (now, models)
-        _OPENROUTER_META_CACHE = (now, meta_map)
-    return list(models)
+    return _coalesce_live_fetch("openrouter", _fetch)
 
 
 def openrouter_model_ids(*, include_live: bool = True) -> list[str]:
@@ -1393,13 +1533,15 @@ def openrouter_model_ids(*, include_live: bool = True) -> list[str]:
     ]
     live = fetch_openrouter_models_live() if include_live and _openrouter_list_enabled() else []
     live_set = set(live)
-    catalog = explicit or list(spec.default_models) or [spec.default_model]
+    catalog = explicit or _openrouter_effective_defaults() or [spec.default_model]
 
     out: list[str] = []
 
     def _add(model: str) -> None:
         model = normalize_openrouter_model(model)
         if not model or model in out:
+            return
+        if _openrouter_free_only_enabled() and not _is_openrouter_free_model(model):
             return
         if live_set and model not in live_set:
             return
@@ -1435,6 +1577,13 @@ def provider_detected_model_count(provider: str) -> int | None:
             models = ollama_model_ids(include_live=True)
         elif slug == "openrouter":
             models = openrouter_model_ids(include_live=True)
+        elif slug == "apple-fm":
+            try:
+                from arka.llm.apple_fm import apple_fm_model_ids
+
+                models = apple_fm_model_ids()
+            except ImportError:
+                models = []
         else:
             spec = get_provider(slug)
             models = provider_model_ids(spec) if spec else []
@@ -1460,10 +1609,14 @@ def llm_doctor_lines() -> list[str]:
         lines.append(f"  LLM preferred:  {pref} → {pref_model}{suffix}")
     elif _has_openrouter() and not _has_primary_cloud_keys():
         spec = get_provider("openrouter")
-        default = spec.default_model if spec else "meta-llama/llama-3.3-70b-instruct"
+        catalog = openrouter_model_ids(include_live=False)
+        default = pick_openrouter_default_model(catalog) if catalog else (spec.default_model if spec else "")
+        if not default and spec:
+            default = spec.default_model
+        free_note = " (free models only)" if _openrouter_free_only_enabled() else ""
         count = provider_detected_model_count("openrouter")
         suffix = f" ({count} models detected)" if count else ""
-        lines.append(f"  LLM preferred:  openrouter → {default} (auto — only cloud key){suffix}")
+        lines.append(f"  LLM preferred:  openrouter → {default} (auto — only cloud key){free_note}{suffix}")
     return lines
 
 
@@ -1511,6 +1664,8 @@ def build_default_chain(*, task: str = "default", skill: str | None = None) -> l
         elif pref_provider == "ollama":
             if not pref_model.startswith("gemini-"):
                 add(pref_provider, pref_model)
+        elif pref_provider == "apple-fm":
+            add(pref_provider, pref_model or "apple-fm-system")
         elif pref_provider == "openrouter":
             live = fetch_openrouter_models_live() if _openrouter_list_enabled() else []
             if not live or pref_model in live:
@@ -1545,8 +1700,18 @@ def build_default_chain(*, task: str = "default", skill: str | None = None) -> l
     for model_id in ollama_models:
         add("ollama", model_id)
 
+    if not non_text_task:
+        try:
+            from arka.llm.apple_fm import apple_fm_enabled, apple_fm_model_ids, provider_available as apple_fm_ok
+
+            if apple_fm_enabled() and apple_fm_ok():
+                for model_id in apple_fm_model_ids():
+                    add("apple-fm", model_id)
+        except ImportError:
+            pass
+
     for spec in provider_specs():
-        if spec.slug in {"gemini", "groq", "ollama", "vllm", "vllm-cloud"}:
+        if spec.slug in {"gemini", "groq", "ollama", "vllm", "vllm-cloud", "apple-fm"}:
             continue
         if spec.slug == "openrouter" and openrouter_only and pref_provider != "openrouter":
             continue
@@ -1571,6 +1736,13 @@ def build_default_chain(*, task: str = "default", skill: str | None = None) -> l
     head = benchmark + skill_models + guidance
     if head:
         ordered = _prepend_chain(head, ordered)
+
+    try:
+        from arka.llm.retired_models import filter_chain
+
+        ordered = filter_chain(ordered)
+    except ImportError:
+        pass
 
     return ordered
 
@@ -1599,6 +1771,22 @@ def _ollama_reachable() -> bool:
             return resp.status == 200
     except (urllib.error.URLError, OSError, TimeoutError):
         return False
+
+
+def _try_ollama_auto_pull(provider: str, model_id: str, err: str, *, verbose: bool) -> bool:
+    """Pull a missing Ollama model once, then let the caller retry inference."""
+    if provider != "ollama" or not ollama_auto_pull_enabled():
+        return False
+    if not is_ollama_model_missing_error(err):
+        return False
+    ok, msg = ensure_ollama_model(model_id, verbose=verbose)
+    if ok:
+        if verbose:
+            print(f"arka_llm: ollama pull ok — retrying {model_id}", file=sys.stderr)
+        return True
+    if verbose:
+        print(f"arka_llm: ollama pull failed for {model_id}: {msg}", file=sys.stderr)
+    return False
 
 
 def _vllm_base_url() -> str:
@@ -1630,6 +1818,8 @@ def _inference_backend(provider: str) -> str:
         return "vllm-cloud"
     if provider == "vllm":
         return "vllm"
+    if provider == "apple-fm":
+        return "apple-fm"
     return provider
 
 
@@ -1676,9 +1866,9 @@ def build_model(
     if provider == "ollama":
         from agno.models.ollama import Ollama
 
-        mid = model_id or env("OLLAMA_CHAT_MODEL") or "minimax-m2.5:cloud"
-        if mid.startswith("gemini-"):
-            mid = "minimax-m2.5:cloud"
+        mid = model_id or env("OLLAMA_CHAT_MODEL") or "qwen3:8b"
+        if mid.startswith("gemini-") or mid.startswith("minimax-m2.5"):
+            mid = "qwen3:8b"
         apply_provider_key("ollama")
         options: dict[str, int | float] = {"temperature": temperature}
         if max_tokens is not None:
@@ -1689,6 +1879,36 @@ def build_model(
             api_key=env("OLLAMA_API_KEY") or None,
             options=options,
         )
+
+    if provider == "apple-fm":
+        from arka.llm.apple_fm import (
+            AppleFmModel,
+            check_availability,
+            cli_base_url,
+            DEFAULT_MODEL_ID,
+        )
+
+        status = check_availability()
+        if status.model_available:
+            return AppleFmModel(
+                model_id=model_id or DEFAULT_MODEL_ID,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+        if status.cli_reachable:
+            from agno.models.openai import OpenAIChat
+
+            mid = model_id or DEFAULT_MODEL_ID
+            kwargs = {
+                "id": mid,
+                "base_url": cli_base_url(),
+                "api_key": env("APPLE_FM_CLI_API_KEY") or "EMPTY",
+                "temperature": temperature,
+            }
+            if max_tokens is not None:
+                kwargs["max_tokens"] = max_tokens
+            return OpenAIChat(**kwargs)
+        return None
 
     if provider == "openai":
         from agno.models.openai import OpenAIChat
@@ -1810,10 +2030,15 @@ def _looks_like_error(text: str) -> bool:
             "can only afford",
             "fewer max_tokens",
             "empty response",
+            " was retired ",
+            "retired at",
+            "status code: 410",
         )
     ):
         return True
-    if re.search(r"\b401\b", stripped) or re.search(r"\b403\b", stripped):
+    if re.search(r"\b401\b", stripped) or re.search(r"\b403\b", stripped) or re.search(r"\b410\b", stripped):
+        return True
+    if _is_retired_model_error(stripped):
         return True
     return False
 
@@ -1875,8 +2100,17 @@ class LlmFallbackEngine:
 
     def candidates(self) -> list[tuple[str, str]]:
         if self.chain:
-            return list(self.chain)
-        return build_default_chain(task=self.task, skill=self.skill or None)
+            chain = list(self.chain)
+        else:
+            chain = build_default_chain(task=self.task, skill=self.skill or None)
+        try:
+            from arka.llm.retired_models import ensure_config_not_retired, filter_chain
+
+            ensure_config_not_retired()
+            chain = filter_chain(chain)
+        except ImportError:
+            pass
+        return chain
 
     def complete(self, system: str, user: str, *, temperature: float = 0.2) -> CompletionResult:
         from agno.agent import Agent
@@ -1913,6 +2147,7 @@ class LlmFallbackEngine:
                         token_retry = True
                         while token_retry:
                             token_retry = False
+                            ollama_pull_retry = False
                             apply_provider_key(provider)
                             model = build_model(
                                 provider,
@@ -1931,6 +2166,49 @@ class LlmFallbackEngine:
                             if attempt_max_tokens:
                                 label = f"{label} (max_tokens={attempt_max_tokens})"
                             tried.append(label)
+                            try:
+                                from arka.llm.apple_fm import AppleFmModel, complete as apple_fm_complete
+                            except ImportError:
+                                AppleFmModel = None  # type: ignore[misc,assignment]
+                                apple_fm_complete = None  # type: ignore[assignment]
+                            if AppleFmModel is not None and isinstance(model, AppleFmModel):
+                                try:
+                                    if verbose:
+                                        print(
+                                            f"arka_llm: trying {label} (task={normalize_task(self.task)})",
+                                            file=sys.stderr,
+                                        )
+                                    attempt_start = time.perf_counter()
+                                    text = apple_fm_complete(
+                                        system,
+                                        user,
+                                        temperature=temperature,
+                                        max_tokens=attempt_max_tokens,
+                                    )
+                                    text = _strip_fences(str(text).strip())
+                                    if text and not _looks_like_error(text):
+                                        _LAST_MODEL = (provider, model_id)
+                                        _LAST_ERROR = ""
+                                        if verbose:
+                                            print(f"arka_llm: ok {label}", file=sys.stderr)
+                                        return CompletionResult(
+                                            text=text,
+                                            provider=provider,
+                                            model_id=model_id,
+                                            attempts=attempts,
+                                        )
+                                    err_text = (text or "empty response")[:300]
+                                    last_error = f"{label}: {err_text}"
+                                    self.store.mark(provider, model_id, RuntimeError(err_text))
+                                    if verbose:
+                                        print(f"arka_llm: fail {label}: {err_text}", file=sys.stderr)
+                                    continue
+                                except Exception as exc:
+                                    last_error = f"{label}: {exc}"
+                                    self.store.mark(provider, model_id, exc)
+                                    if verbose:
+                                        print(f"arka_llm: fail {label}: {exc}", file=sys.stderr)
+                                    continue
                             try:
                                 from arka.telemetry import (
                                     llm_http_span_attributes,
@@ -1956,7 +2234,7 @@ class LlmFallbackEngine:
                                 **(
                                     {"arka.inference.backend": _inference_backend(provider)}
                                     if provider
-                                    in {"vllm", "vllm-cloud", "ollama", "lmstudio", "litellm"}
+                                    in {"vllm", "vllm-cloud", "ollama", "lmstudio", "litellm", "apple-fm"}
                                     else {}
                                 ),
                             }
@@ -2109,9 +2387,25 @@ class LlmFallbackEngine:
                                     except ImportError:
                                         pass
                                     if _is_retired_model_error(err_text):
-                                        self.store.mark(provider, model_id, RuntimeError(f"retired model: {err_text}"))
-                                        if verbose:
-                                            print(f"arka_llm: skip retired model {label}", file=sys.stderr)
+                                        try:
+                                            from arka.llm.retired_models import handle_retired_model_error
+
+                                            handle_retired_model_error(
+                                                provider,
+                                                model_id,
+                                                err_text,
+                                                store=self.store,
+                                                verbose=verbose,
+                                            )
+                                        except ImportError:
+                                            self.store.mark(
+                                                provider, model_id, RuntimeError(f"retired model: {err_text}")
+                                            )
+                                            if verbose:
+                                                print(
+                                                    f"arka_llm: skip retired model {label}",
+                                                    file=sys.stderr,
+                                                )
                                         break
                                     if rotate_provider_key(provider, err_text):
                                         if verbose:
@@ -2155,6 +2449,9 @@ class LlmFallbackEngine:
                                                         file=sys.stderr,
                                                     )
                                                 continue
+                                    if _try_ollama_auto_pull(provider, model_id, err_text, verbose=verbose):
+                                        ollama_pull_retry = True
+                                        break
                                     self.store.mark(provider, model_id, RuntimeError(err_text))
                                     if verbose:
                                         print(f"arka_llm: fail {label}: {err_text}", file=sys.stderr)
@@ -2183,9 +2480,25 @@ class LlmFallbackEngine:
                                 except ImportError:
                                     pass
                                 if _is_retired_model_error(err_text):
-                                    self.store.mark(provider, model_id, RuntimeError(f"retired model: {err_text}"))
-                                    if verbose:
-                                        print(f"arka_llm: skip retired model {label}", file=sys.stderr)
+                                    try:
+                                        from arka.llm.retired_models import handle_retired_model_error
+
+                                        handle_retired_model_error(
+                                            provider,
+                                            model_id,
+                                            err_text,
+                                            store=self.store,
+                                            verbose=verbose,
+                                        )
+                                    except ImportError:
+                                        self.store.mark(
+                                            provider, model_id, RuntimeError(f"retired model: {err_text}")
+                                        )
+                                        if verbose:
+                                            print(
+                                                f"arka_llm: skip retired model {label}",
+                                                file=sys.stderr,
+                                            )
                                     continue
                                 if rotate_provider_key(provider, exc):
                                     if verbose:
@@ -2228,10 +2541,15 @@ class LlmFallbackEngine:
                                                     f"with max_tokens={attempt_max_tokens}",
                                                     file=sys.stderr,
                                                 )
-                                            continue
+                                                continue
+                                if _try_ollama_auto_pull(provider, model_id, err_text, verbose=verbose):
+                                    ollama_pull_retry = True
+                                    break
                                 self.store.mark(provider, model_id, exc)
                                 if verbose:
                                     print(f"arka_llm: fail {label}: {exc}", file=sys.stderr)
+                            if ollama_pull_retry:
+                                continue
             finally:
                 session.close()
 
@@ -2282,6 +2600,33 @@ class LlmFallbackEngine:
                         )
                         if model is None:
                             break
+                        try:
+                            from arka.llm.apple_fm import AppleFmModel, stream_complete as apple_fm_stream
+                        except ImportError:
+                            AppleFmModel = None  # type: ignore[misc,assignment]
+                            apple_fm_stream = None  # type: ignore[assignment]
+                        if AppleFmModel is not None and isinstance(model, AppleFmModel):
+                            try:
+                                seen = ""
+                                for delta in apple_fm_stream(
+                                    system,
+                                    user,
+                                    temperature=temperature,
+                                    max_tokens=attempt_max_tokens,
+                                ):
+                                    seen += delta
+                                    yield delta
+                                if seen.strip():
+                                    text = _strip_fences(seen.strip())
+                                    if text and not _looks_like_error(text):
+                                        _LAST_MODEL = (provider, model_id)
+                                        _LAST_ERROR = ""
+                                        return
+                                last_error = seen[:300] if seen else "empty stream response"
+                            except Exception as exc:
+                                last_error = str(exc)
+                            self.store.mark(provider, model_id, RuntimeError(last_error))
+                            continue
                         try:
                             agent = Agent(model=model, instructions=system, markdown=False)
                             seen = ""

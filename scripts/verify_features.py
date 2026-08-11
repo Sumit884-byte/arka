@@ -49,9 +49,7 @@ def run_py(args: list[str], *, timeout: int = 30) -> tuple[int, str]:
 def test_imports() -> None:
     section("Imports")
     try:
-        from arka.agent import professions, profession_sources, profession_projects
-        from arka.router import route
-        from arka.integrations import qr_code, password_vault
+        from arka.agent import professions, profession_sources
 
         ok("core modules import", True)
         ok("domain count", len(professions.DOMAINS) >= 12, f"got {len(professions.DOMAINS)}")
@@ -400,7 +398,7 @@ def main() -> int:
     if args.live:
         test_output_quality_live()
 
-    print(f"\n━━ Summary ━━")
+    print("\n━━ Summary ━━")
     print(f"  Passed: {PASS}")
     print(f"  Failed: {FAIL}")
     if not args.live:

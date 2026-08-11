@@ -1,0 +1,63 @@
+{
+  "id": "20260729-151700-smartwatches",
+  "topic": "smartwatches",
+  "status": "completed",
+  "duration_seconds": 28800,
+  "interval_seconds": 1800,
+  "started_at": "2026-07-29T09:47:00.432290+00:00",
+  "ends_at": "2026-07-29T17:47:00.432290+00:00",
+  "rounds_done": 9,
+  "angles": [
+    "battery life comparison between leading smartwatch brands",
+    "Research the specific battery life of each leading smartwatch brand",
+    "What are the exact battery life claims for each leading smartwatch brand?",
+    "MIP display impact on battery life",
+    "How do MIP displays compare to OLED/AMOLED and LCD displays in smartwatches regarding power consumption, especially for always-on functionality, and what are the key trade-offs in terms of visual quality?",
+    "Real-world battery life comparison: MIP watches (Garmin, COROS) vs OLED watches (Apple, Samsung) with always-on display enabled",
+    "Quantitative always-on battery life comparison between MIP watches (Garmin/COROS) and OLED watches (Apple/Samsung)",
+    "real-world battery life test results comparing Garmin COROS MIP watches to Apple Samsung OLED watches",
+    "Specific real-world battery life test results for Apple Watch and Samsung Galaxy Watch with OLED displays in comparable usage scenarios"
+  ],
+  "deep": true,
+  "pid": null,
+  "pdf": true,
+  "pdf_images": true,
+  "scheduler": "routine",
+  "updated_at": "2026-07-31T14:29:39.280006+00:00",
+  "last_round_at": "2026-07-29T16:53:39.474598+00:00",
+  "image_paths": [
+    "/Users/sumitmishra/dev/arka/day-research/sessions/20260729-151700-smartwatches/images/cover.jpg",
+    "/Users/sumitmishra/dev/arka/day-research/sessions/20260729-151700-smartwatches/images/insight.jpg",
+    "/Users/sumitmishra/dev/arka/day-research/sessions/20260729-151700-smartwatches/images/compare.jpg"
+  ],
+  "pdf_path": "/Users/sumitmishra/dev/arka/day-research/sessions/20260729-151700-smartwatches/research.pdf",
+  "routine_id": "dayresearch-20260729151700smartwatch",
+  "chunk_count": 7,
+  "image_credits": [
+    {
+      "file": "cover",
+      "query": "smartwatch collection display",
+      "photographer": "Mudit Jain",
+      "photographer_url": "https://unsplash.com/@jain_mudit",
+      "photo_url": "https://images.unsplash.com/photo-1624165034698-a3a02b915c98?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4MjA2NDl8MHwxfHNlYXJjaHwxfHxzbWFydHdhdGNoJTIwY29sbGVjdGlvbiUyMGRpc3BsYXl8ZW58MXwwfHx8MTc4NTMzOTI1NXww&ixlib=rb-4.1.0&q=80&w=1080",
+      "description": "red green and black analog gauge"
+    },
+    {
+      "file": "insight",
+      "query": "smartwatch screen close up",
+      "photographer": "Simon Daoudi",
+      "photographer_url": "https://unsplash.com/@sdaoudi",
+      "photo_url": "https://images.unsplash.com/photo-1579586337278-3befd40fd17a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4MjA2NDl8MHwxfHNlYXJjaHwxfHxzbWFydHdhdGNoJTIwc2NyZWVuJTIwY2xvc2UlMjB1cHxlbnwxfDB8fHwxNzg1MzM5MjU4fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "description": "Apple Watch Series 5"
+    },
+    {
+      "file": "compare",
+      "query": "smartwatches side by side",
+      "photographer": "Luke Chesser",
+      "photographer_url": "https://unsplash.com/@lukechesser",
+      "photo_url": "https://images.unsplash.com/photo-1434493789847-2f02dc6ca35d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4MjA2NDl8MHwxfHNlYXJjaHwyfHxzbWFydHdhdGNoZXMlMjBzaWRlJTIwYnklMjBzaWRlfGVufDF8MHx8fDE3ODUzMzkyNjB8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "description": "Apple Watch user"
+    }
+  ],
+  "finished_at": "2026-07-30T10:51:47.839976+00:00"
+}

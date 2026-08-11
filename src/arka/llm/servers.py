@@ -58,7 +58,12 @@ def start_timeout() -> float:
 
 
 def _ollama_base_url() -> str:
-    host = _env("OLLAMA_HOST", "127.0.0.1:11434").replace("0.0.0.0", "127.0.0.1")
+    try:
+        from arka.core.api_security import safe_ollama_host
+
+        host = safe_ollama_host()
+    except ImportError:
+        host = _env("OLLAMA_HOST", "127.0.0.1:11434").replace("0.0.0.0", "127.0.0.1")
     if not host.startswith("http"):
         host = f"http://{host}"
     return host.rstrip("/")
@@ -474,6 +479,13 @@ def _start_ollama() -> subprocess.Popen[bytes] | None:
         return None
     env = os.environ.copy()
     try:
+        from arka.core.api_security import safe_ollama_host, warn_if_insecure_startup
+
+        env["OLLAMA_HOST"] = safe_ollama_host()
+        warn_if_insecure_startup("ollama")
+    except ImportError:
+        env["OLLAMA_HOST"] = _env("OLLAMA_HOST", "127.0.0.1:11434").replace("0.0.0.0", "127.0.0.1")
+    try:
         return subprocess.Popen(
             [ollama, "serve"],
             stdout=subprocess.DEVNULL,
@@ -484,6 +496,83 @@ def _start_ollama() -> subprocess.Popen[bytes] | None:
     except OSError as exc:
         _trace_stderr(f"Failed to start Ollama: {exc}")
         return None
+
+
+_OLLAMA_PULL_LOCK = threading.Lock()
+_OLLAMA_PULL_ATTEMPTED: set[str] = set()
+
+
+def ollama_auto_pull_enabled() -> bool:
+    return _truthy("ARKA_OLLAMA_AUTO_PULL", "1")
+
+
+def ollama_pull_timeout() -> float:
+    try:
+        return max(30.0, float(_env("ARKA_OLLAMA_PULL_TIMEOUT", "600")))
+    except ValueError:
+        return 600.0
+
+
+def is_ollama_model_missing_error(msg: str) -> bool:
+    low = (msg or "").lower()
+    return any(
+        x in low
+        for x in (
+            "model_not_found",
+            "model not found",
+            "not found",
+            "404",
+            "does not exist",
+            "unknown model",
+        )
+    )
+
+
+def reset_ollama_pull_attempts() -> None:
+    """Clear per-process pull dedupe (tests only)."""
+    with _OLLAMA_PULL_LOCK:
+        _OLLAMA_PULL_ATTEMPTED.clear()
+
+
+def ensure_ollama_model(model_id: str, *, verbose: bool = False) -> tuple[bool, str]:
+    """Pull an Ollama model once per process when missing. Returns (ok, message)."""
+    model_id = (model_id or "").strip()
+    if not model_id:
+        return False, "empty model id"
+    if not ollama_auto_pull_enabled():
+        return False, "auto-pull disabled (set ARKA_OLLAMA_AUTO_PULL=1 to enable)"
+    ollama = shutil.which("ollama")
+    if not ollama:
+        return False, "ollama binary not found — install from https://ollama.com"
+    with _OLLAMA_PULL_LOCK:
+        if model_id in _OLLAMA_PULL_ATTEMPTED:
+            return False, f"already attempted pull for {model_id} in this process"
+        _OLLAMA_PULL_ATTEMPTED.add(model_id)
+    _trace_stderr(f"Pulling Ollama model {model_id} (timeout {ollama_pull_timeout():.0f}s)…")
+    if verbose:
+        print(f"arka_llm: pulling ollama/{model_id}…", file=sys.stderr)
+    try:
+        proc = subprocess.run(
+            [ollama, "pull", model_id],
+            capture_output=True,
+            text=True,
+            timeout=ollama_pull_timeout(),
+            env=os.environ.copy(),
+        )
+    except subprocess.TimeoutExpired:
+        return False, f"ollama pull {model_id} timed out after {ollama_pull_timeout():.0f}s"
+    except OSError as exc:
+        return False, f"ollama pull failed: {exc}"
+    if proc.returncode != 0:
+        err = (proc.stderr or proc.stdout or "").strip()
+        return False, (err[:300] if err else f"ollama pull exited {proc.returncode}")
+    try:
+        from arka.llm.fallback import clear_ollama_live_cache
+
+        clear_ollama_live_cache()
+    except ImportError:
+        pass
+    return True, f"pulled {model_id}"
 
 
 def _start_vllm() -> subprocess.Popen[bytes] | None:
@@ -587,6 +676,13 @@ def provider_available_with_servers(provider: str) -> bool:
                 return provider_has_keys("groq")
             if spec.slug == "ollama":
                 return is_reachable("ollama") or (auto_start_enabled() and bool(shutil.which("ollama")))
+            if spec.slug == "apple-fm":
+                try:
+                    from arka.llm.apple_fm import provider_available as apple_fm_ok
+
+                    return apple_fm_ok()
+                except ImportError:
+                    return False
             if spec.slug in {"openai", "anthropic"}:
                 return provider_has_keys(provider)
         if provider == "vllm":

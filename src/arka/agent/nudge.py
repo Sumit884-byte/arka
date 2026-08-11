@@ -7,8 +7,6 @@ import json
 import sys
 
 from arka.routing.nudge import (
-    is_compare_mode,
-    is_nudge_request,
     nudge_mode,
     nudge_system_prompt,
     nudge_user_prompt,

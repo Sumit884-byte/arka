@@ -1,0 +1,22 @@
+{
+  "name": "dub_video",
+  "description": "Dub video into another language — transcribe, translate, TTS, and mux (Edge/Sarvam + ffmpeg)",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "dub video",
+    "dubbing",
+    "voice over translation",
+    "translate and dub",
+    "dub to hindi",
+    "dub to spanish"
+  ],
+  "permissions": ["read", "write", "shell", "network"],
+  "requires": {
+    "bins": ["ffmpeg", "ffprobe"],
+    "checks": ["tts"],
+    "note": "STT needs GROQ_API_KEY, SARVAM_API_KEY, or local faster-whisper unless you pass a script file."
+  }
+}

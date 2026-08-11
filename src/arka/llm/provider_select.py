@@ -332,6 +332,13 @@ def _catalog_models_for_provider(slug: str) -> list[str]:
         return groq_model_ids(include_live=False)
     if slug == "ollama":
         return ollama_model_ids(include_live=False)
+    if slug == "apple-fm":
+        try:
+            from arka.llm.apple_fm import apple_fm_model_ids
+
+            return apple_fm_model_ids()
+        except ImportError:
+            return provider_catalog_models(spec) if spec else []
     if slug == "openrouter":
         return openrouter_model_ids(include_live=False)
     if spec:
@@ -420,6 +427,20 @@ def detect_provider_models(
                 source = "catalog"
         else:
             models = ollama_model_ids(include_live=False)
+            source = "catalog"
+        if exclude_exhausted:
+            models = _filter_exhausted_models(slug, models)
+        return models, source
+
+    if slug == "apple-fm":
+        try:
+            from arka.llm.apple_fm import apple_fm_model_ids, check_availability
+
+            status = check_availability()
+            models = apple_fm_model_ids() if status.available else []
+            source = "live" if status.available else "catalog"
+        except ImportError:
+            models = _catalog_models_for_provider(slug)
             source = "catalog"
         if exclude_exhausted:
             models = _filter_exhausted_models(slug, models)
@@ -564,6 +585,16 @@ def auto_pick_model_if_needed(
     retain_model = keep_model_on_switch_enabled() if keep_model is None else keep_model
 
     if pref_model and (not provider or provider == pref_provider):
+        try:
+            from arka.llm.retired_models import is_retired, pick_replacement
+
+            if is_retired(slug, pref_model):
+                replacement = pick_replacement(slug, pref_model)
+                if replacement:
+                    set_env_vars({PREFERRED_MODEL_ENV: replacement})
+                    return replacement
+        except ImportError:
+            pass
         if slug == "openrouter":
             live = fetch_openrouter_models_live(force=force)
             if live and pref_model not in live:

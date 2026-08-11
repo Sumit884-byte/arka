@@ -595,6 +595,28 @@ def route_create_video(cmd: str) -> str | None:
     return "create_video " + " ".join(shlex.quote(a) for a in argv)
 
 
+def route_edit_video(cmd: str) -> str | None:
+    try:
+        from arka.media.edit_video import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "edit_video " + " ".join(shlex.quote(a) for a in argv)
+
+
+def route_dub_video(cmd: str) -> str | None:
+    try:
+        from arka.media.dub_video import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "dub_video " + " ".join(shlex.quote(a) for a in argv)
+
+
 def route_compose_slides(cmd: str) -> str | None:
     try:
         from arka.media.compose_slides import nl_to_argv
@@ -2436,6 +2458,8 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_convert_media,
         route_noise_remove,
         route_create_video,
+        route_edit_video,
+        route_dub_video,
         route_compose_video,
         route_terminal_video,
         route_timer,

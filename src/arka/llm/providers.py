@@ -38,6 +38,8 @@ PROVIDER_SLUG_ALIASES = {
     "google": "gemini",
     "glm": "zai",
     "fugu": "sakana",
+    "apple_fm": "apple-fm",
+    "apple": "apple-fm",
 }
 
 
@@ -371,7 +373,16 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
         default_model="llama3.2:1b",
         kind="native",
         models_env="OLLAMA_MODELS",
-        default_models=("minimax-m2.5:cloud", "qwen3:8b", "llama3.2:1b"),
+        default_models=("qwen3:8b", "llama3.2:1b", "minimax-m2:cloud"),
+    ),
+    ProviderSpec(
+        slug="apple-fm",
+        display_name="Apple Intelligence (on-device)",
+        env_keys=(),
+        default_model="apple-fm-system",
+        kind="native",
+        models_env="APPLE_FM_MODELS",
+        default_models=("apple-fm-system",),
     ),
     ProviderSpec(
         slug="lmstudio",

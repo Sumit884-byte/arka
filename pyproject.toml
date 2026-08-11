@@ -100,12 +100,16 @@ observability = [
     "opentelemetry-sdk>=1.27.0",
     "opentelemetry-exporter-otlp-proto-http>=1.27.0",
 ]
+apple-fm = [
+    "apple-fm-sdk",
+]
 all = [
     "arka-agent[chat,voice,pdf,pdf-tools,whatsapp,charts,drawings,video,3d,3d-ai,observability]",
 ]
 
 [project.scripts]
 arka = "arka.cli:main"
+arka-api = "arka.integrations.arka_api:main"
 
 [project.urls]
 Homepage = "https://github.com/Sumit884-byte/arka"

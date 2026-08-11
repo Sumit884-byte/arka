@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import time
 from contextlib import contextmanager
@@ -53,12 +54,19 @@ def mcp_tool_attrs(
     server: str,
     tool_name: str,
     transport: str = "http",
+    prompt: str = "",
+    args_summary: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return {
+    attrs: dict[str, Any] = {
         "arka.mcp.server": server,
         "arka.mcp.transport": transport,
         "arka.mcp.tool_name": tool_name[:200],
     }
+    if prompt:
+        attrs["arka.mcp.prompt"] = prompt[:500]
+    if args_summary:
+        attrs["arka.mcp.args_summary"] = json.dumps(args_summary, sort_keys=True)[:500]
+    return attrs
 
 
 def record_mcp_request(
@@ -84,11 +92,14 @@ def emit_mcp_log(
     operation: str = "",
     tool_name: str = "",
     success: bool | None = None,
+    duration_ms: float | None = None,
+    prompt: str = "",
+    args_summary: dict[str, Any] | None = None,
 ) -> None:
     try:
         from arka.telemetry.logs import emit_log
 
-        attrs: dict[str, Any] = {"arka.component": "mcp"}
+        attrs: dict[str, Any] = {"arka.component": "mcp", "arka.event": "mcp.server.response"}
         if server:
             attrs["arka.mcp.server"] = server
         if operation:
@@ -97,6 +108,12 @@ def emit_mcp_log(
             attrs["arka.mcp.tool_name"] = tool_name
         if success is not None:
             attrs["arka.mcp.success"] = success
+        if duration_ms is not None and duration_ms > 0:
+            attrs["arka.mcp.duration_ms"] = round(duration_ms, 2)
+        if prompt:
+            attrs["arka.mcp.prompt"] = prompt[:500]
+        if args_summary:
+            attrs["arka.mcp.args_summary"] = json.dumps(args_summary, sort_keys=True)[:500]
         emit_log(message, level=level, attributes=attrs)
     except ImportError:
         pass
@@ -113,6 +130,8 @@ def _emit_mcp_server_span(
     success: bool = True,
     duration_ms: float = 0,
     error: str = "",
+    prompt: str = "",
+    args_summary: dict[str, Any] | None = None,
 ) -> None:
     operation = _mcp_server_operation(method)
     span_name = "arka.mcp.server.tool" if operation == "tools_call" else f"arka.mcp.server.{operation}"
@@ -123,7 +142,15 @@ def _emit_mcp_server_span(
         "arka.mcp.transport": "stdio",
     }
     if tool_name:
-        attrs.update(mcp_tool_attrs(server="arka", tool_name=tool_name, transport="stdio"))
+        attrs.update(
+            mcp_tool_attrs(
+                server="arka",
+                tool_name=tool_name,
+                transport="stdio",
+                prompt=prompt,
+                args_summary=args_summary,
+            )
+        )
     if duration_ms > 0:
         attrs["arka.mcp.duration_ms"] = round(duration_ms, 2)
     if error:
@@ -150,6 +177,8 @@ def observe_mcp_server_request(
     success: bool = True,
     duration_ms: int = 0,
     error: str = "",
+    prompt: str = "",
+    args_summary: dict[str, Any] | None = None,
 ) -> None:
     """Record spans, metrics, and logs for the Arka MCP server (stdio)."""
     server = "arka"
@@ -160,6 +189,8 @@ def observe_mcp_server_request(
         success=success,
         duration_ms=float(duration_ms),
         error=error,
+        prompt=prompt,
+        args_summary=args_summary,
     )
     record_mcp_request(
         server=server,
@@ -170,6 +201,10 @@ def observe_mcp_server_request(
     message = f"mcp server {operation}"
     if tool_name:
         message += f" tool={tool_name}"
+    if prompt:
+        message += f" prompt={prompt[:120]}"
+    if duration_ms > 0:
+        message += f" ({duration_ms}ms)"
     if error:
         message += f" error={error[:120]}"
     emit_mcp_log(
@@ -179,11 +214,19 @@ def observe_mcp_server_request(
         operation=operation,
         tool_name=tool_name,
         success=success,
+        duration_ms=float(duration_ms) if duration_ms > 0 else None,
+        prompt=prompt,
+        args_summary=args_summary,
     )
 
 
 @contextmanager
-def trace_mcp_server_tool_call(*, tool_name: str) -> Iterator[Any]:
+def trace_mcp_server_tool_call(
+    *,
+    tool_name: str,
+    prompt: str = "",
+    args_summary: dict[str, Any] | None = None,
+) -> Iterator[Any]:
     """Wrap an MCP tool handler with a live server-side span, metrics, and logs."""
     start = time.perf_counter()
     current: Any = None
@@ -193,7 +236,13 @@ def trace_mcp_server_tool_call(*, tool_name: str) -> Iterator[Any]:
         yield None
         return
 
-    attrs = mcp_tool_attrs(server="arka", tool_name=tool_name, transport="stdio")
+    attrs = mcp_tool_attrs(
+        server="arka",
+        tool_name=tool_name,
+        transport="stdio",
+        prompt=prompt,
+        args_summary=args_summary,
+    )
     attrs["arka.mcp.role"] = "server"
     attrs["arka.mcp.method"] = "tools/call"
     with span("arka.mcp.server.tool", attributes=attrs) as span_obj:
@@ -218,12 +267,15 @@ def trace_mcp_server_tool_call(*, tool_name: str) -> Iterator[Any]:
                 tool_name=tool_name,
             )
             emit_mcp_log(
-                f"mcp server tools_call tool={tool_name} error={str(exc)[:120]}",
+                f"mcp server tools_call tool={tool_name} error={str(exc)[:120]} ({elapsed:.1f}ms)",
                 level="warn",
                 server="arka",
                 operation="tools_call",
                 tool_name=tool_name,
                 success=False,
+                duration_ms=elapsed,
+                prompt=prompt,
+                args_summary=args_summary,
             )
             raise
         else:
@@ -240,12 +292,15 @@ def trace_mcp_server_tool_call(*, tool_name: str) -> Iterator[Any]:
                 tool_name=tool_name,
             )
             emit_mcp_log(
-                f"mcp server tools_call tool={tool_name}",
+                f"mcp server tools_call tool={tool_name} ({elapsed:.1f}ms)",
                 level="info",
                 server="arka",
                 operation="tools_call",
                 tool_name=tool_name,
                 success=True,
+                duration_ms=elapsed,
+                prompt=prompt,
+                args_summary=args_summary,
             )
 
 

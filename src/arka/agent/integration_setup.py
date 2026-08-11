@@ -30,6 +30,7 @@ PROVIDERS = {
     "sentry": ("SENTRY_AUTH_TOKEN", "https://sentry.io/orgredirect/organizations/:orgslug/settings/auth-tokens/", "error monitoring"),
     "linear": ("LINEAR_API_KEY", "https://linear.app/settings/api", "issue tracking"),
     "discord": ("DISCORD_TOKEN", "https://discord.com/developers/applications", "team notifications"),
+    "devto": ("DEVTO_API_KEY", "https://dev.to/settings/extensions", "dev.to blog publishing"),
     "huggingface": ("HF_TOKEN", "https://huggingface.co/settings/tokens", "open model inference"),
     "mistral": ("MISTRAL_API_KEY", "https://console.mistral.ai/api-keys/", "Mistral models"),
     "cohere": ("COHERE_API_KEY", "https://dashboard.cohere.com/api-keys", "Cohere models"),
@@ -83,7 +84,7 @@ CLI_TOOLS = {
 }
 ALIASES = {
     "gh": "github", "gcp": "google", "gemini": "google", "ctx7": "context7",
-    "hf": "huggingface", "hugging-face": "huggingface",
+    "hf": "huggingface", "hugging-face": "huggingface", "dev.to": "devto",
 }
 
 

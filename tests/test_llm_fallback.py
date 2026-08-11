@@ -267,7 +267,7 @@ def test_builtin_tail_chain_matches_default():
 
     assert builtin_tail_chain() == list(DEFAULT_CHAIN)
     assert DEFAULT_CHAIN[0] == ("gemini", "gemini-2.5-flash")
-    assert DEFAULT_CHAIN[-1] == ("ollama", "llama3.2:1b")
+    assert DEFAULT_CHAIN[-1] == ("ollama", "minimax-m2:cloud")
 
 
 def _fake_llm_engine_chain() -> list[tuple[str, str]]:
@@ -367,6 +367,10 @@ def test_retired_model_error_is_permanent():
     assert fb._is_retired_model_error("HTTP 410: minimax-m2 was retired")
     assert fb._is_retired_model_error("model deprecated")
     assert not fb._is_retired_model_error("temporary timeout")
+
+
+def test_retired_response_body_is_treated_as_error():
+    assert fb._looks_like_error("minimax-m2.5 was retired (status code: 410)")
 
 
 def test_connection_error_is_treated_as_failure():
@@ -479,3 +483,86 @@ def test_exhaustion_notification_is_best_effort(monkeypatch):
     monkeypatch.setattr(fb, "_truthy", lambda *args: True)
     fb._notify_total_exhaustion("all exhausted")
     assert fb._EXHAUSTION_NOTIFIED is True
+
+
+def test_gemini_429_exhausts_all_models(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clear_fallback_env(monkeypatch)
+    monkeypatch.setenv("GEMINI_MODELS", "gemini-2.5-flash,gemini-2.0-flash,gemini-2.0-flash-lite")
+
+    from importlib import reload
+
+    import arka.llm.fallback as fb_mod
+
+    reload(fb_mod)
+    store = fb_mod.ExhaustionStore()
+    store.mark("gemini", "gemini-2.5-flash", RuntimeError("429 RESOURCE_EXHAUSTED"))
+
+    for mid in ("gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.0-flash-lite"):
+        assert store.exhausted("gemini", mid)
+
+
+def test_gemini_rate_limit_error_is_case_insensitive() -> None:
+    assert fb._is_gemini_rate_limit_error("status: resource_exhausted")
+
+
+def test_exhaustion_cooldown_expires(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_EXHAUSTION_COOLDOWN", "60")
+
+    from importlib import reload
+
+    import arka.llm.fallback as fb_mod
+
+    reload(fb_mod)
+    store = fb_mod.ExhaustionStore()
+    past = fb_mod.time.time() - 120
+    store._mark_timed("gemini", "gemini-2.0-flash", now=past)
+
+    assert store.exhausted("gemini", "gemini-2.0-flash") is False
+
+
+def test_gemini_429_skips_remaining_models_in_chain(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _clear_fallback_env(monkeypatch)
+    monkeypatch.setenv("ARKA_MODE", "debug")
+    monkeypatch.setenv("GEMINI_MODELS", "gemini-2.5-flash,gemini-2.0-flash,gemini-2.0-flash-lite")
+
+    from importlib import reload
+    from types import SimpleNamespace
+    from unittest.mock import patch
+
+    import arka.llm.fallback as fb_mod
+
+    reload(fb_mod)
+    store = fb_mod.ExhaustionStore()
+
+    chain = [
+        ("gemini", "gemini-2.5-flash"),
+        ("gemini", "gemini-2.0-flash"),
+        ("gemini", "gemini-2.0-flash-lite"),
+        ("groq", "llama-3.3-70b-versatile"),
+    ]
+    calls: list[tuple[str, str]] = []
+
+    class FakeAgent:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def run(self, _user):
+            provider, model_id = calls[-1]
+            if provider == "gemini":
+                raise RuntimeError("429 RESOURCE_EXHAUSTED")
+            return SimpleNamespace(content="ok from groq")
+
+    def fake_build_model(provider, model_id, temperature, *, max_tokens=None, session=None):
+        calls.append((provider, model_id))
+        return object()
+
+    engine = fb_mod.LlmFallbackEngine(chain=chain, store=store)
+
+    with patch.object(fb_mod, "build_model", side_effect=fake_build_model):
+        with patch("agno.agent.Agent", FakeAgent):
+            result = engine.complete("You are helpful.", "hello")
+
+    assert result.provider == "groq"
+    assert len([c for c in calls if c[0] == "gemini"]) == 1

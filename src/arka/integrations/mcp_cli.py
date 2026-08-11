@@ -227,6 +227,19 @@ def cmd_logs(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_stats(args: argparse.Namespace) -> int:
+    from arka.integrations.mcp_logs import mcp_tool_stats
+
+    print(
+        mcp_tool_stats(
+            top=int(args.top),
+            event=str(args.event or "server.tools_call"),
+            json_output=bool(args.json),
+        )
+    )
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="arka mcp",
@@ -291,6 +304,15 @@ def build_parser() -> argparse.ArgumentParser:
     logs_p.add_argument("--event", default="", help="Filter by exact event name")
     logs_p.add_argument("--json", action="store_true", help="Emit structured JSON")
 
+    stats_p = sub.add_parser("stats", help="Top MCP tools by call frequency (from mcp.jsonl)")
+    stats_p.add_argument("--top", type=int, default=20, help="Number of tools to show (default: 20)")
+    stats_p.add_argument(
+        "--event",
+        default="server.tools_call",
+        help="Log event to aggregate (default: server.tools_call; use client.call_tool for outbound)",
+    )
+    stats_p.add_argument("--json", action="store_true", help="Emit structured JSON")
+
     parse_p = sub.add_parser("parse", help=argparse.SUPPRESS)
     parse_p.add_argument("text", help="Natural language request")
     return parser
@@ -325,6 +347,7 @@ def main(argv: list[str] | None = None) -> int:
         "doctor": cmd_doctor,
         "context7-label": cmd_context7_label,
         "logs": cmd_logs,
+        "stats": cmd_stats,
         "parse": cmd_parse,
     }
     return handlers[args.command](args)
@@ -344,6 +367,7 @@ Usage:
   arka mcp call <server> <tool> [--args '{}']
   arka mcp status                            Connection health
   arka mcp logs [-n 50] [--json]             Show recent MCP client/server events
+  arka mcp stats [--top 20] [--json]         Top MCP tools by call frequency
   arka mcp preset threejs [--apply]          Configure baryhuang/mcp-threejs
   arka mcp preset spline [--apply]           Configure Spline MCP as default Spline provider
   arka mcp self-tools                        List Arka's 37 native MCP tools

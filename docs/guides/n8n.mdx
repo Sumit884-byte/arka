@@ -1,0 +1,160 @@
+---
+title: "n8n workflow automation"
+description: "Connect n8n to Arka's remote agent API and verified webhook inbox — with session continuity and bidirectional triggers."
+keywords: ["n8n", "workflow", "automation", "webhook", "HTTP Request", "integration"]
+icon: "diagram-project"
+---
+
+[n8n](https://n8n.io/) is a workflow automation tool. Arka does not ship a separate n8n server — it exposes two HTTP surfaces you call from n8n **HTTP Request** nodes:
+
+| Endpoint | Arka service | Best for |
+| --- | --- | --- |
+| `POST /v1/agent` | `arka serve` (port 8765) | Full agent runs, coding profile, media |
+| `POST /v1/inbox` | `arka webhook serve` (port 8767) | Verified ingress, session continuity, silence tokens |
+
+```bash
+# Inspect endpoints and copy-paste hints
+arka n8n status
+arka n8n example
+arka n8n example --json
+```
+
+## Prerequisites
+
+1. Configure Arka env vars in `~/.config/arka/.env` (see [Configuration](/guides/configuration)).
+2. Start at least one HTTP listener:
+
+```bash
+# Remote agent API (recommended for general automation)
+arka serve
+
+# Verified webhook inbox (recommended for multi-turn channel sessions)
+WEBHOOK_ENABLED=1 WEBHOOK_TOKEN=$REMOTE_TOKEN arka webhook serve
+```
+
+3. Confirm health:
+
+```bash
+curl -s http://127.0.0.1:8765/v1/health
+curl -s http://127.0.0.1:8767/v1/health -H "Authorization: Bearer $REMOTE_TOKEN"
+```
+
+## Environment variables
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `REMOTE_TOKEN` | generated on first `arka serve` | Bearer token for `/v1/agent` and `/v1/health` |
+| `REMOTE_HOST` | `0.0.0.0` | Bind address for remote server |
+| `REMOTE_PORT` | `8765` | Remote server port |
+| `ARKA_BACKEND_URL` | `http://127.0.0.1:8765` | Override base URL (n8n on another host, Railway, etc.) |
+| `WEBHOOK_ENABLED` | `0` | Must be `1` to start webhook server |
+| `WEBHOOK_TOKEN` | falls back to `REMOTE_TOKEN` | Bearer token for `/v1/inbox` |
+| `WEBHOOK_HOST` | `127.0.0.1` | Webhook bind address |
+| `WEBHOOK_PORT` | `8767` | Webhook port |
+| `MESSAGE_SESSIONS` | `1` | When enabled, inbox uses `source` + `chat_id` for continuity |
+
+## n8n → Arka: HTTP Request (agent)
+
+Use this when you want the full Arka agent (skills, repo context, coding profile).
+
+**Node settings:**
+
+- **Method:** `POST`
+- **URL:** `http://127.0.0.1:8765/v1/agent` (or your `ARKA_BACKEND_URL`)
+- **Authentication:** Header `Authorization: Bearer {{ $env.REMOTE_TOKEN }}`
+- **Body (JSON):**
+
+```json
+{
+  "text": "{{ $json.prompt }}",
+  "remote_speak": false
+}
+```
+
+**Response:** read `output` from the JSON body. Check `ok` and `exit_code`.
+
+Run `arka n8n example` for a copy-paste node definition.
+
+## n8n → Arka: HTTP Request (inbox + sessions)
+
+Use this for verified inbound automation with [Hermes-style session continuity](/guides/hermes-features).
+
+**Node settings:**
+
+- **Method:** `POST`
+- **URL:** `http://127.0.0.1:8767/v1/inbox`
+- **Authentication:** Header `Authorization: Bearer {{ $env.WEBHOOK_TOKEN }}`
+- **Body (JSON):**
+
+```json
+{
+  "text": "{{ $json.message }}",
+  "source": "n8n",
+  "chat_id": "{{ $json.session_id || 'default' }}"
+}
+```
+
+Keep `source` and `chat_id` stable across workflow runs to preserve conversation context. The same session keys work with `arka ask` when `MESSAGE_SESSION_CHANNEL` / `MESSAGE_SESSION_CHAT_ID` match.
+
+**Response:** `output` (empty when `"silent": true`), plus `source` and `chat_id`.
+
+## Session continuity pattern
+
+```text
+Workflow 1 (chat_id=deploy-42): "What failed in the last deploy?"
+Workflow 2 (chat_id=deploy-42): "Draft a rollback checklist."
+```
+
+Both POSTs use `"source":"n8n"` and `"chat_id":"deploy-42"`. Arka injects prior turns before running the agent.
+
+## Arka → n8n (bidirectional)
+
+To push events from Arka into n8n:
+
+1. Add an **n8n Webhook** trigger node to your workflow and copy the **Production URL**.
+2. POST from a shell step, routine, or agent-generated command:
+
+```bash
+curl -s "$N8N_WEBHOOK_URL" \
+  -H "Content-Type: application/json" \
+  -d '{"event":"arka.completed","task":"nightly-health","output":"All checks passed"}'
+```
+
+Store `N8N_WEBHOOK_URL` in Arka's `.env`. For scheduled pushes, use [routines](/guides/openclaw-features) or an n8n **Schedule** trigger that polls Arka health instead.
+
+## Railway hosted option
+
+For a cloud-hosted Arka API (coding profile), deploy with the Railway profile and point n8n at the public URL:
+
+```bash
+arka deploy --platform railway --yes
+export ARKA_BACKEND_URL="https://your-arka.up.railway.app"
+export REMOTE_TOKEN="your-railway-remote-token"
+arka n8n status
+```
+
+Set `REMOTE_TOKEN` and provider keys in Railway Variables. See [Deploy coding skills to Railway](/guides/railway-coding-skills) for the full hosted setup. Prefer HTTPS and keep tokens in n8n credentials — not in workflow JSON exports.
+
+## CLI reference
+
+```bash
+arka webhook serve          # start verified inbox
+arka webhook status         # listener status
+arka webhook status --json
+arka n8n status             # endpoints + n8n hints
+arka n8n example            # curl + HTTP Request JSON
+```
+
+## Troubleshooting
+
+| Symptom | Fix |
+| --- | --- |
+| `401 unauthorized` | Match `Authorization: Bearer` token to `REMOTE_TOKEN` / `WEBHOOK_TOKEN` in Arka's `.env` |
+| Webhook won't start | Set `WEBHOOK_ENABLED=1` and `WEBHOOK_TOKEN` (or `REMOTE_TOKEN`) |
+| No session memory between runs | Use `/v1/inbox` with stable `source` + `chat_id`; confirm `MESSAGE_SESSIONS=1` |
+| n8n timeout | Increase HTTP Request timeout (default agent: 600s; webhook: 300s) |
+| Works locally, not from n8n Cloud | Expose via HTTPS tunnel/reverse proxy or use Railway-hosted Arka |
+
+<Note>
+  Start listeners before running workflows. Use `arka webhook status` and `arka n8n status` to verify URLs and tokens without invoking the agent.
+</Note>

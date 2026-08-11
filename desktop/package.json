@@ -1,0 +1,16 @@
+{
+  "name": "arka-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Arka local desktop app (Tauri)",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "ui:dev": "npm run dev --prefix ui",
+    "ui:build": "npm run build --prefix ui",
+    "bridge": "python3 bridge.py"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.5.0"
+  }
+}

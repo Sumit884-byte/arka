@@ -32,7 +32,97 @@ from arka.media.stock_photos import (
     setup_hint as stock_setup_hint,
     stock_search_query,
 )
+from arka.media.stock_videos import (
+    StockVideo,
+    any_video_source_available,
+    diverse_video_queries,
+    download_stock_video,
+    search_stock_videos,
+    stock_video_search_query,
+    video_uid,
+)
 from arka.media.unsplash import access_key
+
+
+VIDEO_MODES = frozenset({"hybrid", "auto", "photos", "video"})
+
+_MEDIA_TYPE_VIDEO_HINTS = frozenset(
+    {
+        "mountain",
+        "mountains",
+        "ocean",
+        "sea",
+        "forest",
+        "river",
+        "lake",
+        "city",
+        "skyline",
+        "landscape",
+        "sunset",
+        "sunrise",
+        "golden hour",
+        "running",
+        "walking",
+        "driving",
+        "flying",
+        "drone",
+        "aerial",
+        "wave",
+        "waves",
+        "waterfall",
+        "traffic",
+        "street",
+        "nature",
+        "wildlife",
+        "sport",
+        "sports",
+        "workout",
+        "dance",
+        "travel",
+        "road",
+        "highway",
+        "timelapse",
+        "cinematic",
+        "motion",
+        "moving",
+        "panoramic",
+        "outdoors",
+        "hiking",
+        "surf",
+        "snow",
+        "rain",
+        "storm",
+        "clouds",
+    }
+)
+
+_MEDIA_TYPE_IMAGE_HINTS = frozenset(
+    {
+        "chart",
+        "graph",
+        "diagram",
+        "concept",
+        "abstract",
+        "icon",
+        "logo",
+        "portrait",
+        "headshot",
+        "infographic",
+        "data",
+        "statistics",
+        "formula",
+        "equation",
+        "architecture",
+        "blueprint",
+        "screenshot",
+        "ui",
+        "interface",
+        "dashboard",
+        "timeline",
+        "comparison",
+        "table",
+    }
+)
 
 
 @dataclass
@@ -43,12 +133,20 @@ class Scene:
     captions: list[str] = field(default_factory=list)
     image_query: str = ""
     image_keywords: list[str] = field(default_factory=list)
+    media_type: str = ""  # video | image (hybrid mode per-scene pick)
     duration: float = 0.0
     photo: StockPhoto | None = None
     chart: dict | None = None
     chart_path: str = ""
     slide_image: str = ""
     slide_kind: str = ""  # title | section | content (compose_slides layouts)
+
+
+@dataclass
+class BrollSegment:
+    path: Path
+    duration: float
+    kind: str = "slide"  # slide | video
 
 
 @dataclass
@@ -69,6 +167,9 @@ class VideoConfig:
     tts: str = "edge"
     tts_voice: str = ""
     orientation: str = "landscape"
+    burn_text: bool = False
+    video_mode: str = "hybrid"
+    use_only_ai_generated_images: bool = False
 
 
 def _env(name: str, default: str = "") -> str:
@@ -95,7 +196,128 @@ def _env_float(name: str, default: float) -> float:
         return default
 
 
-def load_config() -> VideoConfig:
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = _env(name).lower()
+    if not raw:
+        return default
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    return default
+
+
+def _resolve_video_mode(explicit: str | None = None) -> str:
+    if explicit:
+        mode = explicit.strip().lower()
+        if mode in VIDEO_MODES:
+            return mode
+    if _env_bool("VIDEO_USE_STOCK_VIDEO", False):
+        return "video"
+    mode = (_env("VIDEO_MODE", "hybrid") or "hybrid").lower()
+    if mode == "auto":
+        return "hybrid"
+    return mode if mode in VIDEO_MODES else "hybrid"
+
+
+def _resolve_use_only_ai_generated_images(explicit: bool | None = None) -> bool:
+    if explicit is not None:
+        return explicit
+    return _env_bool("VIDEO_USE_ONLY_AI_GENERATED_IMAGES") or _env_bool("VIDEO_AI_IMAGES_ONLY")
+
+
+def _ai_image_generation_available() -> bool:
+    for name in ("GOOGLE_API_KEY", "GEMINI_API_KEY", "POLLINATIONS_API_KEY", "POLLINATIONS_KEY"):
+        if os.environ.get(name, "").strip():
+            return True
+    return False
+
+
+def _ai_image_setup_hint() -> str:
+    return (
+        "AI-only images require GEMINI_API_KEY (Google Nano Banana) or POLLINATIONS_API_KEY.\n"
+        "  • Gemini: https://aistudio.google.com/\n"
+        "  • Pollinations: https://pollinations.ai/\n"
+        "  • Or unset --use-only-ai-generated-images to use stock photos instead"
+    )
+
+
+def _video_aspect(cfg: VideoConfig) -> str:
+    if (cfg.orientation or "landscape").lower() in {"portrait", "vertical", "9:16"}:
+        return "9:16"
+    return "16:9"
+
+
+def _resolve_burn_text(*, video_mode: str | None = None) -> bool:
+    if _env_bool("VIDEO_NO_TEXT", False):
+        return False
+    burn = _env("VIDEO_BURN_TEXT")
+    if burn:
+        return _env_bool("VIDEO_BURN_TEXT", True)
+    mode = video_mode or _resolve_video_mode()
+    if mode in {"hybrid", "video"}:
+        return False
+    return True
+
+
+def _scene_media_text(scene: Scene) -> str:
+    parts = [
+        scene.title,
+        scene.narration,
+        scene.body,
+        scene.image_query,
+        " ".join(scene.image_keywords),
+    ]
+    return " ".join(part.strip() for part in parts if part.strip()).lower()
+
+
+def _heuristic_media_type(scene: Scene) -> str:
+    if scene.chart or scene.chart_path.strip():
+        return "image"
+    text = _scene_media_text(scene)
+    for hint in _MEDIA_TYPE_IMAGE_HINTS:
+        if hint in text:
+            return "image"
+    for hint in _MEDIA_TYPE_VIDEO_HINTS:
+        if hint in text:
+            return "video"
+    if re.search(
+        r"\b(moving|motion|walking|running|flowing|driving|flying|panoramic|cinematic|drone|timelapse)\b",
+        text,
+    ):
+        return "video"
+    return "video" if any_video_source_available() else "image"
+
+
+def _normalize_media_type(raw: object) -> str:
+    value = str(raw or "").strip().lower()
+    if value in {"video", "clip", "broll", "footage", "motion"}:
+        return "video"
+    if value in {"image", "photo", "picture", "still", "static"}:
+        return "image"
+    return ""
+
+
+def _scene_wants_video(scene: Scene, cfg: VideoConfig) -> bool:
+    mode = (cfg.video_mode or "hybrid").lower()
+    if mode == "photos":
+        return False
+    if mode == "video":
+        return True
+    media = _normalize_media_type(scene.media_type)
+    if media == "video":
+        return True
+    if media == "image":
+        return False
+    return _heuristic_media_type(scene) == "video"
+
+
+def load_config(
+    *,
+    video_mode: str | None = None,
+    burn_text: bool | None = None,
+    use_only_ai_generated_images: bool | None = None,
+) -> VideoConfig:
     from arka.voice.edge_speak import resolve_voice
 
     font_path = _env("VIDEO_FONT_PATH")
@@ -122,6 +344,9 @@ def load_config() -> VideoConfig:
         tts=_env("VIDEO_TTS", "edge").lower() or "edge",
         tts_voice=resolve_voice(voice=explicit_voice),
         orientation=_env("VIDEO_ORIENTATION", "landscape") or "landscape",
+        burn_text=burn_text if burn_text is not None else _resolve_burn_text(video_mode=video_mode),
+        video_mode=_resolve_video_mode(video_mode),
+        use_only_ai_generated_images=_resolve_use_only_ai_generated_images(use_only_ai_generated_images),
     )
 
 
@@ -662,6 +887,7 @@ def _schedule_scene_timeline(
     fallback_query: str,
     captions: list[str] | None = None,
     image_keywords: list[str] | None = None,
+    video: bool = False,
 ) -> list[tuple[float, str, str]]:
     """Return (duration, search_query, body_text) segments."""
     beats = captions if captions else _split_caption_beats(narration)
@@ -674,6 +900,7 @@ def _schedule_scene_timeline(
         total_duration,
         fallback_query=fallback_query,
         image_keywords=image_keywords,
+        video=video,
     )
 
     cuts = {0.0, total_duration}
@@ -816,6 +1043,7 @@ def render_slide(
     cfg: VideoConfig,
     *,
     body_override: str | None = None,
+    show_text: bool | None = None,
 ) -> None:
     Image, ImageDraw, ImageFilter, ImageFont = _require_pillow()
     canvas = Image.new("RGB", (cfg.width, cfg.height), _hex_rgb(cfg.bg_color))
@@ -826,6 +1054,12 @@ def render_slide(
         canvas.paste(photo, (0, 0))
         overlay = Image.new("RGBA", (cfg.width, cfg.height), (15, 23, 42, 170))
         canvas = Image.alpha_composite(canvas.convert("RGBA"), overlay).convert("RGB")
+
+    burn_text = cfg.burn_text if show_text is None else show_text
+    if not burn_text:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        canvas.save(output, format="PNG", optimize=True)
+        return
 
     draw = ImageDraw.Draw(canvas)
     body_source = body_override if body_override is not None else _slide_body(scene)
@@ -977,7 +1211,7 @@ def _topic_photo_keywords(topic: str) -> list[str]:
     return out
 
 
-def _scene_image_keywords(scene: Scene, topic: str) -> list[str]:
+def _scene_image_keywords(scene: Scene, topic: str, *, video: bool = False) -> list[str]:
     if scene.image_keywords:
         raw = [kw.strip() for kw in scene.image_keywords if kw.strip()]
     else:
@@ -990,11 +1224,12 @@ def _scene_image_keywords(scene: Scene, topic: str) -> list[str]:
     out: list[str] = []
     seen: set[str] = set()
     for kw in raw:
-        compact = stock_search_query(kw)
+        compact = stock_video_search_query(kw) if video else stock_search_query(kw)
         if compact and compact not in seen:
             seen.add(compact)
             out.append(compact)
-    return out or _topic_photo_keywords(topic) or [stock_search_query(topic)]
+    fallback = stock_video_search_query(topic) if video else stock_search_query(topic)
+    return out or _topic_photo_keywords(topic) or [fallback]
 
 
 def _scene_search_query(scene: Scene, topic: str) -> str:
@@ -1063,6 +1298,7 @@ def _schedule_broll_segments(
     *,
     fallback_query: str,
     image_keywords: list[str] | None = None,
+    video: bool = False,
 ) -> list[tuple[float, str]]:
     """Return (segment_duration, search_query) pairs for keyword-synced B-roll."""
     if total_duration <= 0:
@@ -1071,12 +1307,12 @@ def _schedule_broll_segments(
     min_segment = _broll_min_segment_sec()
     keywords = image_keywords or _image_query_keywords(image_query)
     keywords = [compact_photo_query(kw) for kw in keywords if kw.strip()]
-    default_query = stock_search_query(
-        image_query.strip() or (keywords[0] if keywords else "") or fallback_query or "computer desk"
-    )
+    raw_default = image_query.strip() or (keywords[0] if keywords else "") or fallback_query or "computer desk"
+    default_query = stock_video_search_query(raw_default) if video else stock_search_query(raw_default)
     query_pool: list[str] = []
+    diversify = diverse_video_queries if video else diverse_photo_queries
     for kw in keywords or [default_query]:
-        query_pool.extend(diverse_photo_queries(kw, limit=4))
+        query_pool.extend(diversify(kw, limit=4))
     if default_query not in query_pool:
         query_pool.insert(0, default_query)
     words = _narration_words(narration)
@@ -1087,7 +1323,7 @@ def _schedule_broll_segments(
         for idx, word in enumerate(words):
             for keyword in keywords:
                 if _word_matches_keyword(word, keyword):
-                    variants = diverse_photo_queries(keyword, limit=4)
+                    variants = diversify(keyword, limit=4)
                     pick = variants[variant_idx % len(variants)]
                     variant_idx += 1
                     events.append(((idx / len(words)) * total_duration, pick))
@@ -1159,6 +1395,53 @@ def _fetch_scene_photo(
     raise SystemExit(f"No unused stock photos found for query: {query!r}")
 
 
+def _build_ai_image_prompt(scene: Scene, query: str, topic: str) -> str:
+    parts: list[str] = []
+    if query.strip():
+        parts.append(query.strip())
+    elif scene.image_query.strip():
+        parts.append(scene.image_query.strip())
+    else:
+        parts.append(scene.title or topic or "technology")
+    narration = scene.narration.strip()
+    if narration:
+        hook = _caption_from_narration(narration)
+        if hook and hook.lower() not in " ".join(parts).lower():
+            parts.append(hook)
+    prompt = ", ".join(parts)
+    return f"{prompt}, high quality, cinematic, photorealistic, no text overlay"
+
+
+def _generate_scene_ai_image(
+    prompt: str,
+    output: Path,
+    cfg: VideoConfig,
+    *,
+    scene_idx: int,
+) -> Path:
+    from arka.generate.image import generate
+
+    print(f"  AI image: generating {prompt!r} …", file=sys.stderr)
+    saved, _provider = generate(prompt, output, _video_aspect(cfg), model="")
+    print(f"  AI image: saved scene {scene_idx + 1}", file=sys.stderr)
+    return saved
+
+
+def _fetch_scene_ai_image(
+    scene: Scene,
+    query: str,
+    topic: str,
+    *,
+    work: Path,
+    scene_idx: int,
+    segment_idx: int,
+    cfg: VideoConfig,
+) -> Path:
+    prompt = _build_ai_image_prompt(scene, query, topic)
+    out = work / f"ai-image-{scene_idx:02d}-{segment_idx:02d}.png"
+    return _generate_scene_ai_image(prompt, out, cfg, scene_idx=scene_idx)
+
+
 def _render_photo_slide(
     scene: Scene,
     photo: StockPhoto,
@@ -1175,6 +1458,22 @@ def _render_photo_slide(
     render_slide(img_path, scene, slide, cfg, body_override=body_override)
 
 
+def _render_video_segment(
+    scene: Scene,
+    video: StockVideo,
+    *,
+    work: Path,
+    scene_idx: int,
+    segment_idx: int,
+    seg_duration: float,
+    clip: Path,
+    cfg: VideoConfig,
+) -> None:
+    raw = work / f"video-{scene_idx:02d}-{segment_idx:02d}.mp4"
+    download_stock_video(video, raw)
+    _stock_video_clip(raw, seg_duration, clip, cfg)
+
+
 def _build_broll_slides(
     scene: Scene,
     *,
@@ -1185,12 +1484,14 @@ def _build_broll_slides(
     scene_idx: int,
     cfg: VideoConfig,
     used_photo_ids: set[str],
+    used_video_ids: set[str],
     credits: list[dict],
     captions: list[str] | None = None,
     segment_offset: int = 0,
-) -> list[tuple[Path, float]]:
+) -> list[BrollSegment]:
     query = _scene_search_query(scene, topic)
-    keywords = _scene_image_keywords(scene, topic)
+    scene_wants_video = _scene_wants_video(scene, cfg)
+    keywords = _scene_image_keywords(scene, topic, video=scene_wants_video or cfg.video_mode == "video")
     context_terms = list(
         dict.fromkeys(
             keywords
@@ -1205,45 +1506,120 @@ def _build_broll_slides(
         fallback_query=topic,
         captions=captions,
         image_keywords=keywords,
+        video=scene_wants_video or cfg.video_mode == "video",
     )
-    slides: list[tuple[Path, float]] = []
+    segments: list[BrollSegment] = []
     for seg_idx, (seg_duration, seg_query, seg_body) in enumerate(timeline):
-        photo = _fetch_scene_photo(
-            seg_query,
-            used_photo_ids,
-            orientation=cfg.orientation,
-            context_terms=context_terms,
-            segment_idx=seg_idx,
-        )
-        if seg_idx == 0 and segment_offset == 0:
-            scene.photo = photo
         out_idx = segment_offset + seg_idx
-        seg_slide = work / f"slide-{scene_idx:02d}-{out_idx:02d}.png"
-        _render_photo_slide(
-            scene,
-            photo,
-            work=work,
-            scene_idx=scene_idx,
-            segment_idx=out_idx,
-            slide=seg_slide,
-            cfg=cfg,
-            body_override=seg_body,
-        )
-        credits.append(
-            {
-                "scene": scene.title,
-                "query": seg_query,
-                "source": photo.source,
-                "photographer": photo.photographer,
-                "url": photo.photographer_url,
-            }
-        )
-        slides.append((seg_slide, seg_duration))
-    return slides
+        media_kind = "slide"
+        media_path = work / f"slide-{scene_idx:02d}-{out_idx:02d}.png"
+        credit: dict = {
+            "scene": scene.title,
+            "query": seg_query,
+            "source": "",
+            "photographer": "",
+            "url": "",
+            "media_type": "image",
+        }
+
+        video: StockVideo | None = None
+        if scene_wants_video:
+            video = _fetch_scene_video(
+                seg_query,
+                used_video_ids,
+                orientation=cfg.orientation,
+                context_terms=context_terms,
+                segment_idx=seg_idx,
+            )
+
+        if video is not None:
+            media_kind = "video"
+            media_path = work / f"clip-{scene_idx:02d}-{out_idx:02d}.mp4"
+            _render_video_segment(
+                scene,
+                video,
+                work=work,
+                scene_idx=scene_idx,
+                segment_idx=out_idx,
+                seg_duration=seg_duration,
+                clip=media_path,
+                cfg=cfg,
+            )
+            credit.update(
+                {
+                    "source": video.source,
+                    "photographer": video.photographer,
+                    "url": video.photographer_url,
+                    "media": "video",
+                    "media_type": "video",
+                }
+            )
+        else:
+            if cfg.use_only_ai_generated_images:
+                img_path = _fetch_scene_ai_image(
+                    scene,
+                    seg_query,
+                    topic,
+                    work=work,
+                    scene_idx=scene_idx,
+                    segment_idx=out_idx,
+                    cfg=cfg,
+                )
+                if seg_idx == 0 and segment_offset == 0:
+                    scene.slide_image = str(img_path)
+                render_slide(
+                    img_path,
+                    scene,
+                    media_path,
+                    cfg,
+                    body_override=seg_body if cfg.burn_text else "",
+                )
+                credit.update(
+                    {
+                        "source": "ai-generated",
+                        "photographer": "",
+                        "url": "",
+                        "media": "ai-image",
+                        "media_type": "image",
+                    }
+                )
+            else:
+                photo = _fetch_scene_photo(
+                    seg_query,
+                    used_photo_ids,
+                    orientation=cfg.orientation,
+                    context_terms=context_terms,
+                    segment_idx=seg_idx,
+                )
+                if seg_idx == 0 and segment_offset == 0:
+                    scene.photo = photo
+                _render_photo_slide(
+                    scene,
+                    photo,
+                    work=work,
+                    scene_idx=scene_idx,
+                    segment_idx=out_idx,
+                    slide=media_path,
+                    cfg=cfg,
+                    body_override=seg_body if cfg.burn_text else "",
+                )
+                credit.update(
+                    {
+                        "source": photo.source,
+                        "photographer": photo.photographer,
+                        "url": photo.photographer_url,
+                        "media": "photo",
+                        "media_type": "image",
+                    }
+                )
+
+        credits.append(credit)
+        segments.append(BrollSegment(media_path, seg_duration, media_kind))
+    return segments
 
 
 def _multi_segment_clip(
-    slides: list[tuple[Path, float]],
+    segments: list[BrollSegment],
     output: Path,
     cfg: VideoConfig,
     *,
@@ -1251,33 +1627,38 @@ def _multi_segment_clip(
     scene_idx: int,
     static: bool = False,
 ) -> None:
-    if len(slides) == 1:
-        slide, duration = slides[0]
+    if len(segments) == 1:
+        seg = segments[0]
+        if seg.kind == "video":
+            shutil.copy2(seg.path, output)
+            return
         if static:
-            _static_scene_clip(slide, duration, output, cfg)
+            _static_scene_clip(seg.path, seg.duration, output, cfg)
         else:
-            _scene_clip(slide, duration, output, cfg, variant=0)
+            _scene_clip(seg.path, seg.duration, output, cfg, variant=0)
         return
     parts: list[Path] = []
-    for segment_idx, (slide, duration) in enumerate(slides):
+    for segment_idx, seg in enumerate(segments):
         part = work / f"clip-{scene_idx:02d}-part-{segment_idx:02d}.mp4"
-        if static:
-            _static_scene_clip(slide, duration, part, cfg)
+        if seg.kind == "video":
+            shutil.copy2(seg.path, part)
+        elif static:
+            _static_scene_clip(seg.path, seg.duration, part, cfg)
         else:
-            _scene_clip(slide, duration, part, cfg, variant=segment_idx)
+            _scene_clip(seg.path, seg.duration, part, cfg, variant=segment_idx)
         parts.append(part)
     _concat_videos(parts, output)
 
 
 def _photo_broll_clip(
-    slides: list[tuple[Path, float]],
+    segments: list[BrollSegment],
     output: Path,
     cfg: VideoConfig,
     *,
     work: Path,
     scene_idx: int,
 ) -> None:
-    _multi_segment_clip(slides, output, cfg, work=work, scene_idx=scene_idx, static=False)
+    _multi_segment_clip(segments, output, cfg, work=work, scene_idx=scene_idx, static=False)
 
 
 def _static_scene_clip(slide: Path, duration: float, output: Path, cfg: VideoConfig) -> None:
@@ -1374,6 +1755,83 @@ def _scene_clip(
     )
     if proc.returncode != 0:
         raise SystemExit(f"ffmpeg scene failed: {(proc.stderr or proc.stdout or proc.returncode).strip()}")
+def _stock_video_clip(
+    video_path: Path,
+    duration: float,
+    output: Path,
+    cfg: VideoConfig,
+) -> None:
+    ffmpeg = _require_ffmpeg()
+    vf = (
+        f"scale={cfg.width}:{cfg.height}:force_original_aspect_ratio=increase,"
+        f"crop={cfg.width}:{cfg.height},"
+        f"fps={cfg.fps},format=yuv420p"
+    )
+    proc = subprocess.run(
+        [
+            ffmpeg,
+            "-nostdin",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            *ffmpeg_thread_args(),
+            "-y",
+            "-stream_loop",
+            "-1",
+            "-i",
+            str(video_path),
+            "-vf",
+            vf,
+            "-t",
+            f"{duration:.3f}",
+            "-an",
+            "-c:v",
+            "libx264",
+            "-preset",
+            cfg.preset,
+            "-crf",
+            str(cfg.crf),
+            "-pix_fmt",
+            "yuv420p",
+            str(output),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        raise SystemExit(f"ffmpeg stock video failed: {(proc.stderr or proc.stdout or proc.returncode).strip()}")
+
+
+def _fetch_scene_video(
+    query: str,
+    used_video_ids: set[str],
+    *,
+    orientation: str,
+    context_terms: list[str] | None = None,
+    segment_idx: int = 0,
+) -> StockVideo | None:
+    if not any_video_source_available():
+        return None
+    variants = diverse_video_queries(query, limit=8)
+    if segment_idx:
+        offset = segment_idx % len(variants)
+        variants = variants[offset:] + variants[:offset]
+    for try_query in variants:
+        videos = search_stock_videos(
+            try_query,
+            count=8,
+            orientation=orientation,
+            context_terms=context_terms,
+            exclude_ids=used_video_ids,
+        )
+        if videos:
+            video = videos[0]
+            used_video_ids.add(video_uid(video))
+            return video
+    return None
+
+
 
 
 def _synthesize_narration(text: str, output: Path, cfg: VideoConfig) -> bool:
@@ -1574,7 +2032,10 @@ def compose(
     needs_photos = bool(scenes)
     if needs_photos:
         _attach_photo_queries(scenes, topic)
-        if not any_source_available():
+        if cfg.use_only_ai_generated_images:
+            if not _ai_image_generation_available():
+                raise SystemExit(_ai_image_setup_hint())
+        elif not any_source_available():
             raise SystemExit(stock_setup_hint("compose_video"))
 
     work = Path(tempfile.mkdtemp(prefix="arka-video-"))
@@ -1584,6 +2045,7 @@ def compose(
 
     try:
         used_photo_ids: set[str] = set()
+        used_video_ids: set[str] = set()
         for i, scene in enumerate(scenes):
             print(f"  Scene {i + 1}/{len(scenes)}: {scene.title}", file=sys.stderr)
             is_chart = scene_has_chart_visual(scene)
@@ -1612,45 +2074,53 @@ def compose(
                 chart_slide = render_scene_visual(scene, work, cfg, index=i)
                 chart_body = beats[0] if beats else (scene.body or scene.title)
                 chart_overlay = work / f"slide-{i:02d}-chart.png"
-                render_slide(chart_slide, scene, chart_overlay, cfg, body_override=chart_body)
-                segments: list[tuple[Path, float]] = [(chart_overlay, chart_hold)]
+                render_slide(
+                    chart_slide,
+                    scene,
+                    chart_overlay,
+                    cfg,
+                    body_override=chart_body if cfg.burn_text else "",
+                )
+                broll_segments: list[BrollSegment] = [BrollSegment(chart_overlay, chart_hold, "slide")]
                 remainder = max(0.0, duration - chart_hold)
                 if remainder > 0.5:
                     broll_beats = beats[1:] if len(beats) > 1 else beats
-                    broll_slides = _build_broll_slides(
-                        scene,
-                        topic=topic,
-                        narration=narration,
-                        duration=remainder,
-                        work=work,
-                        scene_idx=i,
-                        cfg=cfg,
-                        used_photo_ids=used_photo_ids,
-                        credits=credits,
-                        captions=broll_beats or None,
-                        segment_offset=1,
+                    broll_segments.extend(
+                        _build_broll_slides(
+                            scene,
+                            topic=topic,
+                            narration=narration,
+                            duration=remainder,
+                            work=work,
+                            scene_idx=i,
+                            cfg=cfg,
+                            used_photo_ids=used_photo_ids,
+                            used_video_ids=used_video_ids,
+                            credits=credits,
+                            captions=broll_beats or None,
+                            segment_offset=1,
+                        )
                     )
-                    segments.extend(broll_slides)
                     print(
-                        f"    Chart: {chart_hold:.0f}s, then B-roll: {len(broll_slides)} segments",
+                        f"    Chart: {chart_hold:.0f}s, then B-roll: {len(broll_segments) - 1} segments",
                         file=sys.stderr,
                     )
                 else:
                     print(f"    Chart: {chart_hold:.0f}s", file=sys.stderr)
-                static_segments = len(segments)
-                mixed = static_segments > 1 or remainder <= 0.5
-                if mixed and len(segments) > 1:
+                if len(broll_segments) == 1:
+                    _static_scene_clip(chart_overlay, chart_hold, clip, cfg)
+                else:
                     parts: list[Path] = []
-                    for seg_idx, (slide, seg_duration) in enumerate(segments):
+                    for seg_idx, seg in enumerate(broll_segments):
                         part = work / f"clip-{i:02d}-part-{seg_idx:02d}.mp4"
-                        if seg_idx == 0:
-                            _static_scene_clip(slide, seg_duration, part, cfg)
+                        if seg.kind == "video":
+                            shutil.copy2(seg.path, part)
+                        elif seg_idx == 0:
+                            _static_scene_clip(seg.path, seg.duration, part, cfg)
                         else:
-                            _scene_clip(slide, seg_duration, part, cfg, variant=seg_idx)
+                            _scene_clip(seg.path, seg.duration, part, cfg, variant=seg_idx)
                         parts.append(part)
                     _concat_videos(parts, clip)
-                else:
-                    _static_scene_clip(chart_overlay, chart_hold, clip, cfg)
             else:
                 broll_slides = _build_broll_slides(
                     scene,
@@ -1661,6 +2131,7 @@ def compose(
                     scene_idx=i,
                     cfg=cfg,
                     used_photo_ids=used_photo_ids,
+                    used_video_ids=used_video_ids,
                     credits=credits,
                     captions=beats or None,
                 )
@@ -1696,6 +2167,7 @@ def compose(
                             "captions": s.captions,
                             "image_query": s.image_query,
                             "image_keywords": s.image_keywords,
+                            "media_type": s.media_type or _heuristic_media_type(s),
                             "chart": s.chart,
                             "chart_path": s.chart_path,
                             "slide_image": s.slide_image,
@@ -1742,6 +2214,9 @@ def _parse_scenes_json(raw: str) -> list[Scene]:
                 if str(item).strip()
             ]
             image_keywords = [kw for kw in image_keywords if kw]
+        media_type = _normalize_media_type(
+            row.get("media_type") or row.get("media") or row.get("visual_type")
+        )
         scenes.append(
             Scene(
                 title=title,
@@ -1750,6 +2225,7 @@ def _parse_scenes_json(raw: str) -> list[Scene]:
                 captions=captions,
                 image_query=str(row.get("image_query") or row.get("image") or "").strip(),
                 image_keywords=image_keywords,
+                media_type=media_type,
                 duration=float(row.get("duration") or 0),
                 chart=chart,
                 chart_path=str(row.get("chart_path") or row.get("chart_png") or "").strip(),
@@ -1787,6 +2263,7 @@ def _llm_script(
         '"body":"very short on-screen headline (max 12 words)", '
         '"captions":["short line 1","short line 2"] (2-6 lines, max 12 words each, synced on screen), '
         '"image_keywords":["desktop monitor","laptop keyboard","home office"] (3-6 short visual phrases, 2-3 words each), '
+        '"media_type":"video|image" (video for landscapes/action/motion footage; image for charts/concepts/portraits/diagrams), '
         '"image_query":"optional fallback 2-4 word search OR omit when using chart", '
         '"chart":{"type":"bar|barh|pie|line|grouped_bar", "title":"...", '
         '"data":"Label:10,Other:20 or Label:$4.7T,Other:$1.2T", "ylabel":"...", "source":"..."}}'
@@ -1803,6 +2280,8 @@ def _llm_script(
         "Style: clear tech explainer for YouTube. "
         "Provide captions as 2-6 short on-screen lines per scene (max 12 words each). "
         "Provide image_keywords as 3-6 short visual search phrases (2-3 words each, e.g. desktop tower, laptop desk). "
+        "Set media_type per scene: video when motion footage fits (landscapes, action, travel); "
+        "image for charts, concepts, portraits, diagrams, or abstract ideas. "
         "Narration can be longer; captions are what viewers read while listening."
     )
     if target_duration_sec:
@@ -1875,6 +2354,7 @@ def _custom_script_api(
                 "body": "string",
                 "captions": ["string"],
                 "image_keywords": ["string"],
+                "media_type": "video|image",
                 "image_query": "string",
                 "duration": "number",
                 "chart": "optional object",
@@ -2065,6 +2545,12 @@ def nl_to_argv(text: str) -> list[str]:
         argv.extend(["--duration", format_duration_arg(duration)])
     if re.search(r"(?i)\b(llm|write script)\b", t):
         argv.append("--llm")
+    if re.search(r"(?i)\b(?:use\s+only\s+ai[\s-]generated\s+images?|ai\s+images?\s+only)\b", t):
+        argv.append("--use-only-ai-generated-images")
+    if re.search(r"(?i)\b(no\s+text|without\s+text|no\s+captions|no\s+overlays|voice\s*only)\b", t):
+        argv.append("--no-text")
+    if re.search(r"(?i)\b(video\s+b[- ]?roll|stock\s+video|video\s+clips?)\b", t):
+        argv.append("--video-broll")
     return argv
 
 
@@ -2100,6 +2586,34 @@ def build_parser() -> argparse.ArgumentParser:
         help="Target runtime (e.g. 19m, 1h30m, 90s). NL: '19 minute video on …'",
     )
     p_compose.add_argument("-o", "--output", help="Output .mp4 path")
+    p_compose.add_argument(
+        "--mode",
+        choices=sorted(VIDEO_MODES),
+        default=None,
+        help="Visual mode: hybrid (default), photos, video, auto",
+    )
+    p_compose.add_argument(
+        "--text",
+        action="store_true",
+        help="Burn titles/captions on screen (legacy slideshow behavior)",
+    )
+    p_compose.add_argument(
+        "--no-text",
+        action="store_true",
+        help="No on-screen text overlays (default in hybrid mode)",
+    )
+    p_compose.add_argument(
+        "--video-broll",
+        action="store_true",
+        help="Use stock video for all B-roll (alias for --mode video)",
+    )
+    p_compose.add_argument(
+        "--use-only-ai-generated-images",
+        "--ai-images-only",
+        dest="use_only_ai_generated_images",
+        action="store_true",
+        help="Generate scene images with AI (Gemini/Pollinations) instead of stock photos",
+    )
     p_compose.set_defaults(func=cmd_compose)
 
     p_parse = sub.add_parser("parse", help="Parse natural language → compose args")
@@ -2135,19 +2649,36 @@ def cmd_check(_args: argparse.Namespace) -> int:
         print("✓ Pexels key set")
     if pixabay_key():
         print("✓ Pixabay key set")
-    if not any_source_available():
-        print(f"✗ {stock_setup_hint()}", file=sys.stderr)
-        ok = False
+    from arka.media.stock_brightdata import fallback_enabled, is_configured
+
+    if is_configured():
+        print("✓ Bright Data token set" + (" (fallback enabled)" if fallback_enabled() else " (fallback disabled)"))
+    cfg = load_config()
+    if cfg.use_only_ai_generated_images:
+        print("  AI-only images: on (stock photos skipped)")
+        if _ai_image_generation_available():
+            print("✓ AI image generation key set")
+        else:
+            print("✗ AI image key missing (GEMINI_API_KEY or POLLINATIONS_API_KEY)", file=sys.stderr)
+            ok = False
+    else:
+        print("  AI-only images: off")
+        if not any_source_available():
+            print(f"✗ {stock_setup_hint()}", file=sys.stderr)
+            ok = False
     script_url = _env("VIDEO_SCRIPT_API_URL") or _env("ARKA_VIDEO_SCRIPT_API_URL")
     if script_url:
         key_env = _env("VIDEO_SCRIPT_API_KEY_ENV", "VIDEO_SCRIPT_API_KEY")
         print(f"✓ Custom script API configured ({script_url}, key env {key_env})")
     else:
         print("  Custom script API not set")
-    cfg = load_config()
     print(f"  Font: {cfg.font_path or 'default'}")
     print(f"  Bold: {cfg.font_bold_path or 'default'}")
     print(f"  Size: title={cfg.title_size} body={cfg.body_size}")
+    print(
+        f"  Mode: {cfg.video_mode} (burn_text={'on' if cfg.burn_text else 'off'}, "
+        f"ai_images_only={'on' if cfg.use_only_ai_generated_images else 'off'})"
+    )
     return 0 if ok else 1
 
 
@@ -2249,11 +2780,32 @@ def cmd_compose(args: argparse.Namespace) -> int:
         print("Choosing stock photo keywords with LLM …", file=sys.stderr)
         scenes = _llm_enrich_image_keywords(topic, scenes)
 
+    video_mode = _resolve_video_mode(getattr(args, "mode", None))
+    if getattr(args, "video_broll", False):
+        video_mode = "video"
+    burn_text: bool | None = None
+    if getattr(args, "text", False):
+        burn_text = True
+    elif getattr(args, "no_text", False):
+        burn_text = False
+    elif video_mode == "photos":
+        burn_text = True
+    cfg = load_config(
+        video_mode=video_mode,
+        burn_text=burn_text,
+        use_only_ai_generated_images=getattr(args, "use_only_ai_generated_images", False),
+    )
+
     label = topic_label(topic)
     print(f"Topic: {label}", file=sys.stderr)
+    print(
+        f"Mode: {cfg.video_mode} | on-screen text: {'on' if cfg.burn_text else 'off'} | "
+        f"AI images only: {'on' if cfg.use_only_ai_generated_images else 'off'}",
+        file=sys.stderr,
+    )
     out = Path(args.output).expanduser() if args.output else _default_output(topic)
     print(f"Composing {len(scenes)} scenes → {out}", file=sys.stderr)
-    saved = compose(scenes, output=out, topic=topic)
+    saved = compose(scenes, output=out, topic=topic, cfg=cfg)
     print(f"Saved video: {saved}")
     print(f"Credits: {saved.with_suffix('.json')}")
     if _env("OPEN_VIDEO", "1") not in {"0", "false"}:

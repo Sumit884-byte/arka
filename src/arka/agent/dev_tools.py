@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shlex
 import shutil
 import importlib.util
 import sys
@@ -100,8 +101,95 @@ def developer_tools_text() -> str:
     return "\n".join(lines)
 
 
-def ci_gates(*, full: bool = False, changed: list[str] | None = None) -> list[Gate]:
+CI_CONFIG_CANDIDATES = (".arka/ci.yaml", ".arka/ci.yml", ".arka/ci.json")
+
+
+def _parse_ci_config_text(text: str, *, path: Path) -> dict | None:
+    stripped = (text or "").strip()
+    if not stripped:
+        return None
+    if path.suffix == ".json":
+        try:
+            data = json.loads(stripped)
+        except json.JSONDecodeError:
+            return None
+        return data if isinstance(data, dict) else None
+    try:
+        import yaml
+    except ImportError:
+        return None
+    try:
+        data = yaml.safe_load(stripped)
+    except Exception:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def load_ci_config(root: Path) -> dict | None:
+    """Load per-repo CI overrides from .arka/ci.yaml (or .yml / .json)."""
+    for name in CI_CONFIG_CANDIDATES:
+        path = root / name
+        if not path.is_file():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        parsed = _parse_ci_config_text(text, path=path)
+        if parsed:
+            return parsed
+    return None
+
+
+def _command_list(raw: object) -> list[str] | None:
+    if isinstance(raw, str):
+        parts = shlex.split(raw.strip())
+        return parts or None
+    if isinstance(raw, list):
+        parts = [str(part).strip() for part in raw if str(part).strip()]
+        return parts or None
+    return None
+
+
+def _gates_from_ci_config(
+    config: dict,
+    *,
+    py: str,
+    full: bool = False,
+    changed: list[str] | None = None,
+) -> list[Gate] | None:
+    key = "full_gates" if full else "changed_gates" if changed and not full else "gates"
+    gates_raw = config.get(key) or config.get("gates") or config.get("ci") or config.get("checks")
+    if not isinstance(gates_raw, list) or not gates_raw:
+        return None
+    gates: list[Gate] = []
+    for index, item in enumerate(gates_raw, 1):
+        if isinstance(item, dict):
+            name = str(item.get("name") or f"gate-{index}")
+            cmd = _command_list(item.get("command") or item.get("cmd"))
+            if not cmd:
+                continue
+            gates.append(Gate(name, cmd))
+        elif isinstance(item, str):
+            cmd = _command_list(item)
+            if cmd:
+                gates.append(Gate(f"gate-{index}", cmd))
+    return gates or None
+
+
+def ci_gates(
+    *,
+    full: bool = False,
+    changed: list[str] | None = None,
+    root: Path | None = None,
+) -> list[Gate]:
     py = _python()
+    if root is not None:
+        config = load_ci_config(root)
+        if config:
+            custom = _gates_from_ci_config(config, py=py, full=full, changed=changed)
+            if custom:
+                return custom
     changed = [path for path in (changed or []) if path.endswith(".py")]
     if changed and not full:
         gates = [Gate("ruff-changed", [py, "-m", "ruff", "check", *changed])]
@@ -149,7 +237,7 @@ def run_ci(root: Path, *, full: bool = False, changed_only: bool = False) -> dic
         changed = [line.strip() for line in diff_listing.splitlines() if line.strip()]
         changed.extend(line[3:].strip() for line in status_listing.splitlines() if len(line) > 3 and line[3:].strip())
         changed = list(dict.fromkeys(changed))
-    for gate in ci_gates(full=full, changed=changed):
+    for gate in ci_gates(full=full, changed=changed, root=root):
         code, out, err = _run(gate.command, cwd=root, timeout=900)
         results.append(
             {
@@ -258,6 +346,61 @@ def cmd_security(args: argparse.Namespace) -> int:
         for item in findings:
             print(f"- {item['kind']}: {item['file']}:{item['line']} — {item['text']}")
     return 1 if findings else 0
+
+
+def ci_payload(root: Path | str | None = None, *, full: bool = False, changed_only: bool = False) -> dict:
+    """Structured CI result for MCP / automation clients."""
+    path = _repo_root(str(root) if root is not None else None)
+    payload = run_ci(path, full=full, changed_only=changed_only)
+    return {
+        "path": payload["path"],
+        "ok": payload["ok"],
+        "config": load_ci_config(path),
+        "results": [
+            {
+                "name": row["name"],
+                "command": row["command"],
+                "ok": row["ok"],
+                "exit_code": row["exit_code"],
+            }
+            for row in payload["results"]
+        ],
+    }
+
+
+def review_payload(
+    root: Path | str | None = None,
+    *,
+    base: str | None = None,
+    staged: bool = False,
+) -> dict:
+    """Structured review report for MCP / automation clients."""
+    path = _repo_root(str(root) if root is not None else None)
+    report = review_text(path, base=base, staged=staged)
+    hints = [
+        line.strip()
+        for line in report.splitlines()
+        if any(marker in line.lower() for marker in ("security:", "test-gap:", "docs:"))
+    ]
+    test_gaps_list: list[str] = []
+    try:
+        from arka.agent.dev_workflows import test_gaps, test_gaps_for_files
+
+        if staged:
+            _, names_out, _ = _run(["git", "diff", "--cached", "--name-only"], cwd=path)
+            file_list = [ln.strip() for ln in names_out.splitlines() if ln.strip()]
+            test_gaps_list = test_gaps_for_files(file_list, root=path) if file_list else []
+        else:
+            test_gaps_list = test_gaps(path)
+    except ImportError:
+        test_gaps_list = []
+    return {
+        "path": str(path),
+        "report": report,
+        "hints": hints,
+        "test_gaps": test_gaps_list,
+        "ok": not hints,
+    }
 
 
 def review_text(root: Path, *, base: str | None = None, staged: bool = False) -> str:

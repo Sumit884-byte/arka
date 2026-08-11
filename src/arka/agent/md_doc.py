@@ -134,11 +134,17 @@ _GOOGLE_DESIGN_RE = re.compile(
     r"(?i)\b(?:follow|use|read|open|load)\s+(?:google\s+)?design(?:\.md)?\b"
 )
 
+_ASCII_ISOMETRIC_RE = re.compile(
+    r"(?i)\b(?:follow|use|read|open|load)\s+(?:ascii[- ]isometric(?:[- ]landing[- ]page)?(?:\.md)?|isometric landing page design)\b"
+)
+
 
 def route_command(text: str) -> str:
     clean = " ".join((text or "").split())
     if _GOOGLE_DESIGN_RE.search(clean) and not _ASK_RE.search(clean):
         return "md_doc read google-design"
+    if _ASCII_ISOMETRIC_RE.search(clean) and not _ASK_RE.search(clean):
+        return "md_doc read ascii-isometric-landing-page"
     path = extract_md_path(clean)
     if not path:
         return ""

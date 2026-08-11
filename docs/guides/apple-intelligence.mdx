@@ -1,0 +1,90 @@
+---
+title: "Apple Intelligence (on-device)"
+description: "Use Apple's Foundation Models via Arka on supported Macs."
+icon: "apple"
+---
+
+Arka can route LLM requests to Apple's on-device **Foundation Models** (Apple Intelligence) through the `apple-fm` provider. Inference stays on your Mac — no API key required.
+
+## Requirements
+
+- **macOS 26+** (Apple Intelligence enabled in System Settings)
+- **Apple Silicon Mac** that supports Apple Intelligence
+- Python optional extra: `pip install 'arka-agent[apple-fm]'` (installs `apple-fm-sdk`)
+
+On Linux and Windows, the provider is registered but always skipped gracefully.
+
+## Quick setup
+
+```bash
+pip install 'arka-agent[apple-fm]'
+arka model setup apple-fm
+arka model status
+arka llm apple-fm status
+```
+
+Set Apple Intelligence as your preferred provider:
+
+```bash
+arka provider set apple-fm --model apple-fm-system
+```
+
+Or add to `.env`:
+
+```bash
+APPLE_FM_ENABLED=1
+AI_PREFERRED_PROVIDER=apple-fm
+AI_PREFERRED_MODEL=apple-fm-system
+```
+
+## How it works
+
+1. **Native SDK** — Arka calls `apple-fm-sdk` directly (`SystemLanguageModel` + `LanguageModelSession`).
+2. **Fallback chain** — On supported Macs, `apple-fm` is added after Ollama in the auto-built fallback chain.
+3. **Streaming** — Supported via the SDK's `stream_response()` when available.
+
+Check availability anytime:
+
+```bash
+arka llm apple-fm status
+arka model status
+```
+
+## Optional: apple-fm-cli server
+
+If the SDK is not installed but you run an OpenAI-compatible local server (for example [apple-fm-cli](https://pypi.org/project/apple-fm-cli/)), Arka auto-detects it:
+
+```bash
+pip install apple-fm-cli
+apple-fm-cli server --host 127.0.0.1 --port 8765
+```
+
+Configure Arka to use that endpoint (default port `8765` avoids conflict with vLLM on `8000`):
+
+```bash
+export APPLE_FM_CLI_BASE_URL=http://127.0.0.1:8765/v1
+export APPLE_FM_ENABLED=1
+```
+
+The server does not need a real API key; Arka sends a placeholder bearer token.
+
+## Troubleshooting
+
+| Symptom | Fix |
+| --- | --- |
+| `SDK not installed` | `pip install apple-fm-sdk` or `pip install 'arka-agent[apple-fm]'` |
+| `Apple Intelligence not enabled` | System Settings → Apple Intelligence → turn on |
+| `DEVICE_NOT_ELIGIBLE` | Mac or OS version does not support on-device models |
+| `MODEL_NOT_READY` | Wait for Apple Intelligence model download to finish |
+
+Disable the provider without uninstalling:
+
+```bash
+export APPLE_FM_ENABLED=0
+```
+
+## Related
+
+- [Model hosting setup](/guides/model-hosting) — Ollama, vLLM, LM Studio, Exo
+- `arka llm providers --models` — list configured providers
+- `arka hybrid status` — combine local and hosted routes

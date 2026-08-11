@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import subprocess
 import sys
@@ -237,13 +236,38 @@ def _plan_proposes_test_fix_when_green(proposal: str, diag: DiagnosticResult | N
     return diag is not None and diag.passed and bool(_TEST_FIX_RE.search(proposal or ""))
 
 
+def _sample_repo_paths(root: Path, *, limit: int = 60) -> list[str]:
+    """Real repo paths for the planner — reduces hallucinated file names."""
+    paths: list[str] = []
+    try:
+        proc = subprocess.run(
+            ["git", "ls-files", "src/", "tests/"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        if proc.returncode == 0:
+            paths = [line.strip() for line in (proc.stdout or "").splitlines() if line.strip()]
+    except OSError:
+        paths = []
+    if not paths:
+        for pattern in ("src/**/*.py", "tests/**/*.py"):
+            paths.extend(str(path.relative_to(root)) for path in root.glob(pattern))
+    return sorted(dict.fromkeys(paths))[:limit]
+
+
 def record_attempt(
     plan: ImprovementPlan,
     *,
     outcome: str,
     notes: str = "",
     root: Path | None = None,
+    after_apply: bool = False,
 ) -> None:
+    if outcome in {"passed", "failed", "no_changes"} and not after_apply:
+        return
     if root is not None:
         plan.files = _validate_plan_files(plan.files, root)
     data = load_memory()
@@ -620,6 +644,9 @@ def generate_plan(
             "",
             "=== prior attempts (do not repeat) ===",
             recent_attempts_context(focus),
+            "",
+            "=== known repo paths (must exist — do not invent paths) ===",
+            "\n".join(_sample_repo_paths(root)) or "(run from git checkout)",
         ]
     )
 
@@ -1005,11 +1032,11 @@ def run_self_improve(
         changed = bool(after_stat.strip()) and after_stat.strip() != before_stat.strip()
         if diag_after.passed and changed:
             user_msg(f"✓ applied changes after round {round_num}")
-            record_attempt(plan, outcome="passed", root=root)
+            record_attempt(plan, outcome="passed", root=root, after_apply=True)
             return 0 if last_rc == 0 else last_rc
         if diag_after.passed and not changed:
             user_msg("○ no code changes")
-            record_attempt(plan, outcome="no_changes", root=root)
+            record_attempt(plan, outcome="no_changes", root=root, after_apply=True)
             return 1
 
         if last_rc != 0:
@@ -1017,7 +1044,7 @@ def run_self_improve(
         elif not diag_after.passed:
             user_msg(f"✗ Tests still failing: {summarize_pytest(diag_after.output, passed=False)}")
 
-    record_attempt(plan, outcome="failed", notes=f"exit {last_rc}", root=root)
+    record_attempt(plan, outcome="failed", notes=f"exit {last_rc}", root=root, after_apply=True)
     user_msg("Max rounds reached — issues may remain.")
     return last_rc if last_rc != 0 else 1
 
@@ -1032,8 +1059,20 @@ def route_command(text: str) -> str:
     if sub:
         return f"self_improve {sub.group(1).lower()}"
 
+    mcp_use = re.match(
+        r"(?i)^(?:use\s+)?arka\s+mcp(?:\s+(?:to|and))?\s+"
+        r"(?:improve(?:\s+(?:it|arka|yourself|itself))?|fix)\s*(.*)$",
+        raw,
+    )
+    if mcp_use:
+        rest = _normalize_target(mcp_use.group(1) or "")
+        line = "self_improve --mcp"
+        if rest:
+            line += f" {rest}"
+        return line
+
     if not re.search(
-        r"(?i)\b(?:self\s+improve|improve\s+(?:arka|yourself|itself)|arka\s+improve(?:\s+itself)?|"
+        r"(?i)\b(?:self\s+improve|improve\s+(?:arka|yourself|itself|mcp)|arka\s+improve(?:\s+itself)?|"
         r"loop\s+to\s+fix\s+arka|fix\s+arka(?:\s+(?:tests|codebase))?|improve\s+the\s+arka\s+codebase|"
         r"loop\s+self|improve\s+arka\s+\w+)\b",
         raw,
@@ -1059,6 +1098,7 @@ def route_command(text: str) -> str:
         r"(?i)^(?:arka\s+)?loop\s+to\s+fix\s+arka\s*",
         r"(?i)^(?:arka\s+)?fix\s+arka(?:\s+(?:tests|codebase))?\s*",
         r"(?i)^(?:arka\s+)?improve\s+the\s+arka\s+codebase\s*",
+        r"(?i)^(?:improve\s+mcp)\s*",
         r"(?i)^(?:arka\s+)?improve\s*",
     ):
         stripped = re.sub(pattern, "", target).strip()

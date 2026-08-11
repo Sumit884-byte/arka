@@ -11,6 +11,8 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
+from arka.media.stock_brightdata import fallback_enabled as brightdata_enabled
+from arka.media.stock_brightdata import search_brightdata_images
 from arka.media.unsplash import UnsplashPhoto, access_key as unsplash_key, download_photo as unsplash_download
 from arka.media.unsplash import search_photos as unsplash_search
 from arka.media.unsplash import trigger_download as unsplash_trigger
@@ -412,7 +414,7 @@ def pixabay_key() -> str:
 
 
 def configured_sources() -> list[str]:
-    raw = _env("VIDEO_PHOTO_SOURCES", "unsplash,pexels,pixabay,openverse,web")
+    raw = _env("VIDEO_PHOTO_SOURCES", "unsplash,pexels,pixabay,openverse,web,brightdata")
     return [part.strip().lower() for part in raw.split(",") if part.strip()]
 
 
@@ -643,6 +645,8 @@ def any_source_available() -> bool:
             return True
         if source == "pixabay" and pixabay_key():
             return True
+        if source == "brightdata" and brightdata_enabled():
+            return True
     return False
 
 
@@ -654,7 +658,8 @@ def setup_hint(context: str = "compose_video") -> str:
         "  PEXELS_API_KEY=...        https://www.pexels.com/api/\n"
         "  PIXABAY_API_KEY=...       https://pixabay.com/api/docs/\n"
         "Openverse and web image search need no key (always tried as fallback).\n"
-        "Optional: VIDEO_PHOTO_SOURCES=unsplash,pexels,pixabay,openverse,web"
+        "Optional Bright Data fallback: BRIGHTDATA_API_TOKEN + VIDEO_STOCK_FALLBACK=brightdata\n"
+        "Optional: VIDEO_PHOTO_SOURCES=unsplash,pexels,pixabay,openverse,web,brightdata"
     )
 
 
@@ -853,6 +858,43 @@ def _search_web_images(query: str, *, count: int, orientation: str) -> list[Stoc
     return out
 
 
+def _search_brightdata(query: str, *, count: int, orientation: str) -> list[StockPhoto]:
+    if not brightdata_enabled():
+        return []
+    rows = search_brightdata_images(query, count=max(count * 2, 12))
+    out: list[StockPhoto] = []
+    for idx, row in enumerate(rows):
+        url = str(row.get("url") or "")
+        if not url:
+            continue
+        width = int(row.get("width") or 0)
+        height = int(row.get("height") or 0)
+        if orientation == "portrait" and width and height and width > height:
+            continue
+        if orientation == "landscape" and width and height and height > width:
+            continue
+        title = str(row.get("title") or query)
+        out.append(
+            _make_stock_photo(
+                id=url,
+                url=url,
+                download_url=url,
+                photographer="Bright Data",
+                photographer_url="https://brightdata.com",
+                description=title,
+                source="brightdata",
+                title=title,
+                alt_text=title,
+                category="web",
+                width=width,
+                height=height,
+            )
+        )
+        if len(out) >= count:
+            break
+    return out
+
+
 def _search_source(
     source: str,
     query: str,
@@ -870,6 +912,8 @@ def _search_source(
         return _search_openverse(query, count=count, orientation=orientation)
     if source == "web":
         return _search_web_images(query, count=count, orientation=orientation)
+    if source == "brightdata" and brightdata_enabled():
+        return _search_brightdata(query, count=count, orientation=orientation)
     return []
 
 
@@ -938,6 +982,10 @@ def download_stock_photo(photo: StockPhoto, dest: Path) -> Path:
         )
         unsplash_trigger(unsplash)
         return unsplash_download(unsplash, dest)
+    if photo.source == "brightdata":
+        from arka.media.stock_brightdata import download_brightdata_media
+
+        return download_brightdata_media(photo.url, dest, kind="image")
     req = urllib.request.Request(photo.url, headers={"User-Agent": "arka-compose-video/1.0"})
     with urllib.request.urlopen(req, timeout=60) as resp:
         dest.write_bytes(resp.read())

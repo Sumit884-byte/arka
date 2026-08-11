@@ -10,14 +10,14 @@ _hint_emitted = False
 
 
 def maybe_emit_telemetry_setup_hint() -> None:
-    """Suggest enabling traces when endpoint vars are set but export is off."""
+    """Suggest re-enabling traces when endpoint vars are set but export was explicitly disabled."""
     global _hint_emitted
     if _hint_emitted:
         return
     if os.environ.get("ARKA_TELEMETRY_HINT", "1").strip().lower() in {"0", "false", "no", "off"}:
         return
 
-    from arka.telemetry._otlp import telemetry_master_enabled
+    from arka.telemetry._otlp import _falsy, telemetry_master_enabled
 
     if telemetry_master_enabled():
         return
@@ -28,11 +28,13 @@ def maybe_emit_telemetry_setup_hint() -> None:
     )
     if not has_endpoint:
         return
+    if not (_falsy("OTEL_TRACES_ENABLED") or _falsy("SIGNOZ_TRACES")):
+        return
 
     _hint_emitted = True
     print(
         "arka telemetry: OTLP endpoint detected but tracing is off — "
-        "set OTEL_TRACES_ENABLED=1 then run: arka signoz demo",
+        "unset OTEL_TRACES_ENABLED=0 (or OTEL_SDK_DISABLED) then run: arka signoz demo",
         file=sys.stderr,
     )
 
@@ -47,14 +49,15 @@ def agent_observability_guide() -> dict[str, Any]:
     return {
         "title": "AI Agent Observability with Arka + SigNoz",
         "env": {
-            "OTEL_TRACES_ENABLED": "1",
-            "OTEL_METRICS_ENABLED": "1",
-            "OTEL_LOGS_ENABLED": "1",
             "OTEL_SERVICE_NAME": "arka",
             "SIGNOZ_ENDPOINT": "http://localhost:4318",
             "SIGNOZ_UI_URL": "http://localhost:8080",
             "SIGNOZ_MCP_URL": "http://localhost:8000",
             "SIGNOZ_AUTOSTART": "1",
+        },
+        "disable_env": {
+            "OTEL_SDK_DISABLED": "true",
+            "OTEL_TRACES_ENABLED": "0",
         },
         "commands": [
             "arka signoz setup -y",
@@ -85,8 +88,12 @@ def print_agent_observability_guide(*, file: Any | None = None) -> None:
     out = file if file is not None else sys.stderr
     print(f"# {guide['title']}", file=out)
     print("Env (add to ~/.config/arka/.env or repo .env):", file=out)
+    print("  # OTLP export is on by default to http://127.0.0.1:4318 when unset", file=out)
     for key, value in guide["env"].items():
         print(f"  {key}={value}", file=out)
+    print("  # To disable export:", file=out)
+    for key, value in guide.get("disable_env", {}).items():
+        print(f"  # {key}={value}", file=out)
     print(
         "  # SIGNOZ_AUTOSTART: 0/false/off/no disables login autostart (default on when unset)",
         file=out,

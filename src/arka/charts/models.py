@@ -114,7 +114,6 @@ def plot_model_characteristics(
         _apply_chart_chrome,
         _require_matplotlib,
         plot_bar,
-        plot_scatter,
     )
 
     if not points:
@@ -189,7 +188,7 @@ def build_model_chart(
     kind: str = "auto",
     output: Path | None = None,
 ) -> Path:
-    from arka.charts.plot import default_output, open_image
+    from arka.charts.plot import default_output
 
     bench = benchmark_points(profile)
     points = bench if bench else local_ollama_points()

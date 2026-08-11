@@ -128,6 +128,7 @@
                   "guides/vllm",
                   "guides/free-models",
                   "guides/model-hosting",
+                  "guides/apple-intelligence",
                   "guides/prompt-optimization",
                   "guides/local-llm-research",
                   "guides/research-math",
@@ -146,6 +147,8 @@
                 "pages": [
                   "guides/pdf-rag",
                   "guides/compose-slides",
+                  "guides/compose-video",
+                  "guides/compose-shorts",
                   "guides/compose-3d",
                   "guides/scene-3d",
                   "guides/charts",
@@ -179,6 +182,7 @@
                   "guides/life-sciences",
                   "guides/gemini-cli",
                   "guides/fugu",
+                  "guides/n8n",
                   "guides/post-x"
                 ]
               },
@@ -441,6 +445,10 @@
   },
   "navbar": {
     "links": [
+      {
+        "href": "https://sumit884-byte.github.io/arka/",
+        "label": "Homepage"
+      },
       {
         "href": "https://github.com/Sumit884-byte/arka",
         "label": "GitHub"

@@ -507,6 +507,49 @@ def _turboquant_rag():
     return use_turboquant()
 
 
+def _extract_pdf_text_via_ocr(path: Path) -> str | None:
+    """OCR fallback for scanned PDFs when pdftotext returns nothing."""
+    try:
+        from arka.documents.drawing import load_images
+        from arka.vision.ocr import extract_text
+    except ImportError:
+        return None
+    try:
+        max_pages = max(1, int(env("PDF_OCR_MAX_PAGES", "30") or "30"))
+    except ValueError:
+        max_pages = 30
+    try:
+        images = load_images(path)
+    except (SystemExit, OSError, RuntimeError, ValueError):
+        return None
+    if max_pages > 0:
+        images = images[:max_pages]
+    parts: list[str] = []
+    for data, mime, label in images:
+        text, _engine = extract_text(data, mime)
+        cleaned = (text or "").strip()
+        if cleaned:
+            parts.append(f"[{label}]\n{cleaned}")
+    combined = "\n\n".join(parts).strip()
+    return combined or None
+
+
+def _privategpt_ingest_plan(*, turboquant_ok: bool) -> tuple[bool, bool]:
+    """Return (should_try_ingest, allow_auto_start) for PrivateGPT."""
+    mode = env("PDF_RAG_PGPT", "auto").lower()
+    if mode in {"0", "false", "no", "off"}:
+        return False, False
+    if is_up():
+        return True, False
+    if turboquant_ok and mode == "auto":
+        return False, False
+    if mode in {"1", "true", "yes", "on"}:
+        return True, True
+    if mode == "auto" and not turboquant_ok:
+        return True, auto_start_enabled()
+    return False, False
+
+
 def _extract_document_text(path: Path) -> str | None:
     kind = _file_kind(path)
     if kind == "text" or kind == "probe":
@@ -519,7 +562,10 @@ def _extract_document_text(path: Path) -> str | None:
         if ext == ".pdf":
             from arka.stock.turboquant_rag import extract_pdf_text
 
-            return extract_pdf_text(path)
+            text = extract_pdf_text(path)
+            if text:
+                return text
+            return _extract_pdf_text_via_ocr(path)
         if ext == ".docx":
             from arka.stock.turboquant_rag import extract_docx_text
 
@@ -700,7 +746,7 @@ def cmd_ingest(path: str) -> int:
         else:
             status_msg(f"TurboQuant index skipped: {tq_detail}")
 
-    pgpt_wanted = env("PDF_RAG_PGPT", "1").lower() not in {"0", "false", "no", "off"}
+    pgpt_wanted, pgpt_auto_start = _privategpt_ingest_plan(turboquant_ok=tq_ok)
     if not pgpt_wanted:
         if tq_ok:
             print(f"✓ Indexed {doc.name} (TurboQuant: {tq_detail})")
@@ -709,12 +755,19 @@ def cmd_ingest(path: str) -> int:
         return 1
 
     if not is_up():
-        if not ensure_server(auto_start=True):
-            if tq_ok:
-                print(f"✓ Indexed {doc.name} (TurboQuant: {tq_detail}; PrivateGPT offline)")
-                return 0
-            print(f"PrivateGPT is not running at {base_url()}.", file=sys.stderr)
-            print("Start it with: private-gpt serve", file=sys.stderr)
+        if pgpt_auto_start:
+            if not ensure_server(auto_start=True):
+                if tq_ok:
+                    print(f"✓ Indexed {doc.name} (TurboQuant: {tq_detail}; PrivateGPT offline)")
+                    return 0
+                print(f"PrivateGPT is not running at {base_url()}.", file=sys.stderr)
+                print("Start it with: private-gpt serve", file=sys.stderr)
+                return 1
+        elif tq_ok:
+            print(f"✓ Indexed {doc.name} (TurboQuant: {tq_detail}; PrivateGPT offline)")
+            return 0
+        else:
+            print(f"Ingest failed: {tq_detail or 'could not index document'}", file=sys.stderr)
             return 1
 
     for attempt in range(2):
@@ -792,10 +845,6 @@ def semantic_search_context(question: str, artifact: str | None = None) -> tuple
     return 0, context
 
 
-def _ollama_chat_model(default: str = "llama3.2:1b") -> str:
-    return env("PDF_RAG_MODEL") or env("OLLAMA_CHAT_MODEL") or default
-
-
 def _ollama_api_base() -> str:
     host = env("OLLAMA_HOST", "127.0.0.1:11434")
     if not host.startswith("http"):
@@ -817,6 +866,93 @@ def _gemini_models() -> list[str]:
         if model and model not in out:
             out.append(model)
     return out
+
+
+def _ollama_chat_model(default: str = "llava:latest") -> str:
+    explicit = env("PDF_RAG_MODEL") or env("OLLAMA_CHAT_MODEL")
+    if explicit and "minimax" not in explicit.lower():
+        return explicit
+    try:
+        req = urllib.request.Request(
+            f"{_ollama_api_base()}/api/tags",
+            headers={"Content-Type": "application/json"},
+            method="GET",
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode())
+        names = [
+            str(item.get("name") or "")
+            for item in (data.get("models") or [])
+            if isinstance(item, dict)
+        ]
+        for prefer in ("llava", "llama3.2", "llama3", "qwen", "mistral", "gemma"):
+            for name in names:
+                if prefer in name.lower() and "minimax" not in name.lower():
+                    return name
+        for name in names:
+            if name and "minimax" not in name.lower() and "embed" not in name.lower():
+                return name
+    except (urllib.error.URLError, OSError, json.JSONDecodeError, TimeoutError, ValueError):
+        pass
+    return default
+
+
+def _looks_like_llm_error(text: str) -> bool:
+    low = (text or "").lower()
+    return any(
+        token in low
+        for token in (
+            "status code:",
+            " was retired ",
+            "retired at",
+            "unavailable",
+            "api key",
+            "authentication",
+            "rate limit",
+            "invalid model",
+        )
+    )
+
+
+def _ollama_chat_answer(system: str, user: str) -> str:
+    model = _ollama_chat_model()
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        "stream": False,
+    }
+    req = urllib.request.Request(
+        f"{_ollama_api_base()}/api/chat",
+        data=json.dumps(payload).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=180) as resp:
+        data = json.loads(resp.read().decode())
+    message = data.get("message") if isinstance(data, dict) else {}
+    answer = (message.get("content") if isinstance(message, dict) else "") or ""
+    return str(answer).strip()
+
+
+def _extractive_answer_from_context(question: str, context: str) -> str:
+    from arka.stock.turboquant_rag import _search_terms
+
+    terms = _search_terms(question)
+    lines = [ln.strip() for ln in context.splitlines() if ln.strip()]
+    scored: list[tuple[float, str]] = []
+    for ln in lines:
+        low = ln.lower()
+        score = sum(1.0 for term in terms if term in low)
+        if score:
+            scored.append((score, ln))
+    scored.sort(key=lambda row: (-row[0], row[1]))
+    if scored:
+        return "\n".join(ln for _, ln in scored[:6])
+    trimmed = context.strip()
+    return trimmed[:2000] if trimmed else "No relevant passages found in the indexed document."
 
 
 def _wants_summary(question: str) -> bool:
@@ -910,7 +1046,19 @@ def _llm_synthesize(question: str, context: str, doc_name: str | None = None) ->
 
     from arka.llm.cli import llm_complete
 
-    return llm_complete(system, user, task="pdf")
+    try:
+        answer = llm_complete(system, user, task="pdf")
+        if answer and not _looks_like_llm_error(answer):
+            return answer
+    except Exception:
+        answer = ""
+    try:
+        answer = _ollama_chat_answer(system, user)
+        if answer and not _looks_like_llm_error(answer):
+            return answer
+    except (urllib.error.URLError, OSError, json.JSONDecodeError, TimeoutError, ValueError):
+        pass
+    return _extractive_answer_from_context(question, trimmed)
 
 
 def _tools_unsupported_error(data: object) -> bool:
@@ -1134,10 +1282,6 @@ def cmd_batch_ingest(
 
     ext_label = ", ".join(sorted(exts))
     print(f"Ingesting {len(files)} file(s) ({ext_label}) from {root}", file=sys.stderr)
-
-    pgpt_wanted = env("PDF_RAG_PGPT", "1").lower() not in {"0", "false", "no", "off"}
-    if pgpt_wanted and not is_up():
-        ensure_server(auto_start=True)
 
     ok = 0
     failed = 0

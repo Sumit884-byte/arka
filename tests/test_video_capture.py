@@ -48,7 +48,7 @@ def test_route_capture_video_with_url():
 
 def test_route_capture_video_dashboard():
     routed = route_capture_video("capture walkthrough of the arka web dashboard")
-    assert routed == f"capture video --walkthrough"
+    assert routed == "capture video --walkthrough"
 
 
 def test_default_walkthrough_url():

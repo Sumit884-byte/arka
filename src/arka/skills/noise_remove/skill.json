@@ -1,0 +1,21 @@
+{
+  "name": "noise_remove",
+  "description": "Remove background noise from audio or video files using ffmpeg afftdn — denoise audio directly or re-mux cleaned audio with the original video",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "noise remove",
+    "remove noise",
+    "denoise audio",
+    "denoise video",
+    "clean background noise",
+    "reduce audio noise",
+    "remove background noise from recording"
+  ],
+  "permissions": ["read", "write", "shell"],
+  "requires": {
+    "bins": ["ffmpeg", "ffprobe"]
+  }
+}

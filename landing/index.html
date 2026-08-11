@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Arka — Your terminal, upgraded</title>
+    <meta
+      name="description"
+      content="Arka is an open-source AI terminal agent with 70+ local skills, natural-language routing, voice, MCP for Cursor, and 24-provider LLM failover."
+    />
+    <meta name="theme-color" content="#0b0d12" />
+    <meta property="og:title" content="Arka — Your terminal, upgraded" />
+    <meta
+      property="og:description"
+      content="Route plain English to 70+ local skills. Offline-first routing, security gates, voice, and MCP — all from your terminal."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://sumit884-byte.github.io/arka/" />
+    <link rel="icon" href="assets/mark.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand" href="#" aria-label="Arka home">
+          <img src="assets/logo.svg" alt="" width="88" height="28" />
+        </a>
+
+        <nav class="nav-desktop" aria-label="Primary">
+          <a href="#features">Features</a>
+          <a href="#how-it-works">How it works</a>
+          <a href="#install">Install</a>
+          <a href="#links">Links</a>
+        </nav>
+
+        <div class="header-actions">
+          <a class="btn btn-ghost btn-sm" href="https://arka-agent.mintlify.site" target="_blank" rel="noopener noreferrer">Docs</a>
+          <a class="btn btn-primary btn-sm" href="#install">Get started</a>
+          <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="mobile-nav" aria-label="Open menu">☰</button>
+        </div>
+      </div>
+
+      <nav id="mobile-nav" class="nav-mobile" aria-label="Mobile">
+        <a href="#features">Features</a>
+        <a href="#how-it-works">How it works</a>
+        <a href="#install">Install</a>
+        <a href="#links">Links</a>
+        <a href="https://arka-agent.mintlify.site" target="_blank" rel="noopener noreferrer">Documentation</a>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section class="hero">
+        <div class="container hero-intro reveal">
+          <div class="eyebrow">
+            <span class="eyebrow-dot" aria-hidden="true"></span>
+            Open source · PyPI: arka-agent
+          </div>
+          <h1>Your terminal, <span class="accent">upgraded</span></h1>
+          <p class="hero-lead">
+            Say what you want in plain English. Arka routes your request to the right local skill,
+            runs it on your machine, and speaks the answer back if you want.
+          </p>
+          <div class="hero-cta">
+            <a class="btn btn-primary" href="#install">Install in one command</a>
+            <a class="btn" href="https://github.com/Sumit884-byte/arka" target="_blank" rel="noopener noreferrer">View on GitHub</a>
+          </div>
+        </div>
+
+        <div class="container reveal">
+          <div class="codex-preview" aria-label="Arka Codex workspace preview">
+            <aside class="codex-sidebar">
+              <div class="codex-brand">
+                <div class="codex-logo">A</div>
+                <div>
+                  <strong>Arka</strong>
+                  <span class="codex-sub">Local agent console</span>
+                </div>
+              </div>
+              <div class="workspace-pill"><span>workspace</span><code>local</code></div>
+            </aside>
+            <div class="codex-main">
+              <div class="topbar">
+                <div class="top-title">
+                  <strong>Arka</strong>
+                  <span class="branch">local / desktop</span>
+                  <span class="top-sub">route · skills · voice</span>
+                </div>
+                <div class="status"><span class="dot"></span>Ready</div>
+              </div>
+              <div class="codex-chat">
+                <div class="empty">
+                  <div class="empty-eyebrow">Ask in plain English</div>
+                  <h2>What should Arka do next?</h2>
+                  <p>Commands route to local skills — charts, repo tools, reminders, and more.</p>
+                  <div class="codex-card">
+                    <div class="codex-card-header"><span>session</span><span>ready</span></div>
+                    <div class="terminal-line"><span>›</span> arka ask "what is Rust?"</div>
+                    <div class="terminal-line"><span>›</span> routed to web + AI · zero tokens on symbolic match</div>
+                    <div class="terminal-line"><span>›</span> 70+ local skills on your machine</div>
+                  </div>
+                  <div class="suggestions">
+                    <div class="suggestion"><b>Check setup</b><span>Run doctor and summarize anything I should fix.</span></div>
+                    <div class="suggestion"><b>Repo health</b><span>Check repo health for this project.</span></div>
+                    <div class="suggestion"><b>Capabilities</b><span>What can you do?</span></div>
+                    <div class="suggestion"><b>Weather</b><span>What's the weather in Bangalore?</span></div>
+                  </div>
+                </div>
+              </div>
+              <div class="codex-composer-wrap">
+                <div class="composer">
+                  <span class="round" aria-hidden="true">＋</span>
+                  <span class="composer-input">Ask Arka anything…</span>
+                  <span class="round send" aria-hidden="true">➜</span>
+                </div>
+                <p class="fineprint">Arka can make mistakes. Review outputs before applying changes.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="features" class="section">
+        <div class="container">
+          <div class="section-header reveal">
+            <span class="section-label">Features</span>
+            <h2>Local-first power, cloud when you need it</h2>
+            <p>
+              Deterministic offline routing handles most requests with zero LLM tokens.
+              Security gates, voice, and MCP integrations ship on by default.
+            </p>
+          </div>
+
+          <div class="feature-grid">
+            <article class="feature-card panel reveal">
+              <h3>Offline-first routing</h3>
+              <p>120+ symbolic rules map natural language to skills before any model is called — fast and token-free.</p>
+            </article>
+            <article class="feature-card panel reveal">
+              <h3>70+ local skills</h3>
+              <p>Media, web, PDF RAG, Google Workspace, charts, stocks, YouTube, voice, and more — all on your machine.</p>
+            </article>
+            <article class="feature-card panel reveal">
+              <h3>24-provider failover</h3>
+              <p>Gemini, Groq, OpenAI, Anthropic, Ollama, vLLM, OpenRouter, and others — automatic fallback chain.</p>
+            </article>
+            <article class="feature-card panel reveal">
+              <h3>Security by default</h3>
+              <p>Prompt-injection checks, risky-action prompts, and hard blocks on destructive shell patterns.</p>
+            </article>
+            <article class="feature-card panel reveal">
+              <h3>Voice &amp; MCP</h3>
+              <p>Wake-word listener with TTS replies. Connect to Cursor, Claude Desktop, and any MCP server.</p>
+            </article>
+            <article class="feature-card panel reveal">
+              <h3>Extensible plugins</h3>
+              <p>Add third-party skills via <code>skill.json</code> triggers — no fork required.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="how-it-works" class="section section-alt">
+        <div class="container">
+          <div class="section-header reveal">
+            <span class="section-label">How it works</span>
+            <h2>From install to first answer in minutes</h2>
+            <p>No Docker, no hosted account, no build step. Arka runs entirely on your system.</p>
+          </div>
+
+          <div class="steps">
+            <article class="step panel reveal">
+              <div class="step-num">1</div>
+              <h3>Install</h3>
+              <p>Grab the published package from PyPI with pipx or uv — no git clone needed.</p>
+              <code>pipx install "arka-agent[chat]"</code>
+            </article>
+            <article class="step panel reveal">
+              <div class="step-num">2</div>
+              <h3>Configure</h3>
+              <p>Add at least one API key or point to local Ollama. Run the health check.</p>
+              <code>arka setup && arka doctor</code>
+            </article>
+            <article class="step panel reveal">
+              <div class="step-num">3</div>
+              <h3>Ask</h3>
+              <p>Type or speak in plain English. Arka routes, runs, and returns the result.</p>
+              <code>arka ask "what is Rust?"</code>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="install" class="section">
+        <div class="container">
+          <div class="install-panel panel reveal">
+            <span class="section-label">Get started</span>
+            <h2>Ready to try Arka?</h2>
+            <p>
+              Recommended install via pipx. Optional fish shell unlocks the full 70+ skill router on macOS, Linux, and Windows.
+            </p>
+            <div class="install-row">
+              <div class="install-code" aria-label="Install command">
+                <span>$</span>
+                <code id="install-cmd">pipx install "arka-agent[chat]"</code>
+              </div>
+              <button class="btn btn-primary" type="button" id="copy-install">Copy command</button>
+            </div>
+            <div class="install-links">
+              <a class="btn btn-sm" href="https://arka-agent.mintlify.site/quickstart" target="_blank" rel="noopener noreferrer">Quickstart guide</a>
+              <a class="btn btn-sm" href="https://pypi.org/project/arka-agent/" target="_blank" rel="noopener noreferrer">PyPI package</a>
+              <a class="btn btn-sm" href="https://github.com/Sumit884-byte/arka" target="_blank" rel="noopener noreferrer">Source on GitHub</a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="links" class="section">
+        <div class="container">
+          <div class="section-header reveal">
+            <span class="section-label">Explore</span>
+            <h2>Docs, desktop app, and community</h2>
+            <p>Everything you need to install, extend, and contribute to Arka.</p>
+          </div>
+
+          <div class="links-grid">
+            <a class="link-card panel reveal" href="https://arka-agent.mintlify.site" target="_blank" rel="noopener noreferrer">
+              <h3>Documentation</h3>
+              <p>Quickstart, skills catalog, routing concepts, CLI reference, and guides.</p>
+              <div class="arrow">arka-agent.mintlify.site →</div>
+            </a>
+            <a class="link-card panel reveal" href="https://github.com/Sumit884-byte/arka" target="_blank" rel="noopener noreferrer">
+              <h3>GitHub</h3>
+              <p>Open-source under GPL v2. Star the repo, open issues, and send pull requests.</p>
+              <div class="arrow">Sumit884-byte/arka →</div>
+            </a>
+            <a class="link-card panel reveal" href="https://pypi.org/project/arka-agent/" target="_blank" rel="noopener noreferrer">
+              <h3>PyPI</h3>
+              <p>Install the published <code>arka-agent</code> package — no clone or build required.</p>
+              <div class="arrow">pypi.org/project/arka-agent →</div>
+            </a>
+            <a class="link-card panel reveal" href="https://github.com/Sumit884-byte/arka/tree/main/desktop" target="_blank" rel="noopener noreferrer">
+              <h3>Desktop app</h3>
+              <p>Native Tauri shell for chat, skills, and status — local backend on your machine.</p>
+              <div class="arrow">desktop/ →</div>
+            </a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-inner">
+        <p class="footer-copy">© 2026 Arka · GPL v2 · Built for developers who live in the terminal</p>
+        <div class="footer-links">
+          <a href="https://arka-agent.mintlify.site" target="_blank" rel="noopener noreferrer">Docs</a>
+          <a href="https://github.com/Sumit884-byte/arka" target="_blank" rel="noopener noreferrer">GitHub</a>
+          <a href="https://pypi.org/project/arka-agent/" target="_blank" rel="noopener noreferrer">PyPI</a>
+          <a href="https://github.com/Sumit884-byte/arka/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">License</a>
+        </div>
+      </div>
+    </footer>
+
+    <script src="main.js" defer></script>
+  </body>
+</html>

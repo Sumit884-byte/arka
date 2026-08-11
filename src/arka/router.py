@@ -60,6 +60,14 @@ def route(text: str) -> Route | None:
     if not cmd:
         return None
 
+    try:
+        from arka.core.just_ai import is_just_ai
+
+        if is_just_ai():
+            return None
+    except ImportError:
+        pass
+
     # Resolve explicit slash aliases before integrations and broad URL/media
     # heuristics.  Otherwise `/dev-tool` can be normalized as a hostname and
     # eventually reported as a missing image or opened as `dev-tool.com`.

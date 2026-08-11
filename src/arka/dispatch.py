@@ -495,6 +495,12 @@ def run_skill(skill_line: str) -> int:
         elif head in ("create_video", "create-video", "make_video", "video_create"):
             from arka.media.create_video import main as create_video_main
             code = create_video_main(rest)
+        elif head in ("edit_video", "edit-video", "video_edit", "trim_video", "concat_video"):
+            from arka.media.edit_video import main as edit_video_main
+            code = edit_video_main(rest)
+        elif head in ("dub_video", "dub-video", "video_dub", "dubbing"):
+            from arka.media.dub_video import main as dub_video_main
+            code = dub_video_main(rest)
         elif head in ("chart_from_pdf", "chart-from-pdf", "pdf_chart", "pdf-chart"):
             from arka.charts.chart_from_pdf import main as chart_from_pdf_main
             code = chart_from_pdf_main(rest)

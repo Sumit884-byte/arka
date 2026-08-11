@@ -106,6 +106,38 @@ def test_mcp_logs_write_read_and_redact(tmp_path, monkeypatch):
     assert data["events"][0]["api_key"] == "[redacted]"
 
 
+def test_mcp_logs_capture_prompt_and_args_summary(tmp_path, monkeypatch):
+    from arka.integrations.mcp_logs import log_mcp_event, mcp_tool_call_fields
+
+    monkeypatch.setenv("ARKA_MCP_LOG_PATH", str(tmp_path / "mcp.jsonl"))
+    fields = mcp_tool_call_fields("arka_route", {"prompt": "fix routing", "deep": False})
+    log_mcp_event("server.tools_call", tool="arka_route", status="ok", **fields)
+    row = json.loads((tmp_path / "mcp.jsonl").read_text(encoding="utf-8").strip())
+    assert row["prompt"] == "fix routing"
+    assert row["args_summary"] == {"deep": False}
+
+
+def test_mcp_tool_stats_aggregates_server_calls(tmp_path, monkeypatch):
+    from arka.integrations.mcp_logs import log_mcp_event, mcp_tool_stats
+
+    monkeypatch.setenv("ARKA_MCP_LOG_PATH", str(tmp_path / "mcp.jsonl"))
+    log_mcp_event("server.tools_call", tool="arka_ask", status="ok")
+    log_mcp_event("server.tools_call", tool="arka_ask", status="ok")
+    log_mcp_event("server.tools_call", tool="arka_model", status="ok")
+    log_mcp_event("client.call_tool", server="signoz", tool="search", status="ok")
+
+    text = mcp_tool_stats(top=5)
+    assert "total_calls\t3" in text
+    assert "387" not in text  # sanity: not reading real logs
+    assert "2\tarka_ask" in text
+    assert "1\tarka_model" in text
+    assert "search" not in text
+
+    data = json.loads(mcp_tool_stats(top=5, json_output=True))
+    assert data["total_calls"] == 3
+    assert data["tools"][0] == {"tool": "arka_ask", "count": 2}
+
+
 def test_threejs_mcp_preset_preview_and_apply(mcp_config):
     from arka.integrations.mcp_manager import format_preset, get_server_config, list_server_names
 

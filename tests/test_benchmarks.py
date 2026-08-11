@@ -121,7 +121,7 @@ def test_orchestrate_benchmark_uses_routed_profile(benchmark_env: Path, monkeypa
     store_suite_run("default", run_suite(suite, dry_run=True))
     monkeypatch.setenv("ARKA_BENCHMARK_ORCHESTRATE", "1")
     monkeypatch.setattr("arka.router.route", lambda text: type("R", (), {"skill": "web_answer"})())
-    monkeypatch.setattr("arka.cli.delegate_to_fish", lambda *args, **kwargs: None)
+    monkeypatch.setattr("arka.fish_bridge.delegate_to_fish", lambda *args, **kwargs: None)
     monkeypatch.setattr("arka.cli._run_portable", lambda *args, **kwargs: 0)
 
     code = _cmd_orchestrate(["--benchmark", "how to get free ai credits"])

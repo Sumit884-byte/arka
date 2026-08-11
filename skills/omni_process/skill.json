@@ -1,0 +1,27 @@
+{
+  "name": "omni_process",
+  "type": "python",
+  "entry": "run.py",
+  "version": "0.2.0",
+  "description": "Process technical articles into Omni JSON via Arka LLM routing, validation, and memory",
+  "triggers": [
+    "omni process",
+    "omni_process",
+    "process article",
+    "byte summary",
+    "omni feed"
+  ],
+  "permissions": ["network"],
+  "requires": {
+    "env": []
+  },
+  "metadata": {
+    "arka": {
+      "integration": "omni",
+      "omni_root": "/Users/sumitmishra/dev/omni",
+      "model_env": "SKILL_MODEL_OMNI_PROCESS",
+      "default_model": "groq/llama-3.3-70b-versatile",
+      "prompt_compact": false
+    }
+  }
+}

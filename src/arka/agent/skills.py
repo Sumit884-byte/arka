@@ -403,6 +403,22 @@ def _skill_gates(sk: dict[str, Any]) -> tuple[bool, str]:
         if not os.environ.get(str(env_name), "").strip():
             return False, f"missing env: {env_name}"
 
+    env_any = requires.get("env_any") or []
+    if env_any and not any(os.environ.get(str(e), "").strip() for e in env_any):
+        return False, f"missing env_any: {', '.join(str(e) for e in env_any)}"
+
+    for check_name in requires.get("checks") or []:
+        try:
+            from arka.core.skill_requirements import CUSTOM_CHECKS
+
+            fn = CUSTOM_CHECKS.get(str(check_name))
+            if fn:
+                ok_check, desc = fn()
+                if not ok_check:
+                    return False, f"missing check: {desc}"
+        except ImportError:
+            pass
+
     allowed = {
         p.strip().lower()
         for p in (os.environ.get("SKILL_PERMISSIONS") or "read,write,network,shell").split(",")
@@ -442,7 +458,12 @@ def run_skill(name: str, args: list[str]) -> int:
 
     ok, reason = _skill_gates(sk)
     if not ok:
-        print(f"Skill gate blocked '{name}': {reason}", file=sys.stderr)
+        try:
+            from arka.core.skill_requirements import format_gate_reason
+
+            print(format_gate_reason(name, reason), file=sys.stderr)
+        except ImportError:
+            print(f"Skill gate blocked '{name}': {reason}", file=sys.stderr)
         return 2
 
     ok, reason = _skill_security_gate(name, args)

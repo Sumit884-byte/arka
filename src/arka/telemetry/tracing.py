@@ -465,8 +465,41 @@ def shutdown_tracing() -> None:
         pass
 
 
+def log_response_duration(
+    label: str,
+    start: float | None = None,
+    *,
+    elapsed_ms: float | None = None,
+    attributes: dict[str, Any] | None = None,
+    level: str = "info",
+) -> float:
+    """Log wall-clock response time for a completed request path."""
+    if elapsed_ms is None:
+        if start is None:
+            return 0.0
+        elapsed = duration_ms(start)
+    else:
+        elapsed = round(float(elapsed_ms), 2)
+    attrs: dict[str, Any] = {
+        "arka.request.duration_ms": elapsed,
+        "arka.event": "request.complete",
+    }
+    if attributes:
+        attrs.update(attributes)
+    try:
+        from arka.telemetry.logs import emit_log
+
+        emit_log(f"{label} ({elapsed:.1f}ms)", level=level, attributes=attrs)
+    except ImportError:
+        pass
+    return elapsed
+
+
 @contextmanager
 def request_span(command: str, *, attributes: dict[str, Any] | None = None) -> Iterator[Any]:
+    import time
+
+    start = time.perf_counter()
     try:
         from arka.telemetry.logs import emit_log
         from arka.telemetry.metrics import record_request
@@ -488,3 +521,13 @@ def request_span(command: str, *, attributes: dict[str, Any] | None = None) -> I
         else:
             if not isinstance(current, _NoOpSpan):
                 current.set_attribute("arka.exit_code", 0)
+        finally:
+            elapsed = duration_ms(start)
+            if not isinstance(current, _NoOpSpan):
+                set_span_attributes(current, {"arka.request.duration_ms": elapsed})
+            log_attrs: dict[str, Any] = {"arka.command": command[:200]}
+            if attributes:
+                for key in ("arka.request.kind", "arka.request.text"):
+                    if key in attributes:
+                        log_attrs[key] = str(attributes[key])[:500]
+            log_response_duration(f"request {command} completed", start, attributes=log_attrs)

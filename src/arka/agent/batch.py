@@ -155,6 +155,82 @@ def _batch_or_default(batches: dict[str, PromptBatch], name: str) -> PromptBatch
     return batches.get(name)
 
 
+def batch_to_dict(batch: PromptBatch) -> dict[str, object]:
+    return {
+        "name": batch.name,
+        "due_at": batch.due_at,
+        "items": [asdict(item) for item in batch.items],
+        "item_count": len(batch.items),
+    }
+
+
+def batches_to_dict(batches: dict[str, PromptBatch]) -> dict[str, dict[str, object]]:
+    return {name: batch_to_dict(batch) for name, batch in sorted(batches.items())}
+
+
+def start_batch(*, name: str = "default", until: str) -> PromptBatch:
+    due_at = parse_due_at(until)
+    with _locked_batches() as batches:
+        old = batches.get(name)
+        batch = PromptBatch(name=name, due_at=due_at, items=list(old.items) if old else [])
+        batches[name] = batch
+    return batch
+
+
+def add_to_batch(*, name: str = "default", prompt: str, until: str = "") -> PromptBatch:
+    text = prompt.strip()
+    if not text:
+        raise ValueError("prompt is required")
+    with _locked_batches() as batches:
+        due_at = (
+            parse_due_at(until)
+            if until
+            else batches.get(name, PromptBatch(name, parse_due_at("1h"), [])).due_at
+        )
+        old = batches.get(name)
+        items = list(old.items) if old else []
+        items.append(BatchItem(prompt=text, created_at=_now().isoformat()))
+        batch = PromptBatch(name=name, due_at=due_at, items=items)
+        batches[name] = batch
+    return batch
+
+
+def list_batches() -> dict[str, PromptBatch]:
+    return _load()
+
+
+def clear_batch(*, name: str = "default") -> bool:
+    with _locked_batches() as batches:
+        existed = name in batches
+        batches.pop(name, None)
+    return existed
+
+
+def run_batch(
+    *,
+    name: str = "default",
+    print_only: bool = False,
+    keep: bool = False,
+    due_only: bool = False,
+) -> tuple[int, str]:
+    batches = _load()
+    batch = _batch_or_default(batches, name)
+    if not batch or not batch.items:
+        raise ValueError(f"Batch {name!r} has no prompts")
+    if due_only and datetime.fromisoformat(batch.due_at) > _now():
+        return 0, f"Batch {name!r} is not due yet ({batch.due_at})."
+    prompt = combined_prompt(batch)
+    if print_only:
+        return 0, prompt
+    from arka.dispatch import run_skill
+
+    code = run_skill("agent_code " + shlex.quote(prompt))
+    if code == 0 and not keep:
+        with _locked_batches() as batches:
+            batches.pop(name, None)
+    return int(code or 0), prompt if print_only else f"Batch {name!r} run completed (exit {code})."
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="arka batch")
     sub = parser.add_subparsers(dest="cmd")
@@ -181,59 +257,49 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "start":
         try:
-            due_at = parse_due_at(args.until)
+            batch = start_batch(name=args.name, until=args.until)
         except ValueError as exc:
             print(str(exc), file=sys.stderr)
             return 2
-        with _locked_batches() as batches:
-            old = batches.get(args.name)
-            batches[args.name] = PromptBatch(name=args.name, due_at=due_at, items=list(old.items) if old else [])
-        print(f"Batch '{args.name}' collecting until {due_at}.")
+        print(f"Batch '{args.name}' collecting until {batch.due_at}.")
         return 0
     if args.cmd == "add":
         prompt = " ".join(args.prompt).strip()
         if not prompt:
             print("Usage: arka batch add <prompt>", file=sys.stderr)
             return 2
-        with _locked_batches() as batches:
-            due_at = parse_due_at(args.until) if args.until else batches.get(args.name, PromptBatch(args.name, parse_due_at("1h"), [])).due_at
-            old = batches.get(args.name)
-            items = list(old.items) if old else []
-            items.append(BatchItem(prompt=prompt, created_at=_now().isoformat()))
-            batches[args.name] = PromptBatch(name=args.name, due_at=due_at, items=items)
-        print(f"Added to batch '{args.name}' ({len(items)} item(s), due {due_at}).")
+        try:
+            batch = add_to_batch(name=args.name, prompt=prompt, until=args.until)
+        except ValueError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+        print(f"Added to batch '{args.name}' ({len(batch.items)} item(s), due {batch.due_at}).")
         return 0
     if args.cmd == "list":
-        batches = _load()
+        batches = list_batches()
         if args.json:
-            print(json.dumps({name: {"name": b.name, "due_at": b.due_at, "items": [asdict(i) for i in b.items]} for name, b in batches.items()}, indent=2))
+            print(json.dumps(batches_to_dict(batches), indent=2))
         else:
             _print_batches(batches)
         return 0
     if args.cmd in {"run", "due"}:
-        batches = _load()
-        batch = _batch_or_default(batches, args.name)
-        if not batch or not batch.items:
-            print(f"Batch '{args.name}' has no prompts.", file=sys.stderr)
+        try:
+            code, message = run_batch(
+                name=args.name,
+                print_only=args.print_only,
+                keep=args.keep,
+                due_only=args.cmd == "due",
+            )
+        except ValueError as exc:
+            print(str(exc), file=sys.stderr)
             return 1
-        if args.cmd == "due" and datetime.fromisoformat(batch.due_at) > _now():
-            print(f"Batch '{args.name}' is not due yet ({batch.due_at}).")
-            return 0
-        prompt = combined_prompt(batch)
-        if args.print_only:
-            print(prompt)
-            return 0
-        from arka.dispatch import run_skill
-
-        code = run_skill("agent_code " + shlex.quote(prompt))
-        if code == 0 and not args.keep:
-            with _locked_batches() as batches:
-                batches.pop(args.name, None)
+        if args.print_only or (args.cmd == "due" and code == 0 and "not due yet" in message):
+            print(message)
+        elif code != 0:
+            print(message, file=sys.stderr)
         return code
     if args.cmd == "clear":
-        with _locked_batches() as batches:
-            existed = args.name in batches
-            batches.pop(args.name, None)
+        existed = clear_batch(name=args.name)
         print(f"Cleared batch '{args.name}'." if existed else f"Batch '{args.name}' was already empty.")
         return 0
     parser.print_help()

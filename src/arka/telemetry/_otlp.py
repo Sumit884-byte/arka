@@ -53,7 +53,7 @@ def signal_endpoint(signal: str) -> str:
 
 
 def telemetry_master_enabled() -> bool:
-    """Opt-in only: explicit trace flag or OTLP endpoint env — default OFF."""
+    """Default ON to local SigNoz OTLP; disable with OTEL_SDK_DISABLED or OTEL_TRACES_ENABLED=0."""
     if otel_sdk_disabled():
         return False
     if _falsy("OTEL_TRACES_ENABLED") or _falsy("SIGNOZ_TRACES"):
@@ -62,7 +62,7 @@ def telemetry_master_enabled() -> bool:
         return True
     if os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "").strip():
         return True
-    return False
+    return True
 
 
 def signal_enabled(signal: str) -> bool:

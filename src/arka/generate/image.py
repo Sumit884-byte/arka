@@ -255,10 +255,108 @@ def generate(
 def _extract_image_prompt(text: str) -> str:
     return re.sub(
         r"(?i)^(?:generate|create|draw|paint|make|sketch|design|show)\s+"
-        r"(?:an?\s+)?(?:image|picture|photo|art|drawing|painting|sketch|illustration|portrait|landscape)?\s*(?:of)?\s*",
+        r"(?:me\s+)?(?:an?\s+)?"
+        r"(?:image|picture|photo|drawing|painting|sketch|illustration|portrait|landscape|\bart\b)?\s*(?:of)?\s*",
         "",
         text.strip(),
     ).strip()
+
+
+_SEARCH_RESEARCH_RE = re.compile(
+    r"(?i)\b(?:"
+    r"search(?:\s+for|\s+the\s+web\s+for)?|"
+    r"look(?:ing)?\s+up|"
+    r"find(?:\s+(?:info(?:rmation)?|photos?|pictures?|images?))?|"
+    r"research|"
+    r"tell\s+me\s+about|"
+    r"what\s+(?:is|are)|"
+    r"who\s+(?:is|are)|"
+    r"learn\s+about|"
+    r"get\s+(?:info(?:rmation)?|facts)\s+(?:on|about)|"
+    r"list\s+(?:all\s+)?|"
+    r"show\s+me\s+(?:info(?:rmation)?|facts|details|photos?|pictures?|real)|"
+    r"build\s+(?:a\s+)?(?:website|site|page)|"
+    r"make\s+(?:a\s+)?(?:website|site|page)|"
+    r"write\s+(?:about|on)|"
+    r"explain|describe|document"
+    r")\b"
+)
+
+_CREATIVE_IMAGINARY_RE = re.compile(
+    r"(?i)\b(?:"
+    r"fictional|imaginary|fantasy|fantastical|sci[\s-]?fi|cyberpunk|"
+    r"surreal|dreamlike|magical|mythical|dragon|unicorn|wizard|"
+    r"cartoon|anime|illustration|artistic|stylized|concept\s+art|"
+    r"futuristic|utopian|dystopian|otherworldly|made[\s-]?up|"
+    r"ai[\s-]?(?:generated|art)|abstract"
+    r")\b"
+)
+
+_REAL_WORLD_EXTRA_RE = re.compile(
+    r"(?i)\b(?:"
+    r"breed|breeds|species|native|indigenous|local|"
+    r"dog|dogs|cat|cats|bird|birds|horse|horses|elephant|tiger|lion|"
+    r"president|scientist|celebrity|"
+    r"photograph|photo\s+of|picture\s+of|actual|historical|"
+    r"landmark|monument|temple|church|mosque|museum|"
+    r"animal|animals|wildlife|pet|pets|"
+    r"mahal|breed|hound|sheepdog|pariah|rajapalayam|mudhol|chippiparai|kombai|gaddi"
+    r")\b"
+)
+
+_NAMED_ENTITY_RE = re.compile(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b")
+
+_EXPLICIT_GENERATION_RE = re.compile(
+    r"(?i)(?:^|\b)(?:generate|create|make|draw|paint|sketch|design)\s+(?:\w+\s+){0,4}"
+    r"(?:image|picture|photo|art|drawing|sketch|painting|illustration|portrait|landscape)\b"
+    r"|^show\s+(?:me\s+)?(?:an?\s+)?(?:ai[\s-])?(?:image|picture|photo|illustration|art)\b"
+    r"|^(?:draw|paint|sketch)\s+"
+)
+
+
+def is_search_or_research_intent(text: str) -> bool:
+    """True when the user is looking up facts or building content, not requesting AI art."""
+    return bool(_SEARCH_RESEARCH_RE.search(text or ""))
+
+
+def is_creative_or_imaginary_subject(prompt: str) -> bool:
+    """True when the subject is clearly fictional or explicitly artistic."""
+    return bool(_CREATIVE_IMAGINARY_RE.search(prompt or ""))
+
+
+def is_real_world_subject(prompt: str, *, full_text: str = "") -> bool:
+    """True when the prompt names real entities (people, places, breeds, etc.)."""
+    combined = f"{full_text} {prompt}".strip()
+    try:
+        from arka.agent.three_js_model import symbolic_real_world_entity
+
+        reality = symbolic_real_world_entity(combined)
+        if reality is True:
+            return True
+        if reality is False:
+            return False
+    except ImportError:
+        pass
+    if _NAMED_ENTITY_RE.search(combined) and not is_creative_or_imaginary_subject(combined):
+        return True
+    return bool(_REAL_WORLD_EXTRA_RE.search(combined))
+
+
+def should_generate_image(text: str) -> bool:
+    """Return False for search/research on real subjects; allow clearly creative prompts."""
+    t = (text or "").strip()
+    if not t or not _EXPLICIT_GENERATION_RE.search(t):
+        return False
+    if is_search_or_research_intent(t):
+        return False
+    prompt = _extract_image_prompt(t)
+    if not prompt:
+        return False
+    if is_creative_or_imaginary_subject(prompt) or is_creative_or_imaginary_subject(t):
+        return True
+    if is_real_world_subject(prompt, full_text=t):
+        return False
+    return True
 
 
 def nl_to_argv(text: str) -> list[str]:
@@ -275,15 +373,11 @@ def nl_to_argv(text: str) -> list[str]:
     if re.search(r"(?i)\bascii\s+(?:art|banner)\b", t) or re.search(r"(?i)\bfiglet\b", t):
         return []
 
-    if re.search(
-        r"(?i)(?:^|\b)(?:generate|create|make|draw|paint|sketch|design)\s+(?:an?\s+)?"
-        r"(?:image|picture|photo|art|drawing|sketch|painting|illustration|portrait|landscape)\b",
-        t,
-    ) or re.match(r"(?i)^(draw|paint|sketch)\s+", t):
-        prompt = _extract_image_prompt(t)
-        return [prompt] if prompt else []
+    if not should_generate_image(t):
+        return []
 
-    return []
+    prompt = _extract_image_prompt(t)
+    return [prompt] if prompt else []
 
 
 def cmd_parse(args: argparse.Namespace) -> int:
@@ -307,8 +401,21 @@ def cmd_generate(args: argparse.Namespace) -> int:
     except SystemExit as exc:
         print(str(exc), file=sys.stderr)
         return 1
+    except SystemExit as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
     except Exception as exc:
+        from arka.core.skill_requirements import image_generation_available, hint_for_env
+
         print(_friendly_gemini_error(exc), file=sys.stderr)
+        if not image_generation_available():
+            print(
+                "\nCannot generate images — no API key configured and fallback disabled.\n"
+                f"  • {hint_for_env('GEMINI_API_KEY')}\n"
+                f"  • {hint_for_env('POLLINATIONS_API_KEY')}\n"
+                "  • Or keep IMAGE_FALLBACK=1 (default) for free Pollinations flux.",
+                file=sys.stderr,
+            )
         return 1
 
     print(f"Saved ({provider}): {saved}")

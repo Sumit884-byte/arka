@@ -1,0 +1,33 @@
+{
+  "name": "ai_video",
+  "description": "Full AI text-to-video via Pollinations, Gemini Veo 3.1 (fast→lite→standard), or Replicate — not stock-photo compose_video or ffmpeg slideshows",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "generate ai video",
+    "full ai video",
+    "ai video generation",
+    "text to video",
+    "create ai video",
+    "make ai video",
+    "generate video",
+    "create video clip",
+    "animate scene"
+  ],
+  "permissions": ["read", "write", "network", "shell"],
+  "requires": {
+    "env_optional": [
+      "POLLINATIONS_API_KEY",
+      "GEMINI_API_KEY",
+      "REPLICATE_API_TOKEN",
+      "VIDEO_BACKEND",
+      "VIDEO_MODEL",
+      "VIDEO_ASPECT",
+      "VIDEO_DURATION",
+      "VIDEO_POLLINATIONS_MODEL",
+      "VIDEO_REPLICATE_MODEL"
+    ]
+  }
+}

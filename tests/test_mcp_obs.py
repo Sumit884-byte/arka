@@ -68,6 +68,83 @@ def test_mcp_client_connect_with_mock_http():
     assert [tool.name for tool in tools] == ["signoz_ask"]
 
 
+def test_mcp_tool_call_fields_extracts_prompt_and_args():
+    from arka.integrations.mcp_logs import extract_mcp_prompt, mcp_tool_call_fields, summarize_mcp_tool_args
+
+    fields = mcp_tool_call_fields("arka_ask", {"prompt": "what is arka?", "deep": True})
+    assert fields["prompt"] == "what is arka?"
+    assert fields["args_summary"] == {"deep": True}
+
+    assert extract_mcp_prompt("arka_recall", {"goal": "last deploy"}) == "last deploy"
+    assert summarize_mcp_tool_args("arka_batch", {"action": "add", "prompt": "fix tests", "api_key": "secret"}) == {
+        "action": "add",
+        "api_key": "[redacted]",
+    }
+
+
+def test_observe_mcp_server_request_includes_prompt(monkeypatch):
+    from arka.telemetry import mcp_obs
+
+    log_calls: list[dict] = []
+    span_calls: list[dict] = []
+
+    monkeypatch.setattr(mcp_obs, "record_mcp_request", lambda **kwargs: None)
+    monkeypatch.setattr(mcp_obs, "emit_mcp_log", lambda *args, **kwargs: log_calls.append(kwargs))
+    monkeypatch.setattr(mcp_obs, "_emit_mcp_server_span", lambda **kwargs: span_calls.append(kwargs))
+
+    mcp_obs.observe_mcp_server_request(
+        method="tools/call",
+        tool_name="arka_route",
+        success=True,
+        duration_ms=8,
+        prompt="summarize this repo",
+        args_summary={"deep": False},
+    )
+
+    assert span_calls[0]["prompt"] == "summarize this repo"
+    assert span_calls[0]["args_summary"] == {"deep": False}
+    assert log_calls[0]["prompt"] == "summarize this repo"
+    assert log_calls[0]["args_summary"] == {"deep": False}
+
+
+def test_trace_mcp_server_tool_call_records_prompt(monkeypatch):
+    from arka.telemetry import mcp_obs
+
+    log_calls: list[dict] = []
+    monkeypatch.setattr(mcp_obs, "record_mcp_request", lambda **kwargs: None)
+    monkeypatch.setattr(mcp_obs, "emit_mcp_log", lambda *args, **kwargs: log_calls.append(kwargs))
+
+    class _NoOpSpan:
+        def set_attribute(self, *_args, **_kwargs):
+            pass
+
+        def set_status(self, *_args, **_kwargs):
+            pass
+
+        def record_exception(self, *_args, **_kwargs):
+            pass
+
+    @contextmanager
+    def fake_span(_name, *, attributes=None):
+        yield _NoOpSpan()
+
+    monkeypatch.setattr("arka.telemetry.tracing.span", fake_span)
+    monkeypatch.setattr("arka.telemetry.tracing.mark_ok", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("arka.telemetry.tracing.mark_error", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("arka.telemetry.tracing.set_span_attributes", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("arka.telemetry.tracing.duration_ms", lambda *_args, **_kwargs: 5.0)
+
+    with mcp_obs.trace_mcp_server_tool_call(
+        tool_name="arka_ask",
+        prompt="hello",
+        args_summary={"deep": True},
+    ):
+        pass
+
+    assert log_calls[-1]["prompt"] == "hello"
+    assert log_calls[-1]["args_summary"] == {"deep": True}
+
+
 def test_observe_mcp_server_request_records_metrics(monkeypatch):
     from arka.telemetry import mcp_obs
 

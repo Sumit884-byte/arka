@@ -237,7 +237,9 @@ class TurboQuantStore:
         texts = [str(c.get("text") or "") for c in self.chunks]
         vectors = self._embed_chunks(texts)
         if vectors is None:
-            return False
+            # Chunks are persisted; keyword search still works without embeddings.
+            self.index = None
+            return True
         self.index = self._rebuild_index(vectors)
         return True
 
@@ -427,7 +429,11 @@ def index_document_text(
     ok = store.add_entries(entries, replace_artifact=artifact)
     if ok:
         store.update_registry(artifact, file_name, _text_hash(text))
-    return ok, f"{len(entries)} chunks"
+        return True, f"{len(entries)} chunks"
+    if any(c.get("artifact") == artifact for c in store.chunks):
+        store.update_registry(artifact, file_name, _text_hash(text))
+        return True, f"{len(entries)} chunks (keyword-only; embeddings unavailable)"
+    return False, "index write failed"
 
 
 CODEBASE_SKIP_DIRS = frozenset({

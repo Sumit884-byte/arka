@@ -32,7 +32,7 @@ def seed_logs() -> int:
     if not _require_logs():
         return 1
 
-    from arka.telemetry import mark_ok, span
+    from arka.telemetry import span
     from arka.telemetry.logs import emit_log, shutdown_logs
     from arka.telemetry.tracing import shutdown_tracing
 

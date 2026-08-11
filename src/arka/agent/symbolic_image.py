@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 
 from arka.agent.meme_templates import comparison as _comparison
 

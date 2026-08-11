@@ -175,6 +175,32 @@ SKILL_CATALOG: dict[str, dict[str, Any]] = {
         "example": "convert_media clip.mp4 --to mp3",
         "beginner": True,
     },
+    "noise_remove": {
+        "interests": ["media"],
+        "description": "Remove background noise from audio or video recordings",
+        "example": "noise_remove interview.wav",
+        "beginner": True,
+    },
+    "create_video": {
+        "interests": ["media"],
+        "description": "Create videos from images, audio, or text slides with ffmpeg",
+        "example": "create_video slideshow ./photos/",
+        "beginner": True,
+    },
+    "music_generate": {
+        "interests": ["media"],
+        "description": "Generate original music with Pollinations or local ffmpeg tones",
+        "example": "music_generate upbeat lo-fi hip hop",
+        "beginner": True,
+        "requires_env": ["POLLINATIONS_API_KEY"],
+    },
+    "google_flow": {
+        "interests": ["media"],
+        "description": "Create AI video with Google Flow or Gemini Veo fallback",
+        "example": "google_flow cinematic drone shot over mountains",
+        "beginner": True,
+        "requires_env": ["GEMINI_API_KEY"],
+    },
     "search_web": {
         "interests": ["research"],
         "description": "DuckDuckGo web search from the terminal",
@@ -193,6 +219,12 @@ SKILL_CATALOG: dict[str, dict[str, Any]] = {
         "description": "Generate sample CSV/JSON datasets",
         "example": "generate_data 50 users as csv",
         "beginner": True,
+    },
+    "signoz_publish": {
+        "interests": ["dev"],
+        "description": "One-shot SigNoz publish — GitHub push, Vercel deploy, signoz/BLOG.md",
+        "example": "signoz_publish --yes -m \"Update hackathon blog\"",
+        "beginner": False,
     },
     "github_repo": {
         "interests": ["dev"],

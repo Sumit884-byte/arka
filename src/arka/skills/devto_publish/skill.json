@@ -1,0 +1,16 @@
+{
+  "name": "devto_publish",
+  "description": "Write and publish dev.to articles from research sessions, digests, or markdown files",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "dev.to",
+    "devto",
+    "publish to dev.to",
+    "write for dev.to",
+    "post devto"
+  ],
+  "permissions": ["network"]
+}

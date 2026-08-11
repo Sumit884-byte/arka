@@ -22,8 +22,11 @@ def test_list_tool_definitions_schema(monkeypatch):
     assert "arka_heartbeat" in names
     assert "arka_sessions" in names
     assert "arka_routines" in names
+    assert "arka_batch" in names
+    assert "arka_service_autostart" in names
     assert "arka_session_memory" in names
     assert "arka_subagent" in names
+    assert "arka_parallel" in names
     assert "arka_jules" in names
     assert "arka_self_build" in names
     assert "arka_project_rules" in names
@@ -40,6 +43,7 @@ def test_list_tool_definitions_schema(monkeypatch):
     assert "arka_qr" in names
     assert "arka_sports" in names
     assert "arka_config" in names
+    assert "arka_model" in names
     assert "arka_price" in names
     assert "arka_github" in names
     assert "arka_persona" in names
@@ -53,7 +57,19 @@ def test_list_tool_definitions_schema(monkeypatch):
     assert "arka_timekit" in names
     assert "arka_jsonkit" in names
     assert "arka_repo_health" in names
+    assert "arka_ci" in names
+    assert "arka_review" in names
+    assert "arka_repo_context" in names
+    assert "arka_pr_check" in names
+    assert "arka_code_search" in names
+    assert "arka_apply_patch" in names
     assert "arka_qa" in names
+    assert "arka_edit_video" in names
+    assert "arka_dub_video" in names
+    assert "arka_create_video" in names
+    assert "arka_noise_remove" in names
+    assert "arka_ocr" in names
+    assert "arka_rag" in names
     assert "arka_agent_hub" in names
     assert "arka_team_run" in names
     for tool in tools:
@@ -190,13 +206,15 @@ def test_mcp_server_writes_tool_call_logs(tmp_path, monkeypatch):
             "jsonrpc": "2.0",
             "id": 5,
             "method": "tools/call",
-            "params": {"name": "missing_tool", "arguments": {}},
+            "params": {"name": "missing_tool", "arguments": {"prompt": "hello"}},
         }
     )
     assert result is not None
     logs = read_mcp_logs(limit=5)
     assert "server.tools_call" in logs
-    assert "unknown_tool" in (tmp_path / "mcp.jsonl").read_text(encoding="utf-8")
+    raw = (tmp_path / "mcp.jsonl").read_text(encoding="utf-8")
+    assert "unknown_tool" in raw
+    assert "hello" in raw
 
 
 def test_mcp_server_stdio_roundtrip():
@@ -381,6 +399,81 @@ def test_handle_arka_sessions_push_and_reset(tmp_path, monkeypatch):
         {"action": "context", "channel": "cursor", "chat_id": "proj-1"}
     )
     assert ctx_after == "(no session context)"
+
+
+def test_handle_arka_batch_start_add_list_and_print(tmp_path, monkeypatch):
+    from arka.integrations.mcp_server import _handle_arka_batch
+
+    batch_file = tmp_path / "prompt-batches.json"
+    monkeypatch.setattr("arka.agent.batch.BATCH_FILE", batch_file)
+
+    started = json.loads(_handle_arka_batch({"action": "start", "until": "in 1 hour"}))
+    assert started["name"] == "default"
+    assert started["item_count"] == 0
+
+    updated = json.loads(
+        _handle_arka_batch({"action": "add", "prompt": "add MCP batch tool"})
+    )
+    assert updated["item_count"] == 1
+    assert updated["items"][0]["prompt"] == "add MCP batch tool"
+
+    listed = json.loads(_handle_arka_batch({"action": "list"}))
+    assert "default" in listed
+
+    combined = _handle_arka_batch({"action": "run", "print_only": True})
+    assert "Implement this Arka prompt batch" in combined
+    assert "add MCP batch tool" in combined
+
+    cleared = json.loads(_handle_arka_batch({"action": "clear"}))
+    assert cleared["cleared"] is True
+
+
+def test_handle_arka_batch_via_skill_routing(tmp_path, monkeypatch):
+    from arka.integrations.mcp_server import _handle_arka_skill
+
+    batch_file = tmp_path / "prompt-batches.json"
+    monkeypatch.setattr("arka.agent.batch.BATCH_FILE", batch_file)
+
+    out = _handle_arka_skill({"skill": "batch", "args": ["add", "fix", "tests"]})
+    payload = json.loads(out)
+    assert payload["items"][0]["prompt"] == "fix tests"
+
+
+def test_handle_arka_service_autostart_add_writes_wrapper(tmp_path, monkeypatch):
+    from arka.integrations.mcp_server import _handle_arka_service_autostart
+
+    registry = tmp_path / "service_autostart.json"
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    wrapper = cache / "api-autostart.sh"
+    monkeypatch.setattr(
+        "arka.integrations.service_autostart._registry_file", lambda: registry
+    )
+    monkeypatch.setattr(
+        "arka.integrations.service_autostart._security_gate_action", lambda _cmd: True
+    )
+    monkeypatch.setattr(
+        "arka.integrations.service_autostart._service_paths",
+        lambda _id: {
+            "script": wrapper,
+            "log": cache / "api-autostart.log",
+            "launchd": tmp_path / "agent.plist",
+            "systemd": cache / "unit.service",
+        },
+    )
+
+    entry = json.loads(
+        _handle_arka_service_autostart(
+            {
+                "action": "add",
+                "id": "api",
+                "command": "npm start",
+                "workdir": str(tmp_path),
+            }
+        )
+    )
+    assert entry["wrapper_script"] == str(wrapper)
+    assert wrapper.is_file()
 
 
 def test_handle_arka_routines_list(tmp_path, monkeypatch):
@@ -1247,6 +1340,107 @@ def test_handle_arka_config_list(monkeypatch, tmp_path):
     assert path["exists"] is True
 
 
+def test_handle_arka_model_status_and_recommend(monkeypatch):
+    from arka.integrations.mcp_server import _handle_arka_model
+
+    monkeypatch.setattr(
+        "arka.llm.provider_select.get_preferred",
+        lambda: ("openrouter", "anthropic/claude-3.5-sonnet"),
+    )
+    monkeypatch.setattr(
+        "arka.llm.provider_select.detect_provider_models",
+        lambda provider, **kwargs: (["anthropic/claude-3.5-sonnet", "openai/gpt-4o"], "catalog"),
+    )
+
+    status = json.loads(_handle_arka_model({"action": "status"}))
+    assert status["provider"] == "openrouter"
+    assert status["model"] == "anthropic/claude-3.5-sonnet"
+    assert status["model_valid"] is True
+
+    class FakeReport:
+        tier = "balanced"
+        tier_label = "Balanced"
+
+        def to_dict(self):
+            return {
+                "tier": self.tier,
+                "tier_label": self.tier_label,
+                "recommendations": [{"profile": "chat", "model": "openrouter/openai/gpt-4o-mini"}],
+            }
+
+    monkeypatch.setattr("arka.llm.model_advisor.build_report", lambda: FakeReport())
+    rec = json.loads(_handle_arka_model({"action": "recommend"}))
+    assert rec["tier"] == "balanced"
+    assert rec["recommendations"][0]["profile"] == "chat"
+
+
+def test_handle_arka_model_set(monkeypatch, tmp_path):
+    from arka.integrations.mcp_server import _handle_arka_model
+
+    monkeypatch.setattr(
+        "arka.llm.provider_select.set_preferred_provider",
+        lambda provider, **kwargs: ("openrouter", "openai/gpt-4o-mini", tmp_path / ".env"),
+    )
+    payload = json.loads(
+        _handle_arka_model(
+            {"action": "set", "provider": "openrouter", "model": "openai/gpt-4o-mini"}
+        )
+    )
+    assert payload["ok"] is True
+    assert payload["provider"] == "openrouter"
+    assert payload["model"] == "openai/gpt-4o-mini"
+
+
+def test_handle_arka_model_list_providers(monkeypatch):
+    from dataclasses import dataclass
+
+    from arka.integrations.mcp_server import _handle_arka_model
+
+    @dataclass
+    class Row:
+        slug: str
+        display_name: str
+        configured: bool
+        default_model: str
+        env_keys: tuple[str, ...]
+
+    monkeypatch.setattr(
+        "arka.llm.provider_select.list_provider_rows",
+        lambda: [
+            Row("openrouter", "OpenRouter", True, "openai/gpt-4o-mini", ("OPENROUTER_API_KEY",)),
+        ],
+    )
+    payload = json.loads(_handle_arka_model({"action": "list_providers"}))
+    assert payload["providers"][0]["slug"] == "openrouter"
+
+
+def test_handle_arka_model_dashboard(monkeypatch):
+    from arka.integrations.mcp_server import _handle_arka_model
+
+    monkeypatch.setattr(
+        "arka.llm.credits_usage.build_dashboard_payload",
+        lambda **kwargs: {
+            "headline": "Using openrouter → openai/gpt-4o-mini",
+            "preferred": {"provider": "openrouter", "model": "openai/gpt-4o-mini"},
+            "providers": [],
+            "session_exhausted": [],
+            "settings": {"auto_failover": "1"},
+            "hints": [],
+            "kwargs": kwargs,
+        },
+    )
+
+    payload = json.loads(_handle_arka_model({"action": "dashboard", "chain": True}))
+    assert payload["headline"].startswith("Using openrouter")
+    assert payload["kwargs"]["include_chain"] is True
+    assert payload["kwargs"]["check_balance"] is False
+
+    live = json.loads(_handle_arka_model({"action": "dashboard", "live": True}))
+    assert live["kwargs"]["live"] is True
+    assert live["kwargs"]["check_balance"] is True
+    assert live["kwargs"]["include_chain"] is True
+
+
 def test_handle_arka_sports_leagues(monkeypatch):
     from arka.integrations import sports as sports_mod
     from arka.integrations.mcp_server import _handle_arka_sports
@@ -1385,6 +1579,76 @@ def test_handle_arka_qa_plan(tmp_path):
     assert any(layer["layer"] == "smoke" for layer in payload["layers"])
 
 
+def test_handle_arka_capabilities_local_file_tools():
+    from arka.integrations.mcp_server import _handle_arka_capabilities
+
+    payload = json.loads(_handle_arka_capabilities({}))
+    local = payload["local_file_tools"]
+    assert "arka_ocr" in local["tools"]
+    assert "arka_rag" in local["tools"]
+    assert "local filesystem" in local["notice"].lower()
+    assert "incremental_verify" in local["verify_with"].lower()
+
+    rules = payload["agent_execution_rules"]
+    assert rules["verify_after_fix"]["steps"]
+    assert "fixed" in rules["verify_after_fix"]["notice"].lower()
+    assert any(row["id"] == "verify_after_fix" for row in rules["rules"])
+    assert rules["incremental_verify"]["steps"]
+    assert "verified" in rules["incremental_verify"]["notice"].lower()
+    assert any(row["id"] == "incremental_verify" for row in rules["rules"])
+
+
+def test_handle_arka_ocr_requires_path():
+    from arka.integrations.mcp_server import _handle_arka_ocr
+
+    try:
+        _handle_arka_ocr({"action": "extract"})
+    except ValueError as exc:
+        assert "path is required" in str(exc)
+    else:
+        raise AssertionError("expected ValueError")
+
+
+def test_handle_arka_ocr_extract(monkeypatch, tmp_path):
+    from arka.integrations.mcp_server import _handle_arka_ocr
+
+    image = tmp_path / "note.png"
+    image.write_bytes(b"fake")
+    monkeypatch.setattr(
+        "arka.agent.ocr_skill.extract_image_payload",
+        lambda path, **kwargs: {
+            "path": str(path),
+            "engine": "test",
+            "plain_text": "hello",
+            "blocks": [],
+            "local_files_required": True,
+        },
+    )
+    payload = json.loads(_handle_arka_ocr({"action": "extract", "path": str(image)}))
+    assert payload["plain_text"] == "hello"
+    assert payload["local_files_required"] is True
+
+
+def test_handle_arka_rag_formats():
+    from arka.integrations.mcp_server import _handle_arka_rag
+
+    payload = json.loads(_handle_arka_rag({"action": "formats"}))
+    assert ".pdf" in payload["supported"]
+    assert payload["local_files_required_for_ingest"] is True
+
+
+def test_handle_arka_rag_ingest_requires_local_file(tmp_path):
+    from arka.integrations.mcp_server import _handle_arka_rag
+
+    missing = tmp_path / "missing.pdf"
+    try:
+        _handle_arka_rag({"action": "ingest", "path": str(missing)})
+    except ValueError as exc:
+        assert "local file not found" in str(exc).lower()
+    else:
+        raise AssertionError("expected ValueError")
+
+
 def test_doctor_spawns_client(monkeypatch):
     from arka.integrations.mcp_client import McpTool
     from arka.integrations.mcp_server import doctor, list_tool_names
@@ -1429,3 +1693,99 @@ def test_agent_hub_sync_includes_arka_self(tmp_path, monkeypatch):
     assert result["ok"] is True
     hub_data = json.loads(hub_mcp_path().read_text(encoding="utf-8"))
     assert ARKA_MCP_SERVER_KEY in hub_data["mcpServers"]
+
+
+def test_handle_arka_ci_lists_gates(tmp_path, monkeypatch):
+    from arka.integrations.mcp_server import _handle_arka_ci
+
+    (tmp_path / ".arka").mkdir()
+    (tmp_path / ".arka" / "ci.json").write_text(
+        '{"gates": [{"name": "echo-gate", "command": ["echo", "hi"]}]}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "arka.agent.dev_tools.run_ci",
+        lambda root, **kwargs: {"path": str(root), "ok": True, "results": []},
+    )
+    payload = json.loads(_handle_arka_ci({"path": str(tmp_path), "changed_only": False}))
+    assert payload["ok"] is True
+    assert payload["config"] is not None
+
+
+def test_handle_arka_review_staged(tmp_path, monkeypatch):
+    from arka.integrations.mcp_server import _handle_arka_review
+
+    monkeypatch.setattr(
+        "arka.agent.dev_tools.review_payload",
+        lambda root, **kwargs: {
+            "path": str(root),
+            "report": "Review scope: staged",
+            "hints": [],
+            "test_gaps": [],
+            "ok": True,
+        },
+    )
+    payload = json.loads(_handle_arka_review({"path": str(tmp_path), "staged": True}))
+    assert payload["ok"] is True
+
+
+def test_handle_arka_repo_context_query(tmp_path, monkeypatch):
+    from arka.integrations.mcp_server import _handle_arka_repo_context
+
+    monkeypatch.setattr(
+        "arka.agent.repo_context.context_payload",
+        lambda query, root=None, **kwargs: {
+            "action": "query",
+            "path": str(tmp_path),
+            "query": query,
+            "context": "AGENT RULES",
+        },
+    )
+    payload = json.loads(_handle_arka_repo_context({"query": "routing", "path": str(tmp_path)}))
+    assert payload["context"] == "AGENT RULES"
+
+
+def test_handle_arka_pr_check_diff(tmp_path, monkeypatch):
+    from arka.integrations.mcp_server import _handle_arka_pr_check
+
+    monkeypatch.setattr(
+        "arka.agent.pr_check.pr_check_payload",
+        lambda action, **kwargs: {"ok": True, "action": action, "files": ["a.py"]},
+    )
+    payload = json.loads(_handle_arka_pr_check({"action": "diff", "path": str(tmp_path)}))
+    assert payload["action"] == "diff"
+
+
+def test_handle_arka_code_search(monkeypatch):
+    from arka.integrations.mcp_server import _handle_arka_code_search
+
+    monkeypatch.setattr(
+        "arka.agent.code_search.search_payload",
+        lambda query, **kwargs: {"query": query, "engine": "ripgrep", "results": [], "count": 0, "path": "/tmp"},
+    )
+    payload = json.loads(_handle_arka_code_search({"query": "def main"}))
+    assert payload["engine"] == "ripgrep"
+
+
+def test_handle_arka_apply_patch_search_replace(tmp_path, monkeypatch):
+    from arka.integrations.mcp_server import _handle_arka_apply_patch
+
+    target = tmp_path / "demo.py"
+    target.write_text("hello world\n", encoding="utf-8")
+    monkeypatch.setattr(
+        "arka.core.code_project.get_active_root",
+        lambda: tmp_path,
+    )
+    payload = json.loads(
+        _handle_arka_apply_patch(
+            {
+                "path": str(tmp_path),
+                "file": "demo.py",
+                "search": "hello world",
+                "replace": "hello arka",
+            }
+        )
+    )
+    assert payload["ok"] is True
+    assert target.read_text(encoding="utf-8") == "hello arka\n"
+

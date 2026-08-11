@@ -22,21 +22,60 @@ def impact(root: Path) -> list[str]:
 
 
 def test_gaps(root: Path) -> list[str]:
-    return test_gaps_for_files(changed(root))
+    return test_gaps_for_files(changed(root), root=root)
 
 
-def test_gaps_for_files(files: list[str]) -> list[str]:
-    tests = {
-        Path(path).stem.replace("test_", "")
-        for path in files
-        if "/tests/" in f"/{path}" or path.startswith("tests/")
-    }
+def _read_probe_text(path: Path, *, limit: int = 12_000) -> str:
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")[:limit]
+    except OSError:
+        return ""
+
+
+def _test_file_stems(root: Path) -> set[str]:
+    stems: set[str] = set()
+    tests_dir = root / "tests"
+    if tests_dir.is_dir():
+        for path in tests_dir.rglob("test_*.py"):
+            stems.add(path.stem.removeprefix("test_").lower())
+    return stems
+
+
+def _script_probe_covers(module_path: str, root: Path) -> bool:
+    try:
+        from arka.agent.script_discovery import discover_verification_scripts
+    except ImportError:
+        return False
+    stem = Path(module_path).stem.lower()
+    dotted = module_path.replace("/", ".").removesuffix(".py")
+    for probe in discover_verification_scripts(root):
+        blob = f"{probe.path.name} {probe.docstring} {_read_probe_text(probe.path)}".lower()
+        if stem in blob or dotted in blob or module_path.lower() in blob:
+            return True
+    return False
+
+
+def _source_has_test_coverage(module_path: str, root: Path, test_stems: set[str]) -> bool:
+    stem = Path(module_path).stem.lower()
+    if stem in test_stems:
+        return True
+    if any(stem in item or item in stem for item in test_stems):
+        return True
+    for pattern in (f"tests/test_{stem}.py", f"tests/**/test_{stem}.py"):
+        if list(root.glob(pattern)):
+            return True
+    return _script_probe_covers(module_path, root)
+
+
+def test_gaps_for_files(files: list[str], root: Path | None = None) -> list[str]:
+    project = (root or Path.cwd()).expanduser().resolve()
+    test_stems = _test_file_stems(project) if project.is_dir() else set()
     gaps: list[str] = []
     for file in files:
-        if file.startswith("src/") and Path(file).suffix in {".py", ".ts", ".tsx", ".js"}:
-            stem = Path(file).stem.lower()
-            if stem not in tests and not any(stem in item for item in tests):
-                gaps.append(file)
+        if not (file.startswith("src/") and Path(file).suffix in {".py", ".ts", ".tsx", ".js"}):
+            continue
+        if not _source_has_test_coverage(file, project, test_stems):
+            gaps.append(file)
     return gaps
 
 

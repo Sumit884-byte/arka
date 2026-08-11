@@ -5,7 +5,7 @@ keywords: ["observability", "signoz", "opentelemetry", "tracing"]
 icon: "chart-line"
 ---
 
-Export traces, metrics, and logs to [SigNoz](https://signoz.io) when enabled. **Off by default.**
+Export traces, metrics, and logs to [SigNoz](https://signoz.io). **On by default** to local OTLP at `http://127.0.0.1:4318` when SigNoz is running.
 
 ## Quick start
 
@@ -42,11 +42,13 @@ SigNoz endpoint—not Arka's route instrumentation.
 ## Configuration
 
 ```env
-OTEL_TRACES_ENABLED=1
+# Enabled by default — override only when needed
 SIGNOZ_ENDPOINT=http://localhost:4318
 SIGNOZ_UI_URL=http://localhost:8080
 OTEL_SERVICE_NAME=arka
-# SIGNOZ_API_KEY=               # for alerts / MCP
+# OTEL_SDK_DISABLED=true          # disable all OTLP export
+# OTEL_TRACES_ENABLED=0           # disable traces (metrics/logs follow)
+# SIGNOZ_API_KEY=                 # for alerts / MCP
 ```
 
 ## What gets traced
@@ -109,7 +111,7 @@ arka signoz cursor-setup
 Bundled SigNoz assets (dashboards, alerts, demos) live in `signoz/` in the repo.
 
 <Note>
-  Both `OTEL_TRACES_ENABLED=1` and `SIGNOZ_ENDPOINT` must be set for traces to export.
+  OTLP export is on by default to `http://127.0.0.1:4318`. Set `OTEL_SDK_DISABLED=true` or `OTEL_TRACES_ENABLED=0` to opt out.
 </Note>
 
 ## Production-to-codebase connectors

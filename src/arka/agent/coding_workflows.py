@@ -1,13 +1,16 @@
 """Deterministic coding workflows that make Arka skill use explicit."""
 from __future__ import annotations
+
 import argparse
 from dataclasses import dataclass
 from pathlib import Path
+
 
 @dataclass(frozen=True)
 class Workflow:
     name: str
     steps: tuple[str, ...]
+
 
 WORKFLOWS = {
     "feature": Workflow("feature", ("repo_context", "plan", "write code", "lint_project", "ci", "review")),
@@ -28,6 +31,43 @@ def exhaustive_workflow() -> Workflow:
     steps = tuple(f"{skill} (inspect/plan only)" for skill in skills if skill not in verify) + verify
     return Workflow("exhaustive", steps)
 
+
+def build_workflow_goal(flow: Workflow, task: str) -> str:
+    lines = [
+        f"Execute the Arka '{flow.name}' coding workflow.",
+        f"Task: {task or '(infer from repo context and diff)'}",
+        "",
+        "Run these skills/steps in order. Inspect/plan before edits; verify with ci + review at the end:",
+    ]
+    for index, step in enumerate(flow.steps, 1):
+        lines.append(f"{index}. {step}")
+    lines.append("")
+    lines.append(
+        "Use existing Arka skills (repo_context, ci, review, repo_health, lint_project) explicitly. "
+        "Keep edits minimal and scoped to the code project."
+    )
+    return "\n".join(lines)
+
+
+def execute_workflow(flow: Workflow, task: str) -> int:
+    goal = build_workflow_goal(flow, task)
+    try:
+        from arka.agent.goal import run_goal
+
+        return int(
+            run_goal(
+                goal,
+                max_steps=24,
+                auto_yes=False,
+                auto_continue=True,
+            )
+            or 0
+        )
+    except ImportError as exc:
+        print(f"goal agent unavailable: {exc}", file=__import__("sys").stderr)
+        return 1
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="arka coding-workflow")
     p.add_argument("workflow", choices=sorted((*WORKFLOWS, "exhaustive")))
@@ -39,10 +79,10 @@ def main(argv: list[str] | None = None) -> int:
     for index, step in enumerate(flow.steps, 1):
         print(f"step_{index}\t{step}")
     if not a.run:
-        print("preview\tpass --run to execute; review each generated change")
+        print("preview\tpass --run to execute via goal agent (approval-gated edits)")
         return 0
-    print("execution\tUse the listed Arka skills explicitly in order; automatic code edits remain approval-gated.")
-    return 0
+    print("execution\tstarting goal agent for workflow steps")
+    return execute_workflow(flow, a.task)
 
 
 if __name__ == "__main__":

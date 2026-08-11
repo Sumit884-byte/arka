@@ -47,6 +47,22 @@ class RepoHealthTests(unittest.TestCase):
             names = [c["name"] for c in payload["checks"]]
             self.assertIn("npm test", names)
 
+    def test_detect_mypy_and_tsc(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "pyproject.toml").write_text("[tool.mypy]\n", encoding="utf-8")
+            (root / "package.json").write_text(
+                '{"devDependencies":{"typescript":"5.0.0"},"scripts":{"typecheck":"tsc --noEmit"}}',
+                encoding="utf-8",
+            )
+            (root / "tsconfig.json").write_text("{}", encoding="utf-8")
+            with mock.patch.object(rh, "shutil_which", side_effect=lambda name: f"/usr/bin/{name}"):
+                checks = rh.detect_checks(root)
+            names = [c.name for c in checks]
+            self.assertIn("mypy", names)
+            self.assertIn("tsc", names)
+            self.assertIn("npm run typecheck", names)
+
     def test_route_scan_and_run(self) -> None:
         self.assertEqual(rh.route_command("repo health check"), "repo_health scan")
         self.assertEqual(rh.route_command("run project tests"), "repo_health run --test")

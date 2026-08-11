@@ -27,6 +27,7 @@ _CREDITS_USAGE_RE = re.compile(
 
 _CORE_PROVIDERS = ("gemini", "groq", "openrouter", "ollama")
 _NETWORK_TIMEOUT = 2.5
+_BALANCE_TTL = 60.0
 
 
 def is_credits_usage_request(cmd: str) -> bool:
@@ -212,25 +213,39 @@ def skill_usage_lines() -> list[str]:
 
 
 def fetch_openrouter_balance(*, timeout: float = _NETWORK_TIMEOUT) -> dict[str, object] | None:
-    keys = iter_provider_keys("openrouter")
-    if not keys:
+    def _fetch() -> dict[str, object] | None:
+        keys = iter_provider_keys("openrouter")
+        if not keys:
+            return None
+        for key in keys:
+            try:
+                req = urllib.request.Request(
+                    "https://openrouter.ai/api/v1/auth/key",
+                    headers={"Authorization": f"Bearer {key}"},
+                    method="GET",
+                )
+                with urllib.request.urlopen(req, timeout=timeout) as resp:
+                    payload = json.loads(resp.read().decode())
+                data = payload.get("data") if isinstance(payload, dict) else None
+                if isinstance(data, dict):
+                    return data
+            except (urllib.error.HTTPError, urllib.error.URLError, OSError, TimeoutError, json.JSONDecodeError):
+                if key != keys[-1]:
+                    continue
         return None
-    for key in keys:
-        try:
-            req = urllib.request.Request(
-                "https://openrouter.ai/api/v1/auth/key",
-                headers={"Authorization": f"Bearer {key}"},
-                method="GET",
+
+    try:
+        from arka.core.fetch_dedup import fetch_dedup_enabled, get_cache
+
+        if fetch_dedup_enabled():
+            return get_cache("credits").get_or_fetch(
+                f"openrouter_balance:{timeout}",
+                _fetch,
+                ttl=_BALANCE_TTL,
             )
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                payload = json.loads(resp.read().decode())
-            data = payload.get("data") if isinstance(payload, dict) else None
-            if isinstance(data, dict):
-                return data
-        except (urllib.error.HTTPError, urllib.error.URLError, OSError, TimeoutError, json.JSONDecodeError):
-            if key != keys[-1]:
-                continue
-    return None
+    except ImportError:
+        pass
+    return _fetch()
 
 
 def openrouter_balance_line(*, check_balance: bool) -> str | None:
@@ -254,6 +269,110 @@ def openrouter_balance_line(*, check_balance: bool) -> str | None:
     if not parts:
         return None
     return "  OpenRouter balance: " + ", ".join(parts)
+
+
+def _provider_dashboard_rows(*, live: bool = False) -> list[dict[str, object]]:
+    configured_fn = provider_available if live else _provider_configured_offline
+    rows: list[dict[str, object]] = []
+    for slug in _CORE_PROVIDERS:
+        spec = next((s for s in provider_specs() if s.slug == slug), None)
+        if spec is None:
+            continue
+        ok = configured_fn(slug)
+        keys = collect_provider_keys(slug) if ok else []
+        row: dict[str, object] = {
+            "slug": slug,
+            "display_name": spec.display_name,
+            "configured": ok,
+            "status": "ready" if ok else "missing_key",
+        }
+        if live:
+            row["live"] = ok
+        if ok and keys:
+            row["key_count"] = len(keys)
+            if len(keys) > 1 and rotation_enabled():
+                label = key_rotation_label(slug)
+                if label:
+                    row["key_rotation"] = label
+        elif not ok and spec.env_keys:
+            row["setup_env"] = spec.env_keys[0]
+        rows.append(row)
+    return rows
+
+
+def build_dashboard_payload(
+    *,
+    live: bool = False,
+    check_balance: bool = False,
+    include_chain: bool = False,
+    chain_limit: int = 20,
+) -> dict[str, object]:
+    """Structured LLM provider dashboard for MCP/CLI consumers."""
+    from arka.llm import provider_select as ps
+
+    provider, model = ps.get_preferred()
+    models, models_source = ps.detect_provider_models(provider) if provider else ([], "none")
+    model_valid = bool(model and (not models or model in models))
+    exhausted = [
+        {"provider": p, "model": m} for p, m in EXHAUSTION.list_exhausted()
+    ]
+
+    headline = "No LLM provider configured"
+    if provider and model:
+        headline = f"Using {provider} → {model}"
+    elif provider:
+        headline = f"Using {provider} (no model selected)"
+
+    payload: dict[str, object] = {
+        "headline": headline,
+        "preferred": {
+            "provider": provider or None,
+            "model": model or None,
+            "model_valid": model_valid,
+            "models_detected": len(models),
+            "models_source": models_source,
+        },
+        "providers": _provider_dashboard_rows(live=live),
+        "session_exhausted": exhausted,
+        "settings": {
+            "auto_failover": env("LLM_AUTO_FALLBACK", "1"),
+        },
+        "hints": setup_hint_lines(
+            llm_configured=any(_provider_configured_offline(slug) for slug in _CORE_PROVIDERS),
+            live=live,
+        ),
+    }
+
+    if check_balance and _provider_configured_offline("openrouter"):
+        balance = fetch_openrouter_balance()
+        if balance:
+            payload["openrouter_balance"] = {
+                "usage_usd": balance.get("usage"),
+                "limit_usd": balance.get("limit"),
+                "is_free_tier": balance.get("is_free_tier"),
+            }
+
+    if include_chain:
+        _, counts = fallback_chain_summary(include_all=True, live=live)
+        chain: dict[str, object] = {"counts": counts}
+        candidates = ordered_model_candidates() if live else offline_model_candidates()
+        configured_fn = provider_available if live else _provider_configured_offline
+        entries: list[dict[str, object]] = []
+        for prov, model_id in candidates[: max(1, chain_limit)]:
+            configured = configured_fn(prov)
+            status = "exhausted" if EXHAUSTION.exhausted(prov, model_id) else "ready"
+            entries.append(
+                {
+                    "provider": prov,
+                    "model": model_id,
+                    "configured": configured,
+                    "status": status if configured else "skip",
+                }
+            )
+        chain["candidates"] = entries
+        payload["fallback_chain"] = chain
+
+    return payload
 
 
 def setup_hint_lines(*, llm_configured: bool, live: bool = False) -> list[str]:
@@ -361,6 +480,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 __all__ = [
+    "build_dashboard_payload",
     "fetch_openrouter_balance",
     "is_credits_usage_request",
     "llm_settings_lines",

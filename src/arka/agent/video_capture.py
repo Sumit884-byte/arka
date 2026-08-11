@@ -85,11 +85,40 @@ def _run_action(page: Any, action: dict[str, Any], output_dir: Path, index: int)
             ms = int(seconds * 1000)
         page.wait_for_timeout(max(0, int(ms)))
         return None
+    if kind in {"wait_for_text", "assert_text"}:
+        text = action.get("text")
+        if not text:
+            raise ValueError(f"step {index}: wait_for_text requires text")
+        timeout = int(action.get("timeout_ms", action.get("timeout", 15_000)))
+        locator = page.locator(action["selector"]).first if "selector" in action else page.get_by_text(str(text), exact=action.get("exact", False)).first
+        try:
+            if "selector" in action:
+                locator.get_by_text(str(text), exact=action.get("exact", False)).wait_for(timeout=timeout)
+            else:
+                locator.wait_for(timeout=timeout)
+        except Exception:
+            if action.get("optional"):
+                return None
+            raise
+        return None
     if kind == "press":
         key = action.get("key")
         if not key:
             raise ValueError(f"step {index}: press action requires key")
         page.keyboard.press(str(key))
+        return None
+    if kind in {"type", "fill"}:
+        text = action.get("text")
+        if text is None:
+            text = action.get("value")
+        if text is None:
+            raise ValueError(f"step {index}: type/fill action requires text")
+        if "selector" in action:
+            page.locator(action["selector"]).first.fill(str(text))
+        elif "placeholder" in action:
+            page.get_by_placeholder(str(action["placeholder"])).first.fill(str(text))
+        else:
+            page.keyboard.type(str(text))
         return None
     if kind == "screenshot":
         name = action.get("name") or f"step-{index:03d}.png"
@@ -230,3 +259,7 @@ def walkthrough_output_dir(base: str | Path | None = None) -> Path:
     out = root / f"run-{stamp}"
     out.mkdir(parents=True, exist_ok=True)
     return out
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,16 @@
+{
+  "name": "n8n",
+  "description": "Connect Arka to n8n workflows via remote_server and webhook HTTP endpoints",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "n8n",
+    "n8n integration",
+    "n8n workflow",
+    "workflow automation",
+    "connect arka to n8n"
+  ],
+  "permissions": ["network"]
+}

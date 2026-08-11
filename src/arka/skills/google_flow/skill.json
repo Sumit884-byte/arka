@@ -1,0 +1,27 @@
+{
+  "name": "google_flow",
+  "description": "Create AI video with Google Flow (labs.google/fx/tools/flow) via browser automation or Gemini Veo API fallback",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "google flow",
+    "create video in google flow",
+    "use google flow",
+    "google flow video",
+    "make video with google flow",
+    "flow.google video"
+  ],
+  "permissions": ["read", "write", "network", "shell"],
+  "requires": {
+    "env_optional": [
+      "GEMINI_API_KEY",
+      "GOOGLE_FLOW_BACKEND",
+      "GOOGLE_FLOW_URL",
+      "GOOGLE_FLOW_USER_DATA_DIR",
+      "GOOGLE_FLOW_VEO_MODEL"
+    ],
+    "packages_optional": ["playwright"]
+  }
+}

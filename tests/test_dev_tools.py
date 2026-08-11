@@ -39,6 +39,19 @@ class DevToolsTests(unittest.TestCase):
         self.assertEqual(dt.ci_gates()[0].command[:3], [dt._python(), "-m", "ruff"])
         self.assertEqual(dt.ci_gates(changed=["src/arka/x.py"])[0].name, "ruff-changed")
 
+    def test_ci_gates_loads_arka_config(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".arka").mkdir()
+            (root / ".arka" / "ci.json").write_text(
+                '{"gates": [{"name": "custom", "command": ["echo", "ok"]}]}',
+                encoding="utf-8",
+            )
+            gates = dt.ci_gates(root=root)
+            self.assertEqual(len(gates), 1)
+            self.assertEqual(gates[0].name, "custom")
+            self.assertEqual(gates[0].command, ["echo", "ok"])
+
     def test_changed_ci_deduplicates_status_paths(self) -> None:
         with mock.patch.object(dt, "_run", side_effect=[(0, "src/arka/x.py\n", ""), (0, " M src/arka/x.py\n?? tests/test_x.py\n", "")]), mock.patch.object(dt, "ci_gates", return_value=[]):
             payload = dt.run_ci(Path("."), changed_only=True)

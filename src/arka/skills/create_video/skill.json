@@ -1,0 +1,23 @@
+{
+  "name": "create_video",
+  "description": "Create videos locally with ffmpeg — slideshows from images, still image with audio, text slides, and transparent alpha output (WebM, ProRes, APNG, GIF)",
+  "version": "1.1.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "create video",
+    "make video",
+    "create slideshow",
+    "make slideshow",
+    "video from images",
+    "image to video",
+    "create video from photos",
+    "transparent video",
+    "video with alpha"
+  ],
+  "permissions": ["read", "write", "shell"],
+  "requires": {
+    "bins": ["ffmpeg"]
+  }
+}

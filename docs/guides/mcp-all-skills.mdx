@@ -17,9 +17,52 @@ collapse it into a guessed skill name like `design_from_screenshot` or
 `web_answer`.
 
 This means newly added skills—including data collection, media transforms,
-agent races, reusable blocks, ultra-fast development, and future skills—do not
-need a separate MCP wrapper. Execution still passes through Arka's normal mode,
-security, and write-action gates.
+agent races, reusable blocks, ultra-fast development, OCR, RAG, and future
+skills—do not need a separate MCP wrapper. Execution still passes through
+Arka's normal mode, security, and write-action gates.
+
+## Local-file MCP tools
+
+`arka_ocr` and `arka_rag` are dedicated MCP tools for OCR and document RAG.
+They only work when the agent can read paths on the local machine (for example
+a Cursor workspace file). Cloud agents without mounted files cannot use them.
+
+Call `arka_capabilities` to see the `local_file_tools` section, which lists
+these tools and the shared notice agents should follow.
+
+### Incremental verification (all agents)
+
+Do **not** wait for an entire long log or batch job before checking results.
+
+1. Run the smallest useful demo first (one file, one page, or one sample).
+2. Inspect that result — enough output to confirm success or failure.
+3. If the first demo succeeds, run a second increment.
+4. Only then report the workflow as **verified**.
+
+`arka_capabilities` exposes this under `agent_execution_rules.incremental_verify`.
+
+| Tool | Local path required | Typical use |
+|------|---------------------|-------------|
+| `arka_ocr` | Always (`path`) | Extract text from images; OCR scanned PDFs |
+| `arka_rag` | For `ingest`, `codebase_ingest`, `batch_ingest` | Ingest PDFs/docs and ask questions over them |
+
+Example MCP calls:
+
+```json
+{ "path": "/Users/me/workspace/scan.png", "action": "extract" }
+```
+
+```json
+{ "action": "ingest", "path": "/Users/me/Documents/report.pdf" }
+```
+
+```json
+{ "action": "ask", "document": "report.pdf", "question": "Summarize key findings" }
+```
+
+**Defaults (2026):** `PDF_RAG_PGPT=auto` skips PrivateGPT auto-start when TurboQuant
+already indexed the file. Scanned PDFs are OCR'd locally before indexing. RAG `ask`
+falls back to Ollama, then extractive context, if cloud LLM routes fail.
 
 MCP also applies a safe default filter for personal desktop/device skills.
 Spotify playback/search, Brave/browser-opening helpers, media playback, and

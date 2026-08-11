@@ -1,0 +1,29 @@
+version: "3.8"
+
+services:
+  arka:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: arka:latest
+    container_name: arka-server
+    restart: unless-stopped
+    ports:
+      - "8765:8765"
+    environment:
+      - ARKA_HOSTED_MODE=1
+      - ARKA_REMOTE_PROFILE=coding
+      - ARKA_MCP_ENABLE_PERSONAL_SKILLS=0
+      - REMOTE_HOST=0.0.0.0
+      - REMOTE_TOKEN=${REMOTE_TOKEN:-arka_cloud_secret_token}
+    volumes:
+      - arka_data:/root/.cache
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8765/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  arka_data:

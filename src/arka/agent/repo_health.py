@@ -137,6 +137,45 @@ def detect_checks(root: Path) -> list[Check]:
     except ImportError:
         pass
 
+    if pyproject:
+        try:
+            py_text = (root / "pyproject.toml").read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            py_text = ""
+        if "[tool.pytest" in py_text and ("--cov" in py_text or "pytest-cov" in py_text or "cov" in py_text):
+            if shutil_which("pytest"):
+                checks.append(
+                    Check(
+                        "pytest-cov",
+                        ["pytest", "-q", "--cov", "--cov-report=term-missing", "-x"],
+                        "test",
+                        "pytest coverage from pyproject.toml",
+                    )
+                )
+        if "[tool.mypy]" in py_text and shutil_which("mypy"):
+            checks.append(Check("mypy", ["mypy", "."], "lint", "mypy from pyproject.toml"))
+        if "[tool.pyright]" in py_text and shutil_which("pyright"):
+            checks.append(Check("pyright", ["pyright"], "lint", "pyright from pyproject.toml"))
+
+    if package_json:
+        pkg = _read_package_json(root / "package.json") or {}
+        scripts = pkg.get("scripts") or {}
+        deps = {**(pkg.get("dependencies") or {}), **(pkg.get("devDependencies") or {})}
+        if (root / "tsconfig.json").is_file() and ("typescript" in deps or shutil_which("tsc")):
+            if shutil_which("tsc") or "typescript" in deps:
+                checks.append(
+                    Check(
+                        "tsc",
+                        ["npx", "tsc", "--noEmit"] if shutil_which("npx") else ["tsc", "--noEmit"],
+                        "lint",
+                        "TypeScript typecheck",
+                    )
+                )
+        if "typecheck" in scripts:
+            cmd = scripts["typecheck"]
+            if isinstance(cmd, str) and cmd.strip():
+                checks.append(Check("npm run typecheck", ["npm", "run", "typecheck"], "lint"))
+
     return checks
 
 

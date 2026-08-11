@@ -138,7 +138,16 @@ def default_output(slug: str) -> Path:
 
 
 def open_image(path: Path) -> None:
-    if os.environ.get("OPEN_CHART", os.environ.get("OPEN_IMAGE", "1")) in ("0", "false"):
+    # Never open a chart viewer when:
+    #   - OPEN_CHART / OPEN_IMAGE is explicitly disabled
+    #   - ARKA_CAPTURE_STDIO=1  (MCP server, remote server, or subagent call)
+    #   - ARKA_HOSTED_MODE=1    (cloud/headless Linux/Docker — no display)
+    _falsy = ("0", "false", "no", "off")
+    if os.environ.get("OPEN_CHART", os.environ.get("OPEN_IMAGE", "1")) in _falsy:
+        return
+    if os.environ.get("ARKA_CAPTURE_STDIO", "").lower() in ("1", "true", "yes", "on"):
+        return
+    if os.environ.get("ARKA_HOSTED_MODE", "").strip().lower() in ("1", "true", "yes", "hosted", "server"):
         return
     try:
         if sys.platform == "darwin":
@@ -155,6 +164,7 @@ def open_image(path: Path) -> None:
             )
     except OSError:
         pass
+
 
 
 def parse_range(text: str) -> str:

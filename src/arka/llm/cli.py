@@ -543,6 +543,16 @@ def cmd_reset(_args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_apple_fm_status(_args: argparse.Namespace) -> int:
+    from arka.llm.apple_fm import status_lines
+
+    for line in status_lines():
+        print(line)
+    from arka.llm.apple_fm import check_availability
+
+    return 0 if check_availability().available else 1
+
+
 def cmd_vllm_status(_args: argparse.Namespace) -> int:
     from arka.llm.providers import get_provider, provider_base_url, vllm_cloud_configured
     from arka.llm.servers import (
@@ -650,6 +660,33 @@ def cmd_route(args: argparse.Namespace) -> int:
         return 1
     print(text)
     return 0
+
+
+def _cmd_arbitrage(args: argparse.Namespace) -> int:
+    from arka.llm import arbitrage as arb
+
+    cmd = getattr(args, "arbitrage_cmd", "status") or "status"
+    if cmd == "status":
+        print(__import__("json").dumps(arb.status_payload(), indent=2))
+        return 0
+    if cmd == "once":
+        print(__import__("json").dumps(arb.run_once(dry_run=bool(getattr(args, "dry_run", False))), indent=2))
+        return 0
+    if cmd == "start":
+        print(
+            __import__("json").dumps(
+                arb.start_monitor(
+                    interval=getattr(args, "interval", None),
+                    foreground=bool(getattr(args, "foreground", False)),
+                ),
+                indent=2,
+            )
+        )
+        return 0
+    if cmd == "stop":
+        print(__import__("json").dumps(arb.stop_monitor(), indent=2))
+        return 0
+    return 1
 
 
 def cmd_share(args: argparse.Namespace) -> int:
@@ -773,6 +810,12 @@ def main() -> int:
     p_vllm_status.set_defaults(func=cmd_vllm_status)
     p_vllm.set_defaults(func=cmd_vllm_status, vllm_cmd="status")
 
+    p_apple_fm = sub.add_parser("apple-fm", help="Apple Intelligence on-device model status")
+    p_apple_fm_sub = p_apple_fm.add_subparsers(dest="apple_fm_cmd")
+    p_apple_fm_status = p_apple_fm_sub.add_parser("status", help="Show Apple FM SDK / CLI availability")
+    p_apple_fm_status.set_defaults(func=cmd_apple_fm_status)
+    p_apple_fm.set_defaults(func=cmd_apple_fm_status, apple_fm_cmd="status")
+
     p_trace = sub.add_parser("trace-status", help="Show OpenTelemetry / SigNoz tracing status")
     p_trace.set_defaults(func=cmd_trace_status)
 
@@ -786,6 +829,24 @@ def main() -> int:
     p_share.add_argument("--task", help="override task profile")
     p_share.add_argument("--skill", help="override skill name")
     p_share.set_defaults(func=cmd_share)
+
+    p_arbitrage = sub.add_parser(
+        "arbitrage",
+        help="Monitor provider pricing and hot-swap to cheaper models",
+    )
+    p_arbitrage_sub = p_arbitrage.add_subparsers(dest="arbitrage_cmd")
+    p_arbitrage_status = p_arbitrage_sub.add_parser("status", help="Show arbitrage status")
+    p_arbitrage_status.set_defaults(func=_cmd_arbitrage, arbitrage_cmd="status")
+    p_arbitrage_once = p_arbitrage_sub.add_parser("once", help="Evaluate and apply one swap")
+    p_arbitrage_once.add_argument("--dry-run", action="store_true")
+    p_arbitrage_once.set_defaults(func=_cmd_arbitrage, arbitrage_cmd="once")
+    p_arbitrage_start = p_arbitrage_sub.add_parser("start", help="Start background cost monitor")
+    p_arbitrage_start.add_argument("--interval", type=float, default=None)
+    p_arbitrage_start.add_argument("--foreground", action="store_true")
+    p_arbitrage_start.set_defaults(func=_cmd_arbitrage, arbitrage_cmd="start")
+    p_arbitrage_stop = p_arbitrage_sub.add_parser("stop", help="Stop background cost monitor")
+    p_arbitrage_stop.set_defaults(func=_cmd_arbitrage, arbitrage_cmd="stop")
+    p_arbitrage.set_defaults(func=_cmd_arbitrage, arbitrage_cmd="status", dry_run=False, interval=None, foreground=False)
 
     args = parser.parse_args()
     return args.func(args)

@@ -2,7 +2,6 @@ from arka.agent.coding_tui import status
 
 
 import pytest
-from unittest import mock
 
 
 @pytest.fixture(autouse=True)

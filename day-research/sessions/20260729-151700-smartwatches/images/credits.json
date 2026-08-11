@@ -1,0 +1,26 @@
+[
+  {
+    "file": "cover",
+    "query": "smartwatch collection display",
+    "photographer": "Mudit Jain",
+    "photographer_url": "https://unsplash.com/@jain_mudit",
+    "photo_url": "https://images.unsplash.com/photo-1624165034698-a3a02b915c98?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4MjA2NDl8MHwxfHNlYXJjaHwxfHxzbWFydHdhdGNoJTIwY29sbGVjdGlvbiUyMGRpc3BsYXl8ZW58MXwwfHx8MTc4NTMzOTI1NXww&ixlib=rb-4.1.0&q=80&w=1080",
+    "description": "red green and black analog gauge"
+  },
+  {
+    "file": "insight",
+    "query": "smartwatch screen close up",
+    "photographer": "Simon Daoudi",
+    "photographer_url": "https://unsplash.com/@sdaoudi",
+    "photo_url": "https://images.unsplash.com/photo-1579586337278-3befd40fd17a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4MjA2NDl8MHwxfHNlYXJjaHwxfHxzbWFydHdhdGNoJTIwc2NyZWVuJTIwY2xvc2UlMjB1cHxlbnwxfDB8fHwxNzg1MzM5MjU4fDA&ixlib=rb-4.1.0&q=80&w=1080",
+    "description": "Apple Watch Series 5"
+  },
+  {
+    "file": "compare",
+    "query": "smartwatches side by side",
+    "photographer": "Luke Chesser",
+    "photographer_url": "https://unsplash.com/@lukechesser",
+    "photo_url": "https://images.unsplash.com/photo-1434493789847-2f02dc6ca35d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4MjA2NDl8MHwxfHNlYXJjaHwyfHxzbWFydHdhdGNoZXMlMjBzaWRlJTIwYnklMjBzaWRlfGVufDF8MHx8fDE3ODUzMzkyNjB8MA&ixlib=rb-4.1.0&q=80&w=1080",
+    "description": "Apple Watch user"
+  }
+]

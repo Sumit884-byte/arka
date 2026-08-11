@@ -15,6 +15,7 @@ import subprocess
 import sys
 import contextlib
 import io
+import time
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -713,6 +714,23 @@ def _coding_greeting_text() -> str:
     )
 
 
+def run_just_ai_remote(text: str) -> tuple[str, str, int]:
+    """LLM chat only — no routing or skill dispatch."""
+    text = text.strip()
+    if not text:
+        return "", "", 1
+    try:
+        from arka.agent.chat import answer_question
+
+        provenance, answer = answer_question(text, use_session=True, cleanup=True)
+        output = f"[{provenance}]\n{answer}".strip()
+        return output, extract_speak_text(output), 0
+    except ImportError as exc:
+        return f"Arka chat unavailable: {exc}", "", 1
+    except Exception as exc:
+        return f"LLM chat failed: {exc}", "", 1
+
+
 def run_coding_remote(text: str) -> tuple[str, str, int]:
     """Run a hosted-safe Python route/dispatch path for coding/devtool skills."""
     text = text.strip()
@@ -846,6 +864,10 @@ class ArkaRemoteHandler(BaseHTTPRequestHandler):
                 },
             )
             return
+        if path in ("/v1/handoff", "/v1/notifications"):
+            if not self._check_auth():
+                self._json(401, {"ok": False, "error": "unauthorized — check REMOTE_TOKEN in .env"})
+                return
         if path == "/v1/handoff":
             sys.path.insert(0, str(Path.home() / ".config" / "fish"))
             from arka.agent.core import handoff_api_list
@@ -871,6 +893,7 @@ class ArkaRemoteHandler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
 
         if path == "/v1/agent":
+            started = time.perf_counter()
             try:
                 data = json.loads(self._read_body().decode("utf-8"))
             except json.JSONDecodeError:
@@ -882,7 +905,14 @@ class ArkaRemoteHandler(BaseHTTPRequestHandler):
                 self._json(400, {"ok": False, "error": "missing text"})
                 return
 
-            if _remote_profile() == "coding":
+            try:
+                from arka.core.just_ai import is_just_ai
+            except ImportError:
+                is_just_ai = lambda: False  # type: ignore[assignment,misc]
+
+            if is_just_ai():
+                output, speak_text, code = run_just_ai_remote(text)
+            elif _remote_profile() == "coding":
                 output, speak_text, code = run_coding_remote(text)
             else:
                 output, speak_text, code = run_agent_remote(text)
@@ -897,6 +927,20 @@ class ArkaRemoteHandler(BaseHTTPRequestHandler):
                     "speak_text": speak_text if remote_speak else "",
                 },
             )
+            try:
+                from arka.telemetry.tracing import log_response_duration
+
+                log_response_duration(
+                    f"http remote {path}",
+                    start=started,
+                    attributes={
+                        "arka.http.path": path,
+                        "arka.http.profile": _remote_profile() or "default",
+                        "arka.exit_code": code,
+                    },
+                )
+            except ImportError:
+                pass
             return
 
         if path == "/v1/media":
@@ -1043,15 +1087,17 @@ def remove_pid() -> None:
 
 def serve() -> int:
     _bootstrap_env()
+    from arka.core.api_security import resolve_remote_host, warn_if_insecure_startup
     from arka.env import env_get
 
-    host = env_get("REMOTE_HOST") or "0.0.0.0"
+    host = resolve_remote_host()
     port = int(os.environ.get("PORT") or env_get("REMOTE_PORT") or "8765")
     if _remote_profile() == "coding":
         os.environ.setdefault("ARKA_HOSTED_MODE", "1")
         os.environ.setdefault("ARKA_MODEL_MODE", "auto")
         os.environ.setdefault("ARKA_MCP_ENABLE_PERSONAL_SKILLS", "0")
-    token = ensure_token()
+    ensure_token()
+    warn_if_insecure_startup("remote")
 
     write_pid()
 
@@ -1064,10 +1110,10 @@ def serve() -> int:
     signal.signal(signal.SIGINT, _stop)
 
     httpd = ThreadingHTTPServer((host, port), ArkaRemoteHandler)
-    ip = local_ip()
-    print(f"[arka-remote] Listening on http://{ip}:{port}/", flush=True)
+    ip = local_ip() if host not in {"127.0.0.1", "localhost", "::1"} else "127.0.0.1"
+    print(f"[arka-remote] Listening on http://{ip}:{port}/ (bind {host})", flush=True)
     print(f"[arka-remote] Mobile UI: http://{ip}:{port}/", flush=True)
-    print(f"[arka-remote] Token: {token}", flush=True)
+    print("[arka-remote] Auth: Bearer REMOTE_TOKEN (see .env — not printed)", flush=True)
     print("[arka-remote] Phone does STT/TTS · PC runs agent", flush=True)
 
     try:

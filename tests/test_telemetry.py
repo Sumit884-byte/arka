@@ -1,11 +1,12 @@
 import pytest
 
 
-def test_spans_disabled_by_default(monkeypatch):
+def test_spans_enabled_by_default(monkeypatch):
     monkeypatch.delenv("OTEL_TRACES_ENABLED", raising=False)
     monkeypatch.delenv("SIGNOZ_ENDPOINT", raising=False)
     monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
     monkeypatch.delenv("OTEL_SDK_DISABLED", raising=False)
+    monkeypatch.setenv("OTEL_SKIP_ENDPOINT_PROBE", "1")
 
     from importlib import reload
 
@@ -13,17 +14,37 @@ def test_spans_disabled_by_default(monkeypatch):
     import arka.telemetry.tracing as tracing
 
     reload(otlp)
+    otlp.reset_collector_probe_cache()
     reload(tracing)
     from arka.telemetry import spans_enabled, trace_status
 
-    assert spans_enabled() is False
+    assert spans_enabled() is True
     status = trace_status()
-    assert status["enabled"] == "false"
+    assert status["enabled"] == "true"
+    assert status["endpoint"] == "http://127.0.0.1:4318/v1/traces"
 
 
-def test_signoz_endpoint_alone_does_not_enable(monkeypatch):
+def test_signoz_endpoint_alone_enables_by_default(monkeypatch):
     monkeypatch.delenv("OTEL_TRACES_ENABLED", raising=False)
     monkeypatch.setenv("SIGNOZ_ENDPOINT", "http://localhost:4318")
+    monkeypatch.setenv("OTEL_SKIP_ENDPOINT_PROBE", "1")
+
+    from importlib import reload
+
+    import arka.telemetry._otlp as otlp
+    import arka.telemetry.tracing as tracing
+
+    reload(otlp)
+    otlp.reset_collector_probe_cache()
+    reload(tracing)
+    from arka.telemetry import spans_enabled
+
+    assert spans_enabled() is True
+
+
+def test_explicit_disable_blocks_default(monkeypatch):
+    monkeypatch.delenv("OTEL_TRACES_ENABLED", raising=False)
+    monkeypatch.setenv("OTEL_TRACES_ENABLED", "0")
 
     from importlib import reload
 

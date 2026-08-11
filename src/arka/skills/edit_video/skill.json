@@ -1,0 +1,24 @@
+{
+  "name": "edit_video",
+  "description": "Basic video editing with ffmpeg — trim, concat, text overlay, extract audio, crop, and resize",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "edit video",
+    "trim video",
+    "cut video",
+    "concat videos",
+    "join videos",
+    "add text to video",
+    "video overlay",
+    "extract audio from video",
+    "crop video",
+    "resize video"
+  ],
+  "permissions": ["read", "write", "shell"],
+  "requires": {
+    "bins": ["ffmpeg"]
+  }
+}

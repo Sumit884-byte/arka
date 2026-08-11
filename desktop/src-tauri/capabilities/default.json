@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schema.tauri.app/schema/2",
+  "identifier": "default",
+  "description": "Default capabilities for Arka desktop",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:default",
+    "core:window:allow-set-title",
+    "core:webview:default"
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "name": "service_autostart",
+  "description": "Register and autostart any service at login — wrap shell commands or scripts via launchd/systemd",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "autostart service",
+    "service autostart",
+    "start on login",
+    "autostart on login",
+    "register autostart service"
+  ],
+  "permissions": ["shell"],
+  "requires": {
+    "anyBins": ["launchctl", "systemctl"]
+  }
+}

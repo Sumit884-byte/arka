@@ -7,7 +7,6 @@ import json
 import re
 import shlex
 import statistics
-from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any

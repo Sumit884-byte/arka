@@ -497,6 +497,89 @@ def route_command(text: str) -> str:
     return ""
 
 
+def pr_check_payload(
+    action: str = "diff",
+    *,
+    root: Path | str | None = None,
+    base: str | None = None,
+    pr: int | None = None,
+    run_id: int | None = None,
+    stat_only: bool = False,
+) -> dict:
+    """Structured PR/CI payloads for MCP / automation clients."""
+    project = Path(root).expanduser().resolve() if root else git_root()
+    if project is None or not project.is_dir():
+        return {"ok": False, "error": "not a git repository"}
+    project = project.resolve()
+    act = (action or "diff").strip().lower()
+    base_ref = detect_base(project, base)
+    branch = current_branch(project)
+
+    if act == "diff":
+        if stat_only:
+            text, files = collect_diff(project, base_ref, stat_only=True)
+        else:
+            text, files = collect_diff(project, base_ref, stat_only=False)
+        return {
+            "ok": True,
+            "action": "diff",
+            "path": str(project),
+            "base": base_ref,
+            "branch": branch,
+            "files": files,
+            "diff": text,
+        }
+
+    if act == "ci":
+        pr_data = resolve_pr(project, pr)
+        checks = pr_checks(project)
+        runs = list_runs(project, branch=branch, limit=5)
+        any_failed = any(
+            str(row.get("status", "")).lower() in ("fail", "failure") for row in checks
+        ) or any((run.get("conclusion") or "") == "failure" for run in runs)
+        return {
+            "ok": not any_failed,
+            "action": "ci",
+            "path": str(project),
+            "branch": branch,
+            "pr": pr_data,
+            "checks": checks,
+            "runs": runs,
+            "gh_available": gh_available(),
+        }
+
+    if act == "explain":
+        stat, files = collect_diff(project, base_ref, stat_only=True)
+        logs, run = failed_run_logs(project, run_id, branch=branch)
+        explanation = _llm_explain(logs, stat, files, run) if logs else ""
+        return {
+            "ok": bool(explanation),
+            "action": "explain",
+            "path": str(project),
+            "branch": branch,
+            "files": files,
+            "run": run,
+            "logs": logs[:MAX_LOG_CHARS],
+            "explanation": explanation,
+            "gh_available": gh_available(),
+        }
+
+    if act == "summary":
+        stat, files = collect_diff(project, base_ref, stat_only=True)
+        summary = _llm_summary(stat, files, base_ref, branch) if files else ""
+        return {
+            "ok": bool(summary or stat),
+            "action": "summary",
+            "path": str(project),
+            "base": base_ref,
+            "branch": branch,
+            "files": files,
+            "summary": summary or stat,
+        }
+
+    return {"ok": False, "error": f"unknown action: {action}"}
+
+
 def main(argv: list[str] | None = None) -> int:
     load_env_file()
     parser = argparse.ArgumentParser(

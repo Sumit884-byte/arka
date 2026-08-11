@@ -107,18 +107,17 @@ def collect() -> dict[str, Any]:
     }
     recommendations: list[str] = result["recommendations"]
 
-    has_endpoint_env = bool(
-        os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "").strip()
-        or os.environ.get("SIGNOZ_ENDPOINT", "").strip()
-    )
     if traces_env_on and not packages_ok:
         recommendations.append("Install observability extras: pip install 'arka-agent[observability]'.")
-    elif not telemetry_master_enabled() and has_endpoint_env and not traces_env_on:
+    elif not telemetry_master_enabled():
         recommendations.append(
-            "OTLP endpoint env detected but tracing is off — set OTEL_TRACES_ENABLED=1."
+            "OpenTelemetry export is disabled — unset OTEL_SDK_DISABLED and OTEL_TRACES_ENABLED=0 to re-enable."
         )
-    elif status.get("enabled") != "true" and not traces_env_on:
-        recommendations.append("Enable OTEL_TRACES_ENABLED=1 (and metrics/logs as needed).")
+    elif status.get("enabled") != "true" and packages_ok:
+        recommendations.append(
+            f"OTLP export is on but collector unreachable at {endpoint} — "
+            "run `arka signoz setup -y` or set OTEL_SDK_DISABLED=true to disable."
+        )
     if traces_env_on and packages_ok and status.get("configured") != "true" and not traces_on:
         recommendations.append(
             "Tracing is configured in env but disabled in-process — start SigNoz or set OTEL_SKIP_ENDPOINT_PROBE=1."

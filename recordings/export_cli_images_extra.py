@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import json
 import subprocess
 import sys
 import textwrap
@@ -28,7 +27,6 @@ from arka.media.terminal_video import (  # noqa: E402
     classify_line,
     configure,
     load_mono_font,
-    make_title_png,
     render_terminal,
     sanitize_display,
     wrap_prompt,
@@ -334,7 +332,7 @@ def main() -> None:
         kb = size / 1024
         print(f"  {path.name:42}  {kb:6.1f} KB  {desc}")
     print(f"\nTotal size: {total / (1024 * 1024):.2f} MB")
-    print(f"\nRegenerate: python3 recordings/export_cli_images_extra.py")
+    print("\nRegenerate: python3 recordings/export_cli_images_extra.py")
 
 
 if __name__ == "__main__":

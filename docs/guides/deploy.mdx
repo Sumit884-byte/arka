@@ -1,10 +1,79 @@
 ---
-title: "Deploy web projects"
-description: "Preview and safely deploy Arka projects to Vercel or Netlify."
+title: "Deploy Arka to Cloud & Web Platforms"
+description: "Deploy Arka in one step to single or multiple cloud hosting providers."
 icon: "cloud-arrow-up"
 ---
 
-Preview a deployment first:
+## One Command Multi-Platform Deployment
+
+Deploy Arka simultaneously to all configured platforms (Cloud VM, Railway, Vercel, Netlify, Render, Cloudflare) with a single command:
+
+```bash
+# Option 1: Deploy to all detected platforms matching your project config
+arka deploy --all --yes
+
+# Option 2: Deploy to specific multiple platforms in one command
+arka deploy --platforms vercel,railway,cloud --yes
+
+# Option 3: Shell helper script
+./scripts/deploy_multi.sh --all --yes
+```
+
+Preview multi-platform deployment plans in JSON or human-readable table:
+
+```bash
+arka deploy --all
+arka deploy --platforms vercel,railway,cloud --json
+```
+
+---
+
+## One-Step Cloud Deployment
+
+Deploy Arka to any cloud-hosted machine (Linux VM, VPS, AWS EC2, GCP, DigitalOcean, Docker host):
+
+```bash
+# Option 1: Run the single-step cloud deployment script
+./scripts/deploy_cloud.sh
+
+# Option 2: Run via Docker Compose
+docker compose up -d
+
+# Option 3: Docker one-liner
+docker run -d --name arka -p 8765:8765 -e ARKA_HOSTED_MODE=1 -e REMOTE_TOKEN=your_token arka:latest
+```
+
+Or preview and run via the Arka CLI:
+
+```bash
+arka deploy --platform cloud --yes
+```
+
+---
+
+## Hosted Skill Behavior on Cloud
+
+When Arka runs on a cloud machine (`ARKA_HOSTED_MODE=1` or inside a headless Linux/Docker container), personal desktop, GUI, and audio skills are automatically restricted for safety and compatibility.
+
+### Skill Compatibility Matrix
+
+| Skill Category | Status on Cloud | Examples |
+| --- | --- | --- |
+| **Repo & Code Analysis** | ✅ **Enabled** | `repo_health`, `repo_map`, `repo_graph`, `structure`, `workspace` |
+| **CI/CD & PR Workflows** | ✅ **Enabled** | `ci`, `pr_check`, `github_actions`, `review`, `route_audit` |
+| **Code Editing & Security** | ✅ **Enabled** | `code`, `lint_project`, `security`, `dev_doctor`, `dev_tools` |
+| **MCP Server & REST API** | ✅ **Enabled** | `/v1/health`, `/v1/agent`, MCP tool handlers |
+| **Desktop Applications** | ❌ **Disabled** | `open`, `app_automation`, `desktop_automation` |
+| **Desktop Browser Control** | ❌ **Disabled** | `browser_check`, `agent_browser`, `browse` |
+| **Music & Media Playback** | ❌ **Disabled** | `spotify`, `spotify_control`, `play_youtube`, `stop_music` |
+| **Local Audio & Voice** | ❌ **Disabled** | `voice`, `wake` (local mic/speakers) |
+| **Screen Control** | ❌ **Disabled** | `screen` (desktop screen capture) |
+
+---
+
+## Managed Hosting Providers
+
+Preview a single platform deployment:
 
 ```bash
 arka deploy --platform vercel
@@ -13,8 +82,7 @@ arka deploy --platform railway --json
 arka deploy --platform render --json
 ```
 
-Deploy only after authenticating the platform CLI and explicitly passing
-`--yes`:
+Deploy after authenticating the platform CLI:
 
 ```bash
 arka deploy --platform vercel --production --yes
@@ -23,12 +91,4 @@ arka deploy --platform railway --production --yes
 arka deploy --platform render --production --yes
 ```
 
-Arka never sends credentials or deploys by default. It detects `vercel.json`,
-`netlify.toml`, `railway.toml`, `render.yaml`, `Dockerfile`,
-`docker-compose.yml`, and `package.json` to choose a sensible platform.
-
-Railway and Render are intended for backend/API services. Authenticate their
-CLI or connect the repository in the provider dashboard before using `--yes`.
-
-For hosting Arka's coding/devtool skills specifically, use the Railway hosted
-profile: [Deploy coding skills to Railway](/guides/railway-coding-skills).
+Arka detects `vercel.json`, `netlify.toml`, `railway.toml`, `render.yaml`, `Dockerfile`, `docker-compose.yml`, and `package.json` to choose a sensible platform.

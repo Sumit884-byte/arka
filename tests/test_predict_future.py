@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 from unittest import mock
 
-from arka.predict.domains import detect_domain, extract_location, wants_future_prediction
+from arka.predict.domains import detect_domain, extract_location
 from arka.predict.engine import nl_to_future_argv, run_future
 from arka.routing.symbolic import route_future_predict
 

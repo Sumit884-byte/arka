@@ -5,7 +5,7 @@ keywords: ["observability", "signoz", "opentelemetry", "tracing"]
 icon: "chart-line"
 ---
 
-启用后可将追踪、指标和日志导出到 [SigNoz](https://signoz.io)。**默认关闭。**
+启用后可将追踪、指标和日志导出到 [SigNoz](https://signoz.io)。**默认开启**，本地 OTLP 端点为 `http://127.0.0.1:4318`。
 
 ## 快速开始
 
@@ -20,10 +20,12 @@ arka observability doctor
 ## 配置
 
 ```env
-OTEL_TRACES_ENABLED=1
+# 默认开启 — 仅在需要时覆盖
 SIGNOZ_ENDPOINT=http://localhost:4318
 SIGNOZ_UI_URL=http://localhost:8080
 OTEL_SERVICE_NAME=arka
+# OTEL_SDK_DISABLED=true          # 关闭所有 OTLP 导出
+# OTEL_TRACES_ENABLED=0           # 关闭追踪（指标/日志跟随追踪）
 # SIGNOZ_API_KEY=               # 用于告警 / MCP
 ```
 
@@ -44,5 +46,5 @@ arka signoz cursor-setup
 捆绑的 SigNoz 资产（仪表板、告警、演示）位于仓库的 `signoz/` 中。
 
 <Note>
-  必须同时设置 `OTEL_TRACES_ENABLED=1` 和 `SIGNOZ_ENDPOINT`，追踪才会导出。
+  OTLP 导出默认指向 `http://127.0.0.1:4318`。设置 `OTEL_SDK_DISABLED=true` 或 `OTEL_TRACES_ENABLED=0` 可关闭。
 </Note>

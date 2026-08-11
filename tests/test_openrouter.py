@@ -364,3 +364,125 @@ def test_openrouter_credit_error_falls_back_to_gemini(monkeypatch: pytest.Monkey
     assert calls[0][0] == "openrouter"
     assert calls[-1][0] == "gemini"
     assert fb._is_openrouter_account_credit_failure(credit_msg, 4096)
+
+
+def test_openrouter_free_only_filters_paid_models(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clear_llm_env(monkeypatch)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test-key")
+    monkeypatch.setenv("OPENROUTER_FREE_ONLY", "1")
+
+    from importlib import reload
+
+    import arka.llm.fallback as fb
+
+    reload(fb)
+
+    live = [
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "meta-llama/llama-3.3-70b-instruct",
+        "google/gemma-3-27b-it:free",
+        "anthropic/claude-sonnet-4",
+    ]
+    with patch.object(
+        fb,
+        "fetch_openrouter_models_live",
+        return_value=live,
+    ):
+        models = fb.openrouter_model_ids()
+
+    assert "meta-llama/llama-3.3-70b-instruct:free" in models
+    assert "google/gemma-3-27b-it:free" in models
+    assert "meta-llama/llama-3.3-70b-instruct" not in models
+    assert "anthropic/claude-sonnet-4" not in models
+
+
+def test_openrouter_free_only_default_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clear_llm_env(monkeypatch)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test-key")
+    monkeypatch.setenv("OPENROUTER_FREE_ONLY", "1")
+
+    from importlib import reload
+
+    import arka.llm.fallback as fb
+
+    reload(fb)
+
+    models = [
+        "anthropic/claude-sonnet-4",
+        "google/gemma-3-27b-it:free",
+        "meta-llama/llama-3.3-70b-instruct:free",
+    ]
+    filtered = fb._filter_openrouter_chat_models(models)
+    assert filtered[0] == "meta-llama/llama-3.3-70b-instruct:free"
+    assert fb.pick_openrouter_default_model(filtered) == "meta-llama/llama-3.3-70b-instruct:free"
+
+
+def test_build_default_chain_openrouter_free_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clear_llm_env(monkeypatch)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test-key")
+    monkeypatch.setenv("OPENROUTER_FREE_ONLY", "1")
+
+    from importlib import reload
+
+    import arka.llm.fallback as fb
+
+    reload(fb)
+
+    live = [
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "meta-llama/llama-3.3-70b-instruct",
+        "google/gemma-3-27b-it:free",
+    ]
+    with patch.object(
+        fb,
+        "fetch_openrouter_models_live",
+        return_value=live,
+    ):
+        chain = fb.build_default_chain(task="default")
+
+    openrouter_models = [model for provider, model in chain if provider == "openrouter"]
+    assert openrouter_models
+    assert openrouter_models[0] == "meta-llama/llama-3.3-70b-instruct:free"
+    assert all(":free" in model or fb._is_openrouter_free_model(model) for model in openrouter_models)
+
+
+def test_openrouter_free_only_off_preserves_paid_models(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clear_llm_env(monkeypatch)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test-key")
+
+    from importlib import reload
+
+    import arka.llm.fallback as fb
+
+    reload(fb)
+
+    live = [
+        "meta-llama/llama-3.3-70b-instruct",
+        "meta-llama/llama-3.3-70b-instruct:free",
+    ]
+    with patch.object(
+        fb,
+        "fetch_openrouter_models_live",
+        return_value=live,
+    ):
+        models = fb.openrouter_model_ids()
+
+    assert "meta-llama/llama-3.3-70b-instruct" in models
+
+
+def test_is_openrouter_free_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clear_llm_env(monkeypatch)
+
+    from importlib import reload
+
+    import arka.llm.fallback as fb
+
+    reload(fb)
+
+    assert fb._is_openrouter_free_model("google/gemma-3-27b-it:free") is True
+    assert fb._is_openrouter_free_model("meta-llama/llama-3.3-70b-instruct") is False
+    fb._OPENROUTER_META_CACHE = (
+        0.0,
+        {"demo/zero-cost": {"completion_price": 0.0, "max_completion_tokens": 8192}},
+    )
+    assert fb._is_openrouter_free_model("demo/zero-cost") is True

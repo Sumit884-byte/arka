@@ -4,12 +4,27 @@ description: "Inspect Arka skill usage locally."
 icon: "chart-pie"
 ---
 
-Generate a browser-viewable dashboard:
+Serve a browser-viewable dashboard with skill counters and MCP tool stats:
+
+```bash
+arka dashboard
+```
+
+Default URL: `http://127.0.0.1:8788/`. JSON stats: `GET /api/stats`.
+
+Write a static HTML file instead:
 
 ```bash
 arka usage dashboard --output arka-usage-dashboard.html
+arka dashboard build --output arka-usage-dashboard.html
 ```
 
-The dashboard shows total invocations, tracking state, and per-skill counts.
-It reads Arka's local usage counters; prompts, arguments, and secrets are not
-stored. Disable tracking with `ARKA_USAGE_TRACKING=0`.
+The dashboard shows skill invocations, MCP tool call counts, average durations,
+and recent MCP errors. It reads local usage counters and `logs/mcp.jsonl`;
+prompts, arguments, and secrets are not stored. Disable skill tracking with
+`ARKA_USAGE_TRACKING=0`.
+
+| Variable | Default | Purpose |
+| -------- | ------- | ------- |
+| `ARKA_DASHBOARD_HOST` | `127.0.0.1` | Listen address |
+| `ARKA_DASHBOARD_PORT` | `8788` | Listen port |

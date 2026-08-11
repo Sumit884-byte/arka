@@ -84,7 +84,7 @@ def test_scene_captions_override_auto_split():
 
 
 def test_render_slide_body_override(tmp_path: Path):
-    cfg = load_config()
+    cfg = load_config(burn_text=True)
     scene = Scene(title="IT Sector Trends", body="ignored")
     out = tmp_path / "slide.png"
     render_slide(None, scene, out, cfg, body_override="Cloud and AI reshape hiring.")

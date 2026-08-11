@@ -91,8 +91,14 @@ hub/skills/
 # Mintlify local dev (run `mint dev` from docs/)
 .mintlify/
 
-# Web dashboard (local WIP — not ready for commit)
+# Web dashboard (local WIP — not ready for commit; see desktop/ for Tauri app)
 /web/
+
+# Desktop app build artifacts
+/desktop/ui/node_modules/
+/desktop/node_modules/
+/desktop/ui/dist/
+/desktop/src-tauri/target/
 
 # Test / coverage (local dev harnesses — not committed)
 /local/

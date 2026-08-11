@@ -56,6 +56,21 @@ def test_mcp_project_rules(tmp_path, monkeypatch):
     assert status["files"] == 1
 
 
+def test_repo_verify_after_fix_rule():
+    from arka.paths import checkout_root
+
+    root = checkout_root()
+    assert root is not None
+    rule_path = root / ".cursor" / "rules" / "verify-after-fix.mdc"
+    assert rule_path.is_file()
+    text = rule_path.read_text(encoding="utf-8")
+    assert "verification" in text.lower()
+
+    listed = project_rules.list_rules(root=root)
+    labels = {row["label"] for row in listed}
+    assert ".cursor/rules/verify-after-fix.mdc" in labels
+
+
 def test_memory_context_includes_project_rules(tmp_path, monkeypatch):
     from arka.agent import core as agent_core
 

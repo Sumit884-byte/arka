@@ -35,6 +35,11 @@ def main(argv: list[str] | None = None) -> int:
 
     load_mode()
     args = argv if argv is not None else sys.argv[1:]
+    args, just_ai_flag = _strip_just_ai_flag(args)
+    if just_ai_flag:
+        from arka.core.just_ai import enable_just_ai
+
+        enable_just_ai()
 
     _SKIP_AUTO_REFETCH = frozenset(
         {
@@ -316,10 +321,29 @@ def main(argv: list[str] | None = None) -> int:
 
         return qa_main(args[1:])
 
+    if args[0] in ("duplicate_text", "duplicate-text", "semantic_dedup", "copy_dedup"):
+        from arka.agent.duplicate_text import main as duplicate_text_main
+
+        return duplicate_text_main(args[1:])
+
     if args[0] == "llm":
+        if len(args) > 1 and args[1] == "arbitrage":
+            from arka.llm.arbitrage import main as arbitrage_main
+
+            return arbitrage_main(args[2:])
         from arka.agent.repo_context import main as repo_context_main
 
         return repo_context_main(["llm", *args[1:]])
+
+    if args[0] == "tunnel":
+        from arka.integrations.ollama_tunnel import main as tunnel_main
+
+        return tunnel_main(args[1:])
+
+    if args[0] in ("parallel", "parallel_skills", "parallel-skills"):
+        from arka.agent.parallel import main as parallel_main
+
+        return parallel_main(args[1:])
 
     if args[0] in ("refetch", "update", "sync"):
         return _cmd_refetch(args[1:])
@@ -425,6 +449,26 @@ def main(argv: list[str] | None = None) -> int:
     if args[0] == "fugu":
         return run_script("arka_fugu.py", args[1:])
 
+    if args[0] == "webhook":
+        from arka.integrations.webhook import main as webhook_main
+
+        return webhook_main(args[1:])
+
+    if args[0] == "dashboard":
+        from arka.agent.usage_dashboard import main as usage_dashboard_main
+
+        return usage_dashboard_main(args[1:], default_action="serve")
+
+    if args[0] == "api":
+        from arka.integrations.arka_api import main as arka_api_main
+
+        return arka_api_main(args[1:])
+
+    if args[0] == "n8n":
+        from arka.integrations.n8n import main as n8n_main
+
+        return n8n_main(args[1:])
+
     if args[0] == "benchmark":
         return run_script("arka_benchmark.py", args[1:])
 
@@ -510,6 +554,9 @@ def main(argv: list[str] | None = None) -> int:
     if args[0] in ("daily_reading", "daily-reading", "reading_track", "reading-track"):
         return run_script("arka_daily_reading.py", args[1:])
 
+    if args[0] in ("day_research", "day-research", "interval_research", "interval-research", "research_session"):
+        return run_script("arka_day_research.py", args[1:])
+
     if args[0] == "council":
         return run_script("arka_council.py", args[1:])
 
@@ -546,7 +593,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     if args[0] == "generate" and len(args) >= 2 and args[1] == "music":
-        from arka.generate.music import main as music_main
+        from arka.media.music_generate import main as music_main
 
         try:
             return music_main(args[2:])
@@ -554,10 +601,26 @@ def main(argv: list[str] | None = None) -> int:
             return int(exc.code or 0)
 
     if args[0] in ("generate_music", "generate-music", "music_generate"):
-        from arka.generate.music import main as music_main
+        from arka.media.music_generate import main as music_main
 
         try:
             return music_main(args[1:])
+        except SystemExit as exc:
+            return int(exc.code or 0)
+
+    if args[0] == "generate" and len(args) >= 2 and args[1] == "video":
+        from arka.media.ai_video import main as ai_video_main
+
+        try:
+            return ai_video_main(args[2:])
+        except SystemExit as exc:
+            return int(exc.code or 0)
+
+    if args[0] in ("ai_video", "ai-video", "generate_video", "generate-video"):
+        from arka.media.ai_video import main as ai_video_main
+
+        try:
+            return ai_video_main(args[1:])
         except SystemExit as exc:
             return int(exc.code or 0)
 
@@ -568,6 +631,18 @@ def main(argv: list[str] | None = None) -> int:
             return video_capture_main(args[1:])
         except SystemExit as exc:
             return int(exc.code or 0)
+
+    if args[0] in ("just-ai", "just_ai", "justai"):
+        from arka.core.just_ai import enable_just_ai
+
+        enable_just_ai()
+        q = " ".join(args[1:]).strip()
+        if not q:
+            print("Usage: arka just-ai <question>", file=sys.stderr)
+            return 1
+        from arka.skills import run_chat_ask
+
+        return run_chat_ask(q)
 
     if args[0] in ("ask", "web"):
         q = " ".join(args[1:]).strip()
@@ -642,7 +717,9 @@ def main(argv: list[str] | None = None) -> int:
     # guards apply; fish delegation would skip print_plan output.
     from arka.core.mode import get_mode
 
-    if get_mode() in ("plan", "ask"):
+    from arka.core.just_ai import is_just_ai
+
+    if get_mode() in ("plan", "ask") or is_just_ai():
         return _run_portable(text)
     meme_code = _try_meme_subcommand(args)
     if meme_code is not None:
@@ -765,7 +842,20 @@ def _run_portable(text: str, routed=None) -> int:
         return code
 
 
+def _strip_just_ai_flag(args: list[str]) -> tuple[list[str], bool]:
+    """Remove --just-ai / -J from argv and report whether the flag was present."""
+    out: list[str] = []
+    enabled = False
+    for arg in args:
+        if arg in ("--just-ai", "--just_ai", "-J"):
+            enabled = True
+        else:
+            out.append(arg)
+    return out, enabled
+
+
 def _execute_request(text: str, routed=None) -> int:
+    from arka.core.just_ai import is_just_ai
     from arka.core.mode import (
         ask_mode_skill,
         get_mode,
@@ -776,6 +866,12 @@ def _execute_request(text: str, routed=None) -> int:
     )
     from arka.dispatch import run_shell
     from arka.router import route
+
+    if is_just_ai():
+        from arka.skills import run_chat_ask
+
+        print("→ ask (just_ai)")
+        return run_chat_ask(text)
 
     try:
         from arka.integrations.email_alert import maybe_auto_alert
@@ -1483,6 +1579,13 @@ def _cmd_doctor() -> int:
         from arka.core.network_proxy import doctor_lines as proxy_doctor_lines
 
         for line in proxy_doctor_lines():
+            print(line)
+    except ImportError:
+        pass
+    try:
+        from arka.core.api_security import doctor_lines as api_security_doctor_lines
+
+        for line in api_security_doctor_lines():
             print(line)
     except ImportError:
         pass

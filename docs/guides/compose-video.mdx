@@ -4,13 +4,33 @@ description: "Create explainer videos with Arka, stock media, charts, TTS, and c
 icon: "clapperboard"
 ---
 
-Arka's video composer can build videos from a topic, an explicit JSON script,
-Arka's LLM script generator, or a user-supplied script API.
+Arka's video composer builds narrated explainers from a topic, JSON script, LLM,
+or custom script API. **Hybrid mode is the default:** voiceover plays, no on-screen
+text is burned in, and each scene uses stock **video** or **photo** B-roll depending
+on what fits the narration.
 
 ```bash
-arka compose_video --topic "AI infrastructure"
-arka compose_video --topic "AI infrastructure" --llm
+arka compose_video compose --topic "AI infrastructure" --llm
+arka compose_video compose --topic "AI infrastructure" --text   # legacy captions
+arka compose_video compose --topic "AI infrastructure" --mode photos
 arka compose_video --script scenes.json
+```
+
+## Hybrid mode (default)
+
+| Setting | Default | Meaning |
+|---------|---------|---------|
+| `VIDEO_MODE` | `hybrid` | Mix stock video + photos per scene |
+| On-screen text | off | TTS/voiceover only unless `--text` |
+| Per-scene media | AI/heuristic | `media_type: video` or `image` in scene JSON |
+
+Use `--text` or `VIDEO_BURN_TEXT=1` to restore title/caption overlays. Use
+`--mode photos` for image-only slideshows (legacy). Use `--mode video` for
+all stock video B-roll.
+
+```bash
+VIDEO_MODE=hybrid arka compose_video compose --topic "cinematic mountains"
+VIDEO_BURN_TEXT=1 arka compose_video compose --topic "AI trends" --llm
 ```
 
 ## Bring your own API

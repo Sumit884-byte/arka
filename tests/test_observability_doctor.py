@@ -6,9 +6,9 @@ from arka.telemetry import observability_doctor
 def test_doctor_reports_disabled_otel(monkeypatch):
     monkeypatch.delenv("OTEL_SERVICE_NAME", raising=False)
     monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
-    monkeypatch.delenv("OTEL_TRACES_ENABLED", raising=False)
     monkeypatch.delenv("SIGNOZ_ENDPOINT", raising=False)
     monkeypatch.delenv("SIGNOZ_TRACES", raising=False)
+    monkeypatch.setenv("OTEL_TRACES_ENABLED", "0")
 
     from importlib import reload
 
@@ -23,7 +23,7 @@ def test_doctor_reports_disabled_otel(monkeypatch):
     assert payload["tracing"]["enabled"] == "false"
     assert "verification" in payload
     assert payload["verification"]["traces_skill"]
-    assert any("Enable OTEL_TRACES_ENABLED" in item for item in payload["recommendations"])
+    assert any("OpenTelemetry export is disabled" in item for item in payload["recommendations"])
 
 
 def test_doctor_json_cli_is_read_only(capsys, monkeypatch):

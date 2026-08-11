@@ -204,7 +204,11 @@ end
 
 function _arka_ensure_path --description "Ensure essential system PATH entries exist (internal)"
     set -l essentials
-    if test -d /opt/homebrew/bin
+    set -l skip_brew 0
+    if set -q ARKA_SKIP_HOMEBREW_PATH; and test "$ARKA_SKIP_HOMEBREW_PATH" = 1
+        set skip_brew 1
+    end
+    if test $skip_brew -eq 0; and test -d /opt/homebrew/bin
         set essentials /opt/homebrew/bin /opt/homebrew/sbin
     end
     if test -d /usr/local/bin
@@ -2089,10 +2093,10 @@ function _agent_all_skills --description "Canonical registered agent skill names
         create_desktop_app fix_graphics_driver install_app install_apt install_brew install_flatpak \
         install_snap install_package install_uv install_stt stock_analysis stock macro emotion \
         auto_click auto_copy decrypt_pdf classify_files cleanup_downloads watch_zip monitor_x post_x \
-        generate_image generate_thumbnail generate_video generate_music compose_video compose_slides compose_3d text_to_3d convert_media visual pdf_tools chart meme ascii_art flow fact_check quiz quiz_practice council astronomy metallurgy youtube_transcript youtube_download yt_download media_transcript transcribe_media summarize_url daily_brief wifi_info \
+        generate_image generate_thumbnail generate_video ai_video generate_music google_flow compose_video compose_slides compose_3d text_to_3d convert_media edit_video dub_video visual pdf_tools chart meme ascii_art flow fact_check quiz quiz_practice council astronomy metallurgy youtube_transcript youtube_download yt_download media_transcript transcribe_media summarize_url daily_brief wifi_info \
         folder_summarize playlist_summarize youtube_research yt_research find_videos codebase_ingest \
         agent_remember agent_recall agent_memory agent_trace agent_why agent_last \
-        agent_resume agent_research agent_nudge agent_watch agent_routine agent_fanout \
+        agent_resume agent_research day_research interval_research research_session agent_nudge agent_watch agent_routine agent_fanout \
         agent_code agent_handoff agent_browser transcript_ask media_ask \
         meeting_agent study_agent inbox_agent compare_agent product_reviewer price_check profession pr_check self_improve coding_tui github_repo competitions route_learn \
         bookmarks repo_health repo_context repo_map generate_data data_gen data_ask ask_data query_data analyze_data view_data view_csv show_csv docker_status clipboard_history jsonkit markdown_style style_markdown heartbeat mcp agent_hub gemini_cli harvard_ark persona elon talk_to_elon elon_chat \
@@ -2120,16 +2124,16 @@ function _ollama_api_base --description "Ollama host for client API calls (127.0
     echo (string replace "0.0.0.0" "127.0.0.1" -- "$host")
 end
 
-function _ollama_chat_model --description "Preferred Ollama chat model (minimax cloud, then local)"
+function _ollama_chat_model --description "Preferred Ollama chat model (local first, then cloud)"
     set -l default $argv[1]
-    test -z "$default"; and set default "minimax-m2.5:cloud"
+    test -z "$default"; and set default "qwen3:8b"
     if test -n "$OLLAMA_CHAT_MODEL"
         echo $OLLAMA_CHAT_MODEL
         return
     end
     set -l base (_ollama_api_base)
     set -l names (curl -s --connect-timeout 2 "http://$base/api/tags" | jq -r '.models[].name' 2>/dev/null)
-    for pref in minimax-m2.5:cloud minimax-m2:cloud qwen3:8b llama3.2:1b
+    for pref in qwen3:8b llama3.2:1b minimax-m2:cloud
         if string match -qr -- "$pref" $names
             echo $pref
             return
@@ -2583,6 +2587,8 @@ function skills --description "Show what commands the agent can auto-run"
                 echo (set_color green)"  agent_remember / agent_recall"(set_color normal)" — long-term memory"
             case agent_research
                 echo (set_color green)"  agent_research  "(set_color normal)"[--deep] <q> — TurboQuant + web + media research"
+            case day_research interval_research research_session
+                echo (set_color green)"  day_research    "(set_color normal)"start <topic> --for day|8h [--every 30m] — research for a day/interval"
             case agent_trace agent_why agent_last
                 echo (set_color green)"  agent_trace / agent_why"(set_color normal)" — explain last routing decision"
             case agent_resume
@@ -2676,6 +2682,10 @@ function skills --description "Show what commands the agent can auto-run"
                 echo (set_color green)"  text_to_3d    "(set_color normal)"generate <prompt> — text-to-3D with free/non-trial providers first"
             case convert_media
                 echo (set_color green)"  convert_media   "(set_color normal)"<file> --to <format> | --format all — image/video/slide conversion"
+            case edit_video
+                echo (set_color green)"  edit_video      "(set_color normal)"trim|concat|overlay|extract|crop|resize|mux — ffmpeg video editing"
+            case dub_video
+                echo (set_color green)"  dub_video       "(set_color normal)"dub <file> --target <lang> — transcribe, translate, TTS, mux"
             case pdf_tools
                 echo (set_color green)"  pdf_tools       "(set_color normal)"merge|split|compress|ocr|protect|… — CLI PDF toolkit"
             case agent_ask
@@ -3397,6 +3407,7 @@ print(f"{provider_slug}\t{model_id}")
         if test $status -ne 0
             echo (set_color red)"$saved"(set_color normal)
             return 1
+        end
         set provider (echo $saved | cut -f1)
         set model (echo $saved | cut -f2)
     else
@@ -3416,6 +3427,7 @@ print(f"{provider_slug}\t{chosen}")
         if test $status -ne 0
             echo (set_color red)"$saved"(set_color normal)
             return 1
+        end
         set provider (echo $saved | cut -f1)
         set model (echo $saved | cut -f2)
     end
@@ -6455,6 +6467,32 @@ function quiz --description "Alias for quiz_practice"
     quiz_practice $argv
 end
 
+function day_research --description "Research a topic for an entire day or custom interval"
+    if test (count $argv) -eq 0
+        echo "Usage: day_research start <topic> [--for day|8h|90m] [--every 30m]"
+        echo "       day_research status|stop|digest|show|list|tick"
+        echo "Example: day_research start \"quantum computing\" --for day"
+        echo "Example: day_research start \"AI agents\" --for 4h --every 20m"
+        echo ""
+        echo "NL: research rust for the entire day"
+        echo "NL: research kubernetes for 2 hours every 15 minutes"
+        return 1
+    end
+    if not _arka_ensure_venv
+        return 1
+    end
+    set -l py (_arka_python)
+    $py (_arka_py_script arka_day_research.py) $argv
+end
+
+function interval_research --description "Alias for day_research"
+    day_research $argv
+end
+
+function research_session --description "Alias for day_research"
+    day_research $argv
+end
+
 function council --description "Multi-persona deliberation chamber with synthesis"
     if test (count $argv) -eq 0
         echo "Usage: council <question>"
@@ -6628,6 +6666,87 @@ function generate_video --description "Generate real AI video (Pollinations or G
     $py (_arka_py_script arka_generate_video.py) $flags -- "$prompt"
 end
 
+function ai_video --description "Full AI text-to-video (Pollinations → Gemini Veo 3.1 → Replicate)"
+    set -l prompt_parts
+    set -l flags
+    set -l i 1
+    set -l argc (count $argv)
+    while test $i -le $argc
+        switch $argv[$i]
+            case -o --output -a --aspect -d --duration -m --model
+                set -a flags $argv[$i]
+                set i (math $i + 1)
+                if test $i -le $argc
+                    set -a flags $argv[$i]
+                end
+            case --no-audio check parse
+                set -a flags $argv[$i]
+            case '-*'
+                set -a flags $argv[$i]
+            case '*'
+                set -a prompt_parts $argv[$i]
+        end
+        set i (math $i + 1)
+    end
+    set -l py (_arka_python)
+    if test (count $prompt_parts) -eq 0
+        $py (_arka_py_script arka_ai_video.py) $flags
+        return $status
+    end
+    set -l prompt (string join ' ' -- $prompt_parts)
+    $py (_arka_py_script arka_ai_video.py) $flags -- "$prompt"
+end
+
+function google_flow --description "Create AI video with Google Flow (browser) or Gemini Veo fallback"
+    if test (count $argv) -eq 1; and test "$argv[1]" = open
+        set -l py (_arka_python)
+        $py (_arka_py_script arka_google_flow.py) open
+        return $status
+    end
+    if test (count $argv) -eq 1; and test "$argv[1]" = check
+        set -l py (_arka_python)
+        $py (_arka_py_script arka_google_flow.py) check
+        return $status
+    end
+    set -l prompt_parts
+    set -l flags
+    set -l i 1
+    set -l argc (count $argv)
+    while test $i -le $argc
+        switch $argv[$i]
+            case -o --output -a --aspect -d --duration -m --model --backend
+                set -a flags $argv[$i]
+                set i (math $i + 1)
+                if test $i -le $argc
+                    set -a flags $argv[$i]
+                end
+            case '-*'
+                set -a flags $argv[$i]
+            case '*'
+                set -a prompt_parts $argv[$i]
+        end
+        set i (math $i + 1)
+    end
+    if test (count $prompt_parts) -eq 0
+        echo "Usage: google_flow <prompt> [-o/--output <path>] [-a/--aspect 16:9|9:16|1:1] [-d/--duration 8] [--backend auto|browser|gemini|open]"
+        echo "       google_flow open"
+        echo "Example: google_flow 'cinematic drone shot over mountains at sunset'"
+        echo ""
+        echo "Backends:"
+        echo "  gemini — GEMINI_API_KEY + GCP billing (recommended)"
+        echo "  browser — Playwright on labs.google/fx/tools/flow (Google sign-in)"
+        echo "  open — open Flow UI in your browser"
+        return 1
+    end
+    set -l prompt (string join ' ' -- $prompt_parts)
+    set -l py (_arka_python)
+    $py (_arka_py_script arka_google_flow.py) $flags -- "$prompt"
+end
+
+function flow_video --description "Alias for google_flow"
+    google_flow $argv
+end
+
 function generate_music --description "Generate AI music (Pollinations elevenmusic — optional lyrics or instrumental)"
     set -l prompt_parts
     set -l flags
@@ -6756,6 +6875,41 @@ function convert_media --description "Convert images, video/audio, and slide dec
     end
     set -l py (_arka_python)
     $py (_arka_py_script arka_convert_media.py) $argv
+end
+
+function edit_video --description "Edit video/audio locally with ffmpeg (trim, concat, overlay, mux)"
+    if test (count $argv) -eq 0
+        echo "Usage: edit_video trim clip.mp4 --start 5 --duration 10"
+        echo "       edit_video concat part1.mp4 part2.mp4 -o full.mp4"
+        echo "       edit_video overlay-text reel.mp4 --text 'Subscribe!'"
+        echo "       edit_video extract-audio talk.mp4"
+        echo "       edit_video mux-audio clip.mp4 --audio narration.mp3"
+        echo "       edit_video crop video.mp4 --width 1080 --height 1920"
+        echo "       edit_video resize clip.mp4 --width 1280"
+        echo "       edit_video check"
+        echo ""
+        echo "NL: arka trim clip.mp4 from 10 to 30"
+        echo "    arka concat a.mp4 b.mp4"
+        echo "    arka add audio voice.mp3 to video.mp4"
+        return 1
+    end
+    set -l py (_arka_python)
+    $py (_arka_py_script arka_edit_video.py) $argv
+end
+
+function dub_video --description "Dub video into another language (transcribe, translate, TTS, mux)"
+    if test (count $argv) -eq 0
+        echo "Usage: dub_video dub reel.mp4 --target hindi"
+        echo "       dub_video dub talk.mp4 --target es --source en"
+        echo "       dub_video dub clip.mp4 --target ta --script narration.txt"
+        echo "       dub_video check"
+        echo ""
+        echo "NL: arka dub reel.mp4 to hindi"
+        echo "    arka translate and dub clip.mp4 into tamil"
+        return 1
+    end
+    set -l py (_arka_python)
+    $py (_arka_py_script arka_dub_video.py) $argv
 end
 
 function visual --description "Generate deterministic Arka visuals"
@@ -12034,6 +12188,10 @@ function _agent_offline_route_cmd --description "Full symbolic NL to skill comma
         echo (_agent_build_quiz_practice_cmd "$cmd")
         return 0
     end
+    if _agent_is_day_research_request "$cmd"
+        echo (_agent_build_day_research_cmd "$cmd")
+        return 0
+    end
     if _agent_is_council_request "$cmd"
         echo (_agent_build_council_cmd "$cmd")
         return 0
@@ -12084,6 +12242,14 @@ function _agent_offline_route_cmd --description "Full symbolic NL to skill comma
     end
     if _agent_is_convert_media_request "$cmd"
         echo (_agent_build_convert_media_cmd "$cmd")
+        return 0
+    end
+    if _agent_is_edit_video_request "$cmd"
+        echo (_agent_build_edit_video_cmd "$cmd")
+        return 0
+    end
+    if _agent_is_dub_video_request "$cmd"
+        echo (_agent_build_dub_video_cmd "$cmd")
         return 0
     end
     if _agent_is_compose_video_request "$cmd"
@@ -12346,6 +12512,19 @@ function _agent_build_fact_check_cmd --description "Build fact_check args from N
     end
 end
 
+function _agent_is_day_research_request --description "True if user wants day/interval research (internal)"
+    test -n "$(_agent_build_day_research_cmd "$argv[1]")"
+end
+
+function _agent_build_day_research_cmd --description "Build day_research args from NL (internal)"
+    set -l cmd $argv[1]
+    set -l py (_arka_python)
+    set -l rest ($py (_arka_py_script arka_day_research.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
+    if test (count $rest) -gt 0
+        echo "day_research $rest"
+    end
+end
+
 function _agent_is_quiz_practice_request --description "True if user wants quiz practice (internal)"
     test -n "$(_agent_build_quiz_practice_cmd "$argv[1]")"
 end
@@ -12571,6 +12750,36 @@ end
 
 function _agent_is_convert_media_request --description "True if user wants media format conversion (internal)"
     test -n "$(_agent_build_convert_media_cmd "$argv[1]")"
+end
+
+function _agent_build_edit_video_cmd --description "Build edit_video args from NL (internal)"
+    set -l cmd "$argv[1]"
+    set -l name (_agent_call_name)
+    set cmd (string replace -r -i "^$name\\s+" '' "$cmd" | string trim)
+    set -l py (_arka_python)
+    set -l rest ($py (_arka_py_script arka_edit_video.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
+    if test (count $rest) -gt 0
+        echo "edit_video $rest"
+    end
+end
+
+function _agent_is_edit_video_request --description "True if user wants ffmpeg video editing (internal)"
+    test -n "$(_agent_build_edit_video_cmd "$argv[1]")"
+end
+
+function _agent_build_dub_video_cmd --description "Build dub_video args from NL (internal)"
+    set -l cmd "$argv[1]"
+    set -l name (_agent_call_name)
+    set cmd (string replace -r -i "^$name\\s+" '' "$cmd" | string trim)
+    set -l py (_arka_python)
+    set -l rest ($py (_arka_py_script arka_dub_video.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
+    if test (count $rest) -gt 0
+        echo "dub_video $rest"
+    end
+end
+
+function _agent_is_dub_video_request --description "True if user wants video dubbing (internal)"
+    test -n "$(_agent_build_dub_video_cmd "$argv[1]")"
 end
 
 function _agent_build_compose_video_cmd --description "Build compose_video args from NL (internal)"
@@ -14843,6 +15052,10 @@ function _agent_skill_matches_request --description "True if skill fits the user
             _agent_is_compose_slides_request "$cmd"
         case convert_media
             _agent_is_convert_media_request "$cmd"
+        case edit_video
+            _agent_is_edit_video_request "$cmd"
+        case dub_video
+            _agent_is_dub_video_request "$cmd"
         case compose_video
             _agent_is_compose_video_request "$cmd"
         case generate_video
@@ -18715,6 +18928,7 @@ function agent --description "Run commands safely: executes safe commands automa
         echo "  supermemory remember|recall - Explicit Supermemory commands"
         echo "  semantic_memory           - TurboQuant semantic index on local memories"
         echo "  agent_research [--deep]   - Unified TurboQuant + web + media research"
+        echo "  day_research start <topic> --for day|8h - Research a topic all day / custom interval"
         echo "  agent_trace / agent_why   - Explain last routing decision"
         echo "  agent_resume list         - Resume interrupted agent_loop"
         echo "  agent_handoff add|run     - Phone ↔ PC task queue"
@@ -18894,6 +19108,11 @@ function agent --description "Run commands safely: executes safe commands automa
 
     if test -z "$interpreted"; and _agent_is_quiz_practice_request "$cmd"
         set interpreted (_agent_build_quiz_practice_cmd "$cmd")
+        set route_source offline
+    end
+
+    if test -z "$interpreted"; and _agent_is_day_research_request "$cmd"
+        set interpreted (_agent_build_day_research_cmd "$cmd")
         set route_source offline
     end
 
@@ -19323,15 +19542,30 @@ function agent --description "Run commands safely: executes safe commands automa
     else if _agent_is_convert_media_request "$clean_cmd"
         set interpreted (_agent_build_convert_media_cmd "$cmd")
         set route_source offline
+    else if _agent_is_edit_video_request "$clean_cmd"
+        set interpreted (_agent_build_edit_video_cmd "$cmd")
+        set route_source offline
+    else if _agent_is_dub_video_request "$clean_cmd"
+        set interpreted (_agent_build_dub_video_cmd "$cmd")
+        set route_source offline
     else if _agent_is_compose_video_request "$clean_cmd"
         set interpreted (_agent_build_compose_video_cmd "$cmd")
         set route_source offline
     else if string match -qr '(?i)^(generate|create|make|compose|produce)\s+(?:an?\s+)?(?:music|song|track|tune|melody|beat)\b' "$clean_cmd"
-        set -l rest ((_arka_python) (_arka_py_script arka_generate_music.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
+        set -l py (_arka_python)
+        set -l rest ($py (_arka_py_script arka_generate_music.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
         if test -n "$rest"
             set interpreted "generate_music $rest"
         else
             set interpreted "generate_music"
+        end
+    else if string match -qr '(?i)^(generate|create|make|render|produce|animate|film)\s+(?:an?\s+)?(?:full\s+)?ai\s+(?:video|clip|animation|movie)\b|^(generate|create|make)\s+(?:an?\s+)?(?:full\s+)?ai\s+video\b|(?i)\btext[\s-]?to[\s-]?video\b' "$clean_cmd"
+        set -l py (_arka_python)
+        set -l rest ($py (_arka_py_script arka_ai_video.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
+        if test -n "$rest"
+            set interpreted "ai_video $rest"
+        else
+            set interpreted "ai_video"
         end
     else if string match -qr '(?i)^(generate|create|make|render|produce|animate|film)\s+(?:an?\s+)?(?:video|clip|animation|movie|animated\s+video)\b|^(animate|film)\s+' "$clean_cmd"
         set -l vid_prompt (_agent_parse_video_prompt "$cmd")
@@ -19339,15 +19573,6 @@ function agent --description "Run commands safely: executes safe commands automa
             set interpreted "generate_video "(string escape --style=script -- $vid_prompt)
         else
             set interpreted "generate_video"
-        end
-    else if string match -qr '(?i)^(generate|create|make|draw|paint|sketch|show)\s+(?:an?\s+)?(?:image|picture|photo|art|drawing|sketch|painting|illustration|portrait|landscape)\b|^(draw|paint|sketch)\s+' "$clean_cmd"
-        and not string match -qr '(?i)\bascii\s+(?:art|banner)\b' "$clean_cmd"
-        and not string match -qr '(?i)\bfiglet\b' "$clean_cmd"
-        set -l img_prompt (string replace -r -i '^(?:generate|create|draw|paint|make|sketch)\s+(?:an?\s+)?(?:image|picture|photo|art|drawing|painting|sketch|illustration|portrait|landscape)?\s*(?:of)?\s*' '' "$cmd" | string trim)
-        if test -n "$img_prompt"
-            set interpreted "generate_image "(string escape --style=script -- $img_prompt)
-        else
-            set interpreted "generate_image"
         end
     else if string match -qr '(?i)(save|store|remember)\s+(?:password|pass)\s+\S+\s+(?:for|as|named)\s+[a-zA-Z0-9._-]+' "$clean_cmd"
         set -l m (string match -r '(?i)(?:save|store|remember)\s+(?:password|pass)\s+(\S+)\s+(?:for|as|named)\s+([a-zA-Z0-9._-]+)' "$cmd")
@@ -19802,6 +20027,9 @@ function agent --description "Run commands safely: executes safe commands automa
         set -l sq (_agent_parse_youtube_research_query "$cmd")
         test -z "$sq"; and set sq $cmd
         set interpreted "speak_research $sq"
+    else if _agent_is_day_research_request "$cmd"
+        set interpreted (_agent_build_day_research_cmd "$cmd")
+        set route_source offline
     else if string match -qr '(?i)(research|investigate|deep dive)\s+' "$clean_cmd"
         set -l rq (string replace -r -i '^.*?(?:research|investigate|deep dive)\s+(?:on|about|into)?\s*' '' "$cmd")
         set interpreted "agent_research --deep $rq"

@@ -1,0 +1,17 @@
+{
+  "name": "day_research",
+  "description": "Research any topic for an entire day or a custom time interval — periodic rounds, notes, digest",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "day research",
+    "day_research",
+    "interval research",
+    "research session",
+    "research for the entire day",
+    "research all day"
+  ],
+  "permissions": ["network"]
+}

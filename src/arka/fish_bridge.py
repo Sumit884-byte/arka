@@ -172,7 +172,8 @@ def fish_route_preview(text: str) -> FishRoute | None:
 
     _clear_route_preview_cache_if_stale()
     stamp = _route_preview_stamp or ""
-    cache_key = (stamp, cmd.casefold())
+    platform = (os.environ.get("PLATFORM") or os.environ.get("_PLATFORM") or "").strip().lower()
+    cache_key = (stamp, platform, cmd.casefold())
     if stamp and cache_key in _route_preview_cache:
         return _route_preview_cache[cache_key]
 

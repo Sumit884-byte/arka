@@ -27,7 +27,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="arka hallmark")
     parser.add_argument("action", choices=("build", "audit", "redesign", "study"))
     parser.add_argument("target", nargs="+")
-    parser.add_argument("--json", action="store_true")
+    parser.add_argument("--json", action="store_true", dest="as_json")
     args = parser.parse_args(argv)
     request = build_request(args.action, " ".join(args.target))
     installed = any((Path.home() / path / "hallmark" / "SKILL.md").exists() for path in (".codex/skills", ".claude/skills"))

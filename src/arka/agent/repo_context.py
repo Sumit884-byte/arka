@@ -473,6 +473,33 @@ def query_context(query: str, root: Path | None = None, *, limit_chars: int = MA
     return out
 
 
+def context_payload(
+    query: str = "",
+    root: Path | str | None = None,
+    *,
+    action: str = "query",
+    limit_chars: int = MAX_QUERY_CHARS,
+) -> dict:
+    """Structured repo context for MCP / automation clients."""
+    project = _project_root(str(root) if root is not None else None) if root is not None else _project_root()
+    act = (action or "query").strip().lower()
+    if act == "index":
+        result = sync_index(project, quiet=True)
+        return {"action": "index", "path": str(project), **result}
+    if act == "status":
+        state = get_index_state(project)
+        return {"action": "status", "path": str(project), "index": state}
+    q = (query or "").strip() or "project structure and architecture"
+    text = query_context(q, root=project, limit_chars=limit_chars)
+    return {
+        "action": "query",
+        "path": str(project),
+        "query": q,
+        "context": text,
+        "llm_txt": str(llm_txt_path(project)),
+    }
+
+
 def wants_repo_context(text: str) -> bool:
     clean = (text or "").strip()
     if not clean:

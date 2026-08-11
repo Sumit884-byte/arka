@@ -150,6 +150,12 @@ def remember(
         from arka.agent.core import memory_remember
 
         memory_remember(fact_text)
+        try:
+            from arka.memory.graph_memory import graph_remember
+
+            graph_remember(fact_text)
+        except Exception:
+            pass
         return 0, None
     except ImportError:
         pass
@@ -260,6 +266,15 @@ def recall(
     if facts:
         sections.append(facts)
 
+    try:
+        from arka.memory.graph_memory import graph_recall
+
+        graph_ctx, _ = graph_recall(goal, limit_chars=per_layer)
+        if graph_ctx:
+            sections.append(graph_ctx)
+    except ImportError:
+        pass
+
     notes = _recall_notes(goal, limit_chars=per_layer)
     if notes:
         sections.append(notes)
@@ -320,6 +335,12 @@ def status(*, channel: str = "", chat_id: str = "") -> dict[str, object]:
         info["channel"] = channel_status(ch, cid)
     except ImportError:
         info["channel"] = {"enabled": False}
+    try:
+        from arka.memory.graph_memory import status as graph_status
+
+        info["intelligence_graph"] = graph_status()
+    except ImportError:
+        info["intelligence_graph"] = {"enabled": False}
     return info
 
 

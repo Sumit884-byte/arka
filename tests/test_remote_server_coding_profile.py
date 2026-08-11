@@ -172,28 +172,3 @@ def test_coding_remote_runs_allowed_skill(monkeypatch):
     assert code == 0
     assert ran["line"] == "repo_health scan"
     assert "repo health ok" in output
-
-
-def test_serve_uses_railway_port_and_hosted_defaults(monkeypatch):
-    from arka.integrations import remote_server
-
-    seen = {}
-
-    class FakeServer:
-        def __init__(self, addr, handler):
-            seen["addr"] = addr
-
-        def serve_forever(self):
-            return None
-
-    monkeypatch.setenv("PORT", "9999")
-    monkeypatch.setenv("ARKA_REMOTE_PROFILE", "coding")
-    monkeypatch.setenv("REMOTE_TOKEN", "token")
-    monkeypatch.setattr(remote_server, "ThreadingHTTPServer", FakeServer)
-    monkeypatch.setattr(remote_server, "write_pid", lambda: None)
-    monkeypatch.setattr(remote_server, "remove_pid", lambda: None)
-    monkeypatch.setattr(remote_server, "local_ip", lambda: "127.0.0.1")
-    monkeypatch.setattr(remote_server.signal, "signal", mock.Mock())
-
-    assert remote_server.serve() == 0
-    assert seen["addr"] == ("0.0.0.0", 9999)

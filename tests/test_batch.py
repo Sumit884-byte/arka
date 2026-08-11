@@ -36,6 +36,18 @@ def test_batch_run_dispatches_agent_code_and_clears(tmp_path, monkeypatch):
     assert batch._load() == {}
 
 
+def test_batch_programmatic_api(tmp_path, monkeypatch):
+    monkeypatch.setattr(batch, "BATCH_FILE", tmp_path / "prompt-batches.json")
+    created = batch.start_batch(name="default", until="in 1 hour")
+    assert created.name == "default"
+    updated = batch.add_to_batch(name="default", prompt="fix routing")
+    assert len(updated.items) == 1
+    rows = batch.batches_to_dict(batch.list_batches())
+    assert rows["default"]["items"][0]["prompt"] == "fix routing"
+    assert batch.clear_batch(name="default") is True
+    assert batch.list_batches() == {}
+
+
 def test_batch_route():
     assert route_offline_extras("collect all prompts until 6pm") == "batch start --until 6pm"
     assert route_offline_extras("batch add fix routing").startswith("batch add ")

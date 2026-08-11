@@ -367,6 +367,13 @@ def cmd_check(_args: argparse.Namespace) -> int:
 
 
 def _open_image(path: Path) -> None:
+    # Skip viewer when running inside MCP server, remote server, subagent, or cloud/hosted mode
+    if os.environ.get("ARKA_CAPTURE_STDIO", "").lower() in ("1", "true", "yes", "on"):
+        return
+    if os.environ.get("ARKA_HOSTED_MODE", "").strip().lower() in ("1", "true", "yes", "hosted", "server"):
+        return
+    if os.environ.get("OPEN_CHART", os.environ.get("OPEN_IMAGE", "1")) in ("0", "false", "no", "off"):
+        return
     if sys.platform == "darwin":
         subprocess.Popen(["open", str(path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     elif sys.platform.startswith("linux"):

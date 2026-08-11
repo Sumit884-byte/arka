@@ -4,17 +4,33 @@ from __future__ import annotations
 
 import os
 import re
+import threading
 from pathlib import Path
 
 from arka.paths import arka_home, cache_dir, checkout_root, config_dir, env_file
 
 _PLACEHOLDER_RE = re.compile(
-    r"^your_.*_here$|^changeme$|^xxx+$|^replace[_-]?me$",
+    # Match your_secret_here AND your-secret-here (hyphen form is common in templates)
+    r"^your[-_].*[-_]here$|^your[-_]secret[-_]here$|^changeme$|^xxx+$|^replace[_-]?me$",
     re.IGNORECASE,
 )
 
 # Never map stripped keys to these (OS / shell collisions).
 _BLOCKED_SHORT = frozenset({"HOME", "PATH", "USER", "SHELL", "PWD", "LANG", "TERM"})
+
+# Path-like vars that must never keep template placeholders (OpenSSL writes SSLKEYLOGFILE).
+_PATH_LIKE_KEYS = frozenset(
+    {
+        "SSLKEYLOGFILE",
+        "KEYCHAIN_PATH",
+        "GOOGLE_APPLICATION_CREDENTIALS",
+        "CURL_CA_BUNDLE",
+        "REQUESTS_CA_BUNDLE",
+        "SSL_CERT_FILE",
+        "AWS_CA_BUNDLE",
+        "NODE_EXTRA_CA_CERTS",
+    }
+)
 
 
 def _is_placeholder(val: str) -> bool:
@@ -22,6 +38,26 @@ def _is_placeholder(val: str) -> bool:
     if not v:
         return True
     return bool(_PLACEHOLDER_RE.match(v))
+
+
+def _is_path_like_key(key: str) -> bool:
+    k = (key or "").strip().upper()
+    if k in _PATH_LIKE_KEYS:
+        return True
+    return k.endswith(("_PATH", "_FILE", "_DIR", "_CREDENTIALS", "_CERT", "_BUNDLE"))
+
+
+def _scrub_placeholder_env() -> None:
+    """Remove placeholder values already present in the process environment."""
+    for key, val in list(os.environ.items()):
+        if not _is_placeholder(val):
+            continue
+        # Always drop path-like placeholders; they cause Errno 30 / broken TLS.
+        if _is_path_like_key(key) or val.strip().lower() in {
+            "your-secret-here",
+            "your_secret_here",
+        }:
+            os.environ.pop(key, None)
 
 
 def canonical_env_key(key: str) -> str:
@@ -66,7 +102,24 @@ def env_int(name: str, default: int) -> int:
     return int(os.environ.get(name) or str(default))
 
 
-def load_env(extra: Path | None = None) -> None:
+_ENV_LOADED = False
+_ENV_LOAD_LOCK = threading.Lock()
+
+
+def reset_env_loaded() -> None:
+    """Clear load-once guard (tests only)."""
+    global _ENV_LOADED
+    with _ENV_LOAD_LOCK:
+        _ENV_LOADED = False
+
+
+def load_env(extra: Path | None = None, *, force: bool = False) -> None:
+    global _ENV_LOADED
+    if not force and extra is None:
+        with _ENV_LOAD_LOCK:
+            if _ENV_LOADED:
+                return
+
     paths: list[Path] = []
     if extra:
         paths.append(extra)
@@ -91,6 +144,9 @@ def load_env(extra: Path | None = None) -> None:
         seen.add(path)
         _apply_env_file(path)
 
+    # Shell-sourced .env can leave placeholders in the process; scrub them.
+    _scrub_placeholder_env()
+
     # Apply only Arka-managed defaults after explicit environment files.
     try:
         from arka.core.default_config import read as read_defaults
@@ -112,3 +168,7 @@ def load_env(extra: Path | None = None) -> None:
         apply_proxy_env()
     except ImportError:
         pass
+
+    if extra is None:
+        with _ENV_LOAD_LOCK:
+            _ENV_LOADED = True

@@ -44,6 +44,9 @@ class SelfImproveRoutingTests(unittest.TestCase):
             ("improve arka llm fallback", "self_improve llm fallback"),
             ("arka self improve routing", "self_improve routing"),
             ("self improve routing", "self_improve routing"),
+            ("use arka mcp and improve it", "self_improve --mcp"),
+            ("improve arka mcp", "self_improve mcp"),
+            ("improve mcp capabilities", "self_improve capabilities"),
         )
         for phrase, expected in cases:
             with self.subTest(phrase=phrase):
@@ -196,6 +199,21 @@ class SelfImprovePlanTests(unittest.TestCase):
                 self_improve.record_attempt(plan, outcome="planned", root=Path(tmp))
                 data = self_improve.load_memory()
                 self.assertEqual(len(data["attempts"]), 1)
+
+    def test_record_attempt_skips_passed_without_apply(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            mem = Path(tmp) / "self-improve-memory.json"
+            with mock.patch("arka.agent.self_improve.memory_path", return_value=mem):
+                plan = self_improve.ImprovementPlan(focus="routing", proposal="x", files=[])
+                self_improve.record_attempt(plan, outcome="passed", root=Path(tmp))
+                data = self_improve.load_memory()
+                self.assertEqual(len(data["attempts"]), 0)
+
+    def test_sample_repo_paths_from_git(self) -> None:
+        real_root = Path(__file__).resolve().parents[1]
+        paths = self_improve._sample_repo_paths(real_root, limit=5)
+        self.assertTrue(paths)
+        self.assertTrue(all((real_root / rel).is_file() for rel in paths))
 
     def test_docs_check_reports_missing_llm_txt(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

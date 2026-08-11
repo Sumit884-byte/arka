@@ -45,8 +45,9 @@ def _run_fish_skill(
     if env_extra:
         env.update(env_extra)
     inner = f"source {shlex_quote(str(cfg))}; {skill_line}"
+    fish_bin = shutil.which("fish") or "fish"
     return subprocess.run(
-        ["fish", "-c", inner],
+        [fish_bin, "-c", inner],
         capture_output=True,
         text=True,
         env=env,
@@ -141,12 +142,16 @@ class InstallAppExecutionTests(unittest.TestCase):
             self.assertIn("BREW_INSTALL:fish", log.read_text(encoding="utf-8"))
 
     def test_macos_install_brew_without_brew_points_to_brew_sh(self) -> None:
+        fish = shutil.which("fish")
+        if not fish:
+            raise unittest.SkipTest("fish shell not installed")
         proc = _run_fish_skill(
             "install_brew fish",
             platform="macos",
             env_extra={
                 "CONFIG_DIR": tempfile.mkdtemp(),
-                "PATH": _path_without_brew(),
+                "ARKA_SKIP_HOMEBREW_PATH": "1",
+                "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
             },
         )
         combined = f"{proc.stdout}\n{proc.stderr}"
