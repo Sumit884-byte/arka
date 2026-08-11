@@ -1567,8 +1567,19 @@ def route_spreadsheet(cmd: str) -> str | None:
         return "spreadsheet " + cmd
     return None
 
+def route_coderabbit(cmd: str) -> str | None:
+    try:
+        from arka.agent.coderabbit_review import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
+
+
 def route_teammate_review(cmd: str) -> str | None:
-    if re.search(r"(?i)\b(?:ai\s+teammate|coderabbit|greptile|cross[- ]service|entire\s+codebase)\b", cmd) and re.search(r"(?i)\b(?:review|check|audit|break)\b", cmd):
+    if re.search(r"(?i)\bcoderabbit\b", cmd):
+        return None
+    if re.search(r"(?i)\b(?:ai\s+teammate|greptile|cross[- ]service|entire\s+codebase)\b", cmd) and re.search(r"(?i)\b(?:review|check|audit|break)\b", cmd):
         return "teammate-review"
     return None
 
@@ -2349,6 +2360,7 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_graphify,
         route_spreadsheet,
         route_teammate_review,
+        route_coderabbit,
         route_society,
         route_chart_from_pdf,
         route_treemap,

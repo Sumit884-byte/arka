@@ -60,6 +60,7 @@ LEGACY_MODULES: dict[str, str] = {
     "arka_chat": "arka.agent.chat",
     "arka_survival_lang": "arka.agent.survival_lang",
     "arka_pr_check": "arka.agent.pr_check",
+    "arka_coderabbit": "arka.agent.coderabbit_review",
     "arka_dev_tools": "arka.agent.dev_tools",
     "arka_health_reading": "arka.agent.health_reading",
     "arka_daily_reading": "arka.agent.daily_reading",

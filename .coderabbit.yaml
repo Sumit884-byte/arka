@@ -1,0 +1,33 @@
+# CodeRabbit configuration for Arka — https://docs.coderabbit.ai/getting-started/yaml-configuration
+language: "en-US"
+early_access: false
+reviews:
+  profile: "chill"
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - "main"
+  path_filters:
+    - "!**/*.mp4"
+    - "!**/*.mp3"
+    - "!**/*.webm"
+    - "!**/node_modules/**"
+    - "!**/recordings/**"
+    - "!**/.arka-index"
+    - "!logs/**"
+  path_instructions:
+    - path: "src/arka/**"
+      instructions: |
+        Python agent codebase. Prefer minimal diffs, match existing patterns in neighboring files,
+        and avoid over-engineering. Flag missing tests for new public behavior and secrets in commits.
+    - path: "tests/**"
+      instructions: "Use pytest. Prefer focused tests on real behavior, not trivial asserts."
+    - path: "src/arka/integrations/mcp_server.py"
+      instructions: "Large MCP surface — check handler wiring, input validation, and error messages."
+chat:
+  auto_reply: true

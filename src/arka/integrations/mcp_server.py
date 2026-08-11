@@ -2760,6 +2760,25 @@ def _handle_arka_repo_context(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"repo_context unavailable: {exc}") from exc
 
 
+def _handle_arka_coderabbit(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "comments").strip().lower()
+    try:
+        from arka.agent.coderabbit_review import coderabbit_payload, format_feedback
+
+        path = str(arguments.get("path") or arguments.get("root") or "").strip() or None
+        payload = coderabbit_payload(
+            action,
+            root=path,
+            pr=_mcp_int_optional(arguments.get("pr")),
+            full=bool(arguments.get("full", False)),
+        )
+        if action == "comments" and payload.get("ok") and not arguments.get("json"):
+            return format_feedback(payload)
+        return json.dumps(payload, indent=2)
+    except ImportError as exc:
+        raise RuntimeError(f"coderabbit unavailable: {exc}") from exc
+
+
 def _handle_arka_pr_check(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "diff").strip().lower()
     try:
@@ -5348,6 +5367,36 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_pr_check,
+        ),
+        ArkaMcpTool(
+            name="arka_coderabbit",
+            description=(
+                "CodeRabbit AI code review — trigger PR reviews (@coderabbitai), fetch feedback, "
+                "or run local CLI review when `cr` is installed."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["comments", "trigger", "review", "doctor"],
+                        "default": "comments",
+                    },
+                    "path": {"type": "string", "description": "Optional git repo root"},
+                    "pr": {"type": "integer", "description": "PR number (default: current branch PR)"},
+                    "full": {
+                        "type": "boolean",
+                        "description": "When action=trigger, request @coderabbitai full review",
+                        "default": False,
+                    },
+                    "json": {
+                        "type": "boolean",
+                        "description": "Return raw JSON for comments action",
+                        "default": False,
+                    },
+                },
+            },
+            handler=_handle_arka_coderabbit,
         ),
         ArkaMcpTool(
             name="arka_code_search",

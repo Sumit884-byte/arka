@@ -494,6 +494,16 @@ def route_command(text: str) -> str:
     ):
         return "pr_check summary"
 
+    if re.search(r"(?i)\bcoderabbit\b", low):
+        try:
+            from arka.agent.coderabbit_review import route_command as coderabbit_route
+
+            route = coderabbit_route(raw)
+            if route:
+                return route
+        except ImportError:
+            pass
+
     return ""
 
 

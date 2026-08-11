@@ -597,6 +597,10 @@ def run_skill(skill_line: str) -> int:
         elif head in ("spreadsheet", "spreadsheet_create", "create_spreadsheet"):
             from arka.agent.generate_data import main as generate_data_main
             code = generate_data_main([*rest, "--format", "xlsx"] if "--format" not in rest else rest)
+        elif head in ("coderabbit", "coderabbit_review", "coderabbit-review", "code_rabbit"):
+            from arka.agent.coderabbit_review import main as coderabbit_main
+
+            code = coderabbit_main(rest or ["doctor"])
         elif head in ("teammate_review", "teammate-review", "ai_teammate"):
             from arka.agent.teammate_review import main as teammate_main
             code = teammate_main(rest)
