@@ -1,10 +1,10 @@
 ---
-title: "Deploy Arka to Cloud & Web Platforms"
+title: "Deploy Arka to cloud and web platforms"
 description: "Deploy Arka in one step to single or multiple cloud hosting providers."
 icon: "cloud-arrow-up"
 ---
 
-## One Command Multi-Platform Deployment
+## One-command multi-platform deployment
 
 Deploy Arka simultaneously to all configured platforms (Cloud VM, Railway, Vercel, Netlify, Render, Cloudflare) with a single command:
 
@@ -28,7 +28,7 @@ arka deploy --platforms vercel,railway,cloud --json
 
 ---
 
-## One-Step Cloud Deployment
+## One-step cloud deployment
 
 Deploy Arka to any cloud-hosted machine (Linux VM, VPS, AWS EC2, GCP, DigitalOcean, Docker host):
 
@@ -51,27 +51,27 @@ arka deploy --platform cloud --yes
 
 ---
 
-## Hosted Skill Behavior on Cloud
+## Hosted skill behavior on cloud
 
 When Arka runs on a cloud machine (`ARKA_HOSTED_MODE=1` or inside a headless Linux/Docker container), personal desktop, GUI, and audio skills are automatically restricted for safety and compatibility.
 
-### Skill Compatibility Matrix
+### Skill compatibility matrix
 
-| Skill Category | Status on Cloud | Examples |
+| Skill category | Status on cloud | Examples |
 | --- | --- | --- |
-| **Repo & Code Analysis** | ✅ **Enabled** | `repo_health`, `repo_map`, `repo_graph`, `structure`, `workspace` |
-| **CI/CD & PR Workflows** | ✅ **Enabled** | `ci`, `pr_check`, `github_actions`, `review`, `route_audit` |
-| **Code Editing & Security** | ✅ **Enabled** | `code`, `lint_project`, `security`, `dev_doctor`, `dev_tools` |
-| **MCP Server & REST API** | ✅ **Enabled** | `/v1/health`, `/v1/agent`, MCP tool handlers |
-| **Desktop Applications** | ❌ **Disabled** | `open`, `app_automation`, `desktop_automation` |
-| **Desktop Browser Control** | ❌ **Disabled** | `browser_check`, `agent_browser`, `browse` |
-| **Music & Media Playback** | ❌ **Disabled** | `spotify`, `spotify_control`, `play_youtube`, `stop_music` |
-| **Local Audio & Voice** | ❌ **Disabled** | `voice`, `wake` (local mic/speakers) |
-| **Screen Control** | ❌ **Disabled** | `screen` (desktop screen capture) |
+| **Repo and code analysis** | ✅ **Enabled** | `repo_health`, `repo_map`, `repo_graph`, `structure`, `workspace` |
+| **CI/CD and PR workflows** | ✅ **Enabled** | `ci`, `pr_check`, `github_actions`, `review`, `route_audit` |
+| **Code editing and security** | ✅ **Enabled** | `code`, `lint_project`, `security`, `dev_doctor`, `dev_tools` |
+| **MCP server and REST API** | ✅ **Enabled** | `/v1/health`, `/v1/agent`, MCP tool handlers |
+| **Desktop applications** | ❌ **Disabled** | `open`, `app_automation`, `desktop_automation` |
+| **Desktop browser control** | ❌ **Disabled** | `browser_check`, `agent_browser`, `browse` |
+| **Music and media playback** | ❌ **Disabled** | `spotify`, `spotify_control`, `play_youtube`, `stop_music` |
+| **Local audio and voice** | ❌ **Disabled** | `voice`, `wake` (local mic/speakers) |
+| **Screen control** | ❌ **Disabled** | `screen` (desktop screen capture) |
 
 ---
 
-## Managed Hosting Providers
+## Managed hosting providers
 
 Preview a single platform deployment:
 
