@@ -1,0 +1,60 @@
+---
+title: "Self-improve loop"
+description: "Arka अपनी codebase का विश्लेषण करता है, fixes प्रस्तावित करता है, और वैकल्पिक रूप से safety gates के साथ उन्हें लागू करता है।"
+keywords: ["self-improve", "goal", "automation", "codebase"]
+icon: "arrows-rotate"
+---
+
+**Self-improve** Arka को अपनी repository — tests, routing, docs — का निरीक्षण करने और एक improvement plan तैयार करने देता है। goal agent चलाने और fixes लागू करने के लिए `--apply` उपयोग करें।
+
+## त्वरित शुरुआत
+
+```bash
+arka self improve              # केवल plan (dry-run)
+arka self improve routing      # केंद्रित plan
+arka self improve --apply      # goal agent से लागू करें
+arka self memory               # पिछले improvement प्रयास
+arka self status               # repo + memory path
+```
+
+प्राकृतिक भाषा:
+
+```bash
+arka improve arka
+arka self improve routing
+arka improve arka llm fallback
+```
+
+`self improve routing` को dedicated skill के रूप में भी route किया जाता है ताकि Arka routing fixes को first-class self-improvement task के रूप में treat कर सके।
+
+## Output (normal mode)
+
+```
+━━━ Arka Self-Improve ━━━
+Focus: routing
+Checking: tests, routing, docs
+
+✗ Tests: 1 failure (memory_detect)
+✓ Routing: symbolic.py (40 route_* handlers)
+○ Plan: fix import in tests/test_memory_detect.py
+
+Next: arka self improve routing --apply
+```
+
+<Note>
+  पूरी diagnostics (pytest traces, llm.txt context) केवल [debug mode](/hi/guides/operation-modes) में दिखती हैं।
+</Note>
+
+## Safety
+
+| Rule | व्यवहार |
+| --- | --- |
+| Plan-only default | बिना `--apply` कोई file writes नहीं |
+| `--apply` को agent mode चाहिए | `ask` या `plan` mode में blocked |
+| Secrets blocked | कभी `.env`, credentials, `node_modules` को modify नहीं करता |
+| Memory | `~/.config/arka/self-improve-memory.json` पिछले प्रयासों को track करता है |
+
+## संबंधित
+
+- [Goal agent](/guides/goal-agent) — multi-step autonomous tasks
+- [Testing](/guides/testing) — pytest और CI

@@ -1,0 +1,124 @@
+---
+title: "Session memory, heartbeat, और skill gates"
+description: "OpenClaw से प्रेरित Arka features — markdown session memory, agent heartbeat, और requires, OS, व permissions के लिए skill manifest gates।"
+keywords: ["session memory", "heartbeat", "openclaw", "skill gates", "permissions"]
+icon: "paw"
+---
+
+Arka में कई **OpenClaw से प्रेरित** features शामिल हैं (कोई अलग OpenClaw product integration नहीं)। ये persistent session notes, agent health tracking, और third-party plugins के लिए declarative skill gates जोड़ते हैं।
+
+## Session memory
+
+`~/.config/arka/agent-memory/` के तहत संग्रहीत markdown-आधारित session notes:
+
+- `MEMORY.md` — दीर्घकालिक notes (स्वचालित रूप से pruned)
+- `daily/YYYY-MM-DD.md` — प्रति दिन session notes
+
+```bash
+arka session-memory append "Prefers morning standups at 9am"
+arka session-memory append "Always use dark terminal theme" --long-term
+arka session-memory search standup
+arka session-memory context "plan my morning routine"
+arka session-memory status
+arka session-memory clear                # आज के daily notes
+arka session-memory clear --long-term    # MEMORY.md रीसेट करें
+arka session-memory clear --all
+```
+
+जब `SESSION_MEMORY=1` हो, तो recalled context `context_for()` के ज़रिए agent loops में inject होता है।
+
+### Environment variables
+
+| Variable | Default | उद्देश्य |
+| --- | --- | --- |
+| `SESSION_MEMORY` | `1` | सक्षम करें (अक्षम के लिए `0`) |
+| `SESSION_MEMORY_DIR` | `~/.config/arka/agent-memory` | Storage root |
+| `MEMORY_LONGTERM_MAX_LINES` | `100` | `MEMORY.md` में रखी अधिकतम lines |
+| `MEMORY_AUTO_LONGTERM` | `0` | हर append को स्वचालित रूप से long-term पर promote करें |
+
+Notes को storage से पहले sanitize किया जाता है — injection patterns और unsafe content ब्लॉक किए जाते हैं।
+
+## Heartbeat
+
+अंतिम agent गतिविधि, security flags, routine count, और memory stats को track करता है।
+
+```bash
+arka heartbeat status
+arka heartbeat ping goal.completed
+arka heartbeat history
+arka heartbeat history --json --limit 10
+```
+
+Heartbeat data `~/.cache/fish-agent/heartbeat.json` में लिखा जाता है। हर `ping()` एक bounded `history` ring में append करता है (default 20 events; `HEARTBEAT_HISTORY` से override करें)। Session memory और routines जैसी subsystems गतिविधि पर स्वचालित रूप से `ping()` call करती हैं।
+
+## Skill manifest gates
+
+Third-party plugins `skill.json` में **OpenClaw-शैली gates** घोषित कर सकते हैं। Arka उन्हें discovery, routing, और execution के दौरान लागू करता है।
+
+### Top-level फ़ील्ड
+
+```json
+{
+  "name": "my_skill",
+  "requires": {
+    "bins": ["ffmpeg"],
+    "anyBins": ["docker", "podman"],
+    "env": ["MY_API_KEY"]
+  },
+  "os": ["darwin", "linux"],
+  "permissions": ["read", "network"]
+}
+```
+
+### `metadata.openclaw` (या `metadata.arka` / `metadata.hermes`)
+
+समान फ़ील्ड OpenClaw- और Hermes-शैली manifests के साथ compatibility के लिए `metadata.openclaw`, `metadata.arka`, या `metadata.hermes` के तहत भी रह सकते हैं:
+
+```json
+{
+  "name": "my_skill",
+  "metadata": {
+    "openclaw": {
+      "requires": { "env": ["MY_API_KEY"] },
+      "os": ["darwin"],
+      "permissions": ["network"]
+    }
+  }
+}
+```
+
+Arka इनमें से किसी भी metadata blocks को parse time पर top-level `requires`, `os`, और `permissions` फ़ील्ड में merge करता है।
+
+### Gate व्यवहार
+
+| Gate | कब ब्लॉक करता है |
+| --- | --- |
+| `os` | जब वर्तमान platform सूचीबद्ध न हो |
+| `requires.bins` | जब binary `PATH` पर न मिले |
+| `requires.anyBins` | जब सूचीबद्ध binaries में से कोई भी न मिले |
+| `requires.env` | जब environment variable सेट न हो |
+| `permissions` | जब permission `SKILL_PERMISSIONS` allowlist में न हो |
+
+Gated skills:
+
+- `arka skills list` में `[gated: reason]` के साथ **Marked** होते हैं
+- `match_command()` द्वारा **Skipped** होते हैं ताकि routing अनुपलब्ध plugins से match न हो
+- Safety net के रूप में `run_skill()` पर **Blocked** होते हैं
+
+### Environment variables
+
+| Variable | Default | उद्देश्य |
+| --- | --- | --- |
+| `SKILL_PERMISSIONS` | `read,write,network,shell` | अनुमत permission tags |
+| `SKILLS_PATH` | — | Plugins के लिए खोजने वाली अतिरिक्त directories |
+
+देखें: [Plugins install करना](/hi/guides/plugins) और `src/arka/skills/examples/demo_echo/skill.json` पर उदाहरण।
+
+## संबंधित security
+
+Routines और webhooks अलग hardening परतें लागू करते हैं:
+
+- `ROUTINES_SECURITY=1` — scheduled कार्यों पर symbolic action checks
+- Webhook inbound verification injection payloads को ब्लॉक करता है
+
+ये [Security](/hi/concepts/security) में documented global `SECURITY`, `SECURITY_LLM`, और `SECURITY_ACTIONS` flags के साथ काम करते हैं।

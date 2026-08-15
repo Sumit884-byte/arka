@@ -1,0 +1,112 @@
+---
+title: "Persona chat"
+description: "Arka में simulated character personas बनाएँ और उनसे बात करें — मनोरंजन और शिक्षा के लिए stylized LLM आवाज़ें, असली लोग नहीं।"
+keywords: ["persona", "chat", "elon", "simulation"]
+icon: "masks-theater"
+---
+
+Arka में **simulated persona chat** शामिल है — सार्वजनिक हस्तियों या आपके अपने prompts से प्रेरित LLM-आधारित characters, जो मनोरंजन और शिक्षा के लिए स्पष्ट रूप से कल्पना के रूप में लेबल किए गए हैं।
+
+<Warning>
+  Personas उन असली लोगों के **नहीं** हैं जिनसे वे मिलते-जुलते हैं। इन्हें धोखे, प्रतिरूपण, या authoritative सलाह के लिए उपयोग न करें।
+</Warning>
+
+## त्वरित शुरुआत
+
+Bundled और सहेजे गए personas सूचीबद्ध करें:
+
+```bash
+arka persona list
+```
+
+किसी persona से chat करें (interactive REPL):
+
+```bash
+arka persona chat elon
+arka persona chat socrates
+```
+
+एक-shot प्रश्न:
+
+```bash
+arka persona chat elon "should I learn Rust?"
+```
+
+Bundled **Elon** persona एक shortcut के रूप में उपलब्ध रहता है:
+
+```bash
+arka elon                                 # interactive REPL
+arka elon "should I learn Rust?"          # one-shot
+arka talk_to_elon about first principles  # alias
+```
+
+`arka` के माध्यम से प्राकृतिक भाषा:
+
+```bash
+arka talk to elon about rockets
+arka talk to socrates about virtue
+arka create persona for steve jobs
+arka persona elon about manufacturing
+```
+
+## Persona store
+
+Personas `~/.config/arka/personas/` (या `{ARKA_CONFIG_DIR}/personas/`) में YAML (या JSON) फ़ाइलें हैं।
+
+उदाहरण `~/.config/arka/personas/coach.yaml`:
+
+```yaml
+name: coach
+display_name: Supportive Coach
+description: Encouraging mentor tone for career and learning questions
+disclaimer: Simulated persona for fun — not a real person.
+voice: Warm, concise, asks one clarifying question when helpful
+system_prompt: |
+  You are a simulated supportive coach for entertainment and education only.
+  You are NOT a real person.
+
+  Voice and style:
+  - Encouraging but honest; practical next steps
+  - Short paragraphs; no buzzword soup
+
+  Rules:
+  - Never claim to be a real individual
+  - Do not give authoritative financial, legal, or medical advice
+  - If asked whether you are real, clarify you are a simulation
+```
+
+Bundled templates (`elon`, `socrates`, `blank`) पहली बार उपयोग पर आपकी personas directory में seed होते हैं।
+
+## CLI कमांड
+
+```bash
+arka persona list
+arka persona show <name>
+arka persona create <name>              # interactive wizard
+arka persona create <name> -t blank     # template से
+arka persona create steve-jobs -y       # LLM draft, non-interactive
+arka persona chat <name> ["question"]
+arka persona edit <name>                # $EDITOR में YAML खोलता है
+```
+
+## आवश्यकताएँ
+
+Arka के built-in LLM stack का उपयोग करता है (वही API keys जो `web_answer` / `agent_ask` के लिए)। `~/.config/arka/.env` में `GEMINI_API_KEY`, `GROQ_API_KEY`, या कोई अन्य provider कॉन्फ़िगर करें।
+
+## Disclaimer और output format
+
+हर chat session persona का disclaimer एक बार print करता है, फिर हर reply एक consistent terminal layout का उपयोग करता है:
+
+```text
+  Note: Simulated Elon-inspired persona for fun and education — not the real Elon Musk.
+
+── Elon (simulated) ──
+
+  First-principles answer text wraps near 88 columns and keeps paragraph breaks.
+```
+
+Interactive REPL mode में, आपका prompt `you> ` होता है और हर persona reply header block से पहले `{name}> ` से लेबल होता है। One-shot commands (`arka talk to elon about …`) उसी formatting का उपयोग करते हैं।
+
+Bundled Elon इस disclaimer text का उपयोग करता है:
+
+> Note: Simulated Elon-inspired persona for fun and education — not the real Elon Musk.

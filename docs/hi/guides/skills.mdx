@@ -1,0 +1,92 @@
+---
+title: "Skills catalog: 70+ built-in Arka commands"
+description: "Arka के 70+ built-in skills — media, web search, PDF RAG, Google Workspace, charts, stocks, YouTube, voice, और developer automation के लिए — plus custom skills enable, disable, और create करें।"
+keywords: ["skills", "catalog", "automation", "commands", "built-in skills", "arka skills"]
+icon: "list-check"
+boost: 1.5
+---
+
+Arka **70+ built-in skills** के साथ आता है। सादी अंग्रेज़ी में जो चाहिए बताएँ, और router सही skill चुनता है — पहले offline symbolic rules, ज़रूरत पर LLM fallback। अपने platform पर उपलब्ध skills सूचीबद्ध करने के लिए `arka help` चलाएँ।
+
+<CardGroup cols={3}>
+  <Card title="Chat & web" icon="message-circle" href="/guides/chat">Web Q&A, calc, weather</Card>
+  <Card title="Memory" icon="database" href="/guides/memory">Facts याद रखें और recall करें</Card>
+  <Card title="PDF RAG" icon="file-text" href="/guides/pdf-rag">PDFs ingest और query करें</Card>
+  <Card title="Charts" icon="chart-bar" href="/guides/charts">Line, bar, pie, scatter plots</Card>
+  <Card title="Vision" icon="eye" href="/guides/vision">Images और blueprints</Card>
+  <Card title="YouTube" icon="play" href="/guides/youtube">Research और download</Card>
+  <Card title="Google" icon="mail" href="/guides/google-workspace">Gmail और Calendar</Card>
+  <Card title="Stocks" icon="chart-line" href="/guides/stocks">Market intelligence</Card>
+  <Card title="Voice" icon="microphone" href="/guides/voice">Wake word और TTS</Card>
+  <Card title="Goal agent" icon="bot" href="/guides/goal-agent">Multi-step automation</Card>
+  <Card title="Life sciences" icon="dna" href="/guides/life-sciences">PubMed, genomics, bioinformatics</Card>
+  <Card title="Plugins" icon="plug" href="/guides/plugins">Third-party skills</Card>
+  <Card title="CLI" icon="terminal" href="/hi/guides/cli">पूरा command reference</Card>
+  <Card title="Route learn" icon="route" href="/hi/guides/route-learn">Phrase → skill सिखाएँ</Card>
+  <Card title="MCP" icon="network-wired" href="/hi/guides/mcp">Cursor और external servers</Card>
+  <Card title="Repo health" icon="heart-pulse" href="/hi/guides/repo-health">Lint और test checks</Card>
+</CardGroup>
+
+## Web और chat
+
+| Skill | उदाहरण |
+| --- | --- |
+| `web_answer` | `arka ask who won IPL 2025` |
+| `deep_web_answer` | `arka /latest AI regulation news` |
+| `search_web` | `arka search rust async tutorials` |
+| `calc` | `arka calc 2^10 + sqrt(144)` |
+| `hyperlocal_weather` | `arka weather near me` |
+
+## Media और documents
+
+| Skill | उदाहरण |
+| --- | --- |
+| `compose_video` | `arka compose a video about climate change` |
+| `arka compose_slides` | `arka make slides about climate change` |
+| `arka compose_3d` | `arka create a 3d model of a gear` |
+| `arka pdf_ingest` | `pdf_ingest ~/Documents/resume.pdf` |
+| `arka pdf_ask` | `pdf_ask --doc resume.pdf "summarize skills"` |
+| `arka youtube_research` | `arka youtube research "python asyncio tutorial"` |
+
+## Developer tools
+
+| Skill | उदाहरण |
+| --- | --- |
+| `git_summary` | `arka git summary` |
+| `lint_python` | `arka lint this file` |
+| `github_repo` | `arka github repo stats for arka-agent/arka` |
+| `goal` | `arka goal set up venv and run pytest` |
+| `repo_health` | `arka repo health .` |
+
+## Finance
+
+| Skill | उदाहरण |
+| --- | --- |
+| `stock` | `arka stock analyze AAPL` |
+| `currency_convert` | `arka convert 100 USD to INR` |
+| `arka kalshi` | `kalshi search bitcoin` |
+| `price_check` | `arka price check iPhone 16` |
+
+<Tip>
+  अपने install में हर skill देखने के लिए `arka help` चलाएँ। सूची platform mode (full बनाम portable) और installed extras जैसे `[voice]` या `[pdf]` के अनुसार बदलती है।
+</Tip>
+
+## Skills manage करना
+
+Configuration files edit किए बिना skills enable या disable करें:
+
+```bash
+arka skills list
+arka skills disable compose_video
+arka skills enable compose_video
+```
+
+Disabled skills routing और capability discovery के लिए दिखते रहते हैं, लेकिन execution एक explicit enable command से block होता है। Preferences Arka के user configuration में `skills.json` के अंतर्गत store होती हैं।
+
+## एक custom skill बनाएँ
+
+```bash
+arka skill new api_checker --template dev --guided
+```
+
+Wizard एक description और प्राकृतिक-भाषा triggers माँगता है, फिर `skill.json`, `run.py`, `README.md`, और `TEST_PLAN.md` बनाता है। यह मौजूदा manifests में duplicate triggers जाँचता है और non-colliding phrases सुझाता है।

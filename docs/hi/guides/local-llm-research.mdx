@@ -1,0 +1,26 @@
+---
+title: "Local LLM रिसर्च नोट्स"
+description: "Arka सुधारों के लिए समीक्षा किए गए upstream local-model projects।"
+icon: "magnifying-glass"
+---
+
+Arka `.third_party/local-llm-research/` में shallow upstream checkouts रखता है
+जिससे offline में reference मिल सके। ये runtime में import नहीं किए जाते और Git
+द्वारा ignore किए जाते हैं। वर्तमान research set:
+
+| Project | License | उपयोगी Arka विचार |
+| --- | --- | --- |
+| [Ollama](https://github.com/ollama/ollama) | MIT | Model pull/list/run lifecycle, local API health checks |
+| [llama.cpp](https://github.com/ggml-org/llama.cpp) | MIT | Portable CPU/Metal/CUDA inference और quantized-model sizing |
+| [vLLM](https://github.com/vllm-project/vllm) | Apache-2.0 | OpenAI-compatible serving, GPU batching, throughput-oriented deployment |
+| [Aider](https://github.com/Aider-AI/aider) | Apache-2.0 | Repository map, edit/test loop, local Ollama integration |
+
+Arka का local-model selector पहले से ही installed Ollama मॉडलों और hardware
+headroom का उपयोग करता है। अगले सुरक्षित integrations adapter-level हैं: model
+discovery बेहतर करें, llama.cpp/vLLM health probes expose करें, और
+repository-map एवं verification patterns को पुन: उपयोग करें। प्रत्येक repository
+के license और notices की समीक्षा किए बिना source code copy या vendor dependencies
+न करें; transitive model/runtime licenses project license से भिन्न हो सकते हैं।
+
+Checkouts research के लिए shallow clones के रूप में किए गए थे और version-specific
+व्यवहार पर निर्भर होने से पहले उन्हें refresh किया जाना चाहिए।

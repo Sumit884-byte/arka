@@ -1,0 +1,114 @@
+---
+title: "OpenTelemetry tracing और SigNoz observability"
+description: "Arka से OpenTelemetry traces, metrics, और logs enable करें और उन्हें LLM provider calls, failover events, latency, और token usage monitor करने के लिए SigNoz को भेजें।"
+keywords: ["observability", "signoz", "opentelemetry", "tracing"]
+icon: "chart-line"
+---
+
+Traces, metrics, और logs को [SigNoz](https://signoz.io) पर export करें। जब SigNoz चल रहा हो, तो **default रूप से on** होता है — local OTLP `http://127.0.0.1:4318` पर।
+
+## Quick start
+
+```bash
+arka signoz status
+arka signoz setup -y
+arka signoz demo
+arka ai trace-status
+arka observability doctor
+```
+
+### Login पर autostart (macOS / Linux)
+
+एक बार `arka signoz setup -y` करने के बाद, local Docker stack को login पर up आने के लिए enable करें:
+
+```bash
+arka signoz autostart install
+arka signoz autostart status
+```
+
+macOS पर, **Docker Desktop → Settings → General → Start Docker Desktop when you sign in** भी enable करें।
+Autostart Docker के लिए wait करता है, फिर `foundryctl cast -f casting.yaml --no-gauge` चलाता है।
+Logs: `~/.cache/fish-agent/signoz-autostart.log` (या आपका `CACHE_DIR`)।
+
+`arka signoz autostart uninstall` से हटाएँ। एक ही step में install करने के लिए `arka signoz setup -y` में `--autostart` pass करें।
+
+`arka observability doctor` एक read-only local check है। यह report करता है कि OpenTelemetry enabled और configured है या नहीं, लेकिन यह claim नहीं करता कि SigNoz को data प्राप्त हुआ है। telemetry enable करने के बाद, `arka signoz demo` चलाएँ और SigNoz traces view में `service.name = arka` verify करें। यदि doctor एक configured exporter report करता है लेकिन कोई traces नहीं दिखते, तो problem ingestion या SigNoz endpoint है — Arka के route instrumentation में नहीं।
+
+## Configuration
+
+```env
+# Default रूप से enabled — केवल आवश्यकता होने पर override करें
+SIGNOZ_ENDPOINT=http://localhost:4318
+SIGNOZ_UI_URL=http://localhost:8080
+OTEL_SERVICE_NAME=arka
+# OTEL_SDK_DISABLED=true          # सभी OTLP export disable करें
+# OTEL_TRACES_ENABLED=0           # traces disable करें (metrics/logs follow करते हैं)
+# SIGNOZ_API_KEY=                 # alerts / MCP के लिए
+```
+
+## क्या trace होता है
+
+- LLM provider calls (model, latency, tokens, failover events)
+- **Symbolic / deterministic routing** — offline rule matches, matched `route_*` handler, sub-ms route latency, और `arka.llm.used=false`
+- **Deterministic skill execution** — local skills (password, calc, convert, help, आदि) `arka.execution.kind=deterministic` के साथ
+- Skill dispatch और routing decisions (natural-language CLI input के लिए `arka.request` के अंतर्गत linked)
+- MCP client calls
+- Supermemory operations
+
+हर dispatched skill एक bounded skill name, duration, exit status, execution kind (`deterministic`, `llm_skill`, `llm_routed`, `fish`, या `shell`), और LLM उपयोग हुआ था या नहीं record करता है।
+इन attributes में secrets और पूरे user prompts नहीं जोड़े जाते।
+इससे long-running loops और MCP-backed skills में failures दिखाई देते हैं — बिना exported logs को user के कोड या credentials की copy बनाए।
+
+Structured logs में `trace_id` और `span_id` शामिल होते हैं जब एक active span के अंदर emit किए जाते हैं — एक skill failure log से उसके trace तक jump करने के लिए SigNoz log ↔ trace correlation का उपयोग करें। Metrics explorer में span attributes के पूरक `arka.routing.decisions`, `arka.skill.duration`, और `arka.llm.failover` metrics हैं।
+
+उपयोगी SigNoz trace filters:
+
+- `name = 'arka.request'` — पूरा NL request waterfall (route → skill)
+- `name = 'arka.route' AND arka.route.decision = 'symbolic'` — केवल offline symbolic routes
+- `arka.execution.kind = 'deterministic'` — बिना LLM के local skills
+- `arka.llm.used = false` — कोई भी span जहाँ LLM ने भाग नहीं लिया
+
+## SigNoz dashboard
+
+Bundled Arka agent observability dashboard install करें (15 panels: service overview, skill dispatch latency/errors, routing, LLM failover, model/provider mix, token usage, correlated logs):
+
+```bash
+arka signoz dashboard install
+arka signoz dashboard install --alerts   # bundled alert rules भी बनाएँ
+arka signoz dashboard install --dry-run  # POST के बिना preview
+arka signoz dashboard list
+```
+
+SigNoz → Settings → Service Accounts से `SIGNOZ_API_KEY` आवश्यक है। Template JSON: `signoz/dashboards/arka-agent-observability.json`।
+
+Self-build के माध्यम से MCP-orchestrated install:
+
+```bash
+arka self build observability
+arka self build observability --apply
+arka self build dashboard --apply
+```
+
+## SigNoz MCP \+ Cursor
+
+```bash
+arka signoz mcp tools
+arka signoz cursor-setup
+```
+
+Bundled SigNoz assets (dashboards, alerts, demos) repo में `signoz/` में रहते हैं।
+
+<Note>
+  OTLP export `http://127.0.0.1:4318` पर default रूप से on है। Opt out करने के लिए `OTEL_SDK_DISABLED=true` या `OTEL_TRACES_ENABLED=0` set करें।
+</Note>
+
+## Production-to-codebase connectors
+
+SigNoz, Sentry, Datadog, या New Relic से JSON export करें, फिर stack paths को current repository के साथ correlate करें:
+
+```bash
+arka telemetry-connect ./production-events.json --root .
+arka telemetry-connect ./production-events.json --json
+```
+
+यह read-only है: यह exports upload किए बिना, provider credentials read किए बिना, या कोड edit किए बिना event counts, providers, unmatched events, और frequent file/line hotspots report करता है।

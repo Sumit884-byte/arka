@@ -1,0 +1,14 @@
+---
+title: "AI 队友评审"
+description: "以整个工作区的服务感知能力评审改动。"
+icon: "user-check"
+---
+
+使用 AI 队友评审识别可能影响到不相关微服务或微前端的改动：
+
+```bash
+arka teammate-review .
+arka teammate-review . --json
+```
+
+该评审将当前的 Git diff 与 `arka workspace` 发现结果结合起来。它会标记跨服务改动以及依赖/构建边界的变化，并指出需要运行的测试和契约检查。它是只读的，除非你明确请求由模型进行评审，否则不会声称 LLM 发现了 bug。

@@ -1,0 +1,16 @@
+---
+title: "3D 模型转透明图像"
+description: "渲染网格并去除背景，方便在设计中复用。"
+icon: "camera"
+---
+
+```bash
+arka model_to_image chair.obj --output chair-render.png
+arka model_to_image asset.glb --output public/assets/asset.png --size 2048
+arka model_to_image asset.glb --output hero.png --task "product hero image"
+arka model_to_image asset.glb --output roof.png --angle top
+```
+
+Arka 使用 Blender 做跨平台网格渲染，生成透明 PNG，然后调用现有的抠图技能去除残留像素。支持的网格输入包括 OBJ、STL、GLB 和 GLTF。请在 PATH 上安装 Blender，并安装 vision extra 以支持背景移除。如果只需要透明画布而不需要 rembg 处理，使用 `--keep-background`。
+
+相机默认值是语义化的，而非随机。已知构图时可传入 `--angle front|front-three-quarter|rear|rear-three-quarter|side|three-quarter|top|underside`。已配置 VLLM 服务器（`VLLM_API_URL`，可选 `VLLM_MODEL`）时，`--task` 会让本地模型为该任务选择最合适的视角。如果 VLLM 不可用，Arka 会回退到确定性的符号规则：「roof」选 `top`，「side profile」选 `side`，赛车游戏车辆任务选 `rear-three-quarter`，让车辆像常规第三人称赛车游戏一样从后方观察。

@@ -1,0 +1,29 @@
+---
+title: "Docker status"
+description: "Terminal से Docker containers और images सूचीबद्ध करें, logs देखें, और daemon health जाँचें।"
+keywords: ["docker", "containers", "logs", "devops"]
+icon: "docker"
+iconType: "brands"
+---
+
+`docker ps` flags याद रखे बिना Docker पर त्वरित नज़र।
+
+## प्राकृतिक भाषा
+
+```bash
+arka show docker containers
+arka docker logs for api
+arka list docker images
+arka docker health
+```
+
+## CLI commands
+
+| Command | विवरण |
+| ------- | ----------- |
+| `docker_status ps` | Status और ports के साथ चल रहे containers |
+| `docker_status images` | Size और age के साथ local images |
+| `docker_status logs <container> [--tail N]` | Container logs देखें (default 50 lines) |
+| `docker_status health` | Daemon health सारांश |
+
+`docker` CLI ज़रूरी है। जाँच से पहले Docker Desktop (या daemon) शुरू करें।

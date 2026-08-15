@@ -1,0 +1,268 @@
+---
+title: "Quickstart: Arka इंस्टॉल करें और अपना पहला कमांड चलाएँ"
+description: "macOS, Linux, या Windows पर pipx से Arka इंस्टॉल करें — git clone नहीं — Gemini या Groq API keys सेट करें, arka doctor से जाँच करें, और पाँच मिनट से भी कम में अपना पहला प्राकृतिक-भाषा टर्मिनल कमांड चलाएँ।"
+keywords: ["install arka", "quickstart", "pipx", "arka-agent", "setup", "API keys", "terminal AI"]
+icon: "play"
+boost: 1.5
+---
+
+Arka को macOS, Linux, या Windows पर चलाएँ — **git clone या लोकल build की ज़रूरत नहीं**। प्रकाशित Python पैकेज इंस्टॉल करें, `arka setup` चलाएँ, एक API key जोड़ें, और किसी भी टर्मिनल से `arka` का उपयोग करें।
+
+<Note>
+  **एक नज़र में:** Python 3.11+ चाहिए, एक LLM API key (Gemini या Groq की सिफ़ारिश), और वैकल्पिक रूप से पूरे skill router के लिए fish shell। अनुशंसित इंस्टॉल: `pipx install "arka-agent[chat]"` → `arka setup` → `arka doctor` → `arka ask "what is Rust?"`. पूरे docs: [Introduction](/hi/index)।
+</Note>
+
+Quickstart ट्यूटोरियल देखें:
+
+<Frame caption="Arka quickstart — install, configure, and run your first command">
+  <iframe
+    className="w-full aspect-video rounded-xl"
+    src="https://www.youtube.com/embed/UmuQ3tqahD8"
+    title="Arka quickstart tutorial"
+    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+    allowFullScreen
+  />
+</Frame>
+
+<Tip>
+  **अनुशंसित रास्ता** — pipx (या pip) से install, फिर verify और पूछें:
+</Tip>
+
+<CodeGroup>
+
+```bash 1. Install
+pipx install "arka-agent[chat]"
+arka setup
+```
+
+```bash 2. Verify
+arka doctor
+```
+
+```bash 3. Ask
+arka ask "what is Rust?"
+```
+
+</CodeGroup>
+
+## शुरू करने से पहले
+
+Arka docs-as-code अपनाता है — यह साइट [Mintlify](https://mintlify.com) पर बनी है और [arka-agent.mintlify.site](https://arka-agent.mintlify.site) पर deploy होती है। खुद Arka उपयोग करने के लिए, आपको चाहिए:
+
+- **Python 3.11\+**
+- कम से कम एक LLM API key (Gemini या Groq — free tier के लिए अनुशंसित)
+- पूरे 70\+ skill router के लिए [**fish shell**](https://fishshell.com) (वैकल्पिक लेकिन अनुशंसित)
+
+## Install (source से build नहीं)
+
+अधिकांश उपयोगकर्ताओं को सीधे **`arka-agent`** पैकेज install करना चाहिए। आपको repo clone करने, `./scripts/refetch.sh` चलाने, या कुछ compile करने की ज़रूरत नहीं है — `pip` / `pipx` एक तैयार CLI download करता है।
+
+<Tabs>
+  <Tab title="pipx (अनुशंसित)">
+    Isolated install — रोज़ के टर्मिनल उपयोग के लिए सर्वश्रेष्ठ। [pipx](https://pipx.pypa.io) चाहिए।
+
+    ```bash
+    pipx install "arka-agent[chat]"
+    arka setup
+    arka doctor
+    ```
+
+    अगर PyPI 404 लौटाता है (publish जारी है), तो नवीनतम release सीधे GitHub से install करें — फिर भी **कोई लोकल build नहीं**:
+
+    ```bash
+    pipx install "arka-agent[chat] @ git+https://github.com/Sumit884-byte/arka.git"
+    arka setup
+    arka doctor
+    ```
+  </Tab>
+  <Tab title="pip / venv">
+    किसी मौजूदा virtual environment या user site-packages में install करें।
+
+    ```bash
+    python3 -m pip install "arka-agent[chat]"
+    arka setup
+    arka doctor
+    ```
+
+    GitHub fallback (clone नहीं):
+
+    ```bash
+    python3 -m pip install "arka-agent[chat] @ git+https://github.com/Sumit884-byte/arka.git"
+    arka setup
+    ```
+  </Tab>
+  <Tab title="Git clone (contributors)">
+    केवल तभी ज़रूरत जब आप **Arka खुद विकसित कर रहे हों** या repo patch कर रहे हों।
+
+    ```bash
+    git clone https://github.com/Sumit884-byte/arka.git
+    cd arka
+    ./scripts/refetch.sh --install
+    arka setup
+    ```
+  </Tab>
+  <Tab title="Editable dev">
+    लाइव कोड बदलावों के साथ repo के अंदर काम करने वाले contributors के लिए।
+
+    ```bash
+    git clone https://github.com/Sumit884-byte/arka.git && cd arka
+    python3 scripts/sync_bundled.py
+    pip install -e ".[chat]"
+    arka setup
+    ```
+  </Tab>
+</Tabs>
+
+<Check>
+  Install के बाद, `which arka` को pipx के venv या आपके सक्रिय Python environment के अंतर्गत एक path प्रिंट करना चाहिए। `arka doctor` चलाएँ — fish install होने पर आपको **Skills: full (70+)** दिखना चाहिए, अन्यथा **portable** mode।
+</Check>
+
+### किसी भी टर्मिनल से Arka उपयोग करें
+
+Install के बाद, एक **नया** टर्मिनल tab खोलें (ताकि PATH में pipx आ जाए) और चलाएँ:
+
+```bash
+arka ask "what is Rust?"
+arka "convert 100 USD to INR"
+arka route "summarize this repo"
+arka help
+```
+
+वैकल्पिक — [fish shell](https://fishshell.com) के साथ पूरे 70+ skill router को अनलॉक करें:
+
+```bash
+brew install fish          # macOS
+arka reload                # loads bundled config.fish
+```
+
+fish के बिना भी, Arka **portable** mode में काम करता है: `arka ask`, calc, weather, plugins, और MCP।
+
+## शुरू करें
+
+<Steps>
+  <Step title="API keys कॉन्फ़िगर करें">
+    उदाहरण env फ़ाइल कॉपी करें और कम से कम एक provider key जोड़ें।
+
+    ```bash
+    cp .env.example ~/.config/arka/.env
+    ```
+
+    त्वरित शुरुआत के लिए न्यूनतम `.env`:
+
+    ```env
+    GEMINI_API_KEY=your_key_here
+    GROQ_API_KEY=your_key_here
+    AI_PREFERRED_PROVIDER=gemini
+    AI_PREFERRED_MODEL=gemini-2.0-flash
+    AGENT_SPEAK=1
+    ```
+
+    <Note>
+      Config paths OS के अनुसार अलग होते हैं। Linux में `~/.config/arka/`, macOS में `~/Library/Application Support/arka/`, और Windows में `%APPDATA%\arka\`।
+    </Note>
+  </Step>
+  <Step title="Install जाँचें">
+    dependencies और API keys की पुष्टि के लिए diagnostics चलाएँ।
+
+    ```bash
+    arka doctor
+    ```
+  </Step>
+  <Step title="अपना पहला कमांड चलाएँ">
+    एक सवाल पूछें और देखें कि Arka उसे web-answer skill पर route करता है।
+
+    ```bash
+    arka ask "what is Rust?"
+    ```
+
+    कुछ और आज़माएँ:
+
+    ```bash
+    arka "convert 100 USD to INR"
+    arka council "should I learn Rust?"
+    arka quiz python
+    arka route "convert 100 USD to INR"
+    arka help
+    ```
+  </Step>
+  <Step title="Personalize करें (वैकल्पिक)">
+    interests चुनें और अपने अनुसार skill recommendations पाएँ।
+
+    ```bash
+    arka personalize wizard
+    arka personalize recommend
+    ```
+
+    interest tags और non-interactive flags के लिए देखें [Arka अनुभव को personalize करें](/hi/guides/personalize)।
+  </Step>
+  <Step title="fish shell install करें (वैकल्पिक)">
+    Fish पूरे 70\+ skill router को खोलता है। pip package में `config.fish` शामिल है।
+
+    ```bash
+    # macOS
+    brew install fish
+    
+    # Linux
+    apt install fish
+    
+    # Windows
+    arka "scoop install fish"
+    ```
+  </Step>
+</Steps>
+
+## वैकल्पिक extras
+
+| Extra | जोड़ता है |
+| --- | --- |
+| `[chat]` | Agno, web search, trafilatura, sympy, geopy |
+| `[voice]` | vosk, sounddevice |
+| `[pdf]` | PrivateGPT client |
+| `[charts]` | matplotlib |
+| `[all]` | ऊपर सब कुछ |
+
+```bash
+pip install "arka-agent[all]"
+```
+
+## अगले कदम
+
+sidebar को क्रम से देखें, या जो चाहिए वहाँ जाएँ:
+
+<CardGroup cols={2}>
+  <Card title="Arka के साथ कोड कैसे लिखें" icon="laptop-code" href="/hi/guides/code-with-arka">
+    रोज़ का coding workflow — setup, edits, review, CI, और Cursor MCP।
+  </Card>
+
+  <Card title="CLI reference" icon="terminal" href="/hi/guides/cli">
+    सभी commands, aliases, और subcommands।
+  </Card>
+
+  <Card title="Skills catalog" icon="puzzle-piece" href="/hi/guides/skills">
+    आप Arka से क्या-क्या करवा सकते हैं।
+  </Card>
+
+  <Card title="Routing कैसे काम करता है" icon="route" href="/concepts/routing">
+    Offline rules, LLM fallback, और correction layer।
+  </Card>
+
+  <Card title="LLM configuration" icon="brain" href="/concepts/llm">
+    Providers, failover, और per-skill models।
+  </Card>
+
+  <Card title="Configuration" icon="gear" href="/reference/configuration">
+    Env vars, precedence, और built-in defaults।
+  </Card>
+
+  <Card title="Voice" icon="microphone" href="/guides/voice">
+    Wake word, STT, और TTS setup।
+  </Card>
+
+  <Card title="Arka Council" icon="users" href="/hi/guides/council">
+    Multi-persona deliberation।
+  </Card>
+
+  <Card title="Changelog" icon="newspaper" href="/changelog/2026-07-13">
+    इस सप्ताह क्या नया है।
+  </Card>
+</CardGroup>

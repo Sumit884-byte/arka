@@ -1,0 +1,160 @@
+---
+title: "n8n 工作流自动化"
+description: "将 n8n 连接到 Arka 的远程 agent API 与经过验证的 webhook 收件箱 —— 支持会话连续性与双向触发。"
+keywords: ["n8n", "workflow", "automation", "webhook", "HTTP Request", "integration"]
+icon: "diagram-project"
+---
+
+[n8n](https://n8n.io/) 是一款工作流自动化工具。Arka 不附带单独的 n8n 服务器 —— 它暴露两个 HTTP 接口，供你在 n8n **HTTP Request** 节点中调用：
+
+| 端点 | Arka 服务 | 适用场景 |
+| --- | --- | --- |
+| `POST /v1/agent` | `arka serve`（端口 8765） | 完整的 agent 运行、编码画像、媒体处理 |
+| `POST /v1/inbox` | `arka webhook serve`（端口 8767） | 已验证的入站请求、会话连续性、静默令牌 |
+
+```bash
+# Inspect endpoints and copy-paste hints
+arka n8n status
+arka n8n example
+arka n8n example --json
+```
+
+## 前置条件
+
+1. 在 `~/.config/arka/.env` 中配置 Arka 环境变量（参见 [配置](/cn/guides/configuration)）。
+2. 至少启动一个 HTTP 监听器：
+
+```bash
+# Remote agent API (recommended for general automation)
+arka serve
+
+# Verified webhook inbox (recommended for multi-turn channel sessions)
+WEBHOOK_ENABLED=1 WEBHOOK_TOKEN=$REMOTE_TOKEN arka webhook serve
+```
+
+3. 确认健康状态：
+
+```bash
+curl -s http://127.0.0.1:8765/v1/health
+curl -s http://127.0.0.1:8767/v1/health -H "Authorization: Bearer $REMOTE_TOKEN"
+```
+
+## 环境变量
+
+| 变量 | 默认值 | 用途 |
+| --- | --- | --- |
+| `REMOTE_TOKEN` | 首次运行 `arka serve` 时生成 | `/v1/agent` 和 `/v1/health` 的 Bearer 令牌 |
+| `REMOTE_HOST` | `0.0.0.0` | 远程服务器的绑定地址 |
+| `REMOTE_PORT` | `8765` | 远程服务器端口 |
+| `ARKA_BACKEND_URL` | `http://127.0.0.1:8765` | 覆盖基础 URL（n8n 在其他主机、Railway 等） |
+| `WEBHOOK_ENABLED` | `0` | 必须为 `1` 才会启动 webhook 服务器 |
+| `WEBHOOK_TOKEN` | 回退到 `REMOTE_TOKEN` | `/v1/inbox` 的 Bearer 令牌 |
+| `WEBHOOK_HOST` | `127.0.0.1` | webhook 绑定地址 |
+| `WEBHOOK_PORT` | `8767` | webhook 端口 |
+| `MESSAGE_SESSIONS` | `1` | 启用后，收件箱使用 `source` + `chat_id` 保持会话连续性 |
+
+## n8n → Arka：HTTP Request（agent）
+
+当你想要完整的 Arka agent（技能、仓库上下文、编码画像）时使用它。
+
+**节点设置：**
+
+- **Method:** `POST`
+- **URL:** `http://127.0.0.1:8765/v1/agent`（或你的 `ARKA_BACKEND_URL`）
+- **Authentication:** Header `Authorization: Bearer {{ $env.REMOTE_TOKEN }}`
+- **Body (JSON):**
+
+```json
+{
+  "text": "{{ $json.prompt }}",
+  "remote_speak": false
+}
+```
+
+**响应：** 从 JSON 主体中读取 `output`。检查 `ok` 与 `exit_code`。
+
+运行 `arka n8n example` 可获得可直接粘贴使用的节点定义。
+
+## n8n → Arka：HTTP Request（收件箱 + 会话）
+
+用于带有 [Hermes 风格会话连续性](/cn/guides/hermes-features) 的、已验证的入站自动化。
+
+**节点设置：**
+
+- **Method:** `POST`
+- **URL:** `http://127.0.0.1:8767/v1/inbox`
+- **Authentication:** Header `Authorization: Bearer {{ $env.WEBHOOK_TOKEN }}`
+- **Body (JSON):**
+
+```json
+{
+  "text": "{{ $json.message }}",
+  "source": "n8n",
+  "chat_id": "{{ $json.session_id || 'default' }}"
+}
+```
+
+在多次工作流运行之间保持 `source` 和 `chat_id` 不变，以延续对话上下文。当 `MESSAGE_SESSION_CHANNEL` / `MESSAGE_SESSION_CHAT_ID` 匹配时，同样的会话键也可用于 `arka ask`。
+
+**响应：** `output`（当 `"silent": true` 时为空），以及 `source` 和 `chat_id`。
+
+## 会话连续性模式
+
+```text
+Workflow 1 (chat_id=deploy-42): "What failed in the last deploy?"
+Workflow 2 (chat_id=deploy-42): "Draft a rollback checklist."
+```
+
+两次 POST 都使用 `"source":"n8n"` 与 `"chat_id":"deploy-42"`。Arka 会在运行 agent 前注入之前的对话轮次。
+
+## Arka → n8n（双向）
+
+要把事件从 Arka 推送到 n8n：
+
+1. 在工作流中添加一个 **n8n Webhook** 触发器节点，并复制其 **Production URL**。
+2. 通过 shell 步骤、例行任务或 agent 生成的命令发起 POST：
+
+```bash
+curl -s "$N8N_WEBHOOK_URL" \
+  -H "Content-Type: application/json" \
+  -d '{"event":"arka.completed","task":"nightly-health","output":"All checks passed"}'
+```
+
+在 Arka 的 `.env` 中存储 `N8N_WEBHOOK_URL`。对于定时推送，建议使用 [例行任务](/cn/guides/openclaw-features)，或让 n8n **Schedule** 触发器改为轮询 Arka 的健康状态。
+
+## Railway 托管选项
+
+要获得一个云托管的 Arka API（编码画像），可使用 Railway 画像部署，并让 n8n 指向公网 URL：
+
+```bash
+arka deploy --platform railway --yes
+export ARKA_BACKEND_URL="https://your-arka.up.railway.app"
+export REMOTE_TOKEN="your-railway-remote-token"
+arka n8n status
+```
+
+在 Railway Variables 中设置 `REMOTE_TOKEN` 和提供商 API key。完整的托管步骤参见 [将编码技能部署到 Railway](/cn/guides/railway-coding-skills)。请优先使用 HTTPS，并将令牌保存在 n8n 凭据中 —— 而不是工作流的 JSON 导出里。
+
+## CLI 参考
+
+```bash
+arka webhook serve          # start verified inbox
+arka webhook status         # listener status
+arka webhook status --json
+arka n8n status             # endpoints + n8n hints
+arka n8n example            # curl + HTTP Request JSON
+```
+
+## 故障排查
+
+| 现象 | 解决方法 |
+| --- | --- |
+| `401 unauthorized` | 让 `Authorization: Bearer` 令牌与 Arka `.env` 中的 `REMOTE_TOKEN` / `WEBHOOK_TOKEN` 相匹配 |
+| Webhook 无法启动 | 设置 `WEBHOOK_ENABLED=1` 和 `WEBHOOK_TOKEN`（或 `REMOTE_TOKEN`） |
+| 多次运行之间没有会话记忆 | 使用 `/v1/inbox`，保持 `source` + `chat_id` 稳定；确认 `MESSAGE_SESSIONS=1` |
+| n8n 超时 | 调大 HTTP Request 超时（默认 agent：600s；webhook：300s） |
+| 本地可用，n8n Cloud 却不行 | 通过 HTTPS 隧道/反向代理暴露，或使用 Railway 托管的 Arka |
+
+<Note>
+  运行工作流前先启动监听器。使用 `arka webhook status` 与 `arka n8n status` 可以在不触发 agent 的情况下核对 URL 与令牌。
+</Note>

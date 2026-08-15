@@ -1,0 +1,52 @@
+---
+title: "配置"
+description: "安全、感知硬件的 Arka 默认设置与首次运行配置。"
+icon: "gear"
+---
+
+在不写入任何内容的前提下预览推荐配置：
+
+```bash
+arka setup --configure --json
+```
+
+显式应用它：
+
+```bash
+arka setup --configure --apply
+```
+
+该配置文件是本地优先且感知硬件的。它偏好可运行的本地后端，保持符号路由
+优先，启用回退和本地内存，并对高风险写入要求预览。缺失的云凭据被视为
+正常的回退条件；设置过程绝不会创建或复制密钥。
+
+只查看或重置 Arka 所管理的配置：
+
+```bash
+arka config show --json
+arka config reset
+```
+
+环境变量和项目 `.env` 中的值优先于托管默认值。应用配置文件时会保留已有
+的值。
+
+## 分享配置
+
+导出一份可移植、可安全分享的包：
+
+```bash
+arka config share export --out arka-config-share.json
+```
+
+该包包含托管默认值、模型/服务提供商偏好，以及选定的非敏感环境值。API
+密钥、token、密码、Cookie、Webhook 密钥和其他凭据绝不会被导出；它们会
+在 `required_env` 下列出，接收方就知道需要在本地填写哪些值。
+
+除非传入 `--apply`，否则导入仅为预览：
+
+```bash
+arka config share import arka-config-share.json --json
+arka config share import arka-config-share.json --apply
+```
+
+自然语言也可以："share my Arka config" 会路由到分享导出。

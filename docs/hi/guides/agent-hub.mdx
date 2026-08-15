@@ -1,0 +1,259 @@
+---
+title: "Agent Hub"
+description: "ollama launch agents के लिए साझा MCP, memory, और skills — एक Arka-managed hub जिसे Claude Code, Hermes, OpenClaw, और अन्य agents consume कर सकते हैं।"
+keywords: ["agent hub", "ollama launch", "mcp", "shared memory", "openclaw", "hermes", "unification"]
+icon: "sitemap"
+---
+
+**Arka Agent Hub** `ollama launch` से launch किए गए coding agents के लिए एक साझा interoperability layer है। Arka external agents को patch या fork नहीं करता। इसके बजाय, यह canonical config files export करता है, opt-in करने पर ज्ञात agent paths में MCP merge करता है, और environment variables सेट करता है जिन्हें कोई भी agent पढ़ सकता है।
+
+## क्या साझा होता है
+
+| Hub path | Source | Purpose |
+| --- | --- | --- |
+| `~/.config/arka/hub/mcp.json` | `~/.config/arka/mcp.json` | एकल MCP config (Cursor-compatible) |
+| `~/.config/arka/hub/memory/summary.json` | unified memory \+ sessions | Lightweight facts और session index |
+| `~/.config/arka/hub/memory/context.md` | unified memory \+ sessions | Human-readable context bundle |
+| `~/.config/arka/hub/memory/README.md` | generated | प्रत्येक agent को context कैसे load करना है |
+| `~/.config/arka/hub/skills/manifest.json` | `discover_skills()` | Installed Arka skills जो अन्य agents पढ़ सकते हैं |
+| `~/.config/arka/hub/skills/INSTALL.md` | generated | Skill install instructions |
+| `~/.config/arka/hub/launch.env` | generated | किसी भी agent के लिए sourceable env contract |
+| `~/.config/arka/hub/agents.json` | static registry | Agent catalog \+ last sync timestamps |
+
+## त्वरित शुरुआत
+
+```bash
+# Export-only sync (v1 behavior — कोई agent config writes नहीं)
+arka agent_hub sync
+
+# Full unification: MCP को agent configs + memory tails में merge करें
+arka agent_hub sync --unify
+
+# Supported ollama launch agents सूचीबद्ध करें
+arka agent_hub list
+
+# Shared env vars के साथ launch करें (default में पहले sync करता है)
+arka agent_hub launch claude
+arka agent_hub launch hermes
+arka agent_hub launch openclaw
+
+# जाँचें इस मशीन पर कौन-से agent configs मौजूद हैं
+arka agent_hub detect
+
+# Per-agent MCP merge status दिखाएँ
+arka agent_hub adapters
+arka agent_hub tools
+
+# Memory export को वापस Arka में import करें
+arka agent_hub import-memory path/to/export.json
+
+# MCP से: IDE memory sources सूचीबद्ध करें, फिर import करें
+arka mcp call arka arka_agent_hub --args '{"action":"memory_sources"}'
+arka mcp call arka arka_agent_hub --args '{"action":"import_memory","all":true}'
+
+# Sync state और unify status जाँचें
+arka agent_hub status
+
+# ollama + hub paths + per-agent unify status verify करें
+arka agent_hub doctor
+```
+
+fish से:
+
+```fish
+arka agent_hub sync
+arka agent_hub sync --unify
+arka agent_hub detect
+arka agent_hub launch claude
+source ~/.config/arka/hub/launch.env
+```
+
+प्राकृतिक भाषा:
+
+```fish
+arka "sync agent hub"
+arka "launch claude code"
+arka "shared mcp for agents"
+arka "detect agent hub configs"
+```
+
+## Full unification (v2)
+
+**Export-only** (`agent_hub sync`) hub files copy करता है और `launch.env` लिखता है — सुरक्षित, कोई external config changes नहीं।
+
+**Full unification** (`agent_hub sync --unify`) अतिरिक्त रूप से:
+
+1. **MCP merge** — प्रत्येक agent के ज्ञात config path में hub `mcpServers` जोड़ता है (missing होने पर file बनाता है)। मौजूदा user servers तब तक संरक्षित रहते हैं जब तक आप `--replace` पास न करें।
+2. **Memory bundle** — `context.md`, `memory/README.md` लिखता है, और वैकल्पिक रूप से OpenClaw `MEMORY.md` का tail `hub/memory/openclaw_memory_tail.md` में copy करता है।
+3. **Skills docs** — manifest paths और env vars के साथ `skills/INSTALL.md` लिखता है।
+4. **Launch contract** — पूरे env var set के साथ `launch.env` फिर से generate करता है।
+
+```bash
+# सुरक्षित merge (केवल missing MCP servers जोड़ें)
+arka agent_hub sync --unify
+
+# Destructive: agent MCP को hub servers से replace करें
+arka agent_hub sync --unify --replace
+```
+
+`--unify` चलने से पहले, Arka आपकी config directory का auto-backup `config/backups/arka-config-YYYY-MM-DD.tar.gz` पर लेता है (default चालू)। `ARKA_CONFIG_BACKUP_ON_UNIFY=0` से disable करें, या कभी भी `arka config backup` manually चलाएँ।
+
+देखने के लिए कि कौन-सी config files locally मौजूद हैं `agent_hub detect` उपयोग करें, क्या merge होगा या पहले से merged है यह देखने के लिए `agent_hub adapters`, और credentials expose किए बिना exported MCP servers सूचीबद्ध करने के लिए `agent_hub tools`।
+
+## Supported agents
+
+| Key | Name | Launch command |
+| --- | --- | --- |
+| `claude` | Claude Code | `ollama launch claude` |
+| `codex-app` | Codex App | `ollama launch codex-app` |
+| `hermes` | Hermes Agent | `ollama launch hermes` |
+| `openclaw` | OpenClaw | `ollama launch openclaw` |
+| `opencode` | OpenCode | `ollama launch opencode` |
+| `codex` | Codex CLI | `ollama launch codex` |
+| `copilot` | GitHub Copilot Agent | `ollama launch copilot` |
+| `droid` | Droid | `ollama launch droid` |
+| `pi` | Pi Agent | `ollama launch pi` |
+
+प्रत्येक agent में documented MCP config paths हैं (Cursor, Claude Desktop, `~/.codex/mcp.json`, आदि)। `sync --unify` उस agent के लिए सभी paths में merge करता है।
+
+## Environment contract
+
+जब आप `agent_hub launch` चलाते हैं या `launch.env` source करते हैं, Arka सेट करता है:
+
+| Variable | Points to |
+| --- | --- |
+| `ARKA_HUB_DIR` | Hub root (`~/.config/arka/hub/`) |
+| `ARKA_MCP_CONFIG` | Hub MCP config |
+| `ARKA_MEMORY_DIR` | Hub memory exports |
+| `ARKA_CONTEXT_MD` | Human-readable `memory/context.md` |
+| `ARKA_SKILLS_MANIFEST` | Skills manifest JSON |
+| `ARKA_SKILLS_DIR` | Skills directory |
+| `MCP_CONFIG` | `ARKA_MCP_CONFIG` जैसा ही (उन agents के लिए जो इसे पढ़ते हैं) |
+
+Agent-specific aliases (केवल जहाँ documented हैं):
+
+| Agent | Extra variable |
+| --- | --- |
+| OpenClaw | `OPENCLAW_MCP_CONFIG` → hub MCP path |
+| Claude / Codex / Copilot | plugin dirs के लिए `ARKA_SKILLS_DIR` |
+
+```bash
+source ~/.config/arka/hub/launch.env
+```
+
+## Memory import
+
+Hub exports, session notes, या IDE-specific stores (Cursor rules, Codex `AGENTS.md`, OpenClaw `MEMORY.md`, और अधिक) से **Arka में** memory import करें। Imported text unified memory या session notes में लिखने से पहले Arka security gates से गुज़रता है।
+
+### CLI
+
+```bash
+# स्पष्ट JSON या markdown export
+arka agent_hub import-memory ~/.config/arka/hub/memory/summary.json
+arka agent_hub import-memory ./notes.md
+```
+
+### MCP (Cursor, Claude Code, VS Code)
+
+किसी भी connected MCP client से `arka_agent_hub` उपयोग करें:
+
+```json
+{ "action": "memory_sources" }
+```
+
+Source id के अनुसार grouped importable files लौटाता है, उदाहरण के लिए `arka_session`, `cursor`, `arka_hub`, या `agent:openclaw`।
+
+```json
+{ "action": "import_memory", "source": "cursor" }
+{ "action": "import_memory", "source": "agent:claude" }
+{ "action": "import_memory", "all": true }
+{ "action": "import_memory", "path": "/path/to/export.json" }
+```
+
+विशिष्ट workflow:
+
+1. देखने के लिए कि इस मशीन पर कौन-सी IDE files मौजूद हैं `memory_sources` call करें।
+2. एक source (`source`) या सब कुछ detected (`all: true`) import करें।
+3. `arka memory status` या MCP से `arka_recall` से पुष्टि करें।
+
+Terminal से:
+
+```bash
+arka mcp call arka arka_agent_hub --args '{"action":"memory_sources"}'
+arka mcp call arka arka_agent_hub --args '{"action":"import_memory","all":true}'
+```
+
+### Supported IDE memory locations
+
+| Source id | IDE / agent | Paths scanned |
+| --- | --- | --- |
+| `arka_session` | Arka | `~/.config/arka/agent-memory/MEMORY.md` |
+| `arka_hub` | Arka Hub export | `hub/memory/summary.json`, `hub/memory/context.md` |
+| `cursor` | Cursor | `~/.cursor/rules/*.mdc` (user rules directory) |
+| `vscode_copilot` | VS Code / Copilot | `~/.github/copilot-instructions.md` |
+| `agent:openclaw` | OpenClaw | `~/.openclaw/MEMORY.md`, `~/.config/openclaw/MEMORY.md` |
+| `agent:claude` | Claude Code | session `MEMORY.md`, Claude project files |
+| `agent:codex` | Codex CLI / App | `~/.codex/AGENTS.md` |
+
+केवल locally मौजूद files ही `memory_sources` से लौटती हैं। Empty files को import result में error के साथ skip किया जाता है।
+
+### Formats
+
+| Format | व्यवहार |
+| --- | --- |
+| JSON (`summary.json`) | `facts` को unified memory में और `long_term_notes` को session notes में import करता है |
+| Markdown (`.md`, `.mdc`) | प्रत्येक गैर-empty bullet या line एक long-term session note बनती है |
+
+## MCP adapters
+
+`agent_hub sync` `~/.config/arka/hub/adapters/` के अंतर्गत **snippet files** लिखता है जो दिखाती हैं कि hub MCP servers को Cursor या Claude Desktop configs में कैसे merge करें।
+
+`--unify` के साथ, Arka hub servers को प्रत्येक agent के documented MCP paths में सीधे merge करता है (default में add-only)।
+
+Agent MCP को hub servers से पूरी तरह overwrite करने के लिए:
+
+```bash
+arka agent_hub sync --unify --replace
+```
+
+Legacy `--force` अभी भी Cursor/Claude Desktop adapter targets में merge करता है।
+
+## Scoped export (edge / ClawBox)
+
+Always-on edge devices (Jetson Orin, ClawBox) पर, hub क्या export करता है इसे सीमित करें ताकि shared context shared trust न बने:
+
+```env
+ARKA_MEMORY_TRUST_MAX=team
+ARKA_HUB_MEMORY_SCOPE=team:clawbox
+```
+
+| Setting | प्रभाव |
+| --- | --- |
+| `ARKA_MEMORY_TRUST_MAX` | Recall और hub export को `global`, `team`, `workflow`, या `run` tier तक सीमित करता है |
+| `ARKA_HUB_MEMORY_SCOPE` | Hub `summary.json` / `context.md` को एक team (जैसे `team:clawbox`) तक filter करता है |
+
+**अनुशंसित edge pattern:**
+
+```bash
+# Export-only — agent configs में कोई writes नहीं
+arka agent_hub sync
+
+# Edge पर sync --unify तब तक न चलाएँ जब तक आप agent configs में MCP merge करने का इरादा न रखें
+source ~/.config/arka/hub/launch.env
+```
+
+Hub exports में facts पर `trust_tier` और `provenance` शामिल है और scoped workflow memory के लिए एक `scratchpad_preview` है।
+
+Template से एक scoped team बनाएँ:
+
+```bash
+arka team create clawbox --template clawbox-edge
+```
+
+## संबंधित guides
+
+- [MCP integration](/hi/guides/mcp) — `~/.config/arka/mcp.json` में servers configure करें
+- [Memory](/guides/memory) — hub में exported unified memory layers
+- [Skills](/hi/guides/skills) — skills manifest में सूचीबद्ध plugins
+- [OpenClaw-inspired features](/guides/openclaw-features) — session memory और skill gates
+- [Hermes-inspired features](/guides/hermes-features) — channel sessions और sub-agents

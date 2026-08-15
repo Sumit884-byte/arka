@@ -1,0 +1,15 @@
+---
+title: "脚本理解记忆"
+description: "让 Arka 记住它经常使用的脚本。"
+icon: "file-code"
+---
+
+让 Arka 记住它经常使用的脚本：
+
+```bash
+arka understand-script show scripts/build.py
+arka understand-script remember scripts/build.py
+arka understand-script list
+```
+
+Arka 会本地记录脚本的函数、导入、行数和 CLI 提示的摘要。之后的编码和路由任务可以直接使用这份摘要，而无需重新发现脚本结构。分析时不会执行脚本。「remember this script tools/build.py」这类自然语言也支持。

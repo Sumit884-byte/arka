@@ -1,0 +1,15 @@
+---
+title: "Spreadsheet निर्माण"
+description: "Arka से CSV और Excel workbooks generate करें।"
+icon: "table-cells"
+---
+
+एक preset या schema से workbook बनाएँ:
+
+```bash
+arka spreadsheet users --count 50 --output users.xlsx
+arka spreadsheet sales --count 100 --output sales.xlsx
+```
+
+Arka मौजूदा data generator का उपयोग करता है, CSV/TSV/JSON/XLSX output का समर्थन करता है,
+और generator के output नियमों के अनुसार असुरक्षित overwrites से इनकार करता है।

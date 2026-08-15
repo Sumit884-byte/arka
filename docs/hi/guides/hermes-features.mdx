@@ -1,0 +1,150 @@
+---
+title: "Channel sessions और sub-agent delegation"
+description: "Webhooks और CLI के लिए प्रति-channel session निरंतरता, silence tokens, और isolated background sub-agents।"
+keywords: ["message sessions", "subagent", "gateway", "cross-platform", "channel"]
+icon: "sitemap"
+---
+
+Arka **channel sessions** और **sub-agent delegation** प्रदान करता है — [Hermes Agent](https://github.com/NousResearch/hermes-agent) से प्रेरित patterns, कोई अलग product integration नहीं। ये प्रति-channel conversation निरंतरता, webhook session handoff, और isolated background sub-agents जोड़ते हैं।
+
+## Features
+
+| अवधारणा | Arka feature |
+| --- | --- |
+| प्रति-chat session store | `arka session` — `channel:chat_id` द्वारा keyed |
+| Cross-platform निरंतरता | जब `channel`/`chat_id` मेल खाते हैं तो Webhook \+ `arka ask` समान session साझा करते हैं |
+| Silence tokens | `[SILENT]`, `NO_REPLY` webhook outbound delivery को दबाते हैं |
+| Sub-agent delegation | `subagent spawn` — isolated background agent कार्य |
+
+Arka पूर्ण gateway adapters (Telegram, Discord, आदि) **नहीं** भेजता। [Webhook ingress](/hi/guides/openclaw-features) और channel bridges का उपयोग करें, फिर उनके ऊपर channel sessions attach करें।
+
+## Message sessions
+
+`~/.config/arka/message-sessions/` के तहत संग्रहीत प्रति-channel conversation turns:
+
+```bash
+arka session push cli default user "Start the deploy checklist"
+arka session push cli default assistant "Step 1: run tests"
+arka session context cli default
+arka session resume cli default
+arka session list
+arka session reset telegram 123456789
+arka session status
+```
+
+Sessions `channel:chat_id` के रूप में keyed होते हैं (उदा. `webhook:slack`, `cli:default`, `telegram:987654321`)।
+
+### CLI निरंतरता
+
+जब `MESSAGE_SESSIONS=1` (default) हो, तो `arka ask` और chat engine स्वचालित रूप से `cli:default` session को पढ़ते और लिखते हैं (`MESSAGE_SESSION_CHANNEL` और `MESSAGE_SESSION_CHAT_ID` से override करें)। Terminal में एक thread शुरू करें, समान channel और chat ID के साथ webhook से जारी रखें, या इसके विपरीत।
+
+### Webhook निरंतरता
+
+जब `WEBHOOK_ENABLED=1` हो, तो inbound POST bodies में शामिल हो सकते हैं:
+
+```json
+{
+  "text": "What's the deploy status?",
+  "channel": "telegram",
+  "chat_id": "123456789"
+}
+```
+
+Arka user turn append करता है, prior session context को agent prompt में inject करता है, assistant reply को store करता है, और response में `chat_id` लौटाता है।
+
+### Silence tokens
+
+स्पष्ट silence tokens group chats और automations को outbound text भेजे बिना एक turn store करने देते हैं:
+
+- `[SILENT]`
+- `SILENT`
+- `NO_REPLY`
+- `NO REPLY`
+
+जब agent का final response इनमें से एक ही हो (case-insensitive), तो webhook `"silent": true` और खाली `output` फ़ील्ड लौटाता है। Turn अभी भी session transcript में store होता है।
+
+External MCP clients `arka_sessions` action `silence_check` के साथ समान tokens की जाँच कर सकते हैं (लौटाता है `{ "silent": true|false, "tokens": [...] }`)।
+
+### Environment variables
+
+| Variable | Default | उद्देश्य |
+| --- | --- | --- |
+| `MESSAGE_SESSIONS` | `1` | सक्षम करें (अक्षम के लिए `0`) |
+| `MESSAGE_SESSIONS_DIR` | `~/.config/arka/message-sessions` | Storage root |
+| `MESSAGE_SESSION_IDLE_MINUTES` | `0` | Idle मिनटों के बाद auto-reset (`0` = कभी नहीं) |
+| `MESSAGE_SESSION_MAX_TURNS` | `40` | प्रति session रखी अधिकतम turns |
+| `MESSAGE_SESSION_CHANNEL` | `cli` | CLI chat के लिए default channel |
+| `MESSAGE_SESSION_CHAT_ID` | `default` | CLI chat के लिए default chat ID |
+
+Legacy `HERMES_SESSIONS*` variables aliases के रूप में समर्थित रहते हैं।
+
+Inbound turns sanitized होते हैं — injection patterns और unsafe content storage से पहले ब्लॉक किए जाते हैं।
+
+## Sub-agent delegation
+
+Parallel workstreams के लिए isolated background agents spawn करें:
+
+```bash
+arka subagent spawn "Summarize today's git log"
+arka subagent list
+arka subagent resume abc123def4
+arka subagent status
+```
+
+हर sub-agent Python chat engine के ज़रिए चलता है (fish `agent` fallback के साथ)। Task records `~/.cache/fish-agent/subagents/` के तहत रहते हैं।
+
+### Security gates
+
+| Gate | कब ब्लॉक करता है |
+| --- | --- |
+| `SUBAGENT_SECURITY=1` | जब task `SECURITY_LLM` prompt verification में विफल हो |
+| `arka "SUBAGENT_MAX"` | जब concurrent running agents सीमा से अधिक हों |
+| `arka "SUBAGENT_MAX_CHARS"` | जब task text बहुत लंबा हो |
+
+Synchronously चलाने के लिए (tests में उपयोग) `SUBAGENT_SYNC=1` सेट करें।
+
+### Environment variables
+
+| Variable | Default | उद्देश्य |
+| --- | --- | --- |
+| `arka "SUBAGENT_ENABLED"` | `1` | सक्षम करें (अक्षम के लिए `0`) |
+| `arka "SUBAGENT_DIR"` | `~/.cache/fish-agent/subagents` | Storage root |
+| `arka "SUBAGENT_MAX"` | `3` | अधिकतम concurrent background agents |
+| `arka "SUBAGENT_TIMEOUT"` | `600` | प्रति-agent timeout (सेकंड) |
+| `arka "SUBAGENT_SECURITY"` | `1` | Spawn कार्यों पर security gates लागू करें |
+
+Legacy `HERMES_SUBAGENT*` variables aliases के रूप में समर्थित रहते हैं।
+
+Sub-agents `--session-channel` और `--session-chat-id` के ज़रिए किसी message session से attach हो सकते हैं।
+
+## Background process स्थिति
+
+`arka background processes` का उपयोग तब करें जब आप एक जगह देखना चाहें कि Arka के पास वर्तमान में क्या सक्रिय है:
+
+```bash
+arka background processes
+arka background processes --json
+```
+
+Report में सक्रिय sub-agent tasks, enabled routines, webhook status, configured MCP servers, और `arka mcp serve` जैसी Arka-owned दिखने वाली live OS processes शामिल हैं। Legacy कमांड `arka background agent tasks` अभी भी alias के रूप में काम करता है।
+
+यह कमांड read-only है। यह agents, routines, या servers को रोकता या फिर से शुरू नहीं करता।
+
+## Skill manifest gates
+
+Plugin gates `metadata.openclaw`, `metadata.arka`, या `metadata.hermes` का उपयोग करते हैं — सभी उसी तरह merged। विवरण के लिए [OpenClaw से प्रेरित gates](/hi/guides/openclaw-features) देखें।
+
+## Heartbeat integration
+
+`heartbeat status` channel session और sub-agent counts report करता है:
+
+```bash
+arka heartbeat status
+```
+
+## संबंधित features
+
+- [Context layers](/hi/guides/memory#context-layers) — कैसे memory, session notes, और channel turns एक साथ फिट होते हैं
+- [Session memory](/hi/guides/openclaw-features) — दीर्घकालिक markdown notes (`MEMORY.md`)
+- [Webhooks](/hi/guides/openclaw-features) — verified external ingress
+- [Security](/hi/concepts/security) — global `SECURITY`, `SECURITY_LLM`, और `SECURITY_ACTIONS` flags

@@ -1,0 +1,25 @@
+---
+title: "确定性编码工作流"
+description: "让 Arka 的技能使用对编码智能体变得明确。"
+icon: "diagram-project"
+---
+
+在执行前预览一个工作流：
+
+```bash
+arka coding-workflow feature --task "add rate limiting"
+arka coding-workflow bugfix --task "fix the timeout regression" --run
+arka coding-workflow frontend --task "implement the approved screenshot" --run
+arka coding-workflow exhaustive --task "audit and improve this project"
+```
+
+工作流会列出确切的技能调用序列，这样编码模型就无需推断自定义
+技能名。执行仍然需要审批；在提交前请审阅生成的修改和 CI 结果。
+
+`exhaustive` 会发现所有公开的智能体技能，把每一项放入 inspect/plan
+阶段，并以 lint、CI、review 和仓库健康检查作为收尾。这样能在
+不要求编码模型记忆自定义技能名的情况下明确暴露完整技能面。
+Inspect/plan 步骤不会自动改动代码。
+
+编码提示词也会告诉 Arka 先审视现有技能、MCP 工具以及集成/库
+适配器，然后集成相关工具，而不是重新实现已经存在的功能。

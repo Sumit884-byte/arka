@@ -1,0 +1,15 @@
+---
+title: "Research optimization"
+description: "Arka से reproducible bounded parameter optimization चलाएँ।"
+icon: "gauge-high"
+---
+
+```bash
+arka optimize "(x - 3)**2" --bounds=-10,10 --iterations 200 --seed 7
+arka optimize "(x - 3)**2" --json
+```
+
+यह एक मौलिक, छोटा evolutionary search है जिसमें fixed seed और bounded arithmetic
+objective है। यह PaGMO2 की population-based और reproducible optimization concepts
+से प्रेरित है; PaGMO2 में GPL-3.0 और LGPL-3.0 components हैं, इसलिए Arka इसके
+source को copy या link नहीं करता।

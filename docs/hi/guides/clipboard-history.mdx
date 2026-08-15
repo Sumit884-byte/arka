@@ -1,0 +1,33 @@
+---
+title: "Clipboard history"
+description: "Terminal से हाल की clipboard entries सहेजें, सूचीबद्ध करें और restore करें।"
+keywords: ["clipboard", "history", "paste", "copy"]
+icon: "clipboard"
+---
+
+Clipboard snippets का rolling history रखें — तब उपयोगी जब आप terminals और apps के बीच copy-paste करते हैं।
+
+## Natural language
+
+```bash
+arka save clipboard to history
+arka show clipboard history
+arka paste clipboard entry 2
+arka clear clipboard history
+```
+
+## CLI commands
+
+| Command | विवरण |
+| ------- | ----------- |
+| `clipboard_history save` | वर्तमान clipboard को history में सहेजें |
+| `clipboard_history list` | हाल की entries सूचीबद्ध करें (सबसे नई पहले) |
+| `clipboard_history paste <index>` | Entry को system clipboard पर restore करें |
+| `clipboard_history paste <index> --stdout` | Entry को stdout पर print करें |
+| `clipboard_history clear` | History मिटाएँ |
+
+Platform clipboard tools का उपयोग करता है (macOS पर `pbcopy`/`pbpaste`, Linux पर `xclip` या `wl-copy`)। आपकी Arka config directory में 50 entries तक store करता है।
+
+<Note>
+  Basic `clipboard` fish skill अभी भी वर्तमान clipboard को copy या show करता है। जब आप persistent recall चाहते हैं तो `clipboard_history` का उपयोग करें।
+</Note>

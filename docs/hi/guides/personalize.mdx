@@ -1,0 +1,93 @@
+---
+title: "अपने Arka अनुभव को personalize करें"
+description: "Onboarding wizard जो आपके interests सहेजता है और उदाहरण commands के साथ built-in skills की सिफ़ारिश करता है — LLM की ज़रूरत नहीं।"
+keywords: ["onboarding", "personalize", "skills", "getting started"]
+icon: "user-gear"
+---
+
+`arka personalize` नए उपयोगकर्ताओं को जल्दी शुरू करने में मदद करता है। एक छोटा प्रश्नावली दें (या flags पास करें), profile को `~/.config/arka/personalize.json` पर सहेजें, और उदाहरण commands के साथ ranked skill recommendations देखें।
+
+## त्वरित शुरुआत
+
+```bash
+arka personalize wizard
+arka personalize recommend
+arka personalize quickstart
+```
+
+Non-interactive (CI, scripts, या बिना TTY के):
+
+```bash
+arka personalize wizard --interests finance,pdf --experience beginner --platform mac -y
+```
+
+## प्राकृतिक भाषा
+
+```bash
+arka personalize me
+arka recommend skills
+arka what skills should I use
+arka get started with arka
+```
+
+## Commands
+
+| Command | यह क्या करता है |
+| --- | --- |
+| `personalize` / `personalize wizard` | Interactive प्रश्नावली; profile सहेजता है |
+| `personalize recommend` | सहेजे गए interests से ranked skills |
+| `personalize status` | सहेजा गया profile दिखाएँ |
+| `personalize reset` | Profile साफ़ करें |
+| `personalize quickstart` | 5-step checklist (setup → doctor → personalize → top skills आज़माएँ) |
+
+## Interest tags
+
+Wizard चलाते समय कोई भी संयोजन चुनें:
+
+| Tag | Covers |
+| --- | --- |
+| `finance` | Stocks, currency, daily brief, price checks |
+| `pdf` | PDFs को merge/compress करना, PDF Q&A |
+| `voice` | Wake word, STT, TTS |
+| `dev` | GitHub, Docker, repo health, PR checks |
+| `productivity` | Reminders, routines, bookmarks |
+| `research` | Web search, YouTube research, data Q&A |
+| `google` | Gmail, Calendar OAuth |
+| `memory` | Unified memory, session notes |
+| `media` | YouTube, slides, video, thumbnails |
+
+## उदाहरण output
+
+```text
+Your profile: finance, pdf (beginner)
+
+Recommended skills:
+  1. pdf_tools — Merge, split, compress, and edit PDFs
+     Try: pdf_tools merge a.pdf b.pdf -o combined.pdf
+  2. stocks [needs GROQ_API_KEY] — Stock quotes, fundamentals, and market context
+     Try: stocks AAPL
+```
+
+Gated skills recommendations में दिखते हैं लेकिन उन पर छूट का उल्लेख होता है (API key, binary, या OS)।
+
+## Profile फ़ाइल
+
+`~/.config/arka/personalize.json` पर सहेजा जाता है:
+
+```json
+{
+  "interests": ["finance", "pdf"],
+  "experience": "beginner",
+  "platforms": ["mac"],
+  "has_api_keys": true,
+  "uses_fish": true,
+  "completed_at": "2026-07-11T12:00:00Z",
+  "onboarding_done": true
+}
+```
+
+## संबंधित
+
+- [Quickstart](/hi/quickstart) — install और पहला कमांड
+- [Skills catalog](/hi/guides/skills) — built-in skills की पूरी सूची
+- [Select model](/guides/select-model) — onboarding के बाद hardware-aware LLM picks

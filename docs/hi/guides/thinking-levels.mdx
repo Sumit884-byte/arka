@@ -1,0 +1,20 @@
+---
+title: "Thinking levels"
+description: "उन मॉडलों के लिए portable reasoning depth चुनें जिनमें native thinking controls नहीं हैं।"
+icon: "brain"
+---
+
+उन मॉडलों के लिए portable reasoning depth चुनें जो native thinking controls
+expose नहीं करते:
+
+```bash
+arka thinking off
+arka thinking low
+arka thinking medium
+arka thinking high
+arka thinking
+```
+
+यह preference लोकल स्तर पर स्टोर होती है और model prompts में guidance के रूप में
+जोड़ी जाती है। Native reasoning-capable मॉडल अपने provider controls रखते हैं; यह
+सेटिंग सामान्य chat/completion मॉडलों को एक सुसंगत user-facing depth selector देती है।

@@ -1,0 +1,16 @@
+---
+title: "पहले design करें, अनुमोदन के बाद build करें"
+description: "Code changes से पहले Arka implementation plans को draft, review, redo और approve करें।"
+icon: "palette"
+---
+
+```bash
+arka design plan "build a dashboard for local model benchmarks"
+arka design show
+arka design redo "include offline support and a CSV export"
+arka design accept
+arka design build --yes
+```
+
+`design plan` और `design redo` project को modify नहीं करते। `design build` तब तक
+blocked रहता है जब तक draft accept नहीं हो जाता, planning को execution से अलग रखते हुए।

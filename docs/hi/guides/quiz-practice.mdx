@@ -1,0 +1,52 @@
+---
+title: "Quiz practice"
+description: "किसी भी topic पर memory के साथ अनंत quiz practice — Arka कभी भी वह प्रश्न नहीं दोहराता जो आप देख चुके हैं।"
+keywords: ["quiz", "practice", "learning", "trivia", "memory"]
+icon: "graduation-cap"
+---
+
+**Quiz practice** एक topic पर अनूठे प्रश्न generate करता है, आपके answers score करता है, और तब तक जारी रहता है जब तक आप रुकते नहीं। पहले पूछे गए प्रश्न याद रखे जाते हैं ताकि आपको हमेशा कुछ नया मिले।
+
+## Quick start
+
+```bash
+arka quiz python
+arka quiz practice rust loops
+arka quiz me on world history
+arka practice quiz biology mitosis
+```
+
+## Interactive flow
+
+1. Arka एक प्रश्न पूछता है
+2. आप एक answer type करते हैं
+3. Arka score और explain करता है
+4. अगला unique प्रश्न
+
+रुकने के लिए **Ctrl+C** दबाएँ या खाली answer enter करें।
+
+## Commands
+
+| Command | विवरण |
+| --- | --- |
+| `arka quiz <topic>` | एक topic पर quiz शुरू करें या जारी रखें |
+| `arka quiz_practice <topic> --count 1` | एक प्रश्न, फिर score |
+| `arka quiz_practice <topic> --reset` | उस topic के लिए memory clear करें |
+| `arka quiz_practice list` | Active topics और question counts दिखाएँ |
+
+## Memory
+
+Per-topic history यहाँ stored है:
+
+```
+~/.config/arka/quiz-memory/<topic-slug>.json
+```
+
+प्रत्येक file `asked` questions और `scores` को track करती है ताकि LLM दोहराव से बच सके।
+
+## Routing
+
+```bash
+arka route "quiz me on python decorators"
+# → quiz_practice 'python decorators'
+```

@@ -1,0 +1,31 @@
+---
+title: "成本与性能护栏"
+description: "让开发期的推理花费、tokens 与延迟保持可见。"
+icon: "shield-halved"
+---
+
+```bash
+arka guardrails status
+arka guardrails reset
+```
+
+可在 `.env` 中设置可选的本地限额：
+
+```env
+ARKA_COST_LIMIT_USD=1.00
+ARKA_TOKEN_LIMIT=100000
+ARKA_LATENCY_LIMIT_MS=15000
+```
+
+当 token 或预估成本预算被超出时，托管请求会在派发前被拦截。仅本地模型永远不会被成本护栏拦截。Arka 只在缓存中存储聚合计数器，不存储提示内容。
+
+Grounded 模式默认开启（`ARKA_GROUNDED_MODE=1`）。它会阻止未经请求的 mock 数据，并指示面向模型的请求使用符号工具或已配置的 API 获取当下信息。除非你显式要求 mock、原型、占位符或示例设计，Arka 会倾向于真实数据、真实集成和生产级的错误处理。仅在做原型时才禁用：
+
+```bash
+ARKA_GROUNDED_MODE=0 arka ask "..."
+arka grounding
+```
+
+生产模式也默认开启（`ARKA_PRODUCTION_MODE=1`）。编码类请求会被指示包含访问控制、密钥安全的数据处理、输入与输出校验、防提示注入、审计日志、测试、错误处理与可观测性。仅对明确一次性的原型才应禁用。
+
+数据最小化默认为 schema-only 模式（`ARKA_DATA_MODE=schema`）。发送到模型的 JSON 载荷会被汇总为字段名/类型或数组计数；字面的商业机密值仍可供本地工具使用，但不会暴露给模型。仅在数据可安全分享时才使用 `ARKA_DATA_MODE=full`。

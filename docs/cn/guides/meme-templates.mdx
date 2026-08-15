@@ -1,0 +1,132 @@
+---
+title: "梗图模板"
+description: "使用本地 Pillow 合成可复用的梗图布局 —— 无需 AI Token。"
+icon: "image"
+---
+
+在本地用 Pillow 合成常见梗图格式。模板既能配合**你自己的图像**，也支持**纯文字面板**（纯色背景加自动换行的标签）。输出默认保存到 `~/Pictures/arka-generated/`（可用 `IMAGE_OUTPUT_DIR` 覆盖）。
+
+## 模板
+
+| 模板 | CLI 子命令 | 描述 |
+| ---- | ---------- | ---- |
+| 对比 | `comparison` | 带标题的并排面板 |
+| Drake | `drake` | 拒绝（上）与接受（下） |
+| 图注 | `caption` | 经典上下文字梗图 |
+| Expanding brain | `expanding-brain` | 四格递进面板 |
+| Two button | `two-button` | 两个红色按钮的两难选择 |
+| Vibe coding 预设 | `vibe-coding` | 内置的架构对比 |
+
+## 素材照片（真实图像）
+
+默认情况下，如果你未传入 `--left` / `--right` / `--image` 路径，梗图面板会尝试抓取**相关素材照片**（Unsplash、Pexels、Pixabay、Openverse、网页）。标签会叠加在照片之上。若查找失败，Arka 会回退到纯文字面板。
+
+```bash
+# 自动使用素材照片（前提是配置了 UNSPLASH_ACCESS_KEY 或 openverse/web）
+arka meme vibe-coding
+
+# 强制使用纯文字面板（旧行为）
+arka meme vibe-coding --no-stock-images
+
+# 为对比面板自定义素材搜索关键词
+arka meme comparison \
+  --left-title "MONOLITH" --right-title "MICROSERVICES" \
+  --left-label "One deploy\nOne repo" \
+  --right-label "Many services\nMany repos" \
+  --left-query "legacy server room" \
+  --right-query "cloud architecture diagram office"
+```
+
+在 `.env` 中设置 `MEME_USE_STOCK_PHOTOS=0` 可全局禁用素材查询。
+
+## 视觉风格
+
+梗图和视频生成共享 `arka/media/media_styles.py` 中的风格预设。
+
+```bash
+# 列出梗图风格
+arka meme styles
+
+# 使用素材照片的霓虹风 vibe-coding 梗图
+arka meme vibe-coding --style neon
+
+# 自然语言
+arka make a retro drake meme reject "skip tests" accept "write tests"
+
+# 列出视频风格
+arka compose_video styles
+
+# 电影感解说视频
+arka compose_video compose --topic "quantum computing" --llm --style cinematic
+
+# AI 视频（Veo / Pollinations）
+arka ai_video "drone over mountains" --style cinematic -d 6
+```
+
+| 梗图风格 | 视频风格 |
+|---------|---------|
+| classic、dark、neon、retro、corporate、comic、cinematic、minimal、vaporwave、newspaper | documentary、cinematic、tech、minimal、neon、retro、news、social、corporate、nature |
+
+默认值：`MEME_STYLE=classic`、`VIDEO_STYLE=documentary`。
+
+## 示例
+
+纯文字对比（无需图片资源）：
+
+```bash
+arka meme comparison \
+  --left-title "VIBE CODING" --right-title "SOFTWARE ENGINEERING" \
+  --left-label "Ship fast\nSkip tests" \
+  --right-label "Design first\nTests & review" \
+  --output ~/Pictures/arka-generated/vibe-vs-engineering.png
+```
+
+vibe-coding 对比软件工程的内置预设：
+
+```bash
+arka meme vibe-coding
+```
+
+Drake hotline bling 布局：
+
+```bash
+arka meme drake \
+  --reject "Deploy on Friday" \
+  --accept "Merge with tests green"
+```
+
+在已有图像上添加图注梗图：
+
+```bash
+arka meme caption \
+  --image photo.jpg \
+  --top "WHEN THE BUILD PASSES" \
+  --bottom "ON THE FIRST TRY"
+```
+
+Expanding brain（四个 `--label` 参数）：
+
+```bash
+arka meme expanding-brain \
+  --label "console.log()" \
+  --label "debugger" \
+  --label "unit tests" \
+  --label "distributed tracing"
+```
+
+Two-button 抉择：
+
+```bash
+arka meme two-button \
+  --dilemma "Production is on fire" \
+  --left "Rollback" --right "Hotfix in prod" \
+  --highlight left
+```
+
+## 自然语言
+
+「make a drake meme」、「comparison meme」、「expanding brain meme」和「vibe coding vs software engineering meme」等短语会自动路由到 `arka meme …`。
+
+## 相关
+
+需要固定使用图片文件的并排布局，请参考 [符号图像合成](/guides/symbolic-images)。

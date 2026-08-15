@@ -1,0 +1,41 @@
+---
+title: "浏览器视频录制"
+description: "用 Playwright 录制网站演示视频与步骤 PNG。"
+icon: "video"
+---
+
+把浏览器演示流程录制为 WebM，并可选生成步骤 PNG：
+
+```bash
+arka capture video https://example.com
+arka capture video https://example.com --output demo-captures
+arka capture video --walkthrough
+arka capture video --help
+python3 recordings/page-walkthrough/walkthrough.py
+```
+
+`--walkthrough` 使用 Arka Web 仪表板预设（Chat → Skills → Status）。设置 `ARKA_WALKTHROUGH_URL` 可覆盖默认开发 URL（`http://127.0.0.1:5173`）。
+
+自定义步骤列表从 JSON 加载：
+
+```bash
+arka capture video https://example.com --actions steps.json
+```
+
+每个步骤是一个带 `type` 字段的对象：`goto`、`click`、`wait`、`press` 或 `screenshot`。用 `--no-video` 只保留 PNG，或用 `--no-screenshots` 只保留视频。
+
+一次性安装浏览器运行时：
+
+```bash
+pip install playwright
+arka "playwright install chromium"
+```
+
+自然语言路由也可用：
+
+```bash
+arka route "record a walkthrough video of https://example.com"
+arka route "capture walkthrough of the arka web dashboard"
+```
+
+**说明：** Arka MCP 的浏览器技能目前仍然只返回 PNG。需要 MP4/WebM 产物时请使用 CLI 或 `recordings/page-walkthrough/walkthrough.py`。

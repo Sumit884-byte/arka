@@ -1,0 +1,144 @@
+---
+title: "Coding TUI"
+description: "Repository edits के लिए एक केंद्रित terminal workspace शुरू करें।"
+icon: "window-maximize"
+---
+
+Repository edits के लिए एक केंद्रित terminal workspace शुरू करें:
+
+```bash
+arka dev tui .
+# alias:
+arka coding-tui .
+```
+
+TUI के अंदर:
+
+```text
+/status
+/plan add a settings page
+/test
+/test tests/test_foo.py
+/test --no-fix
+/test --max-fixes 2
+/run tests
+/run tests --fix
+/run tests --no-fix
+/ci
+/ci preview
+/review
+/review --fail
+/ship
+/ship --fix
+/history
+/clear
+/help
+/quit
+```
+
+सादे-टेक्स्ट अनुरोध plan अनुरोध के रूप में माने जाते हैं (जैसे `/plan`)।
+प्रॉम्प्ट पर plan को approve करें (`y`, `yes`, या `approve`) तो वह तुरंत execute
+हो जाएगा — अलग से `/run` की आवश्यकता नहीं है। पिछले approved plan को फिर से
+execute करने के लिए, या बिना पहले plan किए किसी goal को चलाने के लिए, `/run
+<goal>` का उपयोग करें। `/plan` LLM को plan-only mode में call करता है और बिना
+बदलाव किए एक structured plan (summary, files, steps) print करता है। जब LLM
+उपलब्ध नहीं होता, Arka एक local repository-aware plan पर fallback करता है।
+
+## Test commands
+
+| Command | Mode | Agent? | Writes? |
+|---------|------|--------|---------|
+| `/test [path]` | strict read-only, फिर failure पर auto-fix | केवल Fix pass | केवल Fix pass |
+| `/test --no-fix [path]` | केवल strict read-only | No | कभी नहीं |
+| `/test --max-fixes N` | N तक fix passes (default 1) | केवल Fix passes | केवल Fix passes |
+| `/run tests` | flexible read-only, फिर failure पर auto-fix | Yes | केवल Fix pass |
+| `/run tests --no-fix` | केवल flexible read-only | Yes (readonly) | कभी नहीं |
+| `/run tests --fix` | शुरुआत से fix mode | Yes | अनुमत |
+| `/run tests --max-fixes N` | readonly run के बाद N तक fix passes | Yes | केवल Fix passes |
+| सादा `test` या `tests` | `/test` जैसा | failure पर केवल Fix pass | केवल Fix pass |
+| सादा `run tests` | `/run tests` जैसा | Yes | failure पर केवल Fix pass |
+| `/ship` | staged review + changed CI | No | कभी नहीं |
+| `/ship --fix` | goal-agent CI fix के साथ ship | CI failure पर Yes | fix पर अनुमत |
+| `/ci` | changed-only CI gates चलाएँ | No | कभी नहीं |
+| `/ci preview` | केवल gate list का preview | No | कभी नहीं |
+| `/review --fail` | review hints होने पर TUI से exit | No | कभी नहीं |
+
+`/test` repo-appropriate test command को नियतात्मक रूप से चलाता है (pytest, npm
+test, cargo test, आदि — repo health से detect होता है)। Optional path run को
+scope करता है, जैसे `/test tests/test_foo.py`। Output **Test run (read-only)**
+के रूप में लेबल होता है। जब failures detected होते हैं, Arka print करता है कि
+कितने fail हुए और **Fix pass i/N** चलाता है — `--max-fixes` तक writable
+goal-agent passes (default **1**) — फिर परिणाम दिखाने के लिए tests को read-only
+में फिर से चलाता है। automatic repair को skip करने के लिए `/test --no-fix` का
+उपयोग करें।
+
+`/run tests` readonly goal agent को strategy चुनने देता है — पूरा pytest, एक
+focused module, `arka ci --changed`, या repo_health-detected runner — readonly
+failures के बाद उसी एक auto-fix pass के साथ। auto-repair बंद करने के लिए
+`--no-fix` जोड़ें, या agent को शुरुआत से files edit करने की अनुमति देने के लिए
+`--fix` (fail हुए auto-fix के बाद एक और स्पष्ट fix round के लिए, या multi-pass
+repair के लिए)।
+
+एक failing test के साथ `/test` के बाद उदाहरण flow:
+
+```text
+○ Test run (read-only)
+Running tests: python -m pytest -q --tb=line
+1 failed, 42 passed
+○ 1 test failure(s) detected — attempting one fix pass…
+○ Fix pass 1/1
+━━━ Changed files (1) ━━━
+  M  src/arka/example.py
+○ Test run (read-only, after fix)
+Running tests: python -m pytest -q --tb=line
+✓ Tests passed (read-only run, after fix)
+```
+
+यदि सभी fix passes के बाद भी tests fail हों:
+
+```text
+✗ Still failing after 2 fix pass(es).
+Try: /run tests --fix --max-fixes N or `arka dev test --fix`
+```
+
+## 3D scaffold
+
+`/scaffold 3d` एक खाली project में React + Vite + Three.js space scene लिखता है।
+इसके बाद Arka केवल इस **trusted template** के लिए स्वचालित रूप से `npm install`
+चलाता है (scaffold manifest से pinned packages — goal agent से arbitrary shell
+नहीं)। install के बाद Vite dev server शुरू करने के लिए `--run` जोड़ें, या
+prompt पर `y` का उत्तर दें।
+
+```text
+/scaffold 3d
+/scaffold 3d --run
+```
+
+`/plan` के माध्यम से approved greenfield 3D goals समान scaffold path और
+post-install steps का उपयोग करते हैं। यदि network offline है, तो scaffold files
+फिर भी बनाई जाती हैं और Arka manual next steps के साथ एक ईमानदार failure
+message print करता है।
+
+`/status` current branch, dirty file count, और code project initialized है या
+नहीं दिखाता है। `/ci` changed-only gates चलाता है; `/ci preview` बिना execute
+किए gates सूचीबद्ध करता है। `/review` test-gap hints के साथ staged changes का
+सारांश देता है। `/ship` commit से पहले review + CI चलाता है। `/history` current
+session से commands सूचीबद्ध करता है; `/clear` screen साफ़ करता है और session
+state reset करता है।
+
+Coding agent execution के बाद एक completion/failure summary print करता है और
+incremental verification के लिए `arka dev test` सुझाता है।
+
+Coding requests भाषा-agnostic हैं: अपने अनुरोध में language, framework, या file
+extension का उल्लेख करें और Arka repository के मौजूदा toolchain का उपयोग करेगा।
+Voice input और output भी किसी भी Edge TTS-supported BCP-47 language का उपयोग
+कर सकते हैं:
+
+```bash
+arka speak --lang fr-FR "Crée un test pour cette fonction"
+SPEAK_LANG=ja-JP arka speak "このコードを説明してください"
+```
+
+curated list के बाहर के locale के लिए, Arka स्वचालित रूप से मिलान करने वाली Edge
+voice खोजता है और केवल तभी English पर fallback करता है जब वह locale उपलब्ध नहीं
+हो।

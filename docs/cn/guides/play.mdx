@@ -1,0 +1,14 @@
+---
+title: "Arka Play 基准测试"
+description: "使用符号规则游戏对本地模型输出进行基准测试。"
+icon: "gamepad"
+---
+
+使用符号规则游戏对本地模型输出进行基准测试：
+
+```bash
+pip install python-chess
+arka play chess --moves e2e4 e7e5 g1f3 b8c6 --json
+```
+
+Arka 会针对国际象棋规则验证每一步棋，报告非法走子和准确率，并返回最终的 FEN。同一套框架可以扩展到其他确定性游戏；模型的非法动作永远不会改变棋盘。

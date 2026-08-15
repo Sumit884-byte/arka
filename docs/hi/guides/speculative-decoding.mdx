@@ -1,0 +1,15 @@
+---
+title: "In-engine speculative decoding"
+description: "तेज़ लोकल generation के लिए draft मॉडल configure करें।"
+icon: "forward-fast"
+---
+
+```bash
+arka speculative vllm --draft-model qwen3:1.7b
+arka speculative vllm --draft-model qwen3:1.7b --num-draft-tokens 6 --apply
+```
+
+Arka draft settings स्टोर करता है, बिना यह दावा किए कि हर runtime उनका समर्थन
+करता है। सक्रिय vLLM, Exo, Ollama, या MLX build को launch करते समय
+speculative-decoding विकल्प expose करने चाहिए। इसे सक्षम करने के बाद generated
+output की गुणवत्ता और latency की पुष्टि करें।

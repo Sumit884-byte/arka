@@ -1,0 +1,37 @@
+---
+title: "可复用的应用模块"
+description: "生成常见的认证与支付构建模块，附带技术栈说明。"
+icon: "cubes"
+---
+
+```bash
+arka blocks list
+arka blocks show auth_login
+arka blocks show payments_stripe
+arka blocks use auth_signup --stack "Next.js + Auth.js" --out components/signup.tsx
+arka blocks create "create a crypto wallet page and save it as a block"
+```
+
+可用模块包括登录、注册、密码重置、OAuth、邮箱验证、Stripe
+Checkout/订阅、PayPal 以及 webhook 接收器。每个模块都会列出
+兼容的技术栈以及安全/实现要点。生成的文件刻意保持简短且可检查；
+除非提供 `--force`，否则不会覆盖已有文件。这些只是起始模板，
+并不是可直接投产的认证或支付系统：请在发布前补齐服务端校验、
+测试、密钥管理、webhook 以及各提供商特定的配置。生成的输出现在
+包含生产就绪门禁与所需的环境变量；请在部署前逐项实现并验证。
+Arka 不会仅仅因为脚手架已生成就将其标记为生产就绪。
+
+自然语言也可以工作："show reusable login blocks" 或
+"list available app blocks."。Arka 也能把一个待创建的页面/组件
+转成可复用的模块规范，例如："create a crypto wallet page and save it as a block."。
+
+同时提供 Web3 相关模块：
+
+```bash
+arka blocks show web3_wallet
+arka blocks show web3_sign_in
+arka blocks use web3_token_transfer --stack "Next.js + viem" --out web3/transfer.md
+```
+
+它们包含链与合约白名单、绑定 nonce 的签名校验、交易模拟、回执
+检查以及明确的生产就绪门禁。

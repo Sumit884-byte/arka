@@ -1,0 +1,89 @@
+---
+title: "3D scene composition"
+description: "वास्तविक model assets से impressive interactive Three.js scenes बनाएं।"
+icon: "cubes"
+---
+
+Primitive geometry के बजाय वास्तविक GLB/GLTF assets का उपयोग करें:
+
+```bash
+arka scene-3d "Museum visitors" \
+  --model https://example.com/human.glb \
+  --model https://example.com/robot.glb \
+  --out museum-scene \
+  --preset museum
+```
+
+## One-shot impressive scenes (URLs आवश्यक नहीं)
+
+Arka curated three.js examples catalog से verified free assets को auto-resolve कर सकता है:
+
+```bash
+arka scene-3d "Animated robot gallery" --auto --preset gallery --out arka-scenes/robot-gallery
+```
+
+या natural language से:
+
+```bash
+arka create an impressive interactive 3d robot gallery scene
+```
+
+Resolution order: user-provided models → curated catalog → वैकल्पिक `threejs` MCP search → local generation (procedural / HF Shap-E) जब तक कि `--no-generate` set न हो।
+
+## Visual presets
+
+| Preset | Look |
+|--------|------|
+| `gallery` | Reflective dark floor, rim lights, bloom |
+| `studio` | Neutral sweep, soft shadows (default) |
+| `outdoor` | Warm sun, light fog, large ground |
+| `racing` | Low chase camera, track-style ground |
+| `interior` | Warm ambient, tighter framing |
+| `space` | Starfield, bloom |
+| `museum` | Polished exhibit floor |
+
+यदि `--preset` omitted है, तो Arka scene plan context से एक infer करता है।
+
+## Scene features
+
+Generated scene में शामिल हैं:
+
+- Damping और double-click camera reset के साथ OrbitControls
+- Shadow maps, ACES tone mapping, और वैकल्पिक bloom
+- Preset के अनुरूप ground plane
+- Models fetch होते समय loading overlay
+- जब किसी model में multiple clips हों तो animation clip picker
+- Responsive resize handling
+
+Arka asset URLs invent नहीं करता: auto mode verified catalog entries या configured search providers का उपयोग करता है।
+
+## Contextual scenes plan करें
+
+```bash
+arka scene-3d "Person typing" --intent "working at a desk" \
+  --model ./models/person.glb --model ./models/desk.glb --plan
+```
+
+Plan setting और required model roles (उदाहरण के लिए, एक desk,
+keyboard, monitor, और chair) की पहचान करता है और proportional placement के लिए meters में
+approximate real-world dimensions शामिल करता है। इसमें placement rules भी शामिल हैं जैसे
+keyboard को desk पर रखना, उसके सामने chair रखना, और seated
+character को keyboard के साथ align करना। Configured vLLM/vision backend के साथ rendered model preview describe करने के लिए, `--describe-model preview.png` जोड़ें। Missing
+vision backend एक structured warning produce करता है; यह description invent नहीं करता।
+
+Arka generation से पहले semantic orientation defaults भी चुनता है। उदाहरण के लिए,
+vehicle racing/game prompts जैसे "Cybertruck vs Ferrari racing game" default रूप से एक
+rear three-quarter chase-camera view का उपयोग करते हैं, क्योंकि racing games आमतौर पर
+player car के पीछे दिखाते हैं। Explicit user wording अभी भी जीतती है: "front view,"
+"side profile," "top layout," या "show the back" default को override करते हैं।
+
+## Flags
+
+| Flag | Purpose |
+|------|---------|
+| `--auto` | Plan roles से assets resolve करें |
+| `--no-generate` | केवल catalog + search; AI mesh generation skip करें |
+| `--preset` | Visual environment preset |
+| `--intent` | Planning और layout के लिए Action/context |
+| `--plan` | Contextual plan JSON print करें |
+| `--out` | Output directory (`index.html` लिखता है) |

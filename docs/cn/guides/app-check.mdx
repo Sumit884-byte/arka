@@ -1,0 +1,15 @@
+---
+title: "应用构建检查"
+description: "检测并验证项目的构建和测试工作流。"
+icon: "mobile-screen-button"
+---
+
+请求 Arka 检测并验证项目的构建/测试工作流：
+
+```bash
+arka app-check .
+arka app-check . --run
+arka app-check . --run --json
+```
+
+Arka 可以检测常见的 Python、Node、Rust 和 Go 项目。不加 `--run` 时它只预览检查项。加上 `--run` 后它会在第一次失败处停下，并输出命令结果以便你修复问题。也支持自然语言："build and test this app"。在验证生成的或不受信任的代码时，请在 Arka 沙箱中运行检查。

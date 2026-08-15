@@ -1,0 +1,13 @@
+---
+title: "仓库结构审计"
+description: "安全地发现放错位置的文件与清理机会。"
+icon: "sitemap"
+---
+
+```bash
+arka structure .
+arka structure . --json
+```
+
+审计是只读的。它会报告顶层运行时文件、缓存目录和建议的移动位置；它绝不会
+自动搬移文件，因为必须先审查导入、打包与部署路径。

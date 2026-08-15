@@ -1,0 +1,50 @@
+---
+title: "व्यायाम डेटासेट"
+description: "hasaneyldrm/exercises-dataset से व्यायाम मेटाडेटा को थर्ड-पार्टी मीडिया बंडल किए बिना import और query करें।"
+keywords: ["exercise dataset", "fitness", "workout", "data import"]
+icon: "dumbbell"
+---
+
+Arka [hasaneyldrm/exercises-dataset](https://github.com/hasaneyldrm/exercises-dataset)
+से व्यायाम मेटाडेटा को fitness demos, workout planners, local search और prototype data flows
+के लिए जल्दी से cache कर सकता है।
+
+```bash
+arka exercises import
+arka exercises import --timeout 120
+arka exercises status
+arka exercises search "barbell chest"
+arka exercises export --format csv --output exercises.csv
+```
+
+Natural language भी उसी importer पर route होती है:
+
+```bash
+arka quickly add exercise data from hasaneyldrm/exercises-dataset
+arka search exercise dataset for body weight abs
+```
+
+## क्या cache होता है
+
+Default import केवल `data/exercises.json` डाउनलोड करता है और normalized
+मेटाडेटा को Arka की cache directory में स्टोर करता है:
+
+```text
+~/.cache/fish-agent/datasets/exercises-dataset/exercises.json
+~/.cache/fish-agent/datasets/exercises-dataset/metadata.json
+```
+
+Records में exercise name, body part/category, equipment, target muscle,
+secondary muscles, bilingual instructions, thumbnail path और GIF path शामिल हैं।
+
+Upstream JSON वर्तमान में 10 MB से बड़ा है। यदि आपका network धीमा है, तो chat से
+retry करने के बजाय import को अधिक समय देने के लिए `--timeout` का उपयोग करें।
+
+## License और media नोट
+
+Upstream README dataset को केवल educational / non-commercial बताता है।
+Images और GIF animations अपने-अपने copyright holders के हैं। इसलिए Arka
+डिफ़ॉल्ट रूप से metadata को cache करता है और dataset या media को Arka package के
+अंदर bundle नहीं करता।
+
+Data या media का व्यावसायिक उत्पाद में उपयोग करने से पहले upstream terms सत्यापित करें।

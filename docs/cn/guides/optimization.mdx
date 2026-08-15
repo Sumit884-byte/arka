@@ -1,0 +1,12 @@
+---
+title: "研究型优化"
+description: "从 Arka 执行可复现的有界参数优化。"
+icon: "gauge-high"
+---
+
+```bash
+arka optimize "(x - 3)**2" --bounds=-10,10 --iterations 200 --seed 7
+arka optimize "(x - 3)**2" --json
+```
+
+这是一个原创的小型进化搜索实现，使用固定随机种子与有界算术目标。灵感来自 PaGMO2 的基于种群且可复现的优化理念；由于 PaGMO2 含有 GPL-3.0 与 LGPL-3.0 组件，Arka 未复制或链接其源代码。

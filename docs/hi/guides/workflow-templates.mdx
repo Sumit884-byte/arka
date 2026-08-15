@@ -1,0 +1,51 @@
+---
+title: "Workflow templates"
+description: "पुन: उपयोग करने योग्य prompts और loops से नए Arka tasks compose करें।"
+icon: "copy"
+---
+
+```bash
+arka template list
+arka template show research_brief
+arka template use research_brief --set topic="local LLM serving"
+arka template use repo_release
+```
+
+Templates inspectable text हैं, छिपा हुआ agent behavior नहीं। Prompt templates
+एक prompt produce करते हैं; loop templates एक command produce करते हैं जिसे आप review करके run कर सकते हैं।
+एक template output को `arka iterate` में copy करके नया workflow बनाएँ,
+
+तेज़, विशिष्ट scripts के लिए code starters भी उपलब्ध हैं:
+
+```bash
+arka template list
+arka template use python_cli --set description="CSV inspector" --out tools/inspect.py
+arka template use api_health_check --set url="https://example.com/health" --out tools/health.py
+arka template use data_pipeline --out tools/normalize.py
+arka template use browser_smoke --out tests/smoke.py
+arka template use walk_folder --set pattern="*.py" --out tools/list_python.py
+```
+
+`--out` किसी मौजूदा file को overwrite करने से इनकार करता है। Templates जानबूझकर
+छोटे और inspectable हैं ताकि Arka उन्हें generated logic छिपाए बिना customize कर सके।
+
+`walk_folder` starter डिफ़ॉल्ट रूप से एक folder को handle करता है और `--recursive` के साथ
+nested folders को शामिल करता है:
+
+```bash
+python tools/list_python.py src --recursive --pattern "*.py"
+```
+
+## स्वचालित prompt optimization
+
+Arka AI routing को भेजे गए natural-language requests पर एक local, deterministic
+pass स्वचालित रूप से लागू करता है। यह URLs, files, requirements या facts का आविष्कार किए
+बिना objective और expected output को स्पष्ट करता है। Symbolic routing मूल पाठ रखता है,
+और code blocks, JSON, shell commands और URLs अपरिवर्तित रहते हैं। जब सटीक
+prompt text संरक्षित होना चाहिए तो `arka llm route "..." --skills "..." --no-optimize` का उपयोग करें,
+या `ARKA_PROMPT_OPTIMIZE=0` को globally सेट करें।
+
+`web_screenshot` और `browser_check` द्वारा कैप्चर किए गए screenshots डिफ़ॉल्ट रूप से अस्थायी होते हैं
+और command exit होने पर साफ़ हो जाते हैं। जब बाद के निरीक्षण के लिए एक review artifact
+रखा जाना चाहिए तो `--output` पास करें।
+`arka loop`, या कोई अन्य skill।

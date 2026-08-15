@@ -1,0 +1,59 @@
+---
+title: "X (Twitter) पर पोस्ट करना"
+description: "URL fetch करें, LLM से content को word limit तक छोटा करें, और X/Twitter पर publish करें — GitHub link safety और वैकल्पिक monitoring के साथ।"
+keywords: ["x", "twitter", "post", "social"]
+icon: "x-twitter"
+iconType: "brands"
+---
+
+`post_x` skill एक URL fetch करता है, इसे configurable word limit तक summarize करता है, और [Bird CLI](https://www.npmjs.com/package/@steipete/bird) के माध्यम से X/Twitter पर publish करता है।
+
+## प्राकृतिक भाषा
+
+```bash
+arka post this on my X https://example.com/article
+arka shorten this linkedin post to 40 words and post on twitter
+arka share https://github.com/Sumit884-byte/arka on my x
+```
+
+## Word limits
+
+प्राकृतिक भाषा में word cap निर्दिष्ट करें:
+
+```bash
+arka post this article in 30 words on x
+arka shorten to 50 words and tweet on twitter
+```
+
+डिफ़ॉल्ट: **40 words**। अधिकतम: **200 words**।
+
+## Setup
+
+1. Node.js 18\+ install करें।
+2. Bird को authenticate करें (पहली बार run पर prompts follow करें):
+
+```bash
+npx @steipete/bird login
+```
+
+3. summarization के लिए `.env` में एक LLM provider configured हो (Gemini, Groq, आदि)।
+
+पहली बार use पर Bird `npx` के माध्यम से auto-install हो जाता है यदि यह globally मौजूद नहीं है।
+
+## CLI
+
+```bash
+arka post_x https://example.com/article
+arka post_x https://example.com/article --words 30
+arka post_x --dry-run https://example.com/article   # preview without posting
+```
+
+## Safety
+
+- Tweets में GitHub URLs source text में दिखने चाहिए — hallucinated repo paths block होते हैं।
+- LinkedIn और article URLs पोस्ट करने से पहले fetch और summarize किए जाते हैं।
+- composed tweet का preview देखने के लिए `--dry-run` का उपयोग करें।
+
+<Warning>
+  पोस्ट करने के लिए Bird के माध्यम से valid X/Twitter credentials चाहिए। production accounts में publish करने से पहले tweet content की समीक्षा करें।
+</Warning>

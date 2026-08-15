@@ -1,0 +1,61 @@
+---
+title: "信息图"
+description: "自适应的清单式与思维导图 PNG —— 布局跟随条目数量，纯本地 Pillow。"
+icon: "layout-grid"
+---
+
+在本地用 Pillow 合成**信息图风格的图像**。Arka 会根据你提供的条目数量选择布局 —— 无需 AI Token，字体排版精确可控。
+
+## 布局自动选择
+
+| 条目数 | 布局 |
+| ------ | ---- |
+| 1–2 | 水平一行 |
+| 3 | 三列一行 |
+| 4 | 2×2 网格 |
+| 5–6 | 多列网格 |
+| 7–9 | 3×3 网格 |
+| 10+ | 放射式中心（思维导图） |
+
+需要固定模板时，用 `--layout radial`（或 `grid4`、`row3` 等）覆盖。
+
+## 快速开始
+
+```bash
+# 4 个条目 → 2×2 网格
+arka infographic --title "Types of Headaches" \
+  --item Tension --item Migraine --item Cluster --item Sinus
+
+# 10+ 个条目 → 放射式思维导图
+arka infographic create --title "GitHub Repos" \
+  --item frontend --item backend --item infra --item docs \
+  --item mobile --item cli --item docs-site --item playground \
+  --item design-system --item analytics --item infra-tools
+
+# 风格：clean（默认）、doodle、dark、meme
+arka infographic --title "Daily habits" --style doodle \
+  --items "Walk, Read, Code, Sleep"
+
+# 列出布局与风格
+arka infographic layouts
+arka infographic styles
+```
+
+输出默认保存到 `~/Pictures/arka-generated/`（可用 `IMAGE_OUTPUT_DIR` 覆盖）。默认风格：`INFOGRAPHIC_STYLE=clean`。
+
+## 自然语言
+
+「infographic about …」、「listicle」或「mind map」等短语会在进入 chat 前离线路由：
+
+```bash
+arka 'infographic about "Types of Headaches" items: tension, migraine, cluster, sinus'
+arka route 'listicle titled "Startup stack" with items: Postgres, Redis, Kafka'
+```
+
+## CLI 别名
+
+- `arka infographic …`
+- `arka infographic-maker …`
+- `arka listicle …`
+
+每个单元格使用简单的图形字符图标和自动换行的标签文字。若需要基于素材照片的梗图，请参考 [梗图模板](/cn/guides/meme-templates)。

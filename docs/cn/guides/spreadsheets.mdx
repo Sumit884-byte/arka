@@ -1,0 +1,15 @@
+---
+title: "电子表格生成"
+description: "使用 Arka 生成 CSV 与 Excel 工作簿。"
+icon: "table-cells"
+---
+
+从预设或 schema 生成一个工作簿：
+
+```bash
+arka spreadsheet users --count 50 --output users.xlsx
+arka spreadsheet sales --count 100 --output sales.xlsx
+```
+
+Arka 使用现有的数据生成器，支持 CSV/TSV/JSON/XLSX 输出，
+并按照生成器的输出规则拒绝不安全的覆盖操作。

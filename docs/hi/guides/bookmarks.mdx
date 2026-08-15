@@ -1,0 +1,30 @@
+---
+title: "Bookmark manager"
+description: "Terminal से tags और notes के साथ URLs सहेजें, खोजें और recall करें।"
+keywords: ["bookmarks", "urls", "links", "saved"]
+icon: "bookmark"
+---
+
+आपके काम के links सहेजें और बाद में उन्हें recall करें — कोई browser sync आवश्यक नहीं।
+
+## Natural language
+
+```bash
+arka save bookmark https://docs.python.org --tags docs
+arka list my bookmarks
+arka search bookmarks for python
+arka open bookmark 1
+```
+
+## CLI commands
+
+| Command | विवरण |
+| ------- | ----------- |
+| `bookmarks save <url> [--title T] [--tags a,b] [--note N]` | एक URL सहेजें |
+| `bookmarks list [--tag TAG]` | सहेजे गए bookmarks सूचीबद्ध करें |
+| `bookmarks search <keywords>` | Title, URL, tags, notes खोजें |
+| `bookmarks get <index>` | List index द्वारा URL print करें |
+| `bookmarks open <index>` | Default browser में खोलें |
+| `bookmarks delete <index>` | एक bookmark हटाएँ |
+
+Bookmarks आपकी Arka config directory (`bookmarks.json`) में stored हैं।

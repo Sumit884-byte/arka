@@ -1,0 +1,51 @@
+---
+title: "时区转换"
+description: "使用自然语言在时区之间转换时间 —— PDT 到 IST、7 月 13 日上午 9 点等。"
+keywords: ["timezone", "convert", "PDT", "IST", "UTC"]
+icon: "clock"
+---
+
+在时区之间转换日期和时间，无需联网搜索。Arka 解析自然语言，并使用 `zoneinfo` 准确处理夏令时。
+
+## 快速开始
+
+```bash
+arka convert 9am PDT to IST
+arka convert July 13 at 9:00am PDT to IST
+arka what is this in ist July 13 at 9:00am PDT
+arka "timezone_convert 'July 13 9:00am PDT to IST'"
+```
+
+<Note>
+  `convert` 命令会自动识别是 **时区** 还是 **货币**。`arka convert 100 USD to INR` 仍然路由到货币转换。
+</Note>
+
+## 支持的模式
+
+- 时间 + 缩写：`9am PDT`、`3:30 PM EST`
+- 日期：`July 13`、`2026-07-13`
+- 方向：`to IST`、`in IST`、`PDT to IST`
+
+## 常见缩写
+
+| 缩写 | 时区 |
+| --- | --- |
+| PDT / PST | America/Los_Angeles |
+| EST / EDT | America/New_York |
+| IST | Asia/Kolkata（印度标准时间） |
+| UTC / GMT | UTC |
+
+<Warning>
+  **IST** 映射到印度标准时间（`Asia/Kolkata`），而不是以色列标准时间。
+</Warning>
+
+## 路由
+
+```bash
+arka route "convert 9am PDT to IST"
+# → timezone_convert ...
+```
+
+## 相关
+
+- [货币转换](/cn/guides/skills#finance-and-stocks) —— `arka convert 100 USD to INR`

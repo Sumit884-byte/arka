@@ -1,0 +1,24 @@
+---
+title: "极速开发"
+description: "以优先级感知、限定改动范围的方式进行并行验证。"
+icon: "rocket"
+---
+
+并发运行相互独立的开发任务：
+
+```bash
+arka ultra_fast --iterations 3 \
+  --task 'ui|arka "1"|arka "frontend_loop review app.png"|arka "src/components"|pytest tests/test_ui.py' \
+  --task 'docs|arka "0"|arka "update_docs"|arka "docs"|arka "pytest tests/test_docs.py'"
+```
+
+任务格式为 `name|priority|build-command|edited-paths|test-command`。
+
+- 优先级 `1`：只要某次迭代中它的任一路径发生变化，就在迭代后运行其测试。
+- 优先级 `0`：仅在所有迭代结束后运行一次测试，且必须有路径被修改。
+- 未被修改的任务永远不会被测试。
+- 优先级模式默认启用；使用 `--no-priority` 关闭。
+- 使用 `--auto-priority` 可将所有任务/提示都视为优先级 `1`。
+
+调度器会汇报每个任务、退出码，以及它是否被修改过。请保持
+构建命令彼此独立，并在部署前审阅生成的改动。

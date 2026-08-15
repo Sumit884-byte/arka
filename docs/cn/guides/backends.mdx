@@ -1,0 +1,14 @@
+---
+title: "高级推理后端"
+description: "检测能力并规划实验性的多 GPU 配置。"
+icon: "server"
+---
+
+```bash
+arka backend capabilities vllm
+arka backend capabilities exo --json
+arka backend profile vllm --model my-model --gpus 2 --flash-attention
+arka backend profile exo --model my-model --gpus 4 --row-split --co-engine ds4
+```
+
+配置默认仅为预览，使用 `--run` 才会实际启动。Arka 会报告能力假设，并在启动进程前拒绝不支持的组合。后端标志属于实验性，必须结合已安装的运行时版本与硬件进行验证。

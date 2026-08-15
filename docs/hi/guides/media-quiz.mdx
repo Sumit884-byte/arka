@@ -1,0 +1,14 @@
+---
+title: "मीडिया से क्विज़ वेबसाइट"
+description: "किसी इमेज, वीडियो, ऑडियो फ़ाइल, या PDF के आधार पर क्विज़ वेबसाइट जनरेट करें।"
+icon: "circle-question"
+---
+
+किसी इमेज, वीडियो, ऑडियो फ़ाइल, या PDF के आधार पर क्विज़ वेबसाइट जनरेट करें:
+
+```bash
+arka media-quiz lesson.mp4
+arka media-quiz lecture.png --title "Lecture review" --output public/quiz.html
+```
+
+जनरेट किया गया पेज मीडिया को embed करता है और उत्तर सबमिशन तथा स्कोरिंग hooks के साथ एक responsive क्विज़ फ़ॉर्म प्रदान करता है। प्रोडक्शन assessment के लिए validated प्रश्न और उत्तर जोड़ें; Arka उस मीडिया से factual answer keys नहीं गढ़ता जिसकी वह जांच नहीं कर सकता। "make a quiz website from lesson.mp4" जैसी प्राकृतिक भाषा भी समर्थित है।

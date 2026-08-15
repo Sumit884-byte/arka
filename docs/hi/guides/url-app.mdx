@@ -1,0 +1,14 @@
+---
+title: "URL app design analyzer"
+description: "एक live app URL से interactive design-review dashboard बनाएँ।"
+icon: "link"
+---
+
+एक live app URL से interactive design-review dashboard बनाएँ:
+
+```bash
+arka url-app https://example.com --output review.html
+arka url-app https://example.com --json
+```
+
+Dashboard में page metadata, responsive/accessibility signals, और prioritized design-change prompts शामिल हैं। यह `.md` summary के बजाय एक वास्तविक HTML review app है। Recommendations viewport-scoped रहती हैं और button क्रम को बनाए रखती हैं। Network access read-only है; authenticated या JavaScript-heavy apps के लिए browser screenshot skill का उपयोग करें।

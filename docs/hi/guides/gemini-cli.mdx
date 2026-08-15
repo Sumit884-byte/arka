@@ -1,0 +1,63 @@
+---
+title: "Google Gemini CLI integration"
+description: "Arka से Google का Gemini CLI चलाएँ — interactive sessions, one-shot prompts, और native subcommand passthrough।"
+keywords: ["gemini", "google", "cli", "integration"]
+icon: "google"
+iconType: "brands"
+---
+
+Arka Google के आधिकारिक [**Gemini CLI**](https://github.com/google-gemini/gemini-cli) (`@google/gemini-cli`) को terminal use के लिए built-in Arka skills के साथ wrap करता है।
+
+## Usage
+
+```bash
+arka gemini                          # interactive session
+arka gemini explain asyncio in Python
+arka gemini -m gemini-2.5-flash "summarize this diff"
+arka gemini status                   # check install + auth
+arka gemini mcp                      # native subcommands (passthrough)
+arka gemini -- -p "hello" -m gemini-2.5-pro
+```
+
+fish से:
+
+```fish
+arka gemini_cli explain Rust ownership
+```
+
+## Install
+
+Node.js 18\+ आवश्यक:
+
+```bash
+npm install -g @google/gemini-cli
+# or one-shot:
+npx @google/gemini-cli
+```
+
+## Authentication
+
+या तो:
+
+1. एक बार `gemini` चलाएँ और Google से sign in करें (browser OAuth), या
+2. `~/.config/arka/.env` में `GEMINI_API_KEY` सेट करें (Arka पहले से built-in LLM calls के लिए इसका उपयोग करता है)।
+
+```bash
+arka gemini status
+```
+
+## Binary override करें
+
+```bash
+GEMINI_CLI=/path/to/gemini arka gemini status
+```
+
+## यह कैसे काम करता है
+
+- Bare prompts को headless use के लिए `gemini --skip-trust -p "<prompt>"` के रूप में wrap किया जाता है।
+- Flags और subcommands (`mcp`, `extensions`, `hooks`, आदि) अपरिवर्तित pass होते हैं।
+- यदि `gemini` PATH पर नहीं है, तो Arka `npx @google/gemini-cli` पर fall back करता है।
+
+<Note>
+  Gemini CLI Arka के built-in Gemini provider से अलग है। इसका उपयोग Gemini-specific सुविधाओं (MCP, extensions, hooks) के लिए करें जो native CLI expose करता है।
+</Note>

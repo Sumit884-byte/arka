@@ -1,0 +1,12 @@
+---
+title: "引擎内推测解码"
+description: "配置草稿模型以加速本地生成。"
+icon: "forward-fast"
+---
+
+```bash
+arka speculative vllm --draft-model qwen3:1.7b
+arka speculative vllm --draft-model qwen3:1.7b --num-draft-tokens 6 --apply
+```
+
+Arka 会保存草稿设置，但不会声称每个运行时都支持它们。启用后，正在运行的 vLLM、Exo、Ollama 或 MLX 构建必须在启动时暴露推测解码选项。启用后请验证生成质量与延迟。

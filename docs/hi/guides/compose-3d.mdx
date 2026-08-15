@@ -1,0 +1,196 @@
+---
+title: "3D बनाएं"
+description: "Natural language से printable 3D models generate करें — gears, vases, basic shapes, या AI-planned geometry।"
+keywords: ["3d", "stl", "obj", "mesh", "model", "cad"]
+icon: "cube"
+---
+
+Locally downloadable 3D models बनाएं। Arka सामान्य shapes के लिए procedural meshes बनाता है और custom objects के लिए आपके configured LLM का उपयोग करता है।
+
+## Three.js model preference
+
+Web scenes के लिए, Arka नई geometry generate करने से पहले किसी मौजूदा Three.js-compatible GLTF/GLB
+asset या library की जांच कर सकता है:
+
+```bash
+arka three_js_model guide robot scene
+arka three_js_model search satellite
+```
+
+जब कोई उपयुक्त verified asset मौजूद है तो उसे प्राथमिकता दें; उसका license और
+attribution जांचें, और project के scale और performance conventions को संरक्षित रखें।
+नई geometry केवल तभी generate करें जब कोई उपयुक्त asset मौजूद न हो या originality का अनुरोध किया गया हो।
+
+Search workflow `baryhuang/mcp-threejs` से प्रेरित native Arka logic है:
+Arka request को एक compact asset query में converts करता है, Sketchfab/MCP
+style results को एक candidate shape में normalize करता है, downloadable GLB/GLTF assets
+को पहले rank करता है, और license/attribution/format metadata report करता है। यदि कोई provider
+configured नहीं है, तो Arka zero candidates return करता है और agent को model
+URLs invent न करने के लिए कहता है।
+
+Satellites जैसी recognizable objects के लिए, material और texture maps के साथ realistic licensed
+GLTF/GLB model को प्राथमिकता दें। जब उपयुक्त Three.js asset उपलब्ध हो तो इसे simple
+boxes, spheres, या cylinders से replace न करें।
+Arka पहले एक symbolic reality check apply करता है, फिर model को एक compact
+verification instruction देता है; अनिश्चित objects को एक trusted catalog या
+user-provided URL की आवश्यकता होती है, न कि hallucinated asset URL की।
+
+## Quick start
+
+```bash
+arka create a 3d model of a gear
+arka text_to_3d generate "a small robot with rounded limbs"
+arka generate a 3d model from text using hugging face
+arka make 3d vase 10cm tall
+arka compose 3d model of a coffee mug
+arka generate stl for phone stand
+arka compose_3d gear --teeth 16 --format stl
+```
+
+## Text-to-3D providers
+
+`text_to_3d` का उपयोग तब करें जब prompt कोई procedural shape न हो और आप एक AI
+text-to-mesh backend चाहते हैं:
+
+```bash
+arka text_to_3d providers
+arka text_to_3d generate "a toy spaceship" --format glb
+arka text_to_3d generate "a printable chess knight" --backend hf-shap-e --format obj
+```
+
+Default `auto` provider order पहले free/non-trial है:
+
+1. local Shap-E (`shap-e`) जब installed हो;
+2. Hugging Face Shap-E (`hf-shap-e`) `gradio_client` या `HF_TOKEN` के माध्यम से;
+3. local OpenSCAD + LLM जब उपलब्ध हो;
+4. LLM OBJ fallback।
+
+Trial-credit या paid APIs जैसे Tripo और Meshy अभी भी supported हैं, लेकिन वे
+default chain में नहीं हैं। `--backend tripo` के साथ explicitly opt in करें, या set करें:
+
+```bash
+ARKA_3D_ALLOW_TRIAL_PROVIDERS=1
+```
+
+## Procedural shapes (कोई LLM आवश्यक नहीं)
+
+| Shape | उदाहरण |
+| --- | --- |
+| `cube` | `compose_3d cube --width 2 --height 1 --depth 0.5` |
+| `sphere` | `compose_3d sphere --radius 1.5` |
+| `cylinder` | `compose_3d cylinder --radius 0.04 --height 0.1` |
+| `cone` | `compose_3d cone --radius 1 --height 2` |
+| `gear` | `compose_3d gear --teeth 12 --radius 1` |
+| `vase` | `compose_3d vase --height 0.2` |
+| `torus` | `compose_3d torus --major-radius 1 --minor-radius 0.3` |
+| `boy` / `girl` / `person` | `compose_3d boy` — clean low-poly humanoid template |
+| `robot` | `compose_3d robot` |
+| `tree` | `compose_3d tree` |
+| `house` | `compose_3d house` |
+| `car` | `compose_3d car` |
+
+### Quality tiers
+
+Curve smoothness (segment count) को नियंत्रित करने के लिए `--quality` का उपयोग करें:
+
+| Tier | Segments | किसके लिए सर्वश्रेष्ठ |
+| --- | --- | --- |
+| `low` | 16 | Fast previews |
+| `medium` | 32 | Default balance |
+| `high` | 64 | Smoother gears, vases, humanoids |
+
+```bash
+arka compose_3d gear --teeth 16 --quality high
+arka compose_3d boy --quality high
+```
+
+Human figures (`boy`, `girl`, `person`) consistent, printable meshes के लिए procedural capsule-based templates का उपयोग करते हैं — raw LLM vertex output नहीं।
+
+3D generation fallback orchestration का उपयोग करता है। आवश्यकतानुसार एक preferred chain configure करें,
+जैसे `MODEL_3D_BACKEND_CHAIN=tripo,shap-e,openscad,llm`; प्रत्येक
+backend को क्रम में try किया जाता है और failures अगले backend पर continue होती हैं। फिर LLM
+OBJ generator Arka के सामान्य model fallback का उपयोग करता है, और procedural templates
+supported shapes के लिए offline-safe fallback के रूप में बने रहते हैं।
+
+## Free AI backends (procedural soup से बेहतर)
+
+Organic shapes (`dragon`, `vase with floral pattern`, आदि) के लिए, LLM OBJ fallback से पहले external generators का उपयोग करें:
+
+```bash
+arka compose_3d dragon --backend auto          # try best available free backend
+arka compose_3d dragon --backend tripo         # Tripo AI (300 free credits on signup)
+arka compose_3d dragon --backend hf-shap-e     # HuggingFace Shap-E Space (free GPU quota)
+arka compose_3d gear --backend procedural      # force built-in template
+arka compose_3d check                          # show which backends are configured
+```
+
+### Backend priority (`--backend auto`)
+
+1. **Local Shap-E** — यदि `torch` + `diffusers` installed हैं (`SHAP_E_DEVICE=cuda` वैकल्पिक)
+2. **Tripo AI** — `TRIPO_API_KEY` ([platform.tripo3d.ai](https://platform.tripo3d.ai) — 300 free credits)
+3. **HF Shap-E Space** — `HF_TOKEN` और/या `pip install -e '.[3d-ai]'` (Gradio client)
+4. **Meshy API** — `MESHY_API_KEY` (API के लिए Pro+ आवश्यक है; web UI में 100 free credits/mo)
+5. **Procedural templates** — known shapes के लिए (`gear`, `boy`, `vase`, …)
+6. **LLM OBJ** — आपके chat LLM से last resort vertex output
+
+Known shape commands (`gear`, `cube`, …) API credits बचाने के लिए `--backend auto` के तहत procedural रहते हैं। किसी template पर AI force करने के लिए `--backend tripo` (आदि) pass करें।
+
+### Environment variables
+
+| Variable | Purpose |
+| --- | --- |
+| `TRIPO_API_KEY` | Tripo text-to-3D API (quality के लिए सर्वश्रेष्ठ free tier) |
+| `HF_TOKEN` | HuggingFace auth — Shap-E Space पर बेहतर GPU quota |
+| `MESHY_API_KEY` | Meshy preview+refine pipeline (paid API tier) |
+| `HF_SHAP_E_SPACE` | Gradio space override (default `hysts/Shap-E`) |
+| `MODEL_3D_BACKEND` | जब `--backend` omitted हो तो default backend |
+| `MODEL_3D_OUTPUT_DIR` | Save directory (default `~/Models/arka-generated/`) |
+
+वैकल्पिक extras install करें:
+
+```bash
+pip install -e '.[3d]'       # trimesh — GLB export + load API meshes
+pip install -e '.[3d-ai]'    # gradio_client — reliable HF Space calls
+# Local Shap-E (heavy): pip install torch diffusers
+```
+
+## Export formats
+
+| Flag | Output |
+| --- | --- |
+| `-f obj` | Wavefront OBJ (Preview, Blender, online viewers में देखें) |
+| `-f stl` | ASCII STL (3D printing slicers) |
+| `-f glb` | Binary GLB (`pip install -e '.[3d]'` आवश्यक; trimesh installed होने पर `-f all` में शामिल) |
+| `-f all` | OBJ + STL (+ GLB जब `.[3d]` extra installed हो) |
+
+Models default रूप से `~/Models/arka-generated/` में save होते हैं। `MODEL_3D_OUTPUT_DIR` के साथ override करें।
+
+## Custom shapes (LLM fallback)
+
+जब कोई free backend configured न हो, तो Arka objects के लिए आपके configured LLM को OBJ vertex data generate करने के लिए कहता है, फिर faces साफ़-साफ़ parse होने पर STL export करता है।
+
+```bash
+arka compose_3d "desk organizer with phone slot"
+arka compose_3d "desk organizer" --backend llm   # force LLM OBJ path
+```
+
+`.env` में एक LLM आवश्यक है (chat/compose_slides के समान stack)। Quality Tripo/HF से कम है — जब possible हो `--backend auto` का उपयोग करें।
+
+## अपना model खोलें
+
+Generation के बाद, Arka file paths और tips print करता है:
+
+- **macOS:** Preview में OBJ/STL खोलें, या `blender <file>`
+- **GLB:** [gltf-viewer.donmccurdy.com](https://gltf-viewer.donmccurdy.com/) या Blender
+- **Online:** file को [3dviewer.net](https://3dviewer.net) पर drag करें
+- **3D printing:** STL को Cura, PrusaSlicer, या Bambu Studio में import करें
+
+## Setup check करें
+
+```bash
+arka compose_3d check
+```
+
+## संबंधित
+
+- [Skills catalog](/hi/guides/skills) — Media section में `compose_3d`

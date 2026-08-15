@@ -1,0 +1,44 @@
+---
+title: "Browser video capture"
+description: "Playwright के साथ किसी website के walkthrough videos और step PNGs record करें।"
+icon: "video"
+---
+
+एक browser walkthrough को WebM plus वैकल्पिक step PNGs के रूप में record करें:
+
+```bash
+arka capture video https://example.com
+arka capture video https://example.com --output demo-captures
+arka capture video --walkthrough
+arka capture video --help
+python3 recordings/page-walkthrough/walkthrough.py
+```
+
+`--walkthrough` Arka web dashboard preset (Chat → Skills → Status) का उपयोग करता है।
+Default dev URL (`http://127.0.0.1:5173`) override करने के लिए `ARKA_WALKTHROUGH_URL` set करें।
+
+Custom step lists JSON से load होती हैं:
+
+```bash
+arka capture video https://example.com --actions steps.json
+```
+
+प्रत्येक step एक `type` field वाला object होता है: `goto`, `click`, `wait`, `press`, या
+`screenshot`। केवल PNG captures के लिए `--no-video` या केवल video output के लिए `--no-screenshots` का उपयोग करें।
+
+एक बार browser runtime install करें:
+
+```bash
+pip install playwright
+arka "playwright install chromium"
+```
+
+Natural-language routing भी काम करती है:
+
+```bash
+arka route "record a walkthrough video of https://example.com"
+arka route "capture walkthrough of the arka web dashboard"
+```
+
+**Note:** Arka MCP browser skills अभी भी केवल PNGs return करते हैं। जब आपको MP4/WebM artifacts चाहिए तो CLI या
+`recordings/page-walkthrough/walkthrough.py` का उपयोग करें।

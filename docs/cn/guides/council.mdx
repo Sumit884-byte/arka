@@ -1,0 +1,67 @@
+---
+title: "Arka Council"
+description: "多角色审议 — 由三位模拟专家独立回答同一个问题，然后 Arka 综合出共识、分歧与结论。"
+keywords: ["council", "deliberation", "personas", "synthesis"]
+icon: "users"
+---
+
+**Arka Council** 让多个模拟角色独立回答同一个问题，然后生成一份结构化综合 — 共识、分歧与明确结论。
+
+<Warning>
+  Council 成员是用于头脑风暴的**模拟**角色，并非真实人物或权威建议。
+</Warning>
+
+## 快速开始
+
+```bash
+arka council "should I learn Rust?"
+arka council should I quit my job to start a startup
+arka deliberate with arka on whether remote work is better
+arka ask the council about switching careers
+```
+
+## 输出格式
+
+```
+━━━ Arka Council ━━━
+Question: Should I learn Rust?
+
+── Socrates (simulated) ──
+  ...
+
+── Elon (simulated) ──
+  ...
+
+── Feynman (simulated) ──
+  ...
+
+── Synthesis ──
+  Consensus: ...
+  Tension: ...
+  Verdict: ...
+```
+
+默认 council 成员：**Socrates**、**Elon**、**Feynman**。每人在综合之前用 2–3 句话作答。
+
+## 历史
+
+过去的问题会被存储以避免重复：
+
+```bash
+arka council list
+```
+
+内存文件：`~/.config/arka/council-memory.json`
+
+## 路由
+
+自然语言触发词包括 `council`、`deliberate with arka` 和 `ask the council`。预览路由：
+
+```bash
+arka route "council should I learn Rust"
+```
+
+## 相关
+
+- [Persona chat](/cn/guides/personas) — 单角色对话
+- [路由工作原理](/cn/concepts/routing) — LLM 之前的离线规则

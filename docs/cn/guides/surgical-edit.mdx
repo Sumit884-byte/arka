@@ -1,0 +1,17 @@
+---
+title: "精准编辑"
+description: "编辑前先搜索，拒绝模糊的改动。"
+icon: "scissors"
+---
+
+编辑前先搜索，并拒绝模糊的改动：
+
+```bash
+arka surgical-edit find src/app.py "target function"
+arka surgical-edit edit src/app.py "old text" "new text" --yes
+arka surgical-edit edit src/app.py "old text" "new text" --all --yes
+```
+
+Arka 会先打印匹配的行，默认要求唯一匹配，创建 `.bak` 备份，
+并在关键字缺失或存在歧义时不做任何修改。
+只要清晰地引用文件以及新旧文本，也可以使用自然语言请求。

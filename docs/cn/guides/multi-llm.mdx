@@ -1,0 +1,15 @@
+---
+title: "多 LLM 备选"
+description: "让同一个请求经过多个已配置模型并对比输出。"
+icon: "layer-group"
+---
+
+让同一个请求经过多个已配置模型，并对比带标签的输出：
+
+```bash
+export ARKA_MULTI_LLM_MODELS="openai/gpt-4o-mini,anthropic/claude-3-5-haiku"
+arka multi-llm "propose three names for this product"
+arka multi-llm "write a concise API design" --json
+```
+
+使用以逗号分隔的 `provider/model` 条目。失败的模型会被记录，但不会丢弃其他成功的备选项。诸如 "give me several model alternatives for this landing page" 之类的自然语言会自动路由。

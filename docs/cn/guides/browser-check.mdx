@@ -1,0 +1,54 @@
+---
+title: "浏览器校验"
+description: "用有界的 Playwright 冒烟检查来查看已渲染的 Web 变更。"
+icon: "globe"
+---
+
+```bash
+arka browser_check http://127.0.0.1:3000 --json
+arka "check the frontend in a browser"
+```
+
+Arka 会以无头模式并采用 `wait_until="load"` 加载页面，然后等待一段可配置
+的稳定延迟（对 WebGL/Canvas 应用友好），捕获整页截图，记录页面错误，并
+报告 HTTP 状态和标题。用以下命令安装可选的浏览器运行时：
+
+```bash
+pip install playwright
+arka "playwright install chromium"
+```
+
+对于 Vite/WebGL 应用，必要时使用更长的稳定延迟：
+
+```bash
+arka browser_check http://localhost:5174 --settle 4 --json
+# or: ARKA_BROWSER_SETTLE_SECONDS=4 arka browser_check http://localhost:5174 --json
+```
+
+如果缺少 Playwright，Arka 会打印上面的确切安装命令。浏览器检查是只读的；
+控制台/WebGL 错误会被报告，方便在应用中修复。
+
+## 声明式跨平台应用测试
+
+Arka 可以在 macOS、Linux 和 Windows 上运行相同的浏览器工作流：
+
+```bash
+arka automate http://localhost:3000 --steps '[{"action":"click","selector":"button"},{"action":"assert_text","selector":"body","text":"Done"}]' --json
+```
+
+支持的动作有 `goto`、`click`、`fill`、`press`、`wait`、`assert_text` 和
+`screenshot`。除非提供 `--output`，否则截图是临时的。开发工作流时使用
+`--headed`；在对生产应用运行之前，请审查生成的步骤。
+
+对于原生桌面应用，使用可选的 PyAutoGUI 后端：
+
+```bash
+arka automate unused --backend desktop --steps '[{"action":"click","x":400,"y":300},{"action":"type","text":"hello"},{"action":"screenshot"}]'
+```
+
+桌面步骤支持 `click`、`type`、`hotkey`、`press`、`wait` 和 `screenshot`。
+它们绝不会隐式启动应用或执行 shell 命令；请单独启动目标应用，并将坐标
+限定在测试环境中。
+```
+
+这仅用于校验；它不会编辑代码或自动重试构建。

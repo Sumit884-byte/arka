@@ -1,0 +1,21 @@
+---
+title: "迭代与循环"
+description: "按次数或时间间隔重复 Arka 命令。"
+icon: "arrows-spin"
+---
+
+`iterate` 是有界重复；它精确运行 N 次然后退出：
+
+```bash
+arka iterate 5 "repo health"
+```
+
+`loop` 基于时间间隔运行并持续到被中断为止。当你想要一个有限次数的间隔
+循环时，加上 `--count`：
+
+```bash
+arka loop 300 "check repo health"
+arka loop 60 --count 10 "run tests"
+```
+
+这些运行器独立于 `arka goal`：它们不会规划、修改目标或持久化自主进度。

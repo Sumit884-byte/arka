@@ -1,0 +1,18 @@
+---
+title: "OCR + vLLM 证据"
+description: "让图像回答同时基于 OCR 与模型解读。"
+icon: "eye"
+---
+
+让图像回答同时基于 OCR 与模型解读：
+
+```bash
+pip install pytesseract pillow
+arka vision-evidence screen.png "What price is shown?" \\
+  --model-view "The visual model sees a price label reading $10"
+arka vision-evidence screen.png "What price is shown?" --json
+```
+
+Arka 会报告 OCR 的识别结果、视觉/vLLM 模型的判断，以及一个综合回答，
+标明二者的一致、冲突与不确定之处。它不会把模型的猜测悄悄当作文本证据。
+支持使用自然语言请求。

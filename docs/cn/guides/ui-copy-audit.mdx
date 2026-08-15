@@ -1,0 +1,17 @@
+---
+title: "UI 文案审查"
+description: "审查前端源代码中是否存在重复的按钮或标签文案。"
+icon: "spell-check"
+---
+
+LLM 生成的界面有时会给两个按钮或标签使用相同的措辞。
+在发布前审查前端源代码：
+
+```bash
+arka ui-copy .
+arka ui-copy src --json
+```
+
+审查会检查 HTML、JSX/TSX、Vue 和 Svelte 中按钮/标签/链接的内容，
+归一化大小写和空白，并报告出现重复措辞的文件及行号。
+它仅用于检查；请在阅读上下文后有目的地重命名标签。

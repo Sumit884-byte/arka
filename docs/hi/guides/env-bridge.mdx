@@ -1,0 +1,14 @@
+---
+title: "Local environment bridge"
+description: "Arka के local configuration से किसी अन्य project की .env भरें।"
+icon: "bridge"
+---
+
+```bash
+arka env-bridge /path/to/project
+arka env-bridge /path/to/project --allow OPENAI_API_BASE,OLLAMA_HOST --apply
+```
+
+यह bridge deterministic और केवल-local है; यह values को LLM पर नहीं भेजता।
+यह previews में values को redact करता है, मौजूदा keys को कभी overwrite नहीं करता, और लिखने से पहले
+`--apply` की आवश्यकता होती है। copy की गई variables को सीमित करने के लिए `--allow` को प्राथमिकता दें।

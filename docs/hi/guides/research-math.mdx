@@ -1,0 +1,14 @@
+---
+title: "Research math"
+description: "Arka के साथ reproducible, auditable गणितीय calculations चलाएँ।"
+icon: "square-root-variable"
+---
+
+```bash
+arka research_math "sqrt(16) + 2**3"
+arka math_script "exp(-0.5) / sqrt(2*pi)" --output gaussian.py
+```
+
+Arka expressions को एक restricted AST से validate करता है, बिना imports या
+builtins के evaluate करता है, और AI तथा scientific research workflows में
+पुनरुत्पादन के लिए सटीक calculation को Python script के रूप में save करता है।

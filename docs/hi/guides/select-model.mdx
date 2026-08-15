@@ -1,0 +1,73 @@
+---
+title: "Hardware-aware मॉडल चयन"
+description: "अपने CPU, RAM, GPU, और disk की जाँच करके प्रति-task LLM मॉडल सुझाएँ — फिर वैकल्पिक रूप से उन्हें ai-skill-model profiles पर लागू करें।"
+keywords: ["llm", "model", "hardware", "ollama"]
+icon: "microchip"
+---
+
+Model advisor आपकी मशीन की जाँच करता है और Arka के skill profiles (`route`,
+`chat`, `summarize`, आदि) के लिए **प्रति-task LLM मॉडल** सुझाता है।
+
+## प्राकृतिक भाषा
+
+```bash
+arka select best model for my pc
+arka what llm model should I use
+arka optimize models for my hardware
+arka best models for my mac
+arka auto configure models from my hardware --apply
+```
+
+## CLI
+
+```bash
+arka select_model                    # recommendations दिखाएँ
+arka select_model --apply            # llm-skill-models.json में लिखें
+arka select_model --json             # machine-readable output
+arka select_model probe              # केवल hardware snapshot
+arka select_model --local            # सबसे मज़बूत installed local मॉडल चुनें जो fit हो
+arka select_model --local --run "summarize this repo"  # इसके साथ Ollama के ज़रिये prompt चलाएँ
+```
+
+## Hardware tiers
+
+| Tier | सामान्य hardware | रणनीति |
+| --- | --- | --- |
+| `minimal` | कम RAM, कोई GPU नहीं | केवल cloud, tiny/fast मॉडल |
+| `cloud_light` | Laptop, कोई local LLM नहीं | तेज़ cloud APIs |
+| `balanced` | 8–16 GB RAM | Cloud primary, वैकल्पिक small local |
+| `local_capable` | 16\+ GB RAM, GPU | भारी कार्यों के लिए Ollama \+ cloud का मिश्रण |
+| `local_heavy` | 32\+ GB RAM, मज़बूत GPU | local Ollama मॉडल को प्राथमिकता |
+
+Advisor CPU cores, RAM, GPU (CUDA/MPS/Metal), disk space, battery status, और
+installed Ollama मॉडल की जाँच करता है।
+
+## सुझाव लागू करें
+
+```bash
+arka select_model --apply
+# या
+arka auto apply models for my hardware
+```
+
+यह `~/.config/arka/llm-skill-models.json` में लिखता है। किसी भी समय व्यक्तिगत
+profiles override करें:
+
+```bash
+arka ai-skill-model chat gemini/gemini-2.0-flash
+```
+
+## आवश्यकताएँ
+
+- Cloud tiers के लिए कम से कम एक cloud API key (`GEMINI_API_KEY`, `GROQ_API_KEY`, आदि)।
+- Local tiers के लिए pulled मॉडलों के साथ `ollama serve` चल रहा हो।
+
+केवल on-device विकल्प के लिए, `select_model --local` का उपयोग करें। Arka उपलब्ध
+Ollama मॉडलों और local memory/GPU क्षमता की जाँच करता है, फिर सबसे बड़ा installed
+text मॉडल चुनता है जो runtime headroom के साथ fit हो सके। सभी skill profiles के
+लिए उस मॉडल का उपयोग करने हेतु `--apply` जोड़ें।
+
+## संबंधित
+
+- [LLM concepts](/concepts/llm) — providers और failover
+- [Configuration reference](/reference/configuration) — `ai-skill-model` settings

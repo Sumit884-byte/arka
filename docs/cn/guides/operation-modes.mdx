@@ -1,0 +1,83 @@
+---
+title: "运行模式"
+description: "控制 Arka 的行为方式 — agent、ask、plan、debug 与 multitask 模式。"
+keywords: ["mode", "debug", "ask", "plan", "agent"]
+icon: "toggle-on"
+---
+
+Arka 支持 **运行模式**，用于改变路由的详细程度、写入权限和执行方式。默认是 **agent**（debug 关闭）。
+
+## 模式
+
+| 模式 | 行为 |
+| --- | --- |
+| `agent` | **默认** — 完整技能执行，输出简洁 |
+| `ask` | 只读；风险操作被阻止 |
+| `plan` | 打印结构化步骤，不执行 |
+| `debug` | 显示路由跟踪、LLM 回退、vLLM 状态 |
+| `multitask` | 后台子智能体并行工作 |
+
+## 切换模式
+
+```bash
+arka mode debug
+arka mode agent
+arka mode list
+```
+
+或在 `~/.config/arka/.env` 中设置：
+
+```env
+ARKA_MODE=agent
+```
+
+## Plan 模式工作流示例
+
+在导出演示文稿之前，使用 plan 模式勾勒幻灯片的设计工作：
+
+```bash
+arka mode plan
+arka "improve pitch slide design for kubernetes networking"
+```
+
+Arka 会打印一份结构化计划（审查配色、间距、页脚、指标标注），但不会实际运行 `compose_slides`。切回执行：
+
+```bash
+arka mode agent
+arka compose_slides compose --topic "kubernetes networking" --style pitch --theme dark -f pptx
+```
+
+或使用环境变量一次性覆盖：
+
+```bash
+ARKA_MODE=plan arka "compose slides about kubernetes --style pitch"
+```
+
+请参阅 [Compose slides](/cn/guides/compose-slides) 了解样式与主题选项。
+
+## Debug 模式显示的内容
+
+仅在 `debug` 模式下：
+
+- `arka_llm: fallback ok → groq/...`
+- `→ Interpreted: ...` / `▶ Running skill: ...`
+- vLLM / Ollama 服务器启动消息
+- Self-improve 的完整 pytest 输出以及 goal-agent 上下文
+
+普通模式保持简洁输出，适合非开发者使用。
+
+## Route 模式（独立）
+
+`ROUTE_MODE` 控制**如何路由请求**，而非执行风格：
+
+| 值 | 行为 |
+| --- | --- |
+| `symbolic` | 先离线规则，LLM 回退（推荐） |
+| `ai_only` | 优先 LLM 路由 |
+| `symbolic_only` | 从不调用 LLM 进行路由 |
+
+```env
+ROUTE_MODE=symbolic
+```
+
+请参阅 [路由工作原理](/cn/concepts/routing)。

@@ -1,0 +1,20 @@
+---
+title: "GitHub Actions"
+description: "GitHub Actions workflows का inspect, create, और monitor करें।"
+icon: "github"
+iconType: "brands"
+---
+
+```bash
+arka github-actions inspect .
+arka github-actions new .
+arka github-actions new . --force
+arka github-actions status .
+```
+
+Generated workflow project को install करता है, Ruff चलाता है, और `main` पर
+pushes और pull requests पर Pytest चलाता है। मौजूदा workflows को overwrite नहीं
+किया जाता जब तक `--force` स्पष्ट रूप से न दिया जाए। प्राकृतिक भाषा में अनुरोध
+जैसे "setup GitHub Actions in this repo" और "did the production build fail?"
+समर्थित हैं। Status command read-only है और recent remote runs को inspect करने
+के लिए GitHub CLI (`gh`) का उपयोग करता है।

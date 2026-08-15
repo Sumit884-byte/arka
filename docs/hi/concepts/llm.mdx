@@ -1,0 +1,123 @@
+---
+title: "multi-provider failover के साथ LLM orchestration"
+description: "Arka कैसे 24 LLM providers को automatic failover, API key rotation, per-task profiles, और per-skill model overrides के साथ orchestrate करता है।"
+keywords: ["llm", "providers", "failover", "models"]
+icon: "sparkles"
+---
+
+Arka का `LlmFallbackEngine` **25 providers** में सभी LLM calls को automatic failover, API key rotation, और per-task या per-skill model overrides के साथ manage करता है।
+
+## समर्थित providers
+
+Anthropic, OpenAI, Gemini, Groq, xAI, DeepSeek, Moonshot, Z.AI, MiniMax, Venice, Mistral, Cohere, Together, Fireworks, Perplexity, Hugging Face, OpenRouter, Sakana Fugu, Bedrock, Azure, LiteLLM, Ollama, LM Studio, vLLM, और vLLM Cloud.
+
+## Failover कैसे काम करता है
+
+Orchestrator क्रम में एक candidate list बनाता है:
+
+1. `AI_PREFERRED_PROVIDER` \+ `AI_PREFERRED_MODEL` (यदि set है)
+2. प्रत्येक provider API से live model lists (जब keys अनुमति देती हैं)
+3. Built-in chain: Gemini 2.5/2.0 Flash → Groq Llama 3.3/3.1 → Ollama cloud/local
+
+429, 401, या timeout पर, Arka अगले model को आज़माता है। API key rotation (`API_KEY_ROTATION=1`) providers स्विच करने से पहले backup keys को cycle करता है।
+
+```env
+AI_PREFERRED_PROVIDER=gemini
+AI_PREFERRED_MODEL=gemini-2.0-flash
+AI_KEEP_MODEL_ON_PROVIDER_SWITCH=1
+LLM_AUTO_FALLBACK=1
+API_KEY_ROTATION=1
+```
+
+जब आप `arka provider set groq` (या fish में `ai-pref groq`) के साथ providers बदलते हैं, तो Arka नए provider पर **वही model रखने** का प्रयास करता है, उस provider के default पर वापस आने से पहले। `arka provider set groq --no-keep-model` या `AI_KEEP_MODEL_ON_PROVIDER_SWITCH=0` के साथ अक्षम करें।
+
+## Per-task profiles
+
+| Task | उपयोग के लिए |
+| --- | --- |
+| `route` | Skill routing निर्णय |
+| `summarize` | Email और document summaries |
+| `chat` | Conversational replies |
+| `research` | Deep web research |
+| `agent` | Goal agent steps |
+| `pdf` | PDF question answering |
+| `arka predictions` | Stock और forecast analysis |
+| `compose_video` | Video script generation |
+| `arka compose_slides` | Presentation slide script generation |
+
+Task के अनुसार override करें:
+
+```env
+LLM_FALLBACK_ROUTE=gemini/gemini-2.0-flash,groq/llama-3.3-70b-versatile
+LLM_FALLBACK_SUMMARIZE=groq/llama-3.3-70b-versatile
+```
+
+## Per-skill models
+
+```bash
+arka ai-skill-model web_answer groq/llama-3.3-70b-versatile
+arka ai-skill-model profiles
+arka ai-models
+```
+
+या `~/.config/arka/llm-skill-models.json` को edit करें।
+
+## Benchmark orchestration
+
+यदि आप चाहते हैं कि model selection live benchmark winners का पालन करे, तो पहले एक benchmark suite चलाएँ और फिर orchestration सक्षम करें:
+
+```bash
+arka benchmark run
+arka benchmark show
+ARKA_BENCHMARK_ORCHESTRATE=1 arka orchestrate --benchmark "how to get free ai credits"
+```
+
+Benchmark profile routed task का पालन करता है, इसलिए एक request जो `web_answer` पर route होती है वह `chat` benchmark results का उपयोग करती है, जबकि agent-style requests `agent` का उपयोग करती हैं।
+
+## Shared exhaustion cache
+
+एक session cache — exhausted models को reset तक सभी skills में skip किया जाता है:
+
+```bash
+arka ai reset-exhaustion
+```
+
+Failover पर stderr notification सक्षम करें: `LLM_FALLBACK_NOTIFY=1`. Debug attempts: `LLM_VERBOSE=1`.
+
+## Local LLM servers
+
+```env
+OLLAMA_HOST=127.0.0.1:11434
+LLM_AUTO_START_SERVERS=1
+LLM_AUTO_STOP_SERVERS=1
+```
+
+## Skills संक्षिप्त क्यों रहती हैं
+
+Arka LLM से 70 skill manuals याद रखने के लिए **नहीं** कहता। Skills local programs हैं — model केवल सही नाम चुनता है। LLM route पर, Arka पास करता है:
+
+- एक **compact skill catalog** (केवल registered names)
+- **Curated routing rules** (high-signal patterns)
+- आपकी मशीन के लिए `ROUTE_ALIASES` के माध्यम से **Shell aliases**
+
+Route task कम temperature और एक dedicated chain का उपयोग करता है ताकि एक fast/cheap model classification को संभाले; heavy lifting locally skill के अंदर चलता है।
+
+## Runtime पर निरीक्षण करें
+
+```bash
+arka ai-models
+arka ai models --task summarize
+arka ai models --skill web_answer
+arka ai active-model
+arka ai reset-exhaustion
+```
+
+<Note>
+  answers के नीचे `Model: provider/name` दिखाने के लिए `SHOW_MODEL=1` (default) set करें।
+</Note>
+
+## संबंधित
+
+<CardGroup cols={2}>
+    
+</CardGroup>

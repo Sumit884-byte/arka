@@ -1,0 +1,13 @@
+---
+title: "किसी repository को reverse-engineer करें"
+description: "Local Git history और repository structure को एक build-ready prompt में बदलें।"
+icon: "code-branch"
+---
+
+```bash
+arka repo_reverse
+arka repo_reverse ./project --commits 50 --output rebuild-prompt.md
+arka "reverse engineer this repository"
+```
+
+Arka किसी codebase को rebuild करने या उससे onboard होने के लिए tracked files और हाल के Git evolution को एक inspectable prompt में जोड़ता है। यह locally चलता है और repository को upload नहीं करता।

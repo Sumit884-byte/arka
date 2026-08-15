@@ -1,0 +1,26 @@
+---
+title: "自动 MCP 配置"
+description: "发现并安全地配置流行的 MCP 服务器。"
+icon: "wand-magic"
+---
+
+```bash
+arka mcp-auto list
+arka mcp-auto configure
+arka mcp-auto configure github context7 --apply
+```
+
+Arka 使用一份精选目录，检查所需凭证，跳过已有条目，并在应用前
+预览所有更改。配置会写入现有的 Agent Hub MCP 文件，以便 Cursor、
+Codex、Claude 及其他适配器都能复用。
+
+该目录还包含 SQLite、time、Puppeteer、Docker、Git、memory、
+sequential thinking 以及参考 everything 服务器。Brave Search、Slack、
+Notion、GitHub 以及 PostgreSQL 仍需要凭证，会在其环境变量配置好
+之前显示为不可用。
+
+面向本地开发者的快速设置：
+
+```bash
+arka mcp-auto configure filesystem git memory sequential-thinking sqlite time --apply
+```

@@ -1,0 +1,19 @@
+---
+title: "GitHub Actions"
+description: "检查、创建和监控 GitHub Actions 工作流。"
+icon: "github"
+iconType: "brands"
+---
+
+```bash
+arka github-actions inspect .
+arka github-actions new .
+arka github-actions new . --force
+arka github-actions status .
+```
+
+生成的工作流会安装项目、运行 Ruff，并在推送到 `main` 及 pull request 时
+运行 Pytest。除非显式传入 `--force`，否则不会覆盖已有的工作流。也支持
+诸如 "setup GitHub Actions in this repo" 和 "did the production build fail?"
+等自然语言请求。状态命令是只读的，会使用 GitHub CLI（`gh`）检查最近的
+远端运行。

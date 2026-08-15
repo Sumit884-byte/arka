@@ -1,0 +1,12 @@
+---
+title: "本地模型量化"
+description: "通过安全的先预览后执行工作流创建更小的 GGUF 模型。"
+icon: "compress"
+---
+
+```bash
+arka quantize model-f16.gguf --output model-q4.gguf --type Q4_K_M
+arka quantize model-f16.gguf --output model-q4.gguf --type Q4_K_M --run
+```
+
+第一条命令只是预览 `llama-quantize` 命令。要真正执行需要加 `--run`，输出目录会自动创建。请先安装一个暴露了 `llama-quantize` 的 llama.cpp 构建，再进行转换。

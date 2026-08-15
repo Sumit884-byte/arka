@@ -1,0 +1,73 @@
+---
+title: "MCP के ज़रिए हर Arka स्किल इस्तेमाल करें"
+description: "MCP क्लाइंट्स से dispatch-आधारित Arka क्षमताओं को खोजें और चलाएँ।"
+icon: "table-cells"
+---
+
+<Note>
+  **AI एजेंट्स:** पहले समर्पित [AI एजेंट गाइड](/hi/guides/ai-agents) पढ़ें — रूटिंग तालिका, execution नियम, और session flow। यह पेज dispatch-आधारित स्किल्स और opt-in निजी टूल्स को कवर करता है।
+</Note>
+
+Arka तीन सामान्य MCP entry points देता है:
+
+- `arka_capabilities` वर्तमान MCP tools और dispatch-आधारित स्किल्स सूचीबद्ध करता है।
+- `arka_skill` किसी भी dispatch command को skill नाम और arguments के साथ चलाता है।
+- `arka_route` प्राकृतिक भाषा स्वीकार करता है और उसे Arka के पूरे symbolic/fallback router से रूट करता है।
+
+जब कोई क्लाइंट अनिश्चित हो कि कौन-सा विशिष्ट Arka tool लागू होता है, तो `arka_route` को umbrella MCP skill के रूप में उपयोग करें। पूरे user request को `prompt` के रूप में भेजें; उसे `design_from_screenshot` या `web_answer` जैसे अनुमानित skill नाम में मत बदलें।
+
+इसका मतलब है कि नए जोड़े गए स्किल्स — जिनमें data collection, media transforms, agent races, reusable blocks, ultra-fast development, OCR, RAG, और भविष्य के स्किल्स शामिल हैं — को अलग MCP wrapper की ज़रूरत नहीं है। Execution अभी भी Arka के सामान्य mode, security, और write-action gates से होकर गुज़रता है।
+
+## Local-file MCP tools
+
+`arka_ocr` और `arka_rag` OCR और document RAG के लिए समर्पित MCP tools हैं। ये केवल तभी काम करते हैं जब agent local machine पर paths पढ़ सके (उदाहरण के लिए Cursor workspace file)। बिना mounted files वाले cloud agents इन्हें इस्तेमाल नहीं कर सकते।
+
+`arka_capabilities` को कॉल करके `local_file_tools` section देखें, जो इन tools और agents द्वारा पालन किए जाने वाले साझा notice को सूचीबद्ध करता है।
+
+### Incremental verification (सभी agents)
+
+पूरे लंबे log या batch job का इंतज़ार **मत** करें, फिर results check करें।
+
+1. पहले सबसे छोटा उपयोगी demo चलाएँ (एक file, एक page, या एक sample)।
+2. उस result का निरीक्षण करें — success या failure की पुष्टि के लिए पर्याप्त output।
+3. यदि पहला demo सफल हो, तो दूसरा increment चलाएँ।
+4. उसके बाद ही workflow को **verified** के रूप में report करें।
+
+`arka_capabilities` इसे `agent_execution_rules.incremental_verify` के तहत उजागर करता है।
+
+| Tool | Local path आवश्यक | सामान्य उपयोग |
+|------|---------------------|-------------|
+| `arka_ocr` | हमेशा (`path`) | images से text निकालना; स्कैन किए PDFs का OCR |
+| `arka_rag` | `ingest`, `codebase_ingest`, `batch_ingest` के लिए | PDFs/docs ingest करें और उन पर सवाल पूछें |
+
+उदाहरण MCP कॉल:
+
+```json
+{ "path": "/Users/me/workspace/scan.png", "action": "extract" }
+```
+
+```json
+{ "action": "ingest", "path": "/Users/me/Documents/report.pdf" }
+```
+
+```json
+{ "action": "ask", "document": "report.pdf", "question": "Summarize key findings" }
+```
+
+**Defaults (2026):** `PDF_RAG_PGPT=auto` तब PrivateGPT auto-start स्किप करता है जब TurboQuant ने पहले ही फ़ाइल index कर ली हो। स्कैन किए PDFs indexing से पहले locally OCR किए जाते हैं। यदि cloud LLM रूट फेल हो जाएँ तो RAG `ask` Ollama, फिर extractive context पर fallback करता है।
+
+MCP निजी desktop/device स्किल्स के लिए एक safe default filter भी लागू करता है। Spotify playback/search, Brave/browser-opening helpers, media playback, और `daily_brief` तब तक छिपे या ब्लॉक रहते हैं जब तक MCP server `ARKA_MCP_ENABLE_PERSONAL_SKILLS=1` या एक संकीर्ण `ARKA_MCP_ENABLED_TOOLS` / `ARKA_MCP_ENABLED_SKILLS` override के साथ शुरू न किया जाए।
+
+## Routing cheat sheet
+
+| स्थिति | Tool |
+| --- | --- |
+| अनिश्चित कि कौन-सा Arka tool सही है | पूरे user `prompt` के साथ `arka_route` |
+| skill नाम मालूम है | `arka_skill` `skill` + वैकल्पिक `args` के साथ |
+| Live tool list + rules चाहिए | `arka_capabilities` |
+| Repo layout / symbols | `arka_repo_map` |
+| किसी project folder की fuzzy-find | `arka_tech_stack` (`action: search`) |
+| OCR या document RAG | `arka_ocr`, `arka_rag` (local paths) |
+| Files पर patch | `arka_edit_guard` → `arka_apply_patch` |
+
+पूरी decision table और उदाहरण: [AI एजेंट गाइड](/hi/guides/ai-agents#routing-decision-table)।

@@ -1,0 +1,30 @@
+---
+title: "Engineering loops"
+description: "Bounded plan, implement, verify, review, और learn loops।"
+icon: "arrows-spin"
+---
+
+Arka में एक छोटा, पुनः उपयोग योग्य engineering-loop planner शामिल है, जो
+[loop-engineering](https://github.com/cobusgreyling/loop-engineering) में वर्णित
+iterative workflow से प्रेरित है। यह Arka के मौजूदा repository, lint, CI,
+frontend, और review skills को compose करता है; यह repository-specific कोड
+copy नहीं करता।
+
+```bash
+arka loop-engineering "improve checkout error handling" --iterations 3
+```
+
+प्रत्येक iteration `observe → plan → implement → verify → review → learn` का
+पालन करता है। Loop 20 iterations तक capped है, इसमें एक CI gate शामिल है, और
+default रूप से edits से पहले approval की आवश्यकता होती है। `--apply` का उपयोग
+केवल तब करें जब आप plan की समीक्षा कर चुके हों; `--json` से किसी दूसरे skill या
+MCP client के लिए इसे consume करना आसान हो जाता है।
+
+प्राकृतिक भाषा भी काम करती है:
+
+```text
+engineering loop fix the checkout frontend for 2 iterations
+```
+
+यह `arka loop` से अलग है, जो एक command को time interval पर दोहराता है, और
+`arka iterate` से भी, जो एक command को fixed संख्या में दोहराता है।

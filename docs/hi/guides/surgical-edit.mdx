@@ -1,0 +1,15 @@
+---
+title: "Surgical editing"
+description: "Edit करने से पहले search करें और ambiguous बदलावों को अस्वीकार करें।"
+icon: "scissors"
+---
+
+Edit करने से पहले search करें और ambiguous बदलावों को अस्वीकार करें:
+
+```bash
+arka surgical-edit find src/app.py "target function"
+arka surgical-edit edit src/app.py "old text" "new text" --yes
+arka surgical-edit edit src/app.py "old text" "new text" --all --yes
+```
+
+Arka पहले matching lines print करता है, डिफ़ॉल्ट रूप से एक unique match की आवश्यकता होती है, एक `.bak` backup बनाता है, और जब keyword गायब या ambiguous हो तो कोई बदलाव नहीं करता। प्राकृतिक भाषा अनुरोध तब समर्थित होते हैं जब फ़ाइल और old/new text स्पष्ट रूप से quote किए गए हों।

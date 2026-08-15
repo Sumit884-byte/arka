@@ -1,0 +1,14 @@
+---
+title: "URL 应用设计分析器"
+description: "从一个在线应用 URL 生成交互式的设计评审看板。"
+icon: "link"
+---
+
+从一个在线应用 URL 生成交互式的设计评审看板：
+
+```bash
+arka url-app https://example.com --output review.html
+arka url-app https://example.com --json
+```
+
+该看板包含页面元数据、响应式/可访问性信号，以及按优先级排列的设计改动建议。它是一个真正的 HTML 评审应用，而不是 `.md` 摘要。建议保持在视口范围内，并保留按钮顺序。网络访问是只读的；对于需要认证或大量 JavaScript 的应用，请使用浏览器截屏技能。

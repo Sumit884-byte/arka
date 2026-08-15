@@ -1,0 +1,149 @@
+---
+title: "Sakana Fugu orchestrator"
+description: "Arka से Sakana Fugu के multi-agent orchestration का उपयोग करें — LLM provider, Codex bridge, और Agent Hub peer के रूप में।"
+keywords: ["fugu", "sakana", "orchestrator", "multi-agent", "codex"]
+icon: "fish"
+---
+
+[**Sakana Fugu**](https://sakana.ai/fugu/) Sakana AI का एक learned multi-agent orchestrator है। यह एक single **OpenAI-compatible API** (`https://api.sakana.ai/v1`) expose करता है जो frontier models के pool में कार्य को route, delegate, verify, और synthesize करता है। आपके कोड के दृष्टिकोण से यह एक model की तरह व्यवहार करता है — `fugu` (fast) या `fugu-ultra` (deeper)।
+
+Arka तीन तरीकों से Fugu को integrate करता है:
+
+1. **LLM provider** — failover chains, teams, और skills में `sakana` / `fugu` का उपयोग करें
+2. **`arka fugu` CLI** — Fugu के माध्यम से one-shot prompts
+3. **Agent Hub \+ MCP** — Arka memory, skills, और tools को Fugu के साथ साझा करें (Codex के माध्यम से)
+
+## Quick start
+
+```bash
+# 1. Create an API key at https://console.sakana.ai
+# 2. Add to ~/.config/arka/.env
+SAKANA_API_KEY=your_key_here
+
+# 3. Verify
+arka fugu status
+
+# 4. Ask Fugu
+arka fugu explain how TLS handshake works
+arka fugu ultra design a multi-region failover plan
+```
+
+## LLM provider
+
+Fugu provider `sakana` (alias `fugu`) के रूप में register है:
+
+```env
+SAKANA_API_KEY=your_key_here
+AI_PREFERRED_PROVIDER=sakana
+AI_PREFERRED_MODEL=fugu
+# SAKANA_MODELS=fugu,fugu-ultra
+```
+
+Failover chains में उपयोग करें:
+
+```env
+LLM_FALLBACK=sakana:fugu,gemini:gemini-2.5-flash,groq:llama-3.3-70b-versatile
+```
+
+Per-skill override:
+
+```bash
+arka ai-skill-model research sakana/fugu-ultra
+```
+
+## Agent teams
+
+```yaml
+# ~/.config/arka/teams/research.yaml
+name: research
+members:
+  - role: lead
+    kind: model
+    id: fugu-ultra
+    provider: sakana
+  - role: reviewer
+    kind: model
+    id: gemini-2.0-flash
+    provider: gemini
+```
+
+या provider default का उपयोग करें:
+
+```yaml
+  - role: orchestrator
+    kind: provider
+    id: sakana
+```
+
+## Codex bridge
+
+Fugu का primary harness **OpenAI Codex** है। Sakana provider bundle install करें:
+
+```bash
+curl -fsSL https://sakana.ai/fugu/install | bash
+SAKANA_API_KEY=your_key codex -p fugu
+```
+
+Codex/Fugu के साथ Arka tools साझा करें:
+
+```bash
+# Export hub memory, skills, and MCP registry
+arka fugu sync
+
+# Merge Arka MCP servers into ~/.codex/mcp.json (includes arka mcp serve)
+arka fugu sync --unify
+```
+
+यह Fugu को [Agent Hub](/hi/guides/agent-hub) में register करता है और shared `hub/mcp.json` को Codex के MCP config में merge करता है ताकि Fugu `arka_ask`, `arka_skill`, `arka_team_run`, और अन्य Arka MCP tools को call कर सके।
+
+## MCP: external orchestrators → Arka
+
+MCP client support वाला कोई भी orchestrator (जिसमें Codex के माध्यम से Fugu शामिल है) Arka को tool server के रूप में consume कर सकता है:
+
+```json
+{
+  "mcpServers": {
+    "arka": {
+      "command": "arka",
+      "args": ["mcp", "serve"]
+    }
+  }
+}
+```
+
+Install snippet:
+
+```bash
+arka mcp install --agent cursor --write-config
+arka agent_hub sync --unify
+```
+
+## HTTP webhook (वैकल्पिक ingress)
+
+MCP के बजाय JSON POST करने वाले orchestrators के लिए:
+
+```bash
+WEBHOOK_ENABLED=1
+WEBHOOK_TOKEN=your-secret
+arka webhook serve
+```
+
+Session continuity के लिए `channel` \+ `chat_id` के साथ `http://127.0.0.1:8767/v1/inbox` पर POST करें। session pattern के लिए [Hermes features](/hi/guides/hermes-features) देखें।
+
+## Fugu क्या है (और क्या नहीं)
+
+|  | Fugu | Arka |
+| --- | --- | --- |
+| **भूमिका** | Multi-model orchestrator (frontier LLMs को routes करता है) | Local agent hub (skills, memory, MCP, teams) |
+| **Interface** | OpenAI-compatible REST API | CLI, fish, MCP server, webhooks |
+| **MCP** | Codex harness के माध्यम से | Native client \+ server |
+| **Self-host** | API-only (closed weights) | पूरी तरह से स्थानीय |
+
+Fugu संभालता है **कौन से models को call करना है और उन्हें कैसे coordinate करना है**। Arka संभालता है **आपके environment में कौन से tools, memory, और workflows उपलब्ध हैं**। साथ में: Fugu reasoning को orchestrate करता है; Arka toolbox प्रदान करता है।
+
+## संबंधित
+
+- [LLM failover](/hi/concepts/llm) — provider registry और `sakana` slug
+- [Agent Hub](/hi/guides/agent-hub) — cross-agent MCP/memory sync
+- [MCP](/hi/guides/mcp) — `arka mcp serve` tool surface
+- [Agent teams](/hi/guides/agent-teams) — `provider: sakana` के साथ `kind: model`

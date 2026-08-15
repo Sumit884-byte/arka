@@ -1,0 +1,44 @@
+---
+title: "Dev work के लिए video evidence"
+description: "Architecture recordings, UI bug videos, Loom/Jam reports, और PR repro clips को developer artifacts में बदलें।"
+keywords: ["video evidence", "bug report", "jira", "loom", "jam", "architecture docs", "pull request"]
+icon: "video"
+---
+
+Arka developer recordings को structured artifacts में बदल सकता है — engineers
+को videos में manually scrub करने के लिए छोड़ने के बजाय।
+
+```bash
+arka video-evidence architecture meeting.mp4
+arka video-evidence pr ui-bug-repro.webm --output pr-context.md
+arka video-evidence bug loom-recording.mp4 --format json --output ticket.json
+```
+
+प्राकृतिक भाषा उसी workflow पर route करती है:
+
+```bash
+arka turn architecture whiteboard meeting.mp4 into docs and code stubs
+arka summarize screen recording bug.mp4 as PR reproduction steps
+arka convert Loom bug report bug.mov into a Jira ticket
+arka make a Jam-style ticket from ui-regression.webm
+```
+
+## Modes
+
+| Mode | Output |
+| --- | --- |
+| `architecture` | System overview, data/control flow, decisions, open questions, और code-stub suggestions |
+| `pr` | Pull-request reproduction context: steps, expected बनाम actual, evidence, और verification plan |
+| `bug` | Jira-ready ticket structure: summary, environment clues, repro steps, actual/expected, attachments, acceptance criteria |
+
+## यह कैसे काम करता है
+
+`video_evidence` Arka की `describe_video` pipeline को पुनः उपयोग करता है। जब
+`ffmpeg` और एक vision backend उपलब्ध होते हैं, Arka frames sample करता है और
+उन observations को raw evidence के रूप में उपयोग करता है। यदि vision stack
+उपलब्ध नहीं है, तो भी वह artifact एक स्पष्ट note के साथ बनाता है ताकि workflow
+चुपचाप video details को hallucinate न करे।
+
+पहला implementation file-first और local-safe है। GitHub, GitLab, Jira, Jam, या
+Loom के साथ integrations को downloaded recording path या URL इस skill में पास
+करना चाहिए, फिर generated Markdown या JSON को external system से attach करें।

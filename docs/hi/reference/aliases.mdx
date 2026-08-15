@@ -1,0 +1,73 @@
+---
+title: "Command aliases, subcommand synonyms, और skill नाम"
+description: "Arka के command aliases, agent name overrides, subcommand synonyms, और skill-name equivalents के लिए reference जो आपको एक ही feature को कई तरीकों से invoke करने देते हैं।"
+keywords: ["aliases", "commands", "synonyms"]
+icon: "at"
+---
+
+Arka कई स्तरों पर aliases का उपयोग करता है: मुख्य command नाम, helper functions, subcommand synonyms, और skill-name equivalents।
+
+## Main command
+
+| Command | यह क्या है |
+| --- | --- |
+| `arka` | Default entry point |
+| `agent` | हमेशा उपलब्ध; समान NL router |
+| Custom name | `.env` में `AGENT_NAME=mybot` set करें |
+
+Wake phrases में agent नाम शामिल है: **"hey arka, …"**
+
+## Subcommand synonyms
+
+| Synonyms | पर maps होते हैं |
+| --- | --- |
+| `reload` / `refresh` / `relink` | Config reload |
+| `start` / `up` | Services start |
+| `stop` / `down` | Services stop |
+| `youtube` / `yt` | YouTube commands |
+| `youtube_bulk` / `yt_bulk` | Bulk downloads |
+| `youtube_download` / `yt_download` | Single download |
+| `youtube_research` / `yt_research` | YouTube research |
+| `predict` / `predictions` / `forecast` | Predictions talent |
+| `stock` / `stocks` / `market` | Stock intelligence |
+| `skills` / `plugins` / `extensions` | Plugin management |
+| `supermemory` / `sm` / `memory-cloud` | Cloud memory |
+| `pdf` / `document` / `docs` | PDF RAG |
+| `download` / `dl` | Download media |
+| `quiz` / `quiz_practice` | Quiz practice |
+| `council` / `deliberate` | Arka Council |
+| `open` / `browse` / `open_url` | ब्राउज़र में URL खोलें |
+| `timezone_convert` / `tz_convert` | Timezone conversion |
+| `interesting_fact` / `fun fact` | दिलचस्प trivia |
+| `self` / `self_improve` | Self-improve loop |
+| `provider` | LLM provider selection |
+| `mode` | Operation mode (agent/ask/plan/debug) |
+
+## Skill-name equivalents
+
+| Names | Notes |
+| --- | --- |
+| `stock` / `stock_analysis` | Market bridge |
+| `pass` / `generate_password` | Password vault |
+| `doc_*` / `pdf_*` | Document RAG |
+| `macro` | `stock macro` के लिए Alias |
+| `emotion` | `stock emotion` के लिए Alias |
+
+## Fish shell helpers
+
+| Function | Equivalent |
+| --- | --- |
+| `arka agent_route` | बिना execute किए routing preview करें |
+| `arka route` | अंतिम routing decision |
+| `arka route` | skill choice समझाएँ |
+| `yt_research` | `youtube_research` |
+| `arka yt_bulk` | `youtube_bulk` |
+| `arka yt_download` | `youtube_download` |
+
+## अपनी मशीन पर discover करें
+
+```bash
+arka help
+arka skills list
+grep AGENT_NAME ~/.config/arka/.env
+```

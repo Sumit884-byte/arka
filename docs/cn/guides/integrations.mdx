@@ -1,0 +1,71 @@
+---
+title: "集成"
+description: "在 Arka 的用户 .env 文件中管理可选的服务提供商凭据。"
+icon: "plug"
+---
+
+Arka 将可选的服务提供商凭据保存在其用户 `.env` 文件中。设置过程绝不会打印
+密钥值，并支持交互式、脚本化以及基于 stdin 的流程。
+
+```bash
+arka integration list
+arka integration init --config-dir .
+arka integration init --config-dir . --json
+arka integration init --config-dir . --gitignore
+arka integration setup all
+arka integration setup serper
+arka integration setup signoz --url https://signoz.example.com
+printf '%s' "$OPENROUTER_API_KEY" | arka integration setup openrouter --key-stdin
+arka integration setup stripe --key-file /run/secrets/stripe_key
+arka integration setup stripe --config-dir ./config --key-file ./stripe_key
+arka integration doctor --json
+arka integration doctor --fix
+```
+
+在 CI 中使用 `--key`，用 `--key-stdin` 避免密钥进入 shell 历史，用
+`remove <name> --yes` 撤销本地配置项。常用别名包括：`gh` 表示 GitHub、
+`hf` 表示 Hugging Face、`gemini`/`gcp` 表示 Google、`ctx7` 表示 Context7。
+
+注册表涵盖以下类别：
+
+- **搜索、模型提供商、协作与应用服务。**
+- **数据库** — `postgres`、`redis`、`mongodb`。
+- **软件包注册表** — Docker Hub、npm、PyPI。
+- **可观测性** — SigNoz、Sentry、Datadog、New Relic。
+- **基础设施** — Cloudflare、DigitalOcean、Hetzner。
+- **托管** — Railway、Vercel、Netlify、Render、Fly.io。
+- **邮件** — Resend、SendGrid。
+- **身份认证** — Clerk、Auth0。
+- **分析** — PostHog、Amplitude。
+- **功能开关** — LaunchDarkly、Statsig。
+LLM 可观测性包括 Langfuse。
+AI 开发集成还包括 LangSmith 和 Weights & Biases。
+远程计算集成包括 Modal 和 E2B。
+本地模型运行时包括 Ollama、vLLM 和 LM Studio；使用 `--url` 指定自定义的
+本地端点。
+托管模型集成包括 Groq 和 Replicate。
+消息提供商包括 Telegram 和 WhatsApp。
+
+自然语言也可以：`set up Serper`、`show available integrations`，或
+`check my Sentry integration`。
+
+## 本地模型与托管模型协同
+
+使用 `arka hybrid status` 可查看可达的本地运行时（Ollama、vLLM 或
+LM Studio）以及已配置的托管提供商。`arka hybrid run "..."` 默认采用
+"本地优先"路由，并在需要时回退到托管模型。可选择 `--policy hosted-first`、
+`local-only` 或 `hosted-only`；`--policy parallel` 会同时运行一个本地和
+一个托管模型，返回两个答案以便比较。用 `arka hybrid config local-first`
+（或其他策略）持久化默认策略。
+
+对于涉及隐私的工作，可强制建立本地的硬边界：
+
+```bash
+arka run-only-local-llm "summarize this repository"
+arka hybrid run --local-only "draft a migration plan"
+arka hybrid config local-only
+```
+
+`local-only` 会在推理之前过滤候选链，因此不会把托管提供商用作回退。如果
+没有配置任何可达的 Ollama、vLLM 或 LM Studio 模型，Arka 会返回错误，而
+不是把提示词发送到云端。

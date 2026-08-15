@@ -1,0 +1,95 @@
+---
+title: "合成视频"
+description: "结合 Arka、素材媒体、图表、TTS 和自定义脚本 API 生成解说视频。"
+icon: "clapperboard"
+---
+
+Arka 的视频合成器可以从主题、JSON 脚本、LLM 或自定义脚本 API 生成带旁白的解说视频。**混合模式为默认：** 播放旁白，不叠加屏幕文字，每个场景根据旁白内容选择合适的**视频**或**照片**素材作为 B-roll。
+
+```bash
+arka compose_video compose --topic "AI infrastructure" --llm
+arka compose_video compose --topic "AI infrastructure" --text   # 旧版字幕
+arka compose_video compose --topic "AI infrastructure" --mode photos
+arka compose_video --script scenes.json
+```
+
+## 混合模式（默认）
+
+| 设置 | 默认值 | 含义 |
+|------|--------|------|
+| `VIDEO_MODE` | `hybrid` | 每个场景混用素材视频与照片 |
+| 屏幕文字 | 关 | 仅使用 TTS/旁白，除非加 `--text` |
+| 单场景媒体 | AI/启发式 | 场景 JSON 中的 `media_type: video` 或 `image` |
+
+使用 `--text` 或 `VIDEO_BURN_TEXT=1` 恢复标题/字幕叠加。使用 `--mode photos` 生成仅图片的幻灯片（旧版）。使用 `--mode video` 全部使用素材视频作为 B-roll。
+
+```bash
+VIDEO_MODE=hybrid arka compose_video compose --topic "cinematic mountains"
+VIDEO_BURN_TEXT=1 arka compose_video compose --topic "AI trends" --llm
+```
+
+## 自带 API
+
+想让自己的模型、工作流、品牌系统或脚本生成器输出视频场景时，可使用自定义 HTTP API：
+
+```bash
+arka compose_video \
+  --topic "AI infrastructure" \
+  --script-provider custom \
+  --api-url https://example.com/arka/video-script
+```
+
+也可以在 `.env` 中一次性配置：
+
+```bash
+VIDEO_SCRIPT_PROVIDER=custom
+VIDEO_SCRIPT_API_URL=https://example.com/arka/video-script
+VIDEO_SCRIPT_API_KEY=...
+```
+
+如果密钥存放在其他环境变量下：
+
+```bash
+VIDEO_SCRIPT_API_KEY_ENV=MY_COMPANY_VIDEO_API_KEY
+```
+
+Arka 会发送一个 JSON POST 请求：
+
+```json
+{
+  "topic": "AI infrastructure",
+  "topic_raw": "ai infrastructure",
+  "scenes": 6,
+  "target_duration_sec": 300,
+  "schema": {
+    "type": "array"
+  }
+}
+```
+
+你的 API 应返回一个场景数组或包含 `scenes` 数组的对象：
+
+```json
+{
+  "scenes": [
+    {
+      "title": "Why AI infrastructure matters",
+      "narration": "AI infrastructure is the stack behind modern models.",
+      "body": "The stack behind AI",
+      "captions": ["Models need compute", "Data and serving matter"],
+      "image_keywords": ["gpu server", "data center"],
+      "duration": 8
+    }
+  ]
+}
+```
+
+Arka 仍会在本地校验和补全场景 JSON，然后使用常规的渲染器、素材媒体查询、图表渲染、TTS 和 ffmpeg 流水线。如果自定义 API 失败，Arka 会回退到内置模板，不会因脚本提供方不可用而让视频命令失败。
+
+常用参数：
+
+```bash
+arka compose_video --topic "AI infra" --script-provider custom --api-header "X-Team: demo"
+arka compose_video --topic "AI infra" --script-provider custom --api-key-env MY_VIDEO_KEY
+arka compose_video check
+```

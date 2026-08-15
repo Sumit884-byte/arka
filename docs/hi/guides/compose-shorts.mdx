@@ -1,0 +1,124 @@
+---
+title: "Shorts बनाएं"
+description: "compose_video के साथ 30–90s vertical shorts बनाएं — terminal tool tips, hybrid B-roll, AI images, और CTA endings।"
+icon: "mobile-screen"
+---
+
+Short-form explainers (YouTube Shorts, Reels, TikTok) उसी `compose_video`
+pipeline का उपयोग करते हैं जो long explainers करते हैं, केवल कम scene counts और वैकल्पिक 9:16 output के साथ।
+
+**Shorts के लिए अच्छे defaults:** 4–5 scenes, कुल 30–90s, `--no-text`
+(केवल voiceover), hybrid B-roll या `--ai-images-only`।
+
+```bash
+arka compose_video check   # ffmpeg, Pillow, stock keys
+```
+
+यह भी देखें: hybrid mode, custom script APIs, और env vars के लिए [Video बनाएं](/hi/guides/compose-video)।
+
+## Quick recipe (LLM script)
+
+```bash
+arka compose_video compose \
+  --topic "fzf terminal fuzzy finder for developers" \
+  --llm --scenes 4 --duration 60s \
+  --no-text \
+  -o fzf-short.mp4
+```
+
+Hybrid mode (default) प्रति scene stock **video** और **photo** B-roll mix करता है। जब आप stock photos के बजाय
+Gemini/Pollinations images चाहते हैं तो `--ai-images-only` जोड़ें
+(`GEMINI_API_KEY` या `POLLINATIONS_API_KEY` की आवश्यकता है)।
+
+```bash
+arka compose_video compose \
+  --topic "fzf terminal fuzzy finder" \
+  --llm --scenes 5 --duration 75s \
+  --no-text --ai-images-only \
+  -o fzf-short-ai.mp4
+```
+
+## Terminal tool short (custom script + CTA)
+
+Repeatable shorts (intro → value → install tip → like/subscribe) के लिए, `--llm` के बजाय JSON
+script का उपयोग करें। Narration को punchy रखें; अंतिम scene आपका CTA है।
+
+`terminal-short-script.json`:
+
+```json
+{
+  "scenes": [
+    {
+      "title": "Meet fzf",
+      "narration": "fzf is a command-line fuzzy finder that makes searching files, history, and processes blazing fast.",
+      "image_query": "terminal fuzzy search developer dark theme",
+      "duration": 8
+    },
+    {
+      "title": "Why devs love it",
+      "narration": "Pipe any list into fzf, type a few letters, and jump exactly where you need.",
+      "image_query": "developer terminal workflow productivity",
+      "duration": 10
+    },
+    {
+      "title": "Try it today",
+      "narration": "Install with your package manager, bind Ctrl-R for history search, and never hunt through output again.",
+      "image_query": "install terminal tool command line",
+      "duration": 8
+    },
+    {
+      "title": "Stay tuned",
+      "narration": "If this helped, like and subscribe for more terminal tips and dev tools.",
+      "image_query": "subscribe like notification",
+      "duration": 10
+    }
+  ]
+}
+```
+
+```bash
+arka compose_video compose \
+  --script terminal-short-script.json \
+  --no-text \
+  -o fzf-short.mp4
+```
+
+जब आप explicit control चाहते हैं तो प्रति scene `media_type` set करें (`video` for motion B-roll,
+`image` for diagrams or UI stills)। देखें [Video बनाएं](/hi/guides/compose-video#hybrid-mode-default)।
+
+## Vertical 9:16 (Shorts / Reels)
+
+`compose_video` में अभी तक कोई `--orientation` flag नहीं है। Portrait output और
+vertical stock search के लिए env vars set करें:
+
+```bash
+VIDEO_ORIENTATION=portrait VIDEO_WIDTH=1080 VIDEO_HEIGHT=1920 \
+  arka compose_video compose \
+  --script terminal-short-script.json \
+  --no-text \
+  -o fzf-short-vertical.mp4
+```
+
+**Full AI video** clips (stock B-roll नहीं) के लिए, `VIDEO_ASPECT=9:16` के साथ `ai_video` का उपयोग करें:
+
+```bash
+VIDEO_ASPECT=9:16 arka ai_video "cinematic terminal hacker desk neon" -d 8 -o clip.mp4
+```
+
+## उपयोगी flags & env
+
+| Flag / env | Shorts में उपयोग |
+| --- | --- |
+| `--scenes 4` | Auto scene count override करें (&lt;90s के लिए explicit ठीक है) |
+| `--duration 60s` | Target runtime (`30s`, `90s`, `1m30s`) |
+| `--no-text` | केवल voiceover — hybrid mode में default |
+| `--ai-images-only` | AI-generated scene images |
+| `VIDEO_MODE=hybrid` | Stock video + photos (default) |
+| `VIDEO_SCENE_SEC=5` | जब scene में duration set न हो तब प्रति scene default seconds |
+| `PEXELS_API_KEY` / `PIXABAY_API_KEY` | Hybrid B-roll के लिए stock video |
+
+Natural language भी सही रूप से route होती है:
+
+```bash
+arka "make a 60 second video about fzf with no text, 4 scenes"
+```

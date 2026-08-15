@@ -1,0 +1,29 @@
+---
+title: "项目结构改进提示词"
+description: "用于改进任意仓库结构的安全提示词。"
+icon: "folder-open"
+---
+
+在 Arka 中使用：
+
+```text
+Inspect this repository before changing anything. Build a repo graph and identify
+the highest-impact structural problems using dependency centrality, tests,
+coupling, duplicate logic, and feature boundaries. Propose a small, ordered
+refactor plan. Do not change behavior, public APIs, button order, URLs, or
+configuration contracts. For each move, show source, destination, import/reference
+updates, risks, and a rollback path. Ask for approval before applying moves. After
+approval, make surgical edits, run only tests covering edited files after each
+step, then run the broader project gate and report the exact files and results.
+Preserve modules that are already clear and do not reorganize for aesthetics alone.
+```
+
+对于单个文件移动：
+
+```bash
+arka move_file src/old.py src/new.py
+arka move_file src/old.py src/new.py --yes --update-refs
+```
+
+移动操作默认只做预览，会拒绝目标冲突，并且只在显式请求时才更新简单的
+文本引用。

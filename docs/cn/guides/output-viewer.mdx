@@ -1,0 +1,110 @@
+---
+title: "输出查看器"
+description: "在浏览器中优雅地渲染 JSON、CSV、markdown 与纯文本。"
+keywords: ["output", "viewer", "json", "csv", "markdown", "ui"]
+icon: "table"
+---
+
+**Arka 输出查看器**是一个轻量级的本地 Web UI，会自动检测数据格式并选择最佳呈现方式 — 表格用于 CSV/JSON 数组、格式化 JSON、渲染后的 markdown、键值布局用于对象，当出现路径时还会显示媒体卡片。
+
+无需 React 构建步骤。仅一个 HTML 外壳加上主包中的一个小型 Python 服务器。
+
+## 快速开始
+
+渲染文件并打开浏览器：
+
+```bash
+arka output show data.json
+arka output show results.csv
+cat report.md | arka output show -
+```
+
+启动交互式的粘贴/上传 UI：
+
+```bash
+arka output serve --port 8790 --open
+```
+
+导出独立的 HTML：
+
+```bash
+arka output render data.json -o preview.html
+```
+
+## 支持格式
+
+| 输入 | 检测为 | 渲染为 |
+| ----- | ----------- | ----------- |
+| `.json` 对象数组 | `json_array` | 可滚动表格 |
+| `.json` 对象 | `json_object` | 键值表格 |
+| `.csv` / `.tsv` | `csv` | 表格 |
+| `.md` / markdown 文本 | `markdown` | 标题、列表、代码块 |
+| `.jsonl` | `jsonl` | 表格（当行为对象时） |
+| JSON 中的媒体路径 | `media` | 图片/视频/音频卡片 |
+| 其他内容 | `text` | 等宽 pre 块 |
+
+使用 `--format` 覆盖自动检测：
+
+```bash
+arka output show notes.txt --format markdown
+```
+
+## API（本地服务器）
+
+当 `arka output serve` 运行时（默认 `http://127.0.0.1:8790`）：
+
+| 方法 | 路径 | Body / 查询 |
+| ------ | ---- | ------------ |
+| `GET` | `/` | 交互式 UI |
+| `POST` | `/api/render` | `{"content":"…","filename":"demo.csv"}` |
+| `GET` | `/api/render?path=/abs/path/data.json` | 加载本地文件 |
+
+响应 JSON 包含 `format`、`title`、`body_html` 与 `html`（包装后的视图）。
+
+## CLI 集成
+
+使用 `arka.core.output_layout` 的技能可以将结果推送到查看器：
+
+```bash
+export ARKA_OPEN_UI=1
+arka some-skill-that-prints-a-result-box
+```
+
+或从 Python 调用：
+
+```python
+from arka.core.output_layout import push_to_viewer
+
+push_to_viewer('{"status":"ok"}', title="Deploy result")
+```
+
+## MCP
+
+`arka_view_output` 为智能体渲染内容：
+
+```json
+{"action": "render", "path": "/abs/path/data.csv"}
+{"action": "open", "content": "# Hello\n\nMarkdown body"}
+```
+
+## 环境变量
+
+| 变量 | 默认 | 用途 |
+| -------- | ------- | ------- |
+| `ARKA_OUTPUT_VIEWER_HOST` | `127.0.0.1` | `output serve` 的绑定主机 |
+| `ARKA_OUTPUT_VIEWER_PORT` | `8790` | 监听端口 |
+| `ARKA_OPEN_UI` | — | 在 `result_box` 输出后打开查看器 |
+| `ARKA_OUTPUT_VERIFY` | `0` | 对文本答案进行裁判模型质量检查 |
+| `ARKA_OUTPUT_VERIFY_BLOCK` | `0` | 在显示 footer 之前等待校验 |
+| `ARKA_OUTPUT_SLOW_MS` | `8000` | 在计时 footer 中标记慢响应 |
+
+当 `ARKA_OUTPUT_VERIFY=1` 或使用 `arka ask --verify` 时，一个**裁判**任务配置（默认 `gemini/gemini-2.5-flash`）会为准确性、完整性、有用性和安全性打分（1–5）。结果会显示在答案 footer 中，如 `Quality: total 842ms · quality 4.2/5 (pass)`。
+
+覆盖裁判模型：`arka ai-skill-model judge openrouter/openai/gpt-4o-mini`。
+
+计时（流式时的 TTFA，总延迟）会自动记录，并在启用追踪时导出到 OpenTelemetry（`arka.output.total_ms`、`arka.output.verify.overall` 等）。
+
+## 相关内容
+
+- [Web 仪表板](/cn/guides/web-dashboard) — 完整的 React 聊天 UI（仅本地检出）
+- [数据展示（`view_data`）](/cn/guides/data-ask) — 终端 CSV 预览

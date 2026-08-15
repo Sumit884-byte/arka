@@ -1,0 +1,28 @@
+---
+title: "Sandboxes"
+description: "Generated code और experiments के लिए disposable project workspaces बनाएँ।"
+icon: "box"
+---
+
+Arka generated code और experiments के लिए disposable project workspaces बना
+सकता है:
+
+```bash
+arka sandbox create demo
+arka sandbox create demo_app --from .
+arka sandbox list
+arka sandbox run demo python -m pytest
+arka sandbox status demo
+arka sandbox destroy demo --yes
+```
+
+Commands sandbox को working directory के रूप में, एक bounded timeout, और
+`ARKA_SANDBOX=1` के साथ चलते हैं। Default location Arka का cache
+(`sandboxes/`) है; दूसरा location चुनने के लिए `ARKA_SANDBOX_DIR` set करें।
+प्राकृतिक भाषा भी काम करती है: "create a sandbox", "list sandboxes", या
+"show sandbox demo status"।
+
+यह सुरक्षित development workflows के लिए directory/process isolation है, कोई
+hardened security boundary नहीं। Untrusted या hostile code को Docker या VM में
+चलाएँ। एक sandbox destroy करने के लिए हमेशा स्पष्ट `--yes` confirmation
+आवश्यक है।

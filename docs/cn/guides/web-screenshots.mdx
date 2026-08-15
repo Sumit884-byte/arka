@@ -1,0 +1,24 @@
+---
+title: "响应式网站截图"
+description: "以桌面、平板和移动尺寸截取网站。"
+icon: "desktop"
+---
+
+以桌面、平板和移动尺寸截取网站：
+
+```bash
+arka web-screenshot https://example.com
+arka web-screenshot https://example.com --viewport pc
+arka web-screenshot https://example.com --viewport tablet
+arka web-screenshot https://example.com --viewport mobile --output qa-shots
+```
+
+默认的 `all` 模式会生成 `website-pc.png`、`website-tablet.png` 和 `website-mobile.png`。截图使用 Playwright Chromium，默认捕获整页；加 `--viewport-only` 只捕获可见视口。用 `pip install playwright && playwright install chromium` 安装一次浏览器运行时。对于 WebGL 和 Canvas 应用，会使用页面加载 + 稳定延时替代 `networkidle`，因为渲染循环运行时 `networkidle` 可能永远不会触发。可用 `--settle 4` 或 `ARKA_BROWSER_SETTLE_SECONDS=4` 配置。
+
+基于已有截图集生成设计改进提示：
+
+```bash
+arka web-screenshot --review --output screenshots
+```
+
+该顾问式审查涵盖响应式布局、层级、间距、排版、可访问性、重复标签、溢出和视觉打磨。请在审阅建议提示之后再应用改动。审查按视口划分：如果平板显得不对而 PC 和移动都还好，只改动平板布局。不要为了修复其他模式而改动一个本来就正常的模式。设计建议仅涉及布局：请严格保留按钮的现有顺序和交互顺序。

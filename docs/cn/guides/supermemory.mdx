@@ -1,0 +1,18 @@
+---
+title: "Supermemory 代码 RAG"
+description: "使用 Supermemory 索引代码，实现检索增强的建议。"
+icon: "bookmark"
+---
+
+普通内存保持按需启用且不变。若要显式索引代码以获得检索增强的
+建议，请使用：
+
+```bash
+arka supermemory remember-code src/arka/router.py
+arka supermemory remember-code src/arka/router.py --chunk-lines 160
+```
+
+Arka 会存储带边界的分块，包含文件路径、语言、行范围、`code`
+标签以及项目信任元数据。这样能提升定向检索能力，而不会静默
+上传整个仓库。在使用云端模式前请审阅隐私和 API 设置；
+`MEMORY=local` 会将分块保留在本地。

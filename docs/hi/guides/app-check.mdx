@@ -1,0 +1,15 @@
+---
+title: "App build checks"
+description: "किसी project के build और test workflow का पता लगाएँ और validate करें।"
+icon: "mobile-screen-button"
+---
+
+Arka से किसी project के build/test workflow का पता लगाने और validate करने के लिए कहें:
+
+```bash
+arka app-check .
+arka app-check . --run
+arka app-check . --run --json
+```
+
+Arka सामान्य Python, Node, Rust, और Go projects का पता लगाता है। `--run` के बिना यह केवल checks का preview करता है। `--run` के साथ यह पहली failure पर रुक जाता है और command output की रिपोर्ट करता है ताकि समस्या ठीक की जा सके। Natural language भी काम करती है: "build and test this app"। Generated या untrusted code को validate करते समय Arka sandbox में checks चलाएँ।

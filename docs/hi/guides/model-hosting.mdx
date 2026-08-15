@@ -1,0 +1,40 @@
+---
+title: "आसान AI model hosting सेटअप"
+description: "Arka के लिए लोकल या hosted model runtimes configure करें।"
+icon: "hard-drive"
+---
+
+```bash
+arka model setup list
+arka model setup ollama --model qwen3:8b
+arka model setup apple-fm
+arka model setup vllm --model Qwen/Qwen2.5-7B-Instruct --url http://127.0.0.1:8000/v1
+arka model setup lmstudio --model local-model
+arka model setup openai-compatible --url https://api.example.com/v1 --model my-model
+arka model doctor
+```
+
+Setup command Arka के protected `.env` handling के ज़रिये model preference और
+endpoint configuration लिखता है। यह weights डाउनलोड नहीं करता और न API secrets
+स्टोर करता है; launch commands और provider-specific अगले steps print किए जाते हैं।
+API keys के लिए `arka integration setup <provider>` का उपयोग करें, फिर runtime
+readiness जाँचने के लिए `arka model doctor`। लोकल और hosted मॉडलों को
+`arka hybrid status` और `arka hybrid run --policy parallel` के साथ जोड़ा जा सकता है।
+
+LAN inference cluster के लिए Exo को एक लोकल OpenAI-compatible host के रूप में
+configure करें:
+
+```bash
+arka model setup exo --model your-model
+arka hybrid status
+arka hybrid run --policy local-only "summarize this code"
+```
+
+Exo Macs, Linux workstations, और अन्य trusted मशीनों को pool कर सकता है। इसके
+endpoint को एक private network पर रखें; Arka इसे local के रूप में classify करता है
+और `local-only` के तहत इसे कभी hosted fallbacks पर नहीं भेजता।
+
+Model advisor Apple Silicon/MLX अवसरों, MoE model hints, और speculative/MTP
+decoding hints को भी annotate करता है। ये evidence labels हैं, guarantees नहीं:
+deployment से पहले runtime support और active-parameter metadata की पुष्टि करनी
+चाहिए।

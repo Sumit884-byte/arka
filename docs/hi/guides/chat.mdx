@@ -1,0 +1,72 @@
+---
+title: "Chat, web search, और factual Q&A स्किल्स"
+description: "Arka के chat engine से web search, deep-scrape RAG, math, weather, आस-पास की जगहों की खोज, और location-aware session memory के साथ प्रश्नों के उत्तर पाएँ।"
+keywords: ["chat", "web_answer", "search", "calc", "weather"]
+icon: "comments"
+---
+
+Arka का chat engine factual प्रश्न, deep web research, math, weather, और location-aware search को संभालता है।
+
+## मुख्य स्किल्स
+
+| Skill | उदाहरण |
+| --- | --- |
+| `web_answer` | `arka ask who won IPL 2025` |
+| `deep_web_answer` | `deep_web_answer latest AI regulation news` |
+| `calc` | `arka calc integrate sin(x) dx` |
+| `hyperlocal_weather` | `arka weather near me` |
+| `set_location` | `set_location Mumbai` |
+| `nearby_places` | `nearby_places Kolkata` |
+| `error_helper` | `error_helper <traceback>` |
+| `arka chat_reset` | Session \+ location context साफ़ करें |
+
+## Forced deep search
+
+Deep web search को force करने के लिए `/` से prefix करें:
+
+```bash
+arka "/who won IPL 2025"
+```
+
+## Deep search queue
+
+Background में deep searches चलाएँ:
+
+```bash
+arka "deep_queue add "who won the last IPL final""
+arka "deep_queue list"
+arka "deep_queue run"
+arka "deep_queue results"
+```
+
+## Session memory
+
+उत्तरों पर `[FROM SEARCH]` या `[FROM MEMORY]` tag लगते हैं (TTS के लिए हटा दिए जाते हैं)। Chat sessions एक session के भीतर follow-up प्रश्नों में context को बनाए रखते हैं।
+
+```bash
+arka facing hair loss          # session के साथ web_answer पर रूट
+arka chat_reset                     # context साफ़ करें
+```
+
+## Location grounding
+
+Hyperlocal परिणामों के लिए अपना location सेट करें:
+
+```bash
+arka "set_location Mumbai"
+arka "hyperlocal_weather"
+arka "nearby_places"
+arka map_download Kolkata           # शहर का map ~/.cache/arka/maps/ में cache करें
+```
+
+## Chat extras install करें
+
+```bash
+pip install "arka-agent[chat]"
+```
+
+आवश्यक: Agno, ddgs, trafilatura, sympy, geopy।
+
+<Note>
+  Web queries search से पहले security checks से गुज़रती हैं। देखें [Security](/hi/concepts/security)।
+</Note>

@@ -1,0 +1,15 @@
+---
+title: "PDF 转交互式网站"
+description: "把 PDF 变成基于浏览器的交互式阅读器。"
+icon: "book-open-reader"
+---
+
+把 PDF 变成基于浏览器的交互式阅读器：
+
+```bash
+arka pdf-to-interactive guide.pdf
+arka pdf-to-interactive guide.pdf --output public/guide.html
+arka pdf-to-interactive guide.pdf --output public/experience.html --ultra
+```
+
+生成的页面使用 PDF.js，包含页面导航、缩放控件、可滚动的渲染页面和文本搜索。「turn guide.pdf into an interactive website」这类自然语言也支持。阅读器从 CDN 加载 PDF.js，并按文件名引用源 PDF，因此请把两个文件放在同一个部署目录下。`--ultra` 增加动画过渡、主题/分享控件，以及可选的由 `<model-viewer>` 驱动的 3D 模型面板（`model.glb`）。

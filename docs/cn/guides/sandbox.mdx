@@ -1,0 +1,25 @@
+---
+title: "沙箱"
+description: "为生成的代码和实验创建可丢弃的项目工作区。"
+icon: "box"
+---
+
+Arka 可以为生成的代码和实验创建可丢弃的项目工作区：
+
+```bash
+arka sandbox create demo
+arka sandbox create demo_app --from .
+arka sandbox list
+arka sandbox run demo python -m pytest
+arka sandbox status demo
+arka sandbox destroy demo --yes
+```
+
+命令会以沙箱为工作目录运行，并带有有界超时和 `ARKA_SANDBOX=1`。默认位置
+是 Arka 的缓存目录（`sandboxes/`）；设置 `ARKA_SANDBOX_DIR` 可选择其他
+位置。也支持自然语言："create a sandbox"、"list sandboxes" 或
+"show sandbox demo status"。
+
+这只是用于安全开发工作流的目录/进程隔离，并不是加固过的安全边界。若要
+运行不受信任或恶意的代码，请使用 Docker 或虚拟机。销毁沙箱始终需要显式
+的 `--yes` 确认。

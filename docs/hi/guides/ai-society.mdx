@@ -1,0 +1,23 @@
+---
+title: "AI society simulations"
+description: "विशिष्ट agents को सहयोग करने, बहस करने और vote करने दें।"
+icon: "building-columns"
+---
+
+एक inspectable multi-agent decision simulation चलाएँ:
+
+```bash
+arka society "should we split this service?"
+arka society "choose a caching strategy" --json
+```
+
+Default society में architecture, implementation, risk, और user advocacy roles शामिल हैं। प्रत्येक role स्वतंत्र रूप से propose करता है, skeptic और architect tradeoffs पर बहस करते हैं, और weighted votes एक reversible decision उत्पन्न करते हैं। यह simulation advisory है और आपके repository को संशोधित नहीं करती।
+
+Voted decision से explicit opt-in के साथ code generate करें:
+
+```bash
+arka society "add a health endpoint" --generate
+arka society "add a health endpoint" --generate --output src/health.py
+```
+
+Code default रूप से print किया जाता है। `--output` एक नई file बनाता है और मौजूदा को overwrite करने से इनकार करता है; उपयोग करने से पहले इसकी समीक्षा और test करें।

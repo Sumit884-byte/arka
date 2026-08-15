@@ -1,0 +1,48 @@
+---
+title: "提示词优化"
+description: "让提示更清晰，在调用 LLM 前压缩冗长输入，同时保留用户的确切意图。"
+keywords: ["prompt optimization", "prompt compaction", "llm", "token efficiency"]
+icon: "sliders"
+---
+
+```bash
+arka prompt_optimize "summarize this research paper" --rounds 3 --role "research assistant"
+arka "optimize this prompt: explain the experiment and cite assumptions"
+```
+
+Arka 会应用有界的多轮细化，明确目标、约束、缺失信息处理、验证方式以及输出结构。这是一个原创实现，灵感来自 [Prompt Optimizer](https://github.com/linshenkx/prompt-optimizer) 所描述的面向评估的工作流 — 该仓库以 AGPL-3.0-only 许可发布。Arka 未复制或打包其任何源代码。
+
+## 紧凑的中间形式
+
+对于冗长的自然语言输入，Arka 还会在发送给 LLM 之前，将用户文本转换为一种紧凑的中间表示。原始文本仍会用于符号路由、安全检查、精确命令识别和审计元数据。
+
+紧凑形式会保留：
+
+- 高信号量的需求
+- 少量上下文
+- 字面的 URL、文件路径、代码块、JSON 以及 shell 命令
+- 反幻觉约束
+
+会移除或压缩：
+
+- 重复语句
+- 低信号量的填充语
+- 多余的空白
+
+配置：
+
+```env
+ARKA_PROMPT_OPTIMIZE=1
+ARKA_PROMPT_COMPACT=1
+ARKA_PROMPT_COMPACT_MIN_CHARS=900
+ARKA_PROMPT_COMPACT_MAX_ITEMS=24
+```
+
+当准确措辞必须原样送达模型时，请选择退出：
+
+```bash
+ARKA_PROMPT_COMPACT=0 arka ask "..."
+arka llm complete --system "You are Arka" --user "..." --no-compact
+```
+
+为避免递归重写，路由型提示以及已经紧凑的 `Task IR:` 提示会跳过压缩。

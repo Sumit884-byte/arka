@@ -1,0 +1,19 @@
+---
+title: "Workspace discovery"
+description: "एक workspace से services, micro-frontends, और runtimes का map बनाएँ।"
+icon: "laptop"
+---
+
+एक monorepo या कई projects वाली directory में read-only inventory बनाने के लिए
+`arka workspace` का उपयोग करें:
+
+```bash
+arka workspace .
+arka workspace . --json
+arka workspace . --depth 5
+```
+
+Arka सामान्य manifests (`package.json`, `pyproject.toml`, Go, Rust, Docker) को
+detect करता है और संभावित frontend boundaries को लेबल करता है। Inventory
+जानबूझकर non-mutating है; service-specific कार्य के लिए परिणामी paths को
+`arka ci`, `arka review`, या `arka telemetry-connect` के साथ उपयोग करें।

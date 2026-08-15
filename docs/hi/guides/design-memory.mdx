@@ -1,0 +1,16 @@
+---
+title: "Design references"
+description: "भविष्य के code edits के लिए screenshots, design URLs, या consistency notes सहेजें।"
+icon: "swatchbook"
+---
+
+भविष्य के code edits के लिए एक screenshot, design URL, या consistency note सहेजें:
+
+```bash
+arka design-memory remember ./design.png --note "dark cards, 16px radius"
+arka design-memory list
+```
+
+जब Arka का coding agent edits की योजना बनाता है, तो वह स्वचालित रूप से सहेजे गए design references को शामिल करता है। यह अच्छे viewport modes को बनाए रखता है, केवल प्रभावित layout को बदलता है, और button व interaction क्रम को अपरिवर्तित रखता है। References Arka के cache में locally store होते हैं; केवल वही files और URLs सहेजें जिन्हें रखने में आप सहज हैं।
+
+Animation requests एक symbolic scope guard का भी उपयोग करते हैं: UI animations जोड़ना tests, fixtures, snapshots, या test animations को संशोधित नहीं करता। वे files केवल तब eligible होते हैं जब request स्पष्ट रूप से test scope का नाम ले।

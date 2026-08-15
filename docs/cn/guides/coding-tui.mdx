@@ -1,0 +1,132 @@
+---
+title: "编码 TUI"
+description: "启动一个专注的终端工作区来编辑仓库。"
+icon: "window-maximize"
+---
+
+启动一个专注的终端工作区来编辑仓库：
+
+```bash
+arka dev tui .
+# alias:
+arka coding-tui .
+```
+
+在 TUI 内部：
+
+```text
+/status
+/plan add a settings page
+/test
+/test tests/test_foo.py
+/test --no-fix
+/test --max-fixes 2
+/run tests
+/run tests --fix
+/run tests --no-fix
+/ci
+/ci preview
+/review
+/review --fail
+/ship
+/ship --fix
+/history
+/clear
+/help
+/quit
+```
+
+纯文本请求会被视为计划请求（与 `/plan` 相同）。在提示时批准计划
+（`y`、`yes` 或 `approve`）即可立即执行 — 无需单独的 `/run`。使用
+`/run <goal>` 可以重新执行上一次已批准的计划，或者在不预先规划的情况下运行
+一个目标。`/plan` 会以仅规划模式调用 LLM 并打印一个结构化的计划（摘要、
+文件、步骤），不会做任何修改。当 LLM 不可用时，Arka 会退回到本地的
+仓库感知计划。
+
+## 测试命令
+
+| 命令 | 模式 | 是否使用智能体？ | 是否写入？ |
+|---------|------|--------|---------|
+| `/test [path]` | 严格只读，失败后自动修复 | 仅修复阶段 | 仅修复阶段 |
+| `/test --no-fix [path]` | 仅严格只读 | 否 | 从不 |
+| `/test --max-fixes N` | 最多 N 次修复（默认 1） | 仅修复阶段 | 仅修复阶段 |
+| `/run tests` | 灵活只读，失败后自动修复 | 是 | 仅修复阶段 |
+| `/run tests --no-fix` | 仅灵活只读 | 是（只读） | 从不 |
+| `/run tests --fix` | 从一开始就进入修复模式 | 是 | 允许 |
+| `/run tests --max-fixes N` | 只读运行后最多 N 次修复 | 仅修复阶段 | 仅修复阶段 |
+| 纯文本 `test` 或 `tests` | 与 `/test` 相同 | 失败时仅修复阶段 | 仅修复阶段 |
+| 纯文本 `run tests` | 与 `/run tests` 相同 | 是 | 失败时仅修复阶段 |
+| `/ship` | 暂存审查 + 变更 CI | 否 | 从不 |
+| `/ship --fix` | 使用目标智能体 CI 修复的发布 | CI 失败时启用 | 修复时允许 |
+| `/ci` | 运行仅变更 CI 门禁 | 否 | 从不 |
+| `/ci preview` | 仅预览门禁列表 | 否 | 从不 |
+| `/review --fail` | 存在审查提示时退出 TUI | 否 | 从不 |
+
+`/test` 会确定性地运行与仓库匹配的测试命令（pytest、npm test、cargo test
+等，通过 repo health 检测）。可选路径可以限定运行范围，例如
+`/test tests/test_foo.py`。输出会标记为 **Test run (read-only)**。检测到
+失败时，Arka 会打印失败数量并运行 **Fix pass i/N** — 最多 `--max-fixes`
+次可写目标智能体修复（默认 **1**） — 然后以只读方式重跑测试以显示结果。
+使用 `/test --no-fix` 可跳过自动修复尝试。
+
+`/run tests` 让只读目标智能体选择策略 — 完整 pytest、聚焦某模块、
+`arka ci --changed`，或 repo_health 检测到的运行器 — 只读失败后同样带一次
+自动修复。加上 `--no-fix` 可禁用自动修复，或加 `--fix` 允许智能体从一开始
+就编辑文件（用于自动修复失败后显式再做一轮修复，或多轮修复）。
+
+有一个失败测试时，`/test` 后的示例流程：
+
+```text
+○ Test run (read-only)
+Running tests: python -m pytest -q --tb=line
+1 failed, 42 passed
+○ 1 test failure(s) detected — attempting one fix pass…
+○ Fix pass 1/1
+━━━ Changed files (1) ━━━
+  M  src/arka/example.py
+○ Test run (read-only, after fix)
+Running tests: python -m pytest -q --tb=line
+✓ Tests passed (read-only run, after fix)
+```
+
+如果所有修复阶段之后测试仍然失败：
+
+```text
+✗ Still failing after 2 fix pass(es).
+Try: /run tests --fix --max-fixes N or `arka dev test --fix`
+```
+
+## 3D 脚手架
+
+`/scaffold 3d` 会在空项目中写入一个 React + Vite + Three.js 的太空场景。
+Arka 随后仅对该**受信任模板**自动运行 `npm install`（脚手架清单中固定的
+包 — 而不是来自目标智能体的任意 shell）。加上 `--run` 可在安装后启动
+Vite 开发服务器，或在提示时回答 `y`。
+
+```text
+/scaffold 3d
+/scaffold 3d --run
+```
+
+通过 `/plan` 批准的新项目 3D 目标使用相同的脚手架路径和安装后步骤。如果
+网络离线，脚手架文件仍会创建，Arka 会打印诚实的失败信息与手动后续步骤。
+
+`/status` 显示当前分支、脏文件数量以及代码项目是否已初始化。`/ci` 运行
+仅变更门禁；`/ci preview` 列出门禁但不执行。`/review` 汇总暂存变更并给出
+测试缺口提示。`/ship` 在提交前运行 review + CI。`/history` 列出当前会话
+的命令；`/clear` 清屏并重置会话状态。
+
+编码智能体会在执行后打印完成/失败摘要，并建议使用 `arka dev test` 进行
+增量验证。
+
+编码请求与语言无关：在请求中提及语言、框架或文件扩展名，Arka 就会使用
+仓库现有的工具链。语音输入与输出也可以使用任何 Edge TTS 支持的 BCP-47
+语言：
+
+```bash
+arka speak --lang fr-FR "Crée un test pour cette fonction"
+SPEAK_LANG=ja-JP arka speak "このコードを説明してください"
+```
+
+对于精选列表之外的语言，Arka 会自动寻找匹配的 Edge 语音，仅当该语言不可
+用时才会回退到英文。

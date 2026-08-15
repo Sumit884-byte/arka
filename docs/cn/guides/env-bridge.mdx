@@ -1,0 +1,14 @@
+---
+title: "本地环境桥接"
+description: "使用 Arka 的本地配置填充另一个项目的 .env。"
+icon: "bridge"
+---
+
+```bash
+arka env-bridge /path/to/project
+arka env-bridge /path/to/project --allow OPENAI_API_BASE,OLLAMA_HOST --apply
+```
+
+该桥接是确定性且仅限本地的；它不会将值发送给 LLM。
+它会在预览中脱敏值，绝不覆盖已有键，并要求在写入前使用
+`--apply`。建议使用 `--allow` 限制要复制的变量。

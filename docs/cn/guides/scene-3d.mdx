@@ -1,0 +1,80 @@
+---
+title: "3D 场景合成"
+description: "使用真实模型资源合成惊艳的交互式 Three.js 场景。"
+icon: "cubes"
+---
+
+使用真实的 GLB/GLTF 资源替代简单几何体：
+
+```bash
+arka scene-3d "Museum visitors" \
+  --model https://example.com/human.glb \
+  --model https://example.com/robot.glb \
+  --out museum-scene \
+  --preset museum
+```
+
+## 一键生成惊艳场景（无需 URL）
+
+Arka 可从精选的 three.js 示例目录中自动解析已验证的免费资源：
+
+```bash
+arka scene-3d "Animated robot gallery" --auto --preset gallery --out arka-scenes/robot-gallery
+```
+
+或使用自然语言：
+
+```bash
+arka create an impressive interactive 3d robot gallery scene
+```
+
+解析顺序：用户提供的模型 → 精选目录 → 可选的 `threejs` MCP 搜索 → 本地生成（程序化 / HF Shap-E），除非设置 `--no-generate`。
+
+## 视觉预设
+
+| 预设 | 效果 |
+|------|------|
+| `gallery` | 反光暗色地板、轮廓光、泛光 |
+| `studio` | 中性无缝背景、柔和阴影（默认） |
+| `outdoor` | 暖色阳光、轻雾、大地面 |
+| `racing` | 低视角追车镜头、赛道式地面 |
+| `interior` | 暖色环境光、更紧的构图 |
+| `space` | 星空、泛光 |
+| `museum` | 抛光展厅地板 |
+
+如果省略 `--preset`，Arka 会根据场景规划上下文自动推断。
+
+## 场景特性
+
+生成的场景包含：
+
+- 带阻尼的 OrbitControls 和双击重置相机
+- 阴影贴图、ACES 色调映射及可选泛光
+- 与预设匹配的地面
+- 模型加载时的加载遮罩
+- 模型带多段动画时的动画剪辑选择器
+- 响应式窗口尺寸处理
+
+Arka 不会凭空编造资源 URL：auto 模式使用已验证的目录条目或已配置的搜索提供方。
+
+## 规划上下文相关场景
+
+```bash
+arka scene-3d "Person typing" --intent "working at a desk" \
+  --model ./models/person.glb --model ./models/desk.glb --plan
+```
+
+规划会识别场景设置及所需的模型角色（例如桌子、键盘、显示器和椅子），并包含以米为单位的近似真实尺寸以便按比例放置。还包含放置规则，例如把键盘放在桌上、椅子放在桌前、让坐姿角色对齐键盘。要用已配置的 vLLM/vision 后端为渲染出的模型预览生成描述，请加上 `--describe-model preview.png`。若缺失视觉后端，会产生结构化警告而不会凭空生成描述。
+
+Arka 还会在生成前选择语义化的朝向默认值。例如「Cybertruck vs Ferrari racing game」这样的车辆竞速/游戏提示词默认使用后侧四分之三追车视角，因为竞速游戏通常展示玩家车辆的背面。用户的显式表述仍会覆盖默认：`front view`、`side profile`、`top layout` 或 `show the back` 都会覆盖默认视角。
+
+## 参数
+
+| 参数 | 用途 |
+|------|------|
+| `--auto` | 根据规划角色解析资源 |
+| `--no-generate` | 仅使用目录 + 搜索；跳过 AI 网格生成 |
+| `--preset` | 视觉环境预设 |
+| `--intent` | 用于规划与布局的动作/上下文 |
+| `--plan` | 打印上下文规划 JSON |
+| `--out` | 输出目录（写入 `index.html`） |

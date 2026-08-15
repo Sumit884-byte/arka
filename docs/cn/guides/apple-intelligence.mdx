@@ -1,0 +1,90 @@
+---
+title: "Apple Intelligence（设备端）"
+description: "在受支持的 Mac 上通过 Arka 使用 Apple 的 Foundation Models。"
+icon: "apple"
+---
+
+Arka 可以通过 `apple-fm` 提供商，将 LLM 请求路由到 Apple 的设备端**Foundation Models**（Apple Intelligence）。推理完全在你的 Mac 上进行 — 无需 API 密钥。
+
+## 系统要求
+
+- **macOS 26+**（在系统设置中启用 Apple Intelligence）
+- 支持 Apple Intelligence 的 **Apple Silicon Mac**
+- 可选的 Python 附加组件：`pip install 'arka-agent[apple-fm]'`（会安装 `apple-fm-sdk`）
+
+在 Linux 与 Windows 上，该提供商会被注册，但始终会被优雅跳过。
+
+## 快速搭建
+
+```bash
+pip install 'arka-agent[apple-fm]'
+arka model setup apple-fm
+arka model status
+arka llm apple-fm status
+```
+
+将 Apple Intelligence 设为首选提供商：
+
+```bash
+arka provider set apple-fm --model apple-fm-system
+```
+
+或加入 `.env`：
+
+```bash
+APPLE_FM_ENABLED=1
+AI_PREFERRED_PROVIDER=apple-fm
+AI_PREFERRED_MODEL=apple-fm-system
+```
+
+## 工作原理
+
+1. **原生 SDK** — Arka 直接调用 `apple-fm-sdk`（`SystemLanguageModel` + `LanguageModelSession`）。
+2. **兜底链** — 在受支持的 Mac 上，`apple-fm` 会被添加到自动构建的兜底链中的 Ollama 之后。
+3. **流式** — 通过 SDK 的 `stream_response()`（若可用）支持。
+
+随时检查可用性：
+
+```bash
+arka llm apple-fm status
+arka model status
+```
+
+## 可选：apple-fm-cli 服务器
+
+如果未安装 SDK，但你运行了一个 OpenAI 兼容的本地服务器（例如 [apple-fm-cli](https://pypi.org/project/apple-fm-cli/)），Arka 会自动检测：
+
+```bash
+pip install apple-fm-cli
+apple-fm-cli server --host 127.0.0.1 --port 8765
+```
+
+配置 Arka 使用该端点（默认端口 `8765` 以避免与 `8000` 上的 vLLM 冲突）：
+
+```bash
+export APPLE_FM_CLI_BASE_URL=http://127.0.0.1:8765/v1
+export APPLE_FM_ENABLED=1
+```
+
+该服务器不需要真实的 API 密钥；Arka 会发送一个占位的 bearer token。
+
+## 故障排查
+
+| 症状 | 修复方式 |
+| --- | --- |
+| `SDK not installed` | `pip install apple-fm-sdk` 或 `pip install 'arka-agent[apple-fm]'` |
+| `Apple Intelligence not enabled` | 系统设置 → Apple Intelligence → 开启 |
+| `DEVICE_NOT_ELIGIBLE` | Mac 或系统版本不支持设备端模型 |
+| `MODEL_NOT_READY` | 等待 Apple Intelligence 模型下载完成 |
+
+在不卸载的情况下禁用该提供商：
+
+```bash
+export APPLE_FM_ENABLED=0
+```
+
+## 相关内容
+
+- [模型托管搭建](/cn/guides/model-hosting) — Ollama、vLLM、LM Studio、Exo
+- `arka llm providers --models` — 列出已配置的提供商
+- `arka hybrid status` — 组合本地与托管路由

@@ -1,0 +1,55 @@
+---
+title: "Daily और tech brief"
+description: "आज की headlines, source URLs, OpenAI changelog awareness, और memory-informed topic selection के साथ एक personalized morning tech brief पाएँ।"
+keywords: ["brief", "news", "headlines", "tech"]
+icon: "newspaper"
+---
+
+Daily brief skill एक **personalized news digest** देती है — default रूप से tech-focused, clickable source URLs और stale-date filtering के साथ।
+
+## प्राकृतिक भाषा
+
+```bash
+arka daily brief
+arka morning tech brief
+arka today's tech brief personalized for me
+arka daily tech brief
+arka news brief
+arka morning brief
+```
+
+Headline-शैली की requests भी यहाँ रूट होती हैं:
+
+```bash
+arka give me 10 concise tech news headlines
+arka bullet headlines for AI startups
+```
+
+## आपको क्या मिलता है
+
+- **केवल आज** की headlines — stale dates और पुराने years filter हो जाते हैं।
+- हर bullet में em dash के बाद जहाँ उपलब्ध हो वहाँ एक **source URL** शामिल होता है।
+- **OpenAI changelog** items `platform.openai.com/docs/changelog` पर आधिकारिक URLs को प्राथमिकता देते हैं।
+- जब उपलब्ध हो, Supermemory context से **Personalization** (interests, past brief preferences)।
+- "Here are 10 headlines" जैसी कोई preamble lines नहीं — केवल bullets।
+
+## Configuration
+
+```env
+# Brief enrichment के लिए URL content fetch करते समय अधिकतम words (default 30)
+BRIEF_URL_WORDS=30
+
+# Brief items के लिए URL content fetching सक्षम करें (default off)
+BRIEF_URL_LIMIT_ENABLED=1
+```
+
+## Routing कैसे काम करता है
+
+`daily brief`, `tech brief`, `morning brief`, और `news brief` जैसे phrases `daily_brief` पर रूट होते हैं — generic `web_answer` पर नहीं।
+
+"brief" के असंबंधित उपयोग (उदा. "brief summary of kubernetes") general web answer path पर रहते हैं।
+
+## संबंधित
+
+- [Chat और search](/hi/guides/chat) — `web_answer` और deep search
+- [दीर्घकालिक memory](/hi/guides/memory) — personalization context

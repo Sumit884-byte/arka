@@ -1,0 +1,16 @@
+---
+title: "vLLM 兜底"
+description: "将本地的 vLLM OpenAI 兼容服务器用作 Arka 的兜底提供商。"
+icon: "fire"
+---
+
+先启动 vLLM，然后在 Arka 的兜底链中启用它：
+
+```bash
+export VLLM_HOST=127.0.0.1:8000
+export VLLM_MODEL=your-loaded-model
+export VLLM_FALLBACK=1
+arka doctor
+```
+
+当 vLLM 可达或被显式配置时，Arka 会尝试它；若本地服务器失败，则继续沿常规的提供商链推进。设置 `VLLM_FALLBACK=0` 可关闭这一可选的兜底行为。

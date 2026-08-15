@@ -1,0 +1,71 @@
+---
+title: "Custom routes सिखाना"
+description: "Arka को phrase-to-skill mappings सिखाएँ जो sessions के बीच persist हों — routing mistakes सुधारें, shortcuts जोड़ें, और learned routes manage करें।"
+keywords: ["routing", "learn", "custom", "teach"]
+icon: "compass"
+---
+
+Arka **persistent natural-language routes** सीख सकता है — `~/.config/arka/learned_routes.json` में store किए गए phrase → skill mappings। Learned routes router में symbolic rules से पहले जल्दी check होते हैं।
+
+## एक route सिखाएँ
+
+```bash
+arka route_learn learn "deploy staging" "agent_code run deploy.sh"
+arka route_learn learn "my dashboard" system_monitor
+```
+
+प्राकृतिक भाषा:
+
+```bash
+arka teach route "deploy staging" to "agent_code run deploy.sh"
+arka learn that when I say "morning standup" means stock news
+arka remember route "check disk" as disk_breakdown
+```
+
+## एक routing mistake सुधारें
+
+एक request गलत route होने के बाद, पिछले trace से fix करें:
+
+```bash
+arka route_learn learn --from-trace --correct "stock news"
+```
+
+यह trace input को उस skill के साथ pair करता है जो आप चाहते थे।
+
+## Routes manage करें
+
+| Command | विवरण |
+| --- | --- |
+| `arka route_learn list` | सभी learned routes सूचीबद्ध करें |
+| `arka route_learn delete <id-or-phrase>` | एक route हटाएँ |
+| `arka route_learn test <phrase>` | Preview करें कि एक phrase क्या चलाएगा |
+
+प्राकृतिक भाषा:
+
+```bash
+arka list learned routes
+```
+
+## Placeholders
+
+Trailing text capture करने के लिए skill line में `{args}` उपयोग करें:
+
+```bash
+arka route_learn learn "summarize repo" "github_repo activity {args}"
+# "summarize repo Sumit884-byte/arka" → github_repo activity Sumit884-byte/arka
+```
+
+## Matching कैसे काम करता है
+
+- Exact trigger matches skill line को as-is चलाते हैं।
+- Prefix matches बचा हुआ append करते हैं (`"check servers in prod"` → `system_monitor in prod`)।
+- लंबे triggers छोटों पर जीतते हैं।
+
+<Tip>
+  Learned routes शून्य LLM tokens उपयोग करते हैं। ये team-specific shortcuts और recurring misroutes सुधारने के लिए आदर्श हैं।
+</Tip>
+
+## संबंधित
+
+- [Routing concepts](/concepts/routing) — symbolic rules और LLM fallback
+- [CLI reference](/hi/guides/cli) — `route_learn` subcommands

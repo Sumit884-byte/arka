@@ -1,0 +1,268 @@
+---
+title: "Agent Teams"
+description: "Agents, models, और providers के बीच teams बनाएँ — फिर sequential या parallel workflows को shared memory के साथ चलाएँ।"
+keywords: ["agent teams", "workflows", "multi-agent", "orchestration", "providers", "agent hub"]
+icon: "people-group"
+---
+
+**Agent Teams** आपको coding agents ([Agent Hub](/hi/guides/agent-hub) से), cloud models, और local providers को नामित roles में समूहित करने देते हैं, फिर **workflows** चलाते हैं जो उनके बीच काम को हस्तांतरित करते हैं।
+
+## अवधारणाएँ
+
+| हिस्सा | क्या है | कहाँ संग्रहीत |
+| --- | --- | --- |
+| **Team** | नामित roles (`lead`, `analyst`, …) agents, models, या providers से mapped | `~/.config/arka/teams/` |
+| **Workflow** | team के लिए steps — sequential, parallel, या round-robin handoff | `~/.config/arka/workflows/` |
+| **Run** | task string के साथ workflow execute करें; results steps के बीच `{task}`, `{results}`, `{step_N}` के ज़रिए pass होते हैं | CLI |
+
+Member के प्रकार:
+
+- `agent` — Agent Hub से ollama launch agent (`claude`, `codex`, `hermes`, …)
+- `model` — विशिष्ट model \+ provider (`gpt-4o` \+ `openai`, `gemini-2.0-flash` \+ `gemini`)
+- `provider` — provider default model (`ollama`, `groq`, …)
+
+## त्वरित शुरुआत
+
+Starter teams और workflows पहली बार उपयोग पर seed किए जाते हैं:
+
+```bash
+arka team list
+arka workflow list
+
+arka team show research --resolve
+arka team run research --task "Summarize Rust async patterns"
+
+arka workflow run review-and-ship --task "Plan a v2 auth redesign"
+arka workflow run code-review --task "Review PR #42: add JWT refresh"
+arka workflow run brainstorm --task "Cache invalidation strategies for edge CDN"
+```
+
+fish से:
+
+```fish
+arka team list
+arka team run research --task "Compare Postgres vs SQLite for edge caches"
+arka workflow run code-review --task "Review auth middleware changes"
+arka workflow run brainstorm --task "Ideas for offline-first mobile sync"
+```
+
+## उदाहरण team
+
+```yaml
+name: research
+description: Deep research team
+members:
+  - kind: agent
+    id: claude
+    role: lead
+  - kind: model
+    id: gemini-2.0-flash
+    provider: gemini
+    role: analyst
+  - kind: provider
+    id: ollama
+    role: local-fallback
+defaults:
+  memory: unified
+  mcp: true
+  workflow: review-and-ship
+```
+
+## उदाहरण workflow
+
+```yaml
+name: review-and-ship
+team: research
+steps:
+  - member: lead
+    action: plan
+    prompt: "Break down: {task}"
+  - parallel:
+      - member: analyst
+        action: analyze
+        prompt: "Analyze: {task}\n\nPlan:\n{step_1}"
+      - member: local-fallback
+        action: verify
+        prompt: "Sanity-check: {step_1}"
+  - member: lead
+    action: synthesize
+    prompt: "Merge results: {results}"
+```
+
+## Round-robin mode (v2)
+
+स्पष्ट steps के बजाय, members `max_turns` तक बारी-बारी काम करते हैं। Outputs `{results}`, `{transcript}`, और `{last_result}` में जमा होते हैं।
+
+```yaml
+name: brainstorm
+team: research
+mode: round_robin
+max_turns: 6
+prompt: |
+  Continue brainstorming on: {task}
+  Previous: {last_result}
+members:
+  - lead
+  - analyst
+  - local-fallback
+defaults:
+  retries: 2
+  mcp: true
+```
+
+चलाएँ:
+
+```bash
+arka workflow run brainstorm --task "Edge cache invalidation patterns"
+```
+
+यदि `members` छोड़ दिया जाए, तो सभी team roles definition क्रम में rotate होते हैं।
+
+## Retries (v2)
+
+Run को failed मार्क करने से पहले विफल agent/LLM steps को retry करें।
+
+**प्रति step:**
+
+```yaml
+- member: analyst
+  action: analyze
+  prompt: "Analyze: {task}"
+  retries: 3
+  retry_delay: 2
+```
+
+**Workflow या team defaults:**
+
+```yaml
+defaults:
+  retries: 2
+  retry_delay: 1
+```
+
+प्राथमिकता: step → workflow `defaults` → team `defaults`। Retry count CLI output में दिखता है (`retries=N`, `attempts=N`)। Exponential delay के लिए `TEAM_RETRY_BACKOFF=1` सेट करें।
+
+## Per-step MCP (v2)
+
+प्रति step MCP context सक्षम करें (या workflow/team defaults से inherit करें):
+
+```yaml
+- member: analyst
+  action: fetch
+  prompt: "Summarize open PRs for: {task}"
+  mcp: true
+  mcp_servers: [github]
+```
+
+| Setting | प्रभाव |
+| --- | --- |
+| `mcp: true` | `~/.config/arka/mcp.json` से सभी configured MCP servers inject करें |
+| `mcp_servers: [github]` | नामित servers तक सीमित करें |
+| `defaults.mcp: true` | जब तक override न हो, सभी steps के लिए सक्षम करें |
+
+**Agent** steps के लिए, MCP tool summaries prompt से पहले जोड़े जाते हैं। **Model/provider** steps के लिए, वे system prompt में जोड़े जाते हैं। Model steps के लिए वैकल्पिक tool loop: `TEAM_MCP_TOOL_ROUNDS=1` सेट करें और model से `{"mcp_tool": "github", "tool": "search", "arguments": {}}` जैसा JSON emit करवाएँ।
+
+## CLI reference
+
+```bash
+arka team list
+arka team show <name> [--resolve]
+arka team create <name> [--template research]
+arka team run <name> --task "..." [--workflow <name>]
+
+arka workflow list
+arka workflow show <name>
+arka workflow create <name> [--template review-and-ship] [--team research]
+arka workflow run <name> --task "..."
+```
+
+`--resolve` print करता है कि हर role कैसे किसी concrete agent या LLM target से map होता है।
+
+## Runtime व्यवहार
+
+1. Config dir (या bundled templates) से team \+ workflow YAML/JSON **Load** करें।
+2. Members को **Resolve** करें — Agent Hub catalog के ज़रिए agents; LLM registry के ज़रिए models/providers।
+3. जब `defaults.memory: unified` हो, unified memory को **Recall** करें।
+4. Steps **Execute** करें:
+   - Agent roles → role context के साथ `answer_question` (lightweight; पूर्ण `ollama launch` नहीं)।
+   - Model/provider roles → निश्चित provider/model chain के साथ `LlmOrchestrator`।
+   - Parallel blocks → thread pool (`TEAM_MAX_PARALLEL`, default 4)।
+   - Round-robin → shared transcript variables के साथ `max_turns` के लिए members rotate।
+5. `retries` / `retry_delay` (workflow या team defaults) के अनुसार विफल steps **Retry** करें।
+6. जब किसी step के लिए `mcp` सक्षम हो, तो MCP tool summaries **Inject** करें।
+7. Template variables के ज़रिए outputs को आगे **Pass** करें।
+
+## Bundled templates
+
+| Template | प्रकार | Roles |
+| --- | --- | --- |
+| `research` | team | lead (claude), analyst (gemini), local-fallback (ollama) |
+| `code-review` | team | lead (codex), analyst (groq), local-fallback (ollama) |
+| `clawbox-edge` | team | openclaw lead \+ ollama fallback; Jetson के लिए scoped memory |
+| `review-and-ship` | workflow | plan → parallel analyze/verify → synthesize |
+| `code-review` | workflow | review checklist → parallel review → summary |
+| `brainstorm` | workflow | team roles में round-robin ideation |
+
+Templates से बनाएँ:
+
+```bash
+arka team create my-research --template research
+arka workflow create my-ship --template review-and-ship --team my-research
+```
+
+## Environment
+
+```bash
+ARKA_TEAMS_DIR=~/.config/arka/teams
+ARKA_WORKFLOWS_DIR=~/.config/arka/workflows
+TEAM_MAX_PARALLEL=4
+TEAM_RETRY_BACKOFF=0
+TEAM_MCP_TOOL_ROUNDS=0
+```
+
+## Scoped memory (v3)
+
+Teams provenance के साथ **policy-filtered recall** और **scratchpad writes** का विकल्प चुन सकती हैं:
+
+```yaml
+defaults:
+  memory: scoped          # unified | scoped | off
+  memory_scope:
+    read: [global, team, workflow]
+    write: workflow
+    ttl_hours: 72
+    promote: manual
+  trust_tier: team
+```
+
+| Mode | Recall | Step output |
+| --- | --- | --- |
+| `unified` (default) | Global unified memory | Persist नहीं होता |
+| `scoped` | Trust tier \+ team/workflow द्वारा filter | Provenance के साथ scratchpad |
+| `off` | कोई नहीं | Persist नहीं होता |
+
+Per-step override: workflow step पर `memory_scope: { write: run }`।
+
+```bash
+arka workflow run review-and-ship --task "..." --promote-final
+arka memory scratchpad list --team research
+arka memory promote abc123def456
+```
+
+Workflow runs CLI output में `run_id` और `scratchpad_writes` print करते हैं।
+
+Teams और workflows `arka config backup` में शामिल हैं।
+
+## सीमाएँ
+
+- Agent steps Arka chat routing उपयोग करते हैं, पूर्ण interactive `ollama launch` sessions नहीं।
+- Model-step MCP tool loops opt-in (`TEAM_MCP_TOOL_ROUNDS`) हैं और default रूप से single-round हैं।
+- Round-robin में कोई early-stop condition नहीं — `max_turns` तक चलता है।
+- Workflow conditions और human-in-the-loop gates लागू नहीं हैं।
+- Provider health checks LLM call time पर चलते हैं, team resolve time पर नहीं।
+
+## संबंधित
+
+- [Agent Hub](/hi/guides/agent-hub) — shared MCP, memory, और agent catalog
+- [LLM fallback](/hi/concepts/llm) — model/provider roles द्वारा उपयोग किया जाने वाला provider/model routing
+- [Memory](/hi/guides/memory) — team runs में inject की गई unified memory

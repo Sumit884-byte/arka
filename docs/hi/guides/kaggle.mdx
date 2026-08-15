@@ -1,0 +1,115 @@
+---
+title: "Kaggle datasets"
+description: "Kaggle API का उपयोग करके terminal से Kaggle datasets download और search करें।"
+keywords: ["kaggle", "datasets", "machine learning", "data"]
+icon: "folder-tree"
+---
+
+Arka में Kaggle datasets download और search करने के लिए एक **kaggle** skill शामिल है। यह `kaggle` CLI (preferred) या Python `kaggle` package के माध्यम से आधिकारिक Kaggle API का उपयोग करता है।
+
+## Quick examples
+
+```bash
+kaggle status
+kaggle search titanic
+kaggle download heptapod/titanic
+kaggle download heptapod/titanic --unzip -o ~/Downloads
+```
+
+प्राकृतिक भाषा भी काम करती है:
+
+```bash
+arka "download kaggle dataset heptapod/titanic"
+arka "kaggle search housing prices"
+arka "kaggle status"
+```
+
+या CLI subcommand के माध्यम से:
+
+```bash
+arka kaggle download heptapod/titanic --unzip
+```
+
+## Commands
+
+| Command | विवरण |
+| --- | --- |
+| `kaggle status` | जाँचें कि Kaggle credentials configured हैं या नहीं |
+| `kaggle search <keywords>` | keyword से datasets search करें |
+| `kaggle download <owner/dataset>` | अपने Downloads folder में एक dataset download करें |
+| `kaggle download <owner/dataset> -o DIR` | custom directory में download करें |
+| `kaggle download <owner/dataset> --unzip` | download करें और archives extract करें |
+| `kaggle open <owner/dataset>` | browser में dataset page open करें (कोई API key नहीं) |
+| `kaggle download <owner/dataset> --open` | जब credentials गायब हों तो browser में open करें |
+
+## Credentials
+
+Kaggle के लिए एक API token चाहिए। एक [kaggle.com/settings](https://www.kaggle.com/settings) पर बनाएँ (Account → API → Create New Token)।
+
+**विकल्प A — environment variables** (Arka के लिए अनुशंसित):
+
+```bash
+KAGGLE_USERNAME=your_username
+KAGGLE_KEY=your_api_key
+```
+
+इन्हें `~/.config/arka/.env` में जोड़ें।
+
+**विकल्प B — `kaggle.json`** (standard Kaggle layout):
+
+```bash
+mkdir -p ~/.kaggle
+# unzip the token download into ~/.kaggle/kaggle.json
+chmod 600 ~/.kaggle/kaggle.json
+```
+
+Download से पहले credentials verify करने के लिए `kaggle status` चलाएँ।
+
+## API keys के बिना
+
+आधिकारिक Kaggle API को credentials चाहिए। यदि आपके पास अभी API token नहीं है, तो भी आप अपने browser में dataset page open कर सकते हैं और Kaggle website से manually files download कर सकते हैं।
+
+```bash
+kaggle open heptapod/titanic
+kaggle open https://www.kaggle.com/datasets/heptapod/titanic
+```
+
+प्राकृतिक भाषा:
+
+```bash
+arka "open kaggle dataset heptapod/titanic"
+arka "kaggle open heptapod/titanic"
+```
+
+आप credentials गायब होने पर fail होने के बजाय page open करने के लिए download पर `--open` (या `--browser`) भी pass कर सकते हैं:
+
+```bash
+kaggle download heptapod/titanic --open
+```
+
+यदि आप credentials के बिना `kaggle download` या `kaggle search` चलाते हैं, तो Arka manual download के लिए `kaggle open owner/dataset` सुझाने वाला एक छोटा संदेश print करता है।
+
+## API approach
+
+Skill `kaggle` CLI को प्राथमिकता देता है यदि यह `PATH` पर है:
+
+```bash
+kaggle datasets download -d owner/dataset -p /output/dir
+kaggle datasets list -s "query"
+```
+
+यदि CLI installed नहीं है, तो यह Python `kaggle` package पर fall back करता है:
+
+```bash
+pip install kaggle
+```
+
+## संबंधित skills
+
+| Skill | उदाहरण |
+| --- | --- |
+| `generate_data` | `generate 100 users as csv` |
+| `arka data_ask` | `ask data in reports folder` |
+| `competitions` | `search kaggle competitions` |
+
+यह भी देखें: [Generate data](/hi/guides/generate-data)

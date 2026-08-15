@@ -1,0 +1,156 @@
+---
+title: "Terminal से matplotlib charts generate करें"
+description: "Numbers को line, bar, pie, scatter, histogram, और pareto PNG charts में बदलें, matplotlib द्वारा powered, natural language या Arka CLI commands का उपयोग करके।"
+keywords: ["charts", "matplotlib", "graph", "plot"]
+icon: "chart-column"
+---
+
+Numbers को PNG charts में बदलें। सात chart kinds offline NL parsing के माध्यम से supported हैं — अधिकांश requests के लिए LLM आवश्यक नहीं।
+
+<Note>
+  **हमेशा आगे `arka` का उपयोग करें।** नीचे दिया गया प्रत्येक example एक `arka …` command या `arka "natural language"` है। Fish में आप bundled shortcuts जैसे `chart …` का भी उपयोग कर सकते हैं, लेकिन docs और copy-paste examples `arka` का उपयोग करते हैं ताकि routing explicit रहे।
+</Note>
+
+```bash
+pip install "arka-agent[charts]"
+```
+
+## Chart types
+
+| Kind | CLI | Natural language (`arka` के माध्यम से) |
+| --- | --- | --- |
+| line | `arka chart line AAPL TSLA --range 1y` | `arka "compare Apple and Tesla stock last year"` |
+| bar | `arka chart bar --data "A:1,B:2"` | `arka "phone sales Apple 230 Samsung 210"` |
+| pie | `arka chart pie --data "A:40,B:30"` | `arka "pie chart traffic organic 400 direct 300"` |
+| scatter | `arka chart scatter --data "100:200,120:190"` | `arka "scatter ad spend vs revenue 100 200 120 190"` |
+| histogram | `arka chart histogram --data "12,15,18,22"` | `arka "histogram response times 12 15 18 22"` |
+| pareto | `arka chart pareto --data "A:45,B:28"` | `arka "pareto defects Scratches 45 Dents 28"` |
+| prediction | `arka chart predict AAPL --days 30` | `arka "predict AAPL stock price chart next 30 days"` |
+| model traits | `arka chart models --type scatter` | `arka "chart AI model characteristics scatter latency vs score"` |
+| table image | `arka chart table sales.csv --title "Q1"` | `arka "render metrics.csv as table png"` |
+| from file | `arka chart from metrics.csv --type line` | `arka "chart ~/data/metrics.csv as line"` |
+
+## Dataset columns (flexible NL)
+
+कोई भी column names काम करते हैं — Arka phrasing से axes parse करता है, fixed keywords से नहीं:
+
+```bash
+arka "present time vs income from income.csv"
+arka "plot monthly_revenue over fiscal_period from sales.csv"
+arka "visualize payroll.csv with tenure and salary"
+arka "chart from sales.csv by region value revenue"
+```
+
+Supported patterns: `Y over X`, `X vs Y`, `by X value Y`, `with X and Y`, `x-axis X y-axis Y`. Time-like columns auto-route करते हैं **line** charts पर; अन्य `vs` pairs default रूप से **scatter** पर।
+
+## Natural language examples
+
+Phrase को `arka` में एक single quoted argument के रूप में pass करें:
+
+```bash
+arka "make a chart of training loss"
+arka "chart training loss 1:0.8 2:0.5 3:0.3"
+arka "plot loss over epoch"
+arka "plot X over Y 1:10 2:20 3:30"
+arka "visualize metrics.csv"
+arka "chart from csv sales.tsv as bar"
+arka "graph my data"
+```
+
+## Direct CLI
+
+```bash
+arka chart line AAPL TSLA --range 1y
+arka chart predict RELIANCE.NS --days 30 --range 1y
+arka chart bar --data "Apple:230,Samsung:210,Xiaomi:140" --title "Phone sales"
+arka chart pie --data "Organic:400,Direct:300,Referral:300" --title "Traffic"
+arka chart table sales.csv --title "Q1 sales" --max-rows 25
+```
+
+## Table as PNG
+
+Spreadsheet-style table (headers + rows) को PNG के रूप में render करें — slides, docs, या CSV previews share करने के लिए उपयोगी:
+
+```bash
+arka chart table sales.csv
+arka chart table metrics.csv --title "Experiment results" --max-rows 30 -o ~/Desktop/table.png
+arka chart from report.csv --type table
+```
+
+Natural language:
+
+```bash
+arka "render sales.csv as table png"
+arka "table image from metrics.csv title 'Results'"
+```
+
+## Chart defaults
+
+`~/.config/arka/charts.yaml` में reusable data store करें:
+
+```yaml
+defaults:
+  scatter:
+    data: "100:200,120:190,170:280"
+    xlabel: "Ad Spend"
+    ylabel: "Revenue"
+  line:
+    tickers: [AAPL, TSLA]
+    range: 1y
+```
+
+Charts `~/Pictures/arka-generated/` में save होते हैं और macOS/Linux पर automatically खुलते हैं।
+
+## Future prediction (सभी domains)
+
+Stock tickers से आगे, Arka live data sources से futures predict करता है:
+
+| Domain | उदाहरण | Data source |
+| --- | --- | --- |
+| Weather | `arka predict future "weather in Delhi next 7 days" --chart` | Open-Meteo |
+| Rainfall / monsoon | `arka predict future "monsoon rainfall in Mumbai" --chart` | Open-Meteo + ISRO MOSDAC notes |
+| Stock | `arka chart predict AAPL --days 30` | Yahoo Finance |
+| Satellite | `arka predict future "ISS pass over Bangalore"` | Open Notify |
+| Kaggle CSV | `arka predict future "from kaggle owner/dataset next 30 days" --chart` | Kaggle API + trend |
+| Local CSV | `arka predict future "forecast from metrics.csv" --chart` | Local file trend |
+
+ISRO GSMaP satellite rainfall archives: `.env` में `MOSDAC_USER` और `MOSDAC_PASSWORD` set करें (देखें [MOSDAC API manual](https://mosdac.gov.in/downloadapi-manual))। Charts MOSDAC के बिना काम करते हैं; credentials HDF5 archive search unlock करते हैं।
+
+```bash
+arka predict future "rainfall in Mumbai next 2 weeks" --chart
+arka predict future "from kaggle heptapod/titanic next 30 days" --chart
+arka chart predict --domain rainfall "monsoon in Pune" --days 14
+```
+
+Natural language:
+
+```bash
+arka "predict monsoon rainfall in Mumbai next 2 weeks"
+arka "forecast kaggle dataset heptapod/titanic next 30 days with chart"
+```
+
+Kaggle datasets को API credentials आवश्यक हैं (`KAGGLE_USERNAME` / `KAGGLE_KEY` या `~/.kaggle/kaggle.json`)। देखें [Kaggle datasets](/hi/guides/kaggle)।
+
+### AI model characteristic charts
+
+LLM models की तुलना scatter plots (latency vs score) या bar charts (scores / local model size) के साथ करें:
+
+```bash
+arka benchmark run --dry-run          # populate benchmark-results.json first
+arka chart models --type scatter    # latency vs score with labeled points
+arka chart models --type score_bar --profile chat
+arka chart models --type size_bar   # local Ollama models by parameter scale
+```
+
+Natural language:
+
+```bash
+arka "chart AI model characteristics with data points"
+arka "scatter plot of model latency vs benchmark score"
+arka "graph LLM model comparison"
+```
+
+```env
+# CHART_OUTPUT_DIR=~/Pictures/arka-generated
+# CHARTS_CONFIG=              # override defaults file path
+```

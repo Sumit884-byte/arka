@@ -1,0 +1,15 @@
+---
+title: "检查并移除文本"
+description: "在编辑文件前先检查精确的文本匹配。"
+icon: "pen-to-square"
+---
+
+用 Arka 在编辑文件前检查精确的文本匹配：
+
+```bash
+arka text inspect README.md "old phrase"
+arka text remove README.md "old phrase" --yes
+arka text remove README.md "old phrase" --all --yes
+```
+
+移除操作默认会创建 `.bak` 备份。如不加 `--yes`，Arka 只会预览匹配数量而不做任何修改。当文件与文本清晰引用时，「inspect the text `old phrase` in README.md」这类自然语言请求也会被路由。

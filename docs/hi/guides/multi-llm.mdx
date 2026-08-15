@@ -1,0 +1,18 @@
+---
+title: "Multi-LLM विकल्प"
+description: "एक ही request को कई configured मॉडलों के माध्यम से चलाएँ और outputs की तुलना करें।"
+icon: "layer-group"
+---
+
+एक ही request को कई configured मॉडलों के ज़रिये चलाएँ और labeled outputs की तुलना
+करें:
+
+```bash
+export ARKA_MULTI_LLM_MODELS="openai/gpt-4o-mini,anthropic/claude-3-5-haiku"
+arka multi-llm "propose three names for this product"
+arka multi-llm "write a concise API design" --json
+```
+
+Comma से अलग किए गए `provider/model` entries का उपयोग करें। असफल मॉडल की सूचना दी
+जाती है बिना सफल विकल्पों को त्यागे। “इस landing page के लिए मुझे कई मॉडल विकल्प
+दो” जैसी प्राकृतिक भाषा स्वतः रूट होती है।

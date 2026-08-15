@@ -1,0 +1,46 @@
+---
+title: "Cost और performance guardrails"
+description: "Development inference खर्च, tokens, और latency को दृश्यमान रखें।"
+icon: "shield-halved"
+---
+
+```bash
+arka guardrails status
+arka guardrails reset
+```
+
+`.env` में वैकल्पिक लोकल सीमाएँ सेट करें:
+
+```env
+ARKA_COST_LIMIT_USD=1.00
+ARKA_TOKEN_LIMIT=100000
+ARKA_LATENCY_LIMIT_MS=15000
+```
+
+Token या अनुमानित लागत बजट पार होने पर hosted requests dispatch से पहले block कर
+दी जाती हैं। Local-only मॉडलों को cost guardrails द्वारा कभी block नहीं किया
+जाता। Arka अपने cache में केवल aggregate counters स्टोर करता है, prompts नहीं।
+
+Grounded mode डिफ़ॉल्ट रूप से सक्षम है (`ARKA_GROUNDED_MODE=1`)। यह unrequested
+mock data को block करता है और model-facing requests को निर्देश देता है कि वर्तमान
+जानकारी के लिए symbolic tools या configured APIs का उपयोग करें। जब तक आप स्पष्ट
+रूप से mock, prototype, placeholder, या example design न माँगें, Arka असली data,
+असली integrations, और production-shaped error handling की ओर झुकता है। केवल
+prototyping के समय अक्षम करें:
+
+```bash
+ARKA_GROUNDED_MODE=0 arka ask "..."
+arka grounding
+```
+
+Production mode भी डिफ़ॉल्ट रूप से सक्षम है (`ARKA_PRODUCTION_MODE=1`)। Coding
+requests को access control, secret-safe data handling, input और output
+validation, prompt-injection defenses, audit logging, tests, error handling, और
+observability शामिल करने का निर्देश दिया जाता है। इसे केवल स्पष्ट रूप से
+disposable prototypes के लिए अक्षम करें।
+
+Data minimization डिफ़ॉल्ट रूप से schema-only mode
+(`ARKA_DATA_MODE=schema`) है। मॉडलों को भेजे गए JSON payloads को field
+names/types या array counts के रूप में summarize किया जाता है; literal
+trade-secret values लोकल tools के लिए उपलब्ध रहते हैं लेकिन मॉडल को expose नहीं
+किए जाते। केवल तभी `ARKA_DATA_MODE=full` का उपयोग करें जब data साझा करना सुरक्षित हो।

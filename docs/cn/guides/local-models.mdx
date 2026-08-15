@@ -1,0 +1,29 @@
+---
+title: "本地模型优化与设置"
+description: "为你的硬件选择并配置可运行的本地模型。"
+icon: "server"
+---
+
+预览一个感知硬件的推荐与设置命令：
+
+```bash
+arka model-optimizer recommend
+arka model-optimizer setup --backend ollama
+```
+
+使用 `--apply` 显式应用服务提供商配置：
+
+```bash
+arka model-optimizer setup --backend ollama --apply
+```
+
+`vllm` 用于已配置的 GPU 服务器，`lmstudio` 用于其 OpenAI 兼容的桌面服务器。
+Arka 不会隐式下载权重或启动服务。它会打印下一条命令，让设置保持显式且
+可回退。
+
+对于部署预览，Arka 支持 Vercel、Netlify、Railway、Render、Hugging Face
+Spaces、Cloudflare Workers 和 GitHub Pages：
+
+```bash
+arka deploy --platform huggingface --json
+```

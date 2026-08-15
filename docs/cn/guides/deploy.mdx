@@ -1,0 +1,99 @@
+---
+title: "将 Arka 部署到云与 Web 平台"
+description: "一步将 Arka 部署到单个或多个云托管服务提供商。"
+icon: "cloud-arrow-up"
+---
+
+## 一条命令的多平台部署
+
+用一条命令同时把 Arka 部署到所有已配置的平台（Cloud VM、Railway、Vercel、
+Netlify、Render、Cloudflare）：
+
+```bash
+# Option 1: Deploy to all detected platforms matching your project config
+arka deploy --all --yes
+
+# Option 2: Deploy to specific multiple platforms in one command
+arka deploy --platforms vercel,railway,cloud --yes
+
+# Option 3: Shell helper script
+./scripts/deploy_multi.sh --all --yes
+```
+
+以 JSON 或人类可读的表格预览多平台部署计划：
+
+```bash
+arka deploy --all
+arka deploy --platforms vercel,railway,cloud --json
+```
+
+---
+
+## 一步云部署
+
+将 Arka 部署到任何云托管机器（Linux VM、VPS、AWS EC2、GCP、DigitalOcean、
+Docker 主机）：
+
+```bash
+# Option 1: Run the single-step cloud deployment script
+./scripts/deploy_cloud.sh
+
+# Option 2: Run via Docker Compose
+docker compose up -d
+
+# Option 3: Docker one-liner
+docker run -d --name arka -p 8765:8765 -e ARKA_HOSTED_MODE=1 -e REMOTE_TOKEN=your_token arka:latest
+```
+
+或者通过 Arka CLI 预览并运行：
+
+```bash
+arka deploy --platform cloud --yes
+```
+
+---
+
+## 云端上的托管技能行为
+
+当 Arka 运行在云端机器上（`ARKA_HOSTED_MODE=1` 或在无头 Linux/Docker
+容器内）时，个人桌面、GUI 和音频类技能会自动被限制，以保证安全与兼容
+性。
+
+### 技能兼容性矩阵
+
+| 技能类别 | 云端状态 | 示例 |
+| --- | --- | --- |
+| **仓库与代码分析** | ✅ **启用** | `repo_health`、`repo_map`、`repo_graph`、`structure`、`workspace` |
+| **CI/CD 与 PR 工作流** | ✅ **启用** | `ci`、`pr_check`、`github_actions`、`review`、`route_audit` |
+| **代码编辑与安全** | ✅ **启用** | `code`、`lint_project`、`security`、`dev_doctor`、`dev_tools` |
+| **MCP 服务器与 REST API** | ✅ **启用** | `/v1/health`、`/v1/agent`、MCP 工具处理器 |
+| **桌面应用** | ❌ **禁用** | `open`、`app_automation`、`desktop_automation` |
+| **桌面浏览器控制** | ❌ **禁用** | `browser_check`、`agent_browser`、`browse` |
+| **音乐与媒体播放** | ❌ **禁用** | `spotify`、`spotify_control`、`play_youtube`、`stop_music` |
+| **本地音频与语音** | ❌ **禁用** | `voice`、`wake`（本地麦克风/扬声器） |
+| **屏幕控制** | ❌ **禁用** | `screen`（桌面屏幕捕获） |
+
+---
+
+## 托管服务提供商
+
+预览单平台部署：
+
+```bash
+arka deploy --platform vercel
+arka deploy --platform netlify --json
+arka deploy --platform railway --json
+arka deploy --platform render --json
+```
+
+在完成平台 CLI 认证后部署：
+
+```bash
+arka deploy --platform vercel --production --yes
+arka deploy --platform netlify --production --yes
+arka deploy --platform railway --production --yes
+arka deploy --platform render --production --yes
+```
+
+Arka 会检测 `vercel.json`、`netlify.toml`、`railway.toml`、`render.yaml`、
+`Dockerfile`、`docker-compose.yml` 和 `package.json`，据此选择合适的平台。

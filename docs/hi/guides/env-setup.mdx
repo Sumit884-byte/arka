@@ -1,0 +1,15 @@
+---
+title: ".env setup"
+description: "Arka के साथ project environment templates सुरक्षित रूप से generate करें।"
+icon: "screwdriver-wrench"
+---
+
+```bash
+arka env_setup
+arka "create a .env for this project"
+```
+
+Arka स्थानीय source files में referenced environment variable names के लिए scan करता है
+और गायब entries को खाली या `your-secret-here` placeholders के रूप में बनाता है। यह कभी भी
+credential values नहीं गढ़ता, नहीं लाता, और नहीं overwrite करता। मौजूदा `.env` values
+संरक्षित रहती हैं; खाली फ़ाइल replace करते समय ही `--force` उपयोग करें।

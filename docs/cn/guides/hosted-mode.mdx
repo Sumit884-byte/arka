@@ -1,0 +1,33 @@
+---
+title: "托管模式"
+description: "让仅桌面的 Arka 技能不进入服务器部署。"
+icon: "cloud"
+---
+
+Arka 会自动检测常见的托管环境，并禁用需要本地桌面、音频设备或 GUI 的
+技能。这包括音乐播放、桌面浏览器自动化、麦克风/唤醒词捕获和屏幕控制。
+编码、API、数据、媒体转换和服务器安全的图像类技能仍然可用。
+
+查看生效的配置文件：
+
+```bash
+arka skills status
+```
+
+用环境配置强制指定配置文件：
+
+```bash
+ARKA_HOSTED_MODE=1 arka skills status  # hosted
+ARKA_HOSTED_MODE=0 arka skills status  # desktop
+```
+
+或为某次部署持久化它：
+
+```bash
+arka skills profile hosted --apply
+```
+
+默认值是 `auto`。检测会考虑 CI、容器、无头 Linux 以及缺失的音频设备。要
+恢复一个被配置文件禁用的技能，运行 `arka skills enable <skill>`；该覆盖
+与用户禁用列表分别存储。这对 Railway、Render、Hugging Face、Docker 以及
+其他服务器部署非常有用。

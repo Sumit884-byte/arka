@@ -1,0 +1,27 @@
+---
+title: "工程循环"
+description: "有界的规划、实现、验证、审查与学习循环。"
+icon: "arrows-spin"
+---
+
+Arka 内置了一个小巧、可复用的工程循环规划器，灵感来自
+[loop-engineering](https://github.com/cobusgreyling/loop-engineering) 描述的
+迭代工作流。它组合了 Arka 现有的仓库、lint、CI、前端和审查技能；不会复制
+任何仓库特定代码。
+
+```bash
+arka loop-engineering "improve checkout error handling" --iterations 3
+```
+
+每次迭代遵循 `observe → plan → implement → verify → review → learn`。该循环
+上限为 20 次迭代，包含 CI 门禁，并且默认在编辑前需要批准。仅在你已审查
+过计划时才使用 `--apply`；`--json` 让其他技能或 MCP 客户端更方便消费。
+
+自然语言也可以：
+
+```text
+engineering loop fix the checkout frontend for 2 iterations
+```
+
+这与 `arka loop`（按时间间隔重复命令）和 `arka iterate`（按固定次数重复
+命令）不同。
