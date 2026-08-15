@@ -615,6 +615,120 @@ code {
   font-size: 1.02rem;
 }
 
+/* Routing diagram */
+.routing-diagram {
+  padding: 1.35rem 1.35rem 1.1rem;
+  margin-bottom: 1rem;
+}
+
+.routing-diagram-head {
+  margin-bottom: 0.85rem;
+}
+
+.routing-diagram-head h3 {
+  margin: 0 0 0.25rem;
+  font-size: 1.02rem;
+  letter-spacing: -0.02em;
+}
+
+.routing-diagram-head .muted {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.routing-canvas {
+  position: relative;
+  height: clamp(220px, 34vw, 280px);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(249, 115, 22, 0.08), transparent 55%),
+    #0d1118;
+  overflow: hidden;
+}
+
+.routing-edges {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  color: color-mix(in srgb, var(--line) 88%, var(--muted));
+  pointer-events: none;
+}
+
+.routing-edge {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  opacity: 0.55;
+  transition: opacity 0.18s ease, stroke-width 0.18s ease, filter 0.18s ease;
+}
+
+.routing-edge.highlight {
+  opacity: 1;
+  stroke-width: 3;
+  color: var(--accent);
+  filter: drop-shadow(0 0 6px rgba(249, 115, 22, 0.55));
+}
+
+.routing-nodes {
+  position: absolute;
+  inset: 0;
+}
+
+.routing-node {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: grid;
+  justify-items: center;
+  gap: 0.2rem;
+  width: 5.75rem;
+  padding: 0.55rem 0.35rem 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.routing-node:hover,
+.routing-node.active {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.12), 0 14px 30px rgba(0, 0, 0, 0.22);
+  transform: translate(-50%, -50%) translateY(-2px);
+}
+
+.routing-icon {
+  width: 2rem;
+  height: 2rem;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: rgba(249, 115, 22, 0.12);
+  color: var(--accent-2);
+}
+
+.routing-icon svg {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.routing-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.routing-sub {
+  font-size: 0.66rem;
+  color: var(--muted);
+  line-height: 1.2;
+  text-align: center;
+}
+
 .feature-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -836,6 +950,28 @@ code {
 }
 
 @media (max-width: 720px) {
+  .routing-canvas {
+    height: 320px;
+  }
+
+  .routing-node {
+    width: 4.6rem;
+    padding: 0.45rem 0.25rem 0.35rem;
+  }
+
+  .routing-icon {
+    width: 1.65rem;
+    height: 1.65rem;
+  }
+
+  .routing-label {
+    font-size: 0.72rem;
+  }
+
+  .routing-sub {
+    font-size: 0.6rem;
+  }
+
   .nav-desktop,
   .header-actions .btn-ghost {
     display: none;

@@ -8,6 +8,8 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from arka.core.screenshot_paths import resolve_screenshot_output, screenshot_path
+
 PLAY_DEPTHS = {"smoke", "standard", "deep"}
 MAX_WAIT_MS = 10_000
 DEFAULT_VERIFY_FRAME_LIMIT = 3
@@ -168,6 +170,26 @@ def _parse_visual_diagnosis(raw: object) -> dict[str, Any]:
     return {"verdict": verdict, "severity": severity, "issues": issues, "fixes": fixes, "raw": raw}
 
 
+def execute_game_action(page: Any, action: dict[str, Any]) -> dict[str, Any]:
+    """Execute one gameplay action (key, click, or wait) and return an event dict."""
+    kind = str(action.get("type", "")).lower()
+    event: dict[str, Any] = {"action": dict(action), "status": "passed"}
+    if kind == "key":
+        page.keyboard.press(str(action.get("key", "ArrowUp")))
+        event["key"] = str(action.get("key", "ArrowUp"))
+    elif kind == "click":
+        locator = page.locator(str(action.get("selector", "canvas")))
+        locator.nth(int(action.get("index", 0))).click(timeout=10_000)
+    elif kind == "wait":
+        ms = min(MAX_WAIT_MS, max(0, int(action.get("ms", 500))))
+        page.wait_for_timeout(ms)
+    else:
+        raise ValueError(f"unsupported action type: {kind!r}; use key, click, or wait")
+    if action.get("purpose"):
+        event["purpose"] = str(action["purpose"])
+    return event
+
+
 def verify_game_visuals(screenshots: list[str], *, frame_limit: int = DEFAULT_VERIFY_FRAME_LIMIT) -> dict[str, Any]:
     """Run a post-play visual diagnosis before saying the game check passed."""
     unique: list[str] = []
@@ -229,7 +251,7 @@ def check_game(
         canvas_count = page.locator("canvas").count()
         if canvas_count == 0:
             raise RuntimeError("game check expected at least one canvas element")
-        initial = target / "frame-000-loaded.png"
+        initial = screenshot_path("frame-loaded", target)
         page.screenshot(path=str(initial))
         strategy = (
             {"depth": "custom", "requested_depth": "custom", "reason": "user-provided actions", "edge_cases": ["custom action list"], "actions": actions}
@@ -238,26 +260,23 @@ def check_game(
         )
         planned = list(strategy["actions"])
         for index, action in enumerate(planned, 1):
-            kind = str(action.get("type", "")).lower()
-            if kind == "key":
-                page.keyboard.press(str(action.get("key", "ArrowUp")))
-            elif kind == "click":
-                locator = page.locator(str(action.get("selector", "canvas")))
-                locator.nth(int(action.get("index", 0))).click(timeout=10_000)
-            elif kind == "wait":
-                page.wait_for_timeout(min(MAX_WAIT_MS, max(0, int(action.get("ms", 500)))))
-            else:
-                raise ValueError(f"action {index}: use key, click, or wait")
-            frame = target / f"frame-{index:03d}.png"
+            try:
+                event = execute_game_action(page, action)
+            except ValueError as exc:
+                raise ValueError(f"action {index}: {exc}") from exc
+            frame = screenshot_path(f"frame-{index:03d}", target)
             page.screenshot(path=str(frame))
-            event = {"action": kind, "status": "passed", "screenshot": str(frame)}
-            if action.get("purpose"):
-                event["purpose"] = str(action["purpose"])
-            if action.get("key"):
-                event["key"] = str(action["key"])
-            events.append(event)
-        screenshot = str(target / "final.png")
-        page.screenshot(path=screenshot)
+            events.append(
+                {
+                    "action": str(action.get("type", "")).lower(),
+                    "status": event.get("status", "passed"),
+                    "screenshot": str(frame),
+                    **{k: v for k, v in event.items() if k not in {"action", "status"}},
+                }
+            )
+        screenshot_path_obj = screenshot_path("final", target)
+        page.screenshot(path=str(screenshot_path_obj))
+        screenshot = str(screenshot_path_obj)
         if record:
             # Closing the page/context finalizes Playwright's webm file.
             video = _finalize_video(page, context)

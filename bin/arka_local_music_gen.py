@@ -12,4 +12,4 @@ _shim_path.ensure()
 from arka._bootstrap import run_legacy_module
 
 if __name__ == "__main__":
-    raise SystemExit(run_legacy_module("arka.integrations.service_autostart"))
+    raise SystemExit(run_legacy_module("arka.agent.local_music_gen"))

@@ -22,6 +22,12 @@ def test_temporary_output_is_unique_and_under_tempdir():
 
 
 def test_review_prompts(tmp_path):
+    (tmp_path / "website-pc-20260814-120000.png").write_bytes(b"png")
+    prompts = review(str(tmp_path))
+    assert prompts and "missing responsive" in prompts[0]
+
+
+def test_review_prompts_legacy_names(tmp_path):
     (tmp_path / "website-pc.png").write_bytes(b"png")
     prompts = review(str(tmp_path))
     assert prompts and "missing responsive" in prompts[0]
@@ -29,7 +35,7 @@ def test_review_prompts(tmp_path):
 
 def test_review_preserves_good_viewports(tmp_path):
     for mode in ("pc", "tablet", "mobile"):
-        (tmp_path / f"website-{mode}.png").write_bytes(b"png")
+        (tmp_path / f"website-{mode}-20260814-120000.png").write_bytes(b"png")
     prompts = review(str(tmp_path))
     assert any("preserving modes" in prompt for prompt in prompts)
     assert "button order" in prompts[0]

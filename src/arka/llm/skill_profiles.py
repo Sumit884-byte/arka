@@ -57,6 +57,10 @@ TASK_PROFILES: dict[str, dict[str, str]] = {
         "description": "General LLM completions",
         "default_model": "gemini/gemini-2.0-flash",
     },
+    "judge": {
+        "description": "Output quality verification — accuracy, completeness, safety",
+        "default_model": "gemini/gemini-2.5-flash",
+    },
 }
 
 # Built-in skill name → task profile (extend via llm-skill-models.json "_profiles" overrides)
@@ -66,6 +70,7 @@ SKILL_TASK_MAP: dict[str, str] = {
     # Chat / Q&A
     "platform_howto": "chat",
     "interesting_fact": "chat",
+    "prompt_coach": "chat",
     "nudge": "chat",
     "contextual_answer": "chat",
     "website_pages": "website_pages",
@@ -157,6 +162,7 @@ SKILL_TASK_MAP: dict[str, str] = {
     "emotion": "predictions",
     # Video compose
     "compose_video": "compose_video",
+    "compose_story": "compose_video",
     "compose_slides": "compose_slides",
     "compose_3d": "compose_3d",
     "three_d": "compose_3d",

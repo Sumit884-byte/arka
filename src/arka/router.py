@@ -254,6 +254,71 @@ def route(text: str) -> Route | None:
         return None
 
 
+def _route_explicit_to_folder(cmd: str) -> Route | None:
+    """Resolve `to Downloads` / `go to … folder` before tech_stack and chat heuristics."""
+    try:
+        from arka.routing.symbolic import route_to_folder
+
+        hit = route_to_folder(cmd.strip())
+        if hit:
+            return Route(hit, source="offline", kind="skill")
+    except ImportError:
+        pass
+    return None
+
+
+def _route_explicit_tech_stack(cmd: str) -> Route | None:
+    """Resolve `best tech stack for …` before broad NL chat heuristics."""
+    try:
+        from arka.routing.symbolic import route_tech_stack
+
+        hit = route_tech_stack(cmd.strip())
+        if hit:
+            return Route(hit, source="offline", kind="skill")
+    except ImportError:
+        pass
+    return None
+
+
+def _route_explicit_connector(cmd: str) -> Route | None:
+    """Resolve `suggest cli to connect` before broad NL chat heuristics."""
+    try:
+        from arka.routing.symbolic import route_cli_connector
+
+        hit = route_cli_connector(cmd.strip())
+        if hit:
+            return Route(hit, source="offline", kind="skill")
+    except ImportError:
+        pass
+    return None
+
+
+def _route_explicit_prompt_coach(cmd: str) -> Route | None:
+    """Resolve prompt coaching before general chat / web_answer fallbacks."""
+    try:
+        from arka.routing.symbolic import route_prompt_coach
+
+        hit = route_prompt_coach(cmd.strip())
+        if hit:
+            return Route(hit, source="offline", kind="skill")
+    except ImportError:
+        pass
+    return None
+
+
+def _route_explicit_infographic(cmd: str) -> Route | None:
+    """Resolve `infographic about …` before broad NL chat heuristics."""
+    try:
+        from arka.routing.symbolic import route_infographic
+
+        hit = route_infographic(cmd.strip())
+        if hit:
+            return Route(hit, source="offline", kind="skill")
+    except ImportError:
+        pass
+    return None
+
+
 def _route_explicit_meme(cmd: str) -> Route | None:
     """Resolve `meme vibe-coding` / `meme drake …` before broad NL chat heuristics."""
     try:
@@ -276,6 +341,26 @@ def route_preview(text: str) -> Route | None:
     meme_route = _route_explicit_meme(cmd)
     if meme_route:
         return meme_route
+
+    infographic_route = _route_explicit_infographic(cmd)
+    if infographic_route:
+        return infographic_route
+
+    to_folder_route = _route_explicit_to_folder(cmd)
+    if to_folder_route:
+        return to_folder_route
+
+    tech_stack_route = _route_explicit_tech_stack(cmd)
+    if tech_stack_route:
+        return tech_stack_route
+
+    connector_route = _route_explicit_connector(cmd)
+    if connector_route:
+        return connector_route
+
+    prompt_coach_route = _route_explicit_prompt_coach(cmd)
+    if prompt_coach_route:
+        return prompt_coach_route
 
     slash_dev = re.match(r"^/(?:dev[-_ ]?tools?|developer[-_ ]?tools?)\b\s*(.*)$", cmd, re.I)
     if slash_dev:
@@ -687,6 +772,26 @@ def _route_offline(cmd: str) -> Route | None:
     if meme_route:
         return meme_route
 
+    infographic_route = _route_explicit_infographic(cmd)
+    if infographic_route:
+        return infographic_route
+
+    to_folder_route = _route_explicit_to_folder(cmd)
+    if to_folder_route:
+        return to_folder_route
+
+    tech_stack_route = _route_explicit_tech_stack(cmd)
+    if tech_stack_route:
+        return tech_stack_route
+
+    connector_route = _route_explicit_connector(cmd)
+    if connector_route:
+        return connector_route
+
+    prompt_coach_route = _route_explicit_prompt_coach(cmd)
+    if prompt_coach_route:
+        return prompt_coach_route
+
     if _is_knowledge_question(clean):
         return Route(f"web_answer {cmd}", source="offline")
 
@@ -896,6 +1001,20 @@ def _is_knowledge_question(clean: str) -> bool:
         from arka.agent.meme_templates import nl_to_argv
 
         if nl_to_argv(clean):
+            return False
+    except ImportError:
+        pass
+    try:
+        from arka.integrations.cli_connector import nl_to_argv as connector_nl_to_argv
+
+        if connector_nl_to_argv(clean):
+            return False
+    except ImportError:
+        pass
+    try:
+        from arka.routing.prompt_coach import is_prompt_coach_request
+
+        if is_prompt_coach_request(clean):
             return False
     except ImportError:
         pass

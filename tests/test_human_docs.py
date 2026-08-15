@@ -52,6 +52,29 @@ def test_route_human_docs():
     hit = route_human_docs("write a human sounding README for this repo")
     assert hit is not None
     assert hit.startswith("human_docs write")
+    assert hit.endswith("--apply")
+
+
+def test_route_human_docs_write_readme_applies():
+    hit = route_human_docs("write readme for this project")
+    assert hit is not None
+    assert "human_docs write" in hit
+    assert "--apply" in hit
+
+
+def test_route_human_docs_preview_skips_apply():
+    hit = route_human_docs("preview readme for this project")
+    assert hit is not None
+    assert "--apply" not in hit
+
+
+def test_match_command_prefers_human_docs_route():
+    from arka.agent.skills import match_command
+
+    hit = match_command("write readme for this project")
+    assert hit.startswith("human_docs write")
+    assert "--apply" in hit
+    assert hit != "human_docs for this project"
 
 
 def test_route_human_docs_skips_unrelated():

@@ -1331,6 +1331,57 @@ def export_cli_images(out_dir: Path | None = None) -> list[tuple[Path, str, int]
     return results
 
 
+def terminal_video_result(
+    action: str,
+    *,
+    project_dir: str | None = None,
+    captures: str | None = None,
+    output: str | None = None,
+    script: str | None = None,
+    skip_verify: bool = False,
+) -> dict[str, object]:
+    """Structured result for MCP and programmatic callers."""
+    normalized = action.strip().lower().replace("_", "-")
+    configure(
+        project_dir=Path(project_dir).expanduser() if project_dir else None,
+        captures=Path(captures).expanduser() if captures else None,
+        output=Path(output).expanduser() if output else None,
+        voiceover_script=Path(script).expanduser() if script else None,
+    )
+    if normalized == "capture":
+        run_capture_commands()
+        return {
+            "action": "capture",
+            "captures_dir": str(CAPTURES),
+            "meta_file": str(META_FILE),
+        }
+    if normalized == "build":
+        _require_ffmpeg()
+        out = run_build(skip_verify=skip_verify)
+        dur = probe_duration(out)
+        size_mb = out.stat().st_size / (1024 * 1024)
+        return {
+            "action": "build",
+            "output": str(out),
+            "duration_seconds": round(dur, 2),
+            "size_mb": round(size_mb, 2),
+            "captures_dir": str(CAPTURES),
+        }
+    if normalized in {"export-images", "export"}:
+        out_dir = Path(output).expanduser() if output else None
+        results = export_cli_images(out_dir)
+        resolved_dir = str((out_dir or (REPO / "recordings" / "cli-images")).resolve())
+        return {
+            "action": "export-images",
+            "output_dir": resolved_dir,
+            "images": [
+                {"path": str(path), "label": label, "bytes": size}
+                for path, label, size in results
+            ],
+        }
+    raise ValueError("action must be build, capture, or export-images")
+
+
 def nl_to_argv(text: str) -> list[str]:
     t = text.strip()
     if not t:

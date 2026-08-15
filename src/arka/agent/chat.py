@@ -33,16 +33,16 @@ QUEUE_RESULTS_FILE = CACHE_DIR / "deep_queue_results.json"
 YEAR = datetime.now().year
 CURRENT_DATE = datetime.now().strftime("%B %d, %Y")
 
-SEARCH_KEYWORDS = [
-    "latest", "recent", "now", "today", "current", "live",
-    "2023", "2024", "2025", "2026",
-    "hackathon", "conference", "release", "update", "changelog",
-    "event", "news", "announcement",
-    "stock", "price", "value", "market", "crypto",
-    "ipl", "t20", "cricket", "match", "score", "winner", "championship",
-    "fifa", "nfl", "nba", "wimbledon", "olympics",
-    "documentation", "api", "tutorial", "guide", "weather",
-]
+from arka.llm.model_cutoffs import (
+    ALWAYS_SEARCH_KEYWORDS,
+    active_model_cutoff,
+    format_cutoff_for_prompt,
+    model_aware_search_enabled,
+    should_search_for_model,
+)
+
+# Backward-compatible alias (year tokens are now model-specific; see model_cutoffs.py).
+SEARCH_KEYWORDS = list(ALWAYS_SEARCH_KEYWORDS)
 
 ERROR_KEYWORDS = [
     "Error", "Exception", "Traceback", "AttributeError",
@@ -50,7 +50,17 @@ ERROR_KEYWORDS = [
     "SyntaxError", "KeyError", "RuntimeError", "FileNotFoundError",
 ]
 
-DECISION_PROMPT = f"""You are a decision engine. Today is {CURRENT_DATE}.
+def decision_prompt(*, task: str | None = None, skill: str | None = None) -> str:
+    cutoff_note = ""
+    if model_aware_search_enabled():
+        info = active_model_cutoff(task=task, skill=skill)
+        if info is not None:
+            cutoff_note = (
+                f"\nActive model: {info.provider}/{info.model_id}. "
+                f"Knowledge cutoff: {format_cutoff_for_prompt(info.cutoff)}. "
+                "Prefer SEARCH for events, releases, scores, or facts after that date."
+            )
+    return f"""You are a decision engine. Today is {CURRENT_DATE}.{cutoff_note}
 Output exactly one line:
 CALC: <sympy expression>  — math, equations, integrals, derivatives
 SEARCH: <short query>       — live/recent data, news, scores, prices, current events
@@ -881,11 +891,18 @@ def ground_search_query(query: str) -> str:
     return query
 
 
-def should_auto_search(text: str) -> bool:
+def should_auto_search(
+    text: str,
+    *,
+    task: str | None = "chat",
+    skill: str | None = "web_answer",
+) -> bool:
     low = text.lower()
     if detect_list_request(text):
         return True
-    return any(re.search(r"\b" + re.escape(kw) + r"\b", low) for kw in SEARCH_KEYWORDS)
+    if any(re.search(r"\b" + re.escape(kw) + r"\b", low) for kw in ALWAYS_SEARCH_KEYWORDS):
+        return True
+    return should_search_for_model(text, task=task, skill=skill)
 
 
 def memory_search_fallback_enabled() -> bool:
@@ -1149,7 +1166,12 @@ def detect_math(text: str) -> bool:
 from arka.llm.cli import llm_complete
 
 
-def get_intent(prompt: str) -> tuple[str, str]:
+def get_intent(
+    prompt: str,
+    *,
+    task: str | None = "chat",
+    skill: str | None = "web_answer",
+) -> tuple[str, str]:
     prompt = prompt.strip()
     if not prompt:
         return "ANSWER", ""
@@ -1166,12 +1188,13 @@ def get_intent(prompt: str) -> tuple[str, str]:
         return "CALC", prompt
     if detect_list_request(prompt):
         return "SEARCH", prompt
-    if should_auto_search(prompt):
+    if should_auto_search(prompt, task=task, skill=skill):
         return "SEARCH", prompt
     try:
-        from arka.integrations.supermemory import is_definitional_query
+        from arka.integrations.supermemory import is_ambiguous_definitional_query
 
-        if is_definitional_query(prompt):
+        # Homographs in tech habitat (e.g. developer + "what is Rust?") need web disambiguation.
+        if is_ambiguous_definitional_query(prompt):
             return "SEARCH", prompt
     except ImportError:
         pass
@@ -1179,7 +1202,13 @@ def get_intent(prompt: str) -> tuple[str, str]:
     if len(prompt.split()) >= 3:
         return "ANSWER", prompt
 
-    decision = llm_complete(DECISION_PROMPT, prompt, temperature=0.0, task="chat")
+    decision = llm_complete(
+        decision_prompt(task=task, skill=skill),
+        prompt,
+        temperature=0.0,
+        task=task or "chat",
+        skill=skill or "web_answer",
+    )
     if decision:
         for line in decision.splitlines():
             line = line.strip()
@@ -1191,7 +1220,7 @@ def get_intent(prompt: str) -> tuple[str, str]:
             if up.startswith("ANSWER:"):
                 return "ANSWER", prompt
 
-    if should_auto_search(prompt):
+    if should_auto_search(prompt, task=task, skill=skill):
         return "SEARCH", prompt
     return "ANSWER", prompt
 
@@ -1973,9 +2002,65 @@ def answer_question(
     use_session: bool = True,
     cleanup: bool = True,
     contextual: bool | None = None,
+    verify: bool | None = None,
 ) -> tuple[str, str]:
     """Returns (provenance, answer_text). provenance: search|memory|calc|weather|error"""
+    import time
+
+    from arka.output import is_model_identity_question, model_identity_answer, set_answer_duration_ms
+
+    start = time.perf_counter()
     question = normalize_question(" ".join(question.split()))
+
+    def _done(prov: str, ans: str) -> tuple[str, str]:
+        total_ms = (time.perf_counter() - start) * 1000
+        set_answer_duration_ms(total_ms)
+        try:
+            from arka.core.output_verify import (
+                OutputTiming,
+                maybe_verify_output,
+                record_output_telemetry,
+                set_output_timing,
+                slow_threshold_ms,
+            )
+
+            timing = OutputTiming(total_ms=total_ms, slow=total_ms > slow_threshold_ms())
+            set_output_timing(timing)
+            record_output_telemetry(timing=timing)
+            force_verify = verify is True
+            blocking = verify is True if verify is not None else None
+            maybe_verify_output(
+                question,
+                ans,
+                blocking=blocking,
+                force=force_verify,
+            )
+        except ImportError:
+            pass
+        return prov, ans
+
+    if is_model_identity_question(question):
+        return _done("memory", model_identity_answer())
+
+    try:
+        from arka.core.answer_cache import (
+            get_cached_answer,
+            is_encyclopedic_query,
+            set_cached_answer,
+        )
+
+        if is_encyclopedic_query(question):
+            cached = get_cached_answer(question)
+            if cached:
+                if use_session:
+                    session_append("user", question)
+                    session_append("assistant", cached)
+                _end_channel_session(cached, use_session=use_session)
+                return _done("cache", cached)
+    except ImportError:
+        set_cached_answer = None  # type: ignore[assignment,misc]
+        is_encyclopedic_query = None  # type: ignore[assignment,misc]
+
     word_limit = detect_word_limit(question)
     contextual_hint = ""
     try:
@@ -2002,7 +2087,7 @@ def answer_question(
                 session_append("user", question)
                 session_append("assistant", msg)
             _end_channel_session(msg, use_session=use_session)
-            return "blocked", msg
+            return _done("blocked", msg)
 
     action, data = get_intent(question)
     list_n = detect_list_request(question)
@@ -2026,7 +2111,7 @@ def answer_question(
             session_append("user", question)
             session_append("assistant", answer)
         _end_channel_session(answer or "Could not analyze error.", use_session=use_session)
-        return "error", answer or "Could not analyze error."
+        return _done("error", answer or "Could not analyze error.")
 
     if action == "CALC":
         result = math_from_question(data)
@@ -2039,7 +2124,7 @@ def answer_question(
             session_append("user", question)
             session_append("assistant", answer)
         _end_channel_session(answer, use_session=use_session)
-        return "calc", answer
+        return _done("calc", answer)
 
     if action == "WEATHER":
         wx = fetch_weather(question)
@@ -2052,7 +2137,7 @@ def answer_question(
             session_append("user", question)
             session_append("assistant", answer)
         _end_channel_session(answer, use_session=use_session)
-        return "weather", answer
+        return _done("weather", answer)
 
     context_block = build_session_context(question) if use_session else ""
     if channel_ctx:
@@ -2280,8 +2365,23 @@ def answer_question(
     if use_session:
         session_append("assistant", answer)
 
+    try:
+        if (
+            set_cached_answer is not None
+            and is_encyclopedic_query is not None
+            and is_encyclopedic_query(question)
+            and action == "ANSWER"
+            and not deep
+            and prov == "memory"
+            and answer
+            and not looks_like_unknown_answer(answer)
+        ):
+            set_cached_answer(question, answer)
+    except ImportError:
+        pass
+
     _end_channel_session(answer, use_session=use_session)
-    return prov, answer
+    return _done(prov, answer)
 
 
 def queue_add(task: str) -> None:
@@ -2340,6 +2440,11 @@ def main() -> int:
     p_ask.add_argument("--deep", action="store_true")
     p_ask.add_argument("--no-session", action="store_true")
     p_ask.add_argument("--no-cleanup", action="store_true")
+    p_ask.add_argument(
+        "--verify",
+        action="store_true",
+        help="Run judge-model output verification before displaying (blocking)",
+    )
 
     p_calc = sub.add_parser("calc", help="SymPy calculation")
     p_calc.add_argument("expression", nargs="+")
@@ -2398,8 +2503,14 @@ def main() -> int:
             deep=args.deep,
             use_session=not args.no_session,
             cleanup=not args.no_cleanup,
+            verify=True if args.verify else None,
         )
-        _print_answer(answer)
+        try:
+            from arka.output import print_block
+
+            print_block("Answer", answer)
+        except ImportError:
+            _print_answer(answer)
         return 0
 
     if args.cmd == "calc":

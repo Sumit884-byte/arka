@@ -12,7 +12,7 @@ from arka.paths import config_dir
 PROFILE_VERSION = 1
 HOSTED_DEVICE_SKILLS = frozenset({
     "play_youtube", "youtube_download", "youtube_bulk", "spotify", "spotify_control", "voice",
-    "wake", "screen", "browser_check", "app_automation", "desktop_automation",
+    "wake", "screen", "browser_check", "verify_web_interaction", "play_website_game", "app_automation", "desktop_automation",
 })
 
 

@@ -1,0 +1,22 @@
+{
+  "name": "reposition_image",
+  "description": "Detect bad avatar/profile image crops and reframe or suggest CSS object-position",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "fix image crop",
+    "reposition avatar",
+    "center face in image",
+    "fix profile picture cropping",
+    "smart image frame",
+    "fix avatar crop",
+    "reposition image"
+  ],
+  "permissions": ["read", "write"],
+  "requires": {
+    "packages_optional": ["opencv-python", "mediapipe"],
+    "env_optional": ["ARKA_REPOSITION_VISION", "DESCRIBE_IMAGE_BACKEND"]
+  }
+}

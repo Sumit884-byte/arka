@@ -336,6 +336,12 @@ SKILL_CATALOG: dict[str, dict[str, Any]] = {
         "example": "agent_hub sync && agent_hub launch claude",
         "beginner": False,
     },
+    "connector": {
+        "interests": ["dev", "productivity"],
+        "description": "Connect the Arka CLI to Agent Hub shared context",
+        "example": "connector connect",
+        "beginner": True,
+    },
 }
 
 _PERSONALIZE_TRIGGERS = re.compile(

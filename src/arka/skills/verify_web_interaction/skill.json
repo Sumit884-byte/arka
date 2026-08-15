@@ -1,0 +1,28 @@
+{
+  "name": "verify_web_interaction",
+  "description": "Verify live website interactions against local code or test spec context",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "verify website interactions",
+    "verify web interaction",
+    "check if site works with this code",
+    "test ui against component",
+    "site verify",
+    "web interaction check"
+  ],
+  "voice_ack": "Verifying website interactions against your code.",
+  "permissions": ["read", "network"],
+  "requires": {
+    "env_optional": [
+      "ARKA_BROWSER_SETTLE_SECONDS",
+      "ARKA_MCP_ALLOW_BROWSER",
+      "ARKA_WEB_VERIFY_VISION",
+      "DESCRIBE_IMAGE_BACKEND",
+      "DESCRIBE_IMAGE_VLLM_START_CMD",
+      "VLLM_START_CMD"
+    ]
+  }
+}

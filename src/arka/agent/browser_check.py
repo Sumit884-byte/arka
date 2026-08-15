@@ -8,6 +8,8 @@ import shutil
 import tempfile
 from pathlib import Path
 
+from arka.core.screenshot_paths import resolve_screenshot_output
+
 def check(url: str, output: str | None = None, settle_seconds: float | None = None) -> dict:
     try:
         from playwright.sync_api import sync_playwright
@@ -18,7 +20,9 @@ def check(url: str, output: str | None = None, settle_seconds: float | None = No
     if temporary:
         directory = tempfile.mkdtemp(prefix="arka-browser-check-")
         atexit.register(shutil.rmtree, directory, ignore_errors=True)
-        output = str(Path(directory) / "browser-check.png")
+        output = str(resolve_screenshot_output(None, prefix="browser-check", default_dir=directory))
+    else:
+        output = str(resolve_screenshot_output(output, prefix="browser-check"))
     settle = float(os.environ.get("ARKA_BROWSER_SETTLE_SECONDS", "2.5")) if settle_seconds is None else settle_seconds
     if settle < 0 or settle > 60:
         raise ValueError("settle_seconds must be between 0 and 60")

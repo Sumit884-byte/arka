@@ -6,7 +6,6 @@
   "type": "python",
   "entry": "run.py",
   "triggers": [
-    "write readme",
     "human sounding readme",
     "draft changelog",
     "write contributing guide",

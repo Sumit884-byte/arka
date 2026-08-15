@@ -335,6 +335,17 @@ def _extract_lyrics(text: str) -> str:
 
 def nl_to_argv(text: str) -> list[str]:
     t = text.strip()
+    if not t:
+        return []
+
+    try:
+        from arka.agent.local_music_gen import wants_local_music
+
+        if wants_local_music(t):
+            return []
+    except ImportError:
+        pass
+
     if not t or not _is_music_generation_request(t):
         return []
 

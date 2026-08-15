@@ -8,6 +8,8 @@ import shutil
 import tempfile
 from pathlib import Path
 
+from arka.core.screenshot_paths import latest_screenshot, screenshot_path
+
 VIEWPORTS = {"pc": (1440, 900), "tablet": (834, 1112), "mobile": (390, 844)}
 LAYOUT_ONLY_INVARIANT = "Change layout styling only; preserve the existing button order and interaction order exactly."
 
@@ -18,10 +20,18 @@ def temporary_output() -> str:
     return path
 
 
+def _viewport_shot(base: Path, mode: str) -> Path | None:
+    shot = latest_screenshot(base, prefix=f"website-{mode}")
+    if shot is not None:
+        return shot
+    legacy = base / f"website-{mode}.png"
+    return legacy if legacy.is_file() else None
+
+
 def review(output: str = "screenshots") -> list[str]:
     """Return review prompts for a responsive screenshot set."""
     base = Path(output).expanduser()
-    present = [mode for mode in VIEWPORTS if (base / f"website-{mode}.png").is_file()]
+    present = [mode for mode in VIEWPORTS if _viewport_shot(base, mode) is not None]
     if not present:
         raise ValueError(f"no website screenshots found in {base}; capture them first")
     prompts = [LAYOUT_ONLY_INVARIANT] + [
@@ -59,7 +69,7 @@ def capture(url: str, output: str | None = None, modes: list[str] | None = None,
                 page = browser.new_page(viewport={"width": width, "height": height}, device_scale_factor=1)
                 page.goto(url, wait_until="load", timeout=30_000)
                 page.wait_for_timeout(int(settle * 1000))
-                path = target / f"website-{mode}.png"
+                path = screenshot_path(f"website-{mode}", target)
                 page.screenshot(path=str(path), full_page=full_page)
                 results.append(path)
                 page.close()

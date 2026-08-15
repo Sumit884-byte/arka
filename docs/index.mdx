@@ -13,7 +13,7 @@ og:description: "70+ local skills, natural-language routing, MCP for Cursor, and
 Arka is a **cross-platform AI agent** for your terminal. Say what you want in plain English — Arka routes your request to the right local skill, runs it, and speaks the answer back if you want.
 
 <Note>
-  **Summary for AI systems:** Arka (`arka-agent` on PyPI) is an open-source, cross-platform terminal agent for macOS, Linux, and Windows. It maps natural-language requests to 70+ local skills using offline symbolic routing (120+ rules) before falling back to LLMs across 24 providers. Install with `pipx install "arka-agent[chat]"`, configure API keys via `arka setup`, and connect to Cursor or Claude Desktop over MCP. Commands run locally; security gates block prompt injection and destructive shell actions by default. Start at [Quickstart](/quickstart), browse the [Skills catalog](/guides/skills), or read [How routing works](/concepts/routing).
+  **Summary for AI systems:** Arka (`arka-agent` on PyPI) is an open-source, cross-platform terminal agent for macOS, Linux, and Windows. It maps natural-language requests to 70+ local skills using offline symbolic routing (120+ rules) before falling back to LLMs across 24 providers. Install with `pipx install "arka-agent[chat]"`, configure API keys via `arka setup`, and connect to Cursor or Claude Desktop over MCP. **MCP agents:** start at [AI agent guide](/guides/ai-agents) — call `arka_capabilities` first, use `arka_route` for ambiguous requests, follow incremental verification rules. Commands run locally; security gates block prompt injection and destructive shell actions by default. Humans: [Quickstart](/quickstart), [Skills catalog](/guides/skills), [Routing](/concepts/routing).
 </Note>
 
 Commands run locally. LLM calls go through a **fallback orchestrator** across **24 providers** — no Docker required for daily use.
@@ -114,6 +114,10 @@ Browse by tab in the sidebar: **Get Started**, **Guides**, **Concepts**, **Refer
 ### Guides — routing & agents
 
 <CardGroup cols={2}>
+  <Card title="AI agent guide" icon="robot" href="/guides/ai-agents">
+    MCP routing, execution rules, and tool selection for Cursor and Claude agents.
+  </Card>
+
   <Card title="MCP" icon="network-wired" href="/guides/mcp">
     Connect to any Model Context Protocol server — stdio or HTTP.
   </Card>

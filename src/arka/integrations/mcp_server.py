@@ -6,6 +6,7 @@ import contextlib
 import io
 import json
 import os
+import re
 import shutil
 import sys
 import threading
@@ -66,6 +67,8 @@ MCP_DEFAULT_DISABLED_SKILL_HEADS = {
     "play_movie",
     "play_song",
     "play_spotify",
+    "play_website_game",
+    "verify_web_interaction",
     "play_youtube",
     "search_web",
     "spotify_brave_debug",
@@ -322,6 +325,399 @@ def _direct_mcp_from_skill(skill: str, args: Any) -> tuple[str, dict[str, Any]] 
         else:
             return None
         return "arka_batch", payload
+
+    if head in {"arka_terminal_video", "terminal_video", "terminal_demo", "cli_demo"}:
+        action = parts[0].lower().replace("_", "-") if parts else "build"
+        start = 1
+        if action not in {"build", "capture", "export-images", "export", "check", "parse"}:
+            action = "build"
+            start = 0
+        if action == "export":
+            action = "export-images"
+        payload: dict[str, Any] = {"action": action}
+        i = start
+        while i < len(parts):
+            token = parts[i]
+            if token in {"-o", "--output"} and i + 1 < len(parts):
+                payload["output"] = parts[i + 1]
+                i += 2
+                continue
+            if token == "--project-dir" and i + 1 < len(parts):
+                payload["project_dir"] = parts[i + 1]
+                i += 2
+                continue
+            if token == "--captures" and i + 1 < len(parts):
+                payload["captures"] = parts[i + 1]
+                i += 2
+                continue
+            if token == "--script" and i + 1 < len(parts):
+                payload["script"] = parts[i + 1]
+                i += 2
+                continue
+            if token == "--skip-verify":
+                payload["skip_verify"] = True
+                i += 1
+                continue
+            i += 1
+        return "arka_terminal_video", payload
+
+    if head in {"arka_local_music", "local_music_gen", "local_music"}:
+        action = parts[0].lower() if parts else "generate"
+        start = 1
+        if action not in {"generate", "parse", "doctor"}:
+            action = "generate"
+            start = 0
+        payload: dict[str, Any] = {"action": action}
+        i = start
+        while i < len(parts):
+            token = parts[i]
+            if token in {"-o", "--output"} and i + 1 < len(parts):
+                payload["output"] = parts[i + 1]
+                i += 2
+                continue
+            if token in {"-d", "--duration"} and i + 1 < len(parts):
+                payload["duration"] = int(parts[i + 1])
+                i += 2
+                continue
+            if token == "--instrumental":
+                payload["instrumental"] = True
+                i += 1
+                continue
+            if token == "--lyrics" and i + 1 < len(parts):
+                payload["lyrics"] = parts[i + 1]
+                i += 2
+                continue
+            if action == "generate" and "prompt" not in payload:
+                payload["prompt"] = parts[i]
+            i += 1
+        return "arka_local_music", payload
+
+    if head in {"arka_music_generate", "music_generate", "generate_music", "generate-music"}:
+        action = parts[0].lower() if parts else "generate"
+        start = 1
+        if action not in {"generate", "parse", "check"}:
+            action = "generate"
+            start = 0
+        payload: dict[str, Any] = {"action": action}
+        prompt_parts: list[str] = []
+        i = start
+        while i < len(parts):
+            token = parts[i]
+            if token in {"-o", "--output"} and i + 1 < len(parts):
+                payload["output"] = parts[i + 1]
+                i += 2
+                continue
+            if token in {"-d", "--duration"} and i + 1 < len(parts):
+                payload["duration"] = int(parts[i + 1])
+                i += 2
+                continue
+            if token in {"-m", "--model"} and i + 1 < len(parts):
+                payload["model"] = parts[i + 1]
+                i += 2
+                continue
+            if token == "--instrumental":
+                payload["instrumental"] = True
+                i += 1
+                continue
+            if token == "--lyrics" and i + 1 < len(parts):
+                payload["lyrics"] = parts[i + 1]
+                i += 2
+                continue
+            if action == "generate":
+                prompt_parts.append(token)
+            i += 1
+        if prompt_parts:
+            payload["prompt"] = " ".join(prompt_parts)
+        return "arka_music_generate", payload
+
+    if head in {"arka_fetch_lyrics", "fetch_lyrics", "song_lyrics", "lyrics_fetch"}:
+        action = parts[0].lower() if parts else "fetch"
+        start = 1
+        if action not in {"fetch", "translate", "parse", "check"}:
+            action = "fetch"
+            start = 0
+        payload: dict[str, Any] = {"action": action}
+        i = start
+        positional: list[str] = []
+        while i < len(parts):
+            token = parts[i]
+            if token in {"-t", "--target"} and i + 1 < len(parts):
+                payload["target"] = parts[i + 1]
+                i += 2
+                continue
+            if token in {"-q", "--query"} and i + 1 < len(parts):
+                payload["query"] = parts[i + 1]
+                i += 2
+                continue
+            if token in {"-o", "--output"} and i + 1 < len(parts):
+                payload["output"] = parts[i + 1]
+                i += 2
+                continue
+            if token in {"-d", "--duration"} and i + 1 < len(parts):
+                payload["duration"] = int(parts[i + 1])
+                i += 2
+                continue
+            if token == "--generate":
+                payload["generate"] = True
+                i += 1
+                continue
+            if token == "--instrumental":
+                payload["instrumental"] = True
+                i += 1
+                continue
+            if token == "--style" and i + 1 < len(parts):
+                payload["style"] = parts[i + 1]
+                i += 2
+                continue
+            positional.append(token)
+            i += 1
+        if len(positional) >= 2:
+            payload["artist"] = positional[0]
+            payload["title"] = " ".join(positional[1:])
+        elif len(positional) == 1 and "query" not in payload:
+            payload["query"] = positional[0]
+        return "arka_fetch_lyrics", payload
+
+    if head in {"arka_play_website_game", "play_website_game", "website_game", "browser_game"}:
+        action = parts[0].lower() if parts else "open"
+        start = 1
+        if action not in {"open", "search", "parse", "check"}:
+            if re.match(r"^https?://", action, re.I):
+                action = "open"
+                start = 0
+            else:
+                action = "search"
+                start = 0
+        payload: dict[str, Any] = {"action": action}
+        i = start
+        positional: list[str] = []
+        while i < len(parts):
+            token = parts[i]
+            if token in {"-q", "--query"} and i + 1 < len(parts):
+                payload["query"] = parts[i + 1]
+                i += 2
+                continue
+            if token in {"-u", "--url"} and i + 1 < len(parts):
+                payload["url"] = parts[i + 1]
+                i += 2
+                continue
+            if token == "--headless":
+                payload["headless"] = True
+                i += 1
+                continue
+            if token == "--open":
+                payload["open"] = True
+                i += 1
+                continue
+            if token == "--auto-start":
+                payload["auto_start"] = True
+                i += 1
+                continue
+            if token in {"--wait", "-w"} and i + 1 < len(parts):
+                payload["wait_seconds"] = int(parts[i + 1])
+                i += 2
+                continue
+            if token in {"--yes", "-y", "--allow-browser"}:
+                payload["allow_browser"] = True
+                i += 1
+                continue
+            positional.append(token)
+            i += 1
+        if action == "open" and positional and "url" not in payload:
+            payload["url"] = positional[0]
+        elif action == "search" and positional and "query" not in payload:
+            payload["query"] = " ".join(positional)
+        return "arka_play_website_game", payload
+
+    if head in {"arka_verify_web_interaction", "verify_web_interaction", "web_interaction_check", "site_verify"}:
+        action = parts[0].lower() if parts else "check"
+        start = 1
+        if action not in {"check", "parse", "check-deps"}:
+            if re.match(r"^https?://", action, re.I):
+                action = "check"
+                start = 0
+            else:
+                action = "check"
+                start = 0
+        payload: dict[str, Any] = {"action": action}
+        i = start
+        positional: list[str] = []
+        while i < len(parts):
+            token = parts[i]
+            if token in {"-c", "--context"} and i + 1 < len(parts):
+                payload["context"] = parts[i + 1]
+                i += 2
+                continue
+            if token in {"-s", "--spec"} and i + 1 < len(parts):
+                payload["spec"] = parts[i + 1]
+                i += 2
+                continue
+            if token in {"-r", "--repo"} and i + 1 < len(parts):
+                payload["repo"] = parts[i + 1]
+                i += 2
+                continue
+            if token == "--headless":
+                payload["headless"] = True
+                i += 1
+                continue
+            if token == "--headed":
+                payload["headed"] = True
+                i += 1
+                continue
+            if token in {"--yes", "-y", "--allow-browser"}:
+                payload["allow_browser"] = True
+                i += 1
+                continue
+            if token == "--vision":
+                payload["vision"] = True
+                i += 1
+                continue
+            if token == "--no-vision":
+                payload["no_vision"] = True
+                i += 1
+                continue
+            if token == "--vllm-verify":
+                payload["vllm_verify"] = True
+                payload["vision"] = True
+                i += 1
+                continue
+            if token == "--vision-backend" and i + 1 < len(parts):
+                payload["vision_backend"] = parts[i + 1]
+                i += 2
+                continue
+            positional.append(token)
+            i += 1
+        if action == "check" and positional and "url" not in payload:
+            payload["url"] = positional[0]
+        return "arka_verify_web_interaction", payload
+
+    if head in {"arka_safety_advice", "safety_advice", "crisis_advice", "support_advice"}:
+        action = parts[0].lower() if parts else "advice"
+        start = 1
+        if action not in {"advice", "resources", "topics", "parse"}:
+            action = "advice"
+            start = 0
+        payload: dict[str, Any] = {"action": action}
+        query_parts: list[str] = []
+        i = start
+        while i < len(parts):
+            token = parts[i]
+            if token == "--topic" and i + 1 < len(parts):
+                payload["topic"] = parts[i + 1]
+                i += 2
+                continue
+            if token == "--region" and i + 1 < len(parts):
+                payload["region"] = parts[i + 1]
+                i += 2
+                continue
+            query_parts.append(token)
+            i += 1
+        if query_parts and action == "advice":
+            payload["text"] = " ".join(query_parts)
+        return "arka_safety_advice", payload
+
+    if head in {
+        "arka_reposition_image",
+        "reposition_image",
+        "fix_image_crop",
+        "fix-image-crop",
+        "smart_image_frame",
+        "smart-image-frame",
+    }:
+        action = parts[0].lower() if parts else "check"
+        start = 1
+        if action not in {"check", "fix", "css", "fix-ui", "batch", "parse"}:
+            if re.search(r"\.(?:png|jpe?g|webp|gif|bmp|tiff?)$", action, re.I):
+                action = "check"
+                start = 0
+            else:
+                action = "check"
+                start = 0
+        payload: dict[str, Any] = {"action": action}
+        i = start
+        positional: list[str] = []
+        while i < len(parts):
+            token = parts[i]
+            if token in {"-o", "--output", "--output-dir"} and i + 1 < len(parts):
+                key = "output" if action != "batch" else "folder"
+                if token == "--output-dir":
+                    key = "output_dir"
+                payload[key] = parts[i + 1]
+                i += 2
+                continue
+            if token in {"-c", "--context"} and i + 1 < len(parts):
+                payload["context"] = parts[i + 1]
+                i += 2
+                continue
+            if token == "--shape" and i + 1 < len(parts):
+                payload["shape"] = parts[i + 1]
+                i += 2
+                continue
+            if token == "--selector" and i + 1 < len(parts):
+                payload["selector"] = parts[i + 1]
+                i += 2
+                continue
+            if token == "--size" and i + 1 < len(parts):
+                payload["size"] = parts[i + 1]
+                i += 2
+                continue
+            if token == "--vision":
+                payload["vision"] = True
+                i += 1
+                continue
+            positional.append(token)
+            i += 1
+        if action == "batch" and positional and "folder" not in payload:
+            payload["folder"] = positional[0]
+        elif positional and "path" not in payload:
+            payload["path"] = positional[0]
+        return "arka_reposition_image", payload
+
+    if head in {
+        "arka_filter_images",
+        "filter_images",
+        "filter-images",
+        "image_relevance",
+        "image-relevance",
+        "hybrid_image_filter",
+        "hybrid-image-filter",
+    }:
+        action = parts[0].lower() if parts else "score"
+        start = 1
+        if action not in {"score", "filter", "check", "parse"}:
+            if re.search(r"\.(?:png|jpe?g|webp|gif|bmp|tiff?)$", action, re.I):
+                action = "check"
+                start = 0
+            else:
+                action = "score"
+                start = 0
+        payload: dict[str, Any] = {"action": action}
+        i = start
+        positional: list[str] = []
+        while i < len(parts):
+            token = parts[i]
+            if token in {"-o", "--output"} and i + 1 < len(parts):
+                payload["output"] = parts[i + 1]
+                i += 2
+                continue
+            if token in {"-q", "--query"} and i + 1 < len(parts):
+                payload["query"] = parts[i + 1]
+                i += 2
+                continue
+            if token == "--borderline-pct" and i + 1 < len(parts):
+                payload["borderline_pct"] = parts[i + 1]
+                i += 2
+                continue
+            if token in {"--vllm-pass", "--vlm-pass"}:
+                payload["vlm_pass"] = True
+                i += 1
+                continue
+            positional.append(token)
+            i += 1
+        if positional and "path" not in payload and "folder" not in payload:
+            key = "path" if action == "check" else "folder"
+            payload[key] = positional[0]
+        return "arka_filter_images", payload
 
     if not parts:
         return None
@@ -1310,6 +1706,335 @@ def _handle_arka_dub_video(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"dub_video unavailable: {exc}") from exc
 
 
+def _handle_arka_fetch_lyrics(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "fetch").strip().lower()
+    try:
+        from arka.media.fetch_lyrics import (
+            cmd_check,
+            fetch_lyrics,
+            fetch_lyrics_result,
+            nl_to_argv,
+            parse_song_query,
+            translate_lyrics,
+        )
+
+        if action == "check":
+            import argparse
+            import io
+            from contextlib import redirect_stderr, redirect_stdout
+
+            buf = io.StringIO()
+            with redirect_stdout(buf), redirect_stderr(buf):
+                code = cmd_check(argparse.Namespace())
+            return json.dumps({"exit_code": code, "report": buf.getvalue().strip()}, indent=2)
+        if action == "parse":
+            text = str(arguments.get("text") or arguments.get("query") or arguments.get("goal") or "").strip()
+            if not text:
+                raise ValueError("text is required when action=parse")
+            argv = nl_to_argv(text)
+            return json.dumps(
+                {"argv": argv, "command": "fetch_lyrics " + " ".join(argv) if argv else ""},
+                indent=2,
+            )
+        if action == "fetch":
+            artist = str(arguments.get("artist") or "").strip()
+            title = str(arguments.get("title") or "").strip()
+            query = str(arguments.get("query") or arguments.get("text") or "").strip()
+            if query and (not artist or not title):
+                artist, title = parse_song_query(query)
+            if not artist or not title:
+                raise ValueError("artist and title (or query) are required when action=fetch")
+            result = fetch_lyrics(artist, title)
+            output = str(arguments.get("output") or arguments.get("out") or "").strip()
+            if output:
+                from arka.media.fetch_lyrics import _save_text
+
+                saved = _save_text(Path(output).expanduser(), str(result["lyrics"]))
+                result["output"] = str(saved)
+            return json.dumps(result, indent=2, ensure_ascii=False)
+        if action == "translate":
+            artist = str(arguments.get("artist") or "").strip()
+            title = str(arguments.get("title") or "").strip()
+            query = str(arguments.get("query") or arguments.get("text") or "").strip()
+            if query and (not artist or not title):
+                artist, title = parse_song_query(query)
+            target = str(
+                arguments.get("target")
+                or arguments.get("target_lang")
+                or arguments.get("language")
+                or ""
+            ).strip()
+            if not artist or not title or not target:
+                raise ValueError("artist, title (or query), and target are required when action=translate")
+            result = fetch_lyrics_result(
+                artist,
+                title,
+                target_lang=target,
+                style=str(arguments.get("style") or "").strip() or None,
+                generate=bool(arguments.get("generate") or arguments.get("remix")),
+                output=str(arguments.get("output") or arguments.get("out") or "").strip() or None,
+                duration=int(arguments["duration"]) if arguments.get("duration") is not None else None,
+                instrumental=bool(arguments.get("instrumental")),
+            )
+            return json.dumps(result, indent=2, ensure_ascii=False)
+        if action == "translate_text":
+            lyrics = str(arguments.get("lyrics") or arguments.get("text") or "").strip()
+            target = str(
+                arguments.get("target")
+                or arguments.get("target_lang")
+                or arguments.get("language")
+                or ""
+            ).strip()
+            if not lyrics or not target:
+                raise ValueError("lyrics and target are required when action=translate_text")
+            result = translate_lyrics(
+                lyrics,
+                target_lang=target,
+                source_lang=str(arguments.get("source") or arguments.get("source_lang") or "auto"),
+            )
+            return json.dumps(result, indent=2, ensure_ascii=False)
+        raise ValueError("action must be fetch, translate, translate_text, check, or parse")
+    except (FileNotFoundError, ValueError) as exc:
+        raise ValueError(str(exc)) from exc
+    except ImportError as exc:
+        raise RuntimeError(f"fetch_lyrics unavailable: {exc}") from exc
+
+
+def _handle_arka_play_website_game(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "open").strip().lower()
+    allow_browser = bool(
+        arguments.get("allow_browser")
+        or arguments.get("yes")
+        or os.environ.get("ARKA_MCP_ALLOW_BROWSER") == "1"
+    )
+    if action in {"open", "search", "agent"} and not allow_browser and not arguments.get("headless"):
+        raise ValueError(
+            "Opening a headed browser game requires allow_browser=true (or headless=true for CI). "
+            "Opt in with ARKA_MCP_ENABLE_PERSONAL_SKILLS=1 for personal desktop skills."
+        )
+    try:
+        from arka.agent.play_website_game import (
+            cmd_check,
+            nl_to_argv,
+            open_game,
+            play_website_game_result,
+            search_games,
+        )
+        from arka.agent.game_agent import run_agent
+
+        if action == "check":
+            import argparse
+            import io
+            from contextlib import redirect_stderr, redirect_stdout
+
+            buf = io.StringIO()
+            with redirect_stdout(buf), redirect_stderr(buf):
+                code = cmd_check(argparse.Namespace())
+            return json.dumps({"exit_code": code, "report": buf.getvalue().strip()}, indent=2)
+        if action == "parse":
+            text = str(arguments.get("text") or arguments.get("query") or arguments.get("goal") or "").strip()
+            if not text:
+                raise ValueError("text is required when action=parse")
+            argv = nl_to_argv(text)
+            return json.dumps(
+                {"argv": argv, "command": "play_website_game " + " ".join(argv) if argv else ""},
+                indent=2,
+            )
+        if action == "open":
+            url = str(arguments.get("url") or "").strip()
+            if not url:
+                raise ValueError("url is required when action=open")
+            result = open_game(
+                url,
+                headless=bool(arguments.get("headless")),
+                wait_seconds=_mcp_int_optional(arguments.get("wait_seconds")),
+                auto_start=bool(arguments.get("auto_start")),
+            )
+            return json.dumps(result, indent=2, ensure_ascii=False)
+        if action == "search":
+            query = str(arguments.get("query") or arguments.get("text") or "").strip()
+            if not query:
+                raise ValueError("query is required when action=search")
+            if arguments.get("open") or arguments.get("open_best"):
+                result = play_website_game_result(
+                    query=query,
+                    headless=bool(arguments.get("headless")),
+                    wait_seconds=_mcp_int_optional(arguments.get("wait_seconds")),
+                    auto_start=bool(arguments.get("auto_start")),
+                    open_best=True,
+                )
+            else:
+                results = search_games(query)
+                result = {"query": query, "results": results, "ok": bool(results)}
+            return json.dumps(result, indent=2, ensure_ascii=False)
+        if action == "agent":
+            url = str(arguments.get("url") or "").strip()
+            if not url:
+                raise ValueError("url is required when action=agent")
+            learn_arg = arguments.get("learn")
+            learn = None if learn_arg is None else bool(learn_arg)
+            rl_arg = arguments.get("rl")
+            rl = None if rl_arg is None else bool(rl_arg)
+            backend = str(arguments.get("vision_backend") or "").strip().lower() or None
+            if backend == "auto":
+                backend = None
+            result = run_agent(
+                url,
+                turns=_mcp_int_optional(arguments.get("turns")),
+                vision_backend=backend,
+                learn=learn,
+                rl=rl,
+                headless=bool(arguments.get("headless")),
+                auto_start=bool(arguments.get("auto_start", True)),
+            )
+            return json.dumps(result, indent=2, ensure_ascii=False)
+        raise ValueError("action must be open, search, agent, check, or parse")
+    except (FileNotFoundError, ValueError) as exc:
+        raise ValueError(str(exc)) from exc
+    except ImportError as exc:
+        raise RuntimeError(f"play_website_game unavailable: {exc}") from exc
+
+
+def _handle_arka_verify_web_interaction(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "check").strip().lower()
+    allow_browser = bool(
+        arguments.get("allow_browser")
+        or arguments.get("yes")
+        or os.environ.get("ARKA_MCP_ALLOW_BROWSER") == "1"
+    )
+    headed = bool(arguments.get("headed"))
+    headless = bool(arguments.get("headless")) or not headed
+    if action == "check" and headed and not allow_browser:
+        raise ValueError(
+            "Headed browser verification requires allow_browser=true (or use headless=true for CI). "
+            "Opt in with ARKA_MCP_ENABLE_PERSONAL_SKILLS=1 for personal desktop skills."
+        )
+    try:
+        from arka.agent.verify_web_interaction import (
+            build_interaction_plan,
+            cmd_check_deps,
+            nl_to_argv,
+            parse_code_context,
+            parse_spec,
+            verify,
+        )
+
+        if action == "check-deps":
+            import argparse
+            import io
+            from contextlib import redirect_stderr, redirect_stdout
+
+            buf = io.StringIO()
+            with redirect_stdout(buf), redirect_stderr(buf):
+                code = cmd_check_deps(argparse.Namespace())
+            return json.dumps({"exit_code": code, "report": buf.getvalue().strip()}, indent=2)
+        if action == "parse":
+            text = str(arguments.get("text") or arguments.get("query") or arguments.get("goal") or "").strip()
+            if text:
+                argv = nl_to_argv(text)
+                return json.dumps(
+                    {"argv": argv, "command": "verify_web_interaction " + " ".join(argv) if argv else ""},
+                    indent=2,
+                )
+            context = parse_code_context(arguments["context"]) if arguments.get("context") else {
+                "selectors": [], "texts": [], "routes": [], "hrefs": []
+            }
+            spec_steps = parse_spec(arguments["spec"]) if arguments.get("spec") else []
+            url = str(arguments.get("url") or "http://127.0.0.1:3000")
+            plan = build_interaction_plan(url, context=context, spec_steps=spec_steps)
+            return json.dumps({"plan": plan, "parsed": context, "spec_steps": spec_steps}, indent=2)
+        if action == "check":
+            url = str(arguments.get("url") or "").strip()
+            if not url:
+                raise ValueError("url is required when action=check")
+            result = verify(
+                url,
+                context_path=str(arguments["context"]) if arguments.get("context") else None,
+                spec_path=str(arguments["spec"]) if arguments.get("spec") else None,
+                repo=str(arguments["repo"]) if arguments.get("repo") else None,
+                headless=headless,
+                output=str(arguments["output"]) if arguments.get("output") else None,
+                settle_seconds=_mcp_float_optional(arguments.get("settle_seconds")),
+                vision=(
+                    False
+                    if arguments.get("no_vision")
+                    else True
+                    if arguments.get("vision") or arguments.get("vllm_verify")
+                    else None
+                ),
+                vision_backend=str(arguments["vision_backend"]) if arguments.get("vision_backend") else None,
+                vllm_verify=bool(arguments.get("vllm_verify")),
+            )
+            return json.dumps(result, indent=2, ensure_ascii=False)
+        raise ValueError("action must be check, parse, or check-deps")
+    except (FileNotFoundError, ValueError) as exc:
+        raise ValueError(str(exc)) from exc
+    except ImportError as exc:
+        raise RuntimeError(f"verify_web_interaction unavailable: {exc}") from exc
+
+
+def _handle_arka_safety_advice(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "advice").strip().lower()
+    try:
+        from arka.agent.safety_advice import (
+            TOPICS,
+            format_advice,
+            nl_to_argv,
+            safety_advice_result,
+        )
+
+        if action == "parse":
+            text = str(arguments.get("text") or arguments.get("query") or arguments.get("goal") or "").strip()
+            if not text:
+                raise ValueError("text is required when action=parse")
+            argv = nl_to_argv(text)
+            return json.dumps(
+                {"argv": argv, "command": "safety_advice " + " ".join(argv) if argv else ""},
+                indent=2,
+            )
+        if action == "topics":
+            return json.dumps(
+                {key: val["title"] for key, val in TOPICS.items()},
+                indent=2,
+                ensure_ascii=False,
+            )
+        if action == "resources":
+            topic = str(arguments.get("topic") or "domestic_violence").strip()
+            region = str(arguments.get("region") or "").strip() or None
+            payload = safety_advice_result("", topic=topic, region=region)
+            return json.dumps(
+                {
+                    "topic": payload["topic"],
+                    "region": payload["region"],
+                    "emergency": payload["emergency"],
+                    "resources": payload["resources"],
+                },
+                indent=2,
+                ensure_ascii=False,
+            )
+        if action == "advice":
+            text = str(
+                arguments.get("text")
+                or arguments.get("query")
+                or arguments.get("prompt")
+                or arguments.get("goal")
+                or ""
+            ).strip()
+            topic = str(arguments.get("topic") or "").strip() or None
+            region = str(arguments.get("region") or "").strip() or None
+            if not text and not topic:
+                raise ValueError("text or topic is required when action=advice")
+            payload = safety_advice_result(text, topic=topic, region=region)
+            if bool(arguments.get("markdown", True)) and not bool(arguments.get("json")):
+                return format_advice(payload)
+            return json.dumps(payload, indent=2, ensure_ascii=False)
+        raise ValueError("action must be advice, resources, topics, or parse")
+    except (FileNotFoundError, ValueError) as exc:
+        raise ValueError(str(exc)) from exc
+    except ImportError as exc:
+        raise RuntimeError(f"safety_advice unavailable: {exc}") from exc
+
+
 def _handle_arka_signoz_publish(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "run").strip().lower()
     try:
@@ -1372,6 +2097,92 @@ def _handle_arka_signoz_publish(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"signoz_publish unavailable: {exc}") from exc
 
 
+def _handle_arka_model_video(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "render").strip().lower()
+    try:
+        from arka.media.model_video import cmd_check, model_video_result, nl_to_argv
+
+        if action == "check":
+            import argparse
+            import io
+            from contextlib import redirect_stderr, redirect_stdout
+
+            buf = io.StringIO()
+            with redirect_stdout(buf), redirect_stderr(buf):
+                code = cmd_check(argparse.Namespace())
+            return json.dumps({"exit_code": code, "report": buf.getvalue().strip()}, indent=2)
+        if action == "parse":
+            text = str(arguments.get("text") or arguments.get("query") or arguments.get("goal") or "").strip()
+            if not text:
+                raise ValueError("text is required when action=parse")
+            argv = nl_to_argv(text)
+            return json.dumps({"argv": argv, "command": "model_video " + " ".join(argv) if argv else ""}, indent=2)
+        if action == "render":
+            source = str(
+                arguments.get("source")
+                or arguments.get("model")
+                or arguments.get("path")
+                or ""
+            ).strip()
+            if not source:
+                raise ValueError("source is required when action=render")
+            output = str(arguments.get("output") or arguments.get("out") or "").strip() or None
+            backend = str(arguments.get("backend") or arguments.get("mode") or "").strip() or None
+            frames = arguments.get("frames")
+            fps = arguments.get("fps")
+            size = int(arguments.get("size") or 1024)
+            angle = str(arguments.get("angle") or "auto").strip()
+            task = str(arguments.get("task") or "").strip()
+            renders = str(arguments.get("renders") or "").strip() or None
+            slide_duration = float(arguments.get("slide_duration") or 0.5)
+            audio = str(arguments.get("audio") or "").strip() or None
+            result = model_video_result(
+                source,
+                output=output,
+                backend=backend,
+                frames=int(frames) if frames is not None else None,
+                fps=int(fps) if fps is not None else None,
+                size=size,
+                angle=angle,
+                task=task,
+                renders=renders,
+                slide_duration=slide_duration,
+                audio=audio,
+            )
+            return json.dumps(result, indent=2)
+        if action == "animate":
+            from arka.media.model_video import animation_video_result
+
+            source = str(
+                arguments.get("source")
+                or arguments.get("model")
+                or arguments.get("path")
+                or ""
+            ).strip()
+            if not source:
+                raise ValueError("source is required when action=animate")
+            output = str(arguments.get("output") or arguments.get("out") or "").strip() or None
+            frames = arguments.get("frames")
+            fps = arguments.get("fps")
+            size = int(arguments.get("size") or 1024)
+            background_raw = arguments.get("background")
+            background = True if background_raw is None else bool(background_raw)
+            result = animation_video_result(
+                source,
+                output=output,
+                frames=int(frames) if frames is not None else None,
+                fps=int(fps) if fps is not None else None,
+                size=size,
+                background=background,
+            )
+            return json.dumps(result, indent=2)
+        raise ValueError("action must be render, animate, check, or parse")
+    except (FileNotFoundError, ValueError) as exc:
+        raise ValueError(str(exc)) from exc
+    except ImportError as exc:
+        raise RuntimeError(f"model_video unavailable: {exc}") from exc
+
+
 def _handle_arka_create_video(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "create").strip().lower()
     try:
@@ -1426,6 +2237,124 @@ def _handle_arka_create_video(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"create_video unavailable: {exc}") from exc
 
 
+def _handle_arka_compose_story(arguments: dict[str, Any]) -> str:
+    import argparse
+
+    action = str(arguments.get("action") or "compose").strip().lower()
+    try:
+        from arka.media.compose_story import cmd_check, nl_to_argv
+        from arka.media.compose_video import cmd_compose, cmd_parse
+
+        if action == "check":
+            import argparse
+            import io
+            from contextlib import redirect_stderr, redirect_stdout
+
+            buf = io.StringIO()
+            with redirect_stdout(buf), redirect_stderr(buf):
+                code = cmd_check(argparse.Namespace())
+            return json.dumps({"exit_code": code, "report": buf.getvalue().strip()}, indent=2)
+        if action == "parse":
+            text = str(arguments.get("text") or arguments.get("query") or arguments.get("topic") or "").strip()
+            if not text:
+                raise ValueError("text is required when action=parse")
+            argv = nl_to_argv(text)
+            return json.dumps(
+                {"argv": argv, "command": "compose_story " + " ".join(argv) if argv else ""},
+                indent=2,
+            )
+        if action == "compose":
+            topic = str(arguments.get("topic") or arguments.get("text") or arguments.get("query") or "").strip()
+            script = str(arguments.get("script") or "").strip() or None
+            output = str(arguments.get("output") or arguments.get("out") or "").strip() or None
+            scenes = arguments.get("scenes")
+            duration = str(arguments.get("duration") or "").strip() or None
+            ns = argparse.Namespace(
+                topic=topic or None,
+                script=script,
+                llm=bool(arguments.get("llm", True)),
+                script_provider="llm",
+                api_url="",
+                api_key_env="",
+                api_header=[],
+                scenes=int(scenes) if scenes is not None else None,
+                duration=duration,
+                output=output,
+                mode=None,
+                text=bool(arguments.get("text", True)),
+                no_text=False,
+                video_broll=False,
+                use_only_ai_generated_images=bool(arguments.get("ai_images_only")),
+                story=True,
+                labeled=bool(arguments.get("labeled", True)),
+                auto_fill=bool(arguments.get("auto_fill", True)),
+                cmd="compose",
+            )
+            if not topic and not script:
+                raise ValueError("topic or script is required when action=compose")
+            import io
+            from contextlib import redirect_stderr, redirect_stdout
+
+            buf = io.StringIO()
+            with redirect_stdout(buf), redirect_stderr(buf):
+                code = cmd_compose(ns)
+            return json.dumps(
+                {
+                    "exit_code": code,
+                    "output": output,
+                    "log": buf.getvalue().strip(),
+                },
+                indent=2,
+            )
+        raise ValueError("action must be compose, check, or parse")
+    except (FileNotFoundError, ValueError) as exc:
+        raise ValueError(str(exc)) from exc
+    except ImportError as exc:
+        raise RuntimeError(f"compose_story unavailable: {exc}") from exc
+
+
+def _handle_arka_terminal_video(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "build").strip().lower().replace("_", "-")
+    try:
+        from arka.media.terminal_video import cmd_check, nl_to_argv, terminal_video_result
+
+        if action == "check":
+            import argparse
+            import io
+            from contextlib import redirect_stderr, redirect_stdout
+
+            buf = io.StringIO()
+            with redirect_stdout(buf), redirect_stderr(buf):
+                code = cmd_check(argparse.Namespace())
+            return json.dumps({"exit_code": code, "report": buf.getvalue().strip()}, indent=2)
+        if action == "parse":
+            text = str(arguments.get("text") or arguments.get("query") or arguments.get("goal") or "").strip()
+            if not text:
+                raise ValueError("text is required when action=parse")
+            argv = nl_to_argv(text)
+            return json.dumps(
+                {"argv": argv, "command": "terminal_video " + " ".join(argv) if argv else ""},
+                indent=2,
+            )
+        if action in {"build", "capture", "export-images", "export"}:
+            if action == "export":
+                action = "export-images"
+            result = terminal_video_result(
+                action,
+                project_dir=str(arguments.get("project_dir") or arguments.get("project") or "").strip() or None,
+                captures=str(arguments.get("captures") or "").strip() or None,
+                output=str(arguments.get("output") or arguments.get("out") or "").strip() or None,
+                script=str(arguments.get("script") or "").strip() or None,
+                skip_verify=bool(arguments.get("skip_verify") or arguments.get("skip_verify_frames")),
+            )
+            return json.dumps(result, indent=2)
+        raise ValueError("action must be build, capture, export-images, check, or parse")
+    except (FileNotFoundError, ValueError) as exc:
+        raise ValueError(str(exc)) from exc
+    except ImportError as exc:
+        raise RuntimeError(f"terminal_video unavailable: {exc}") from exc
+
+
 def _handle_arka_music_generate(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "generate").strip().lower()
     try:
@@ -1474,6 +2403,43 @@ def _handle_arka_music_generate(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"music_generate unavailable: {exc}") from exc
 
 
+def _handle_arka_local_music(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "generate").strip().lower()
+    try:
+        from arka.agent.local_music_gen import doctor, local_music_result, nl_to_argv
+
+        if action == "doctor":
+            return json.dumps(doctor(), indent=2)
+        if action == "parse":
+            text = str(arguments.get("text") or arguments.get("query") or arguments.get("goal") or "").strip()
+            if not text:
+                raise ValueError("text is required when action=parse")
+            argv = nl_to_argv(text)
+            from arka.agent.local_music_gen import route_command
+
+            return json.dumps(
+                {"argv": argv or [], "command": route_command(text)},
+                indent=2,
+            )
+        if action == "generate":
+            prompt = str(arguments.get("prompt") or arguments.get("text") or arguments.get("query") or "").strip()
+            if not prompt:
+                raise ValueError("prompt is required when action=generate")
+            result = local_music_result(
+                prompt,
+                output=str(arguments.get("output") or arguments.get("out") or "").strip() or None,
+                duration=int(arguments["duration"]) if arguments.get("duration") is not None else None,
+                lyrics=str(arguments.get("lyrics") or "").strip(),
+                instrumental=bool(arguments.get("instrumental")),
+            )
+            return json.dumps(result, indent=2)
+        raise ValueError("action must be generate, parse, or doctor")
+    except (FileNotFoundError, ValueError) as exc:
+        raise ValueError(str(exc)) from exc
+    except ImportError as exc:
+        raise RuntimeError(f"local_music unavailable: {exc}") from exc
+
+
 def _handle_arka_ai_video(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "generate").strip().lower()
     try:
@@ -1520,6 +2486,285 @@ def _handle_arka_ai_video(arguments: dict[str, Any]) -> str:
         raise ValueError(str(exc)) from exc
     except ImportError as exc:
         raise RuntimeError(f"ai_video unavailable: {exc}") from exc
+
+
+def _handle_arka_meme(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "create").strip().lower()
+    try:
+        from arka.agent.meme_templates import list_meme_templates, meme_result, nl_to_argv
+
+        if action == "templates":
+            return json.dumps(list_meme_templates(), indent=2)
+        if action == "parse":
+            text = str(arguments.get("text") or arguments.get("query") or arguments.get("goal") or "").strip()
+            if not text:
+                raise ValueError("text is required when action=parse")
+            argv = nl_to_argv(text)
+            return json.dumps(
+                {"argv": argv, "command": "meme " + " ".join(argv) if argv else ""},
+                indent=2,
+            )
+        if action == "create":
+            template = str(arguments.get("template") or "").strip()
+            if not template:
+                raise ValueError("template is required when action=create")
+            labels = arguments.get("labels")
+            label_list = [str(x).strip() for x in labels if str(x).strip()] if isinstance(labels, list) else None
+            items = arguments.get("items")
+            if label_list is None and isinstance(items, list):
+                label_list = [str(x).strip() for x in items if str(x).strip()]
+            use_stock = arguments.get("use_stock_images")
+            if use_stock is None:
+                use_stock = arguments.get("stock")
+            result = meme_result(
+                template,
+                style=str(arguments.get("style") or "").strip() or None,
+                output=str(arguments.get("output") or arguments.get("out") or "").strip() or None,
+                use_stock_images=bool(use_stock) if use_stock is not None else None,
+                left=str(arguments.get("left") or "").strip() or None,
+                right=str(arguments.get("right") or "").strip() or None,
+                left_title=str(arguments.get("left_title") or "LEFT"),
+                right_title=str(arguments.get("right_title") or "RIGHT"),
+                left_label=str(arguments.get("left_label") or "").strip() or None,
+                right_label=str(arguments.get("right_label") or "").strip() or None,
+                left_query=str(arguments.get("left_query") or "").strip() or None,
+                right_query=str(arguments.get("right_query") or "").strip() or None,
+                reject=str(arguments.get("reject") or "").strip() or None,
+                accept=str(arguments.get("accept") or "").strip() or None,
+                image=str(arguments.get("image") or "").strip() or None,
+                top=str(arguments.get("top") or ""),
+                bottom=str(arguments.get("bottom") or ""),
+                label=str(arguments.get("label") or "").strip() or None,
+                stock_query=str(arguments.get("stock_query") or "").strip() or None,
+                labels=label_list,
+                images=[str(x) for x in arguments.get("images")] if isinstance(arguments.get("images"), list) else None,
+                dilemma=str(arguments.get("dilemma") or "").strip() or None,
+                button_left=str(arguments.get("button_left") or arguments.get("left_button") or "").strip() or None,
+                button_right=str(arguments.get("button_right") or arguments.get("right_button") or "").strip() or None,
+                highlight=str(arguments.get("highlight") or "").strip() or None,
+            )
+            return json.dumps(result, indent=2)
+        raise ValueError("action must be create, parse, or templates")
+    except (FileNotFoundError, ValueError) as exc:
+        raise ValueError(str(exc)) from exc
+    except ImportError as exc:
+        raise RuntimeError(f"meme unavailable: {exc}") from exc
+
+
+def _handle_arka_infographic(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "create").strip().lower()
+    try:
+        from arka.agent.infographic import INFOGRAPHIC_STYLES, choose_layout, infographic_result, nl_to_argv
+
+        if action == "layouts":
+            return json.dumps(
+                {
+                    "auto_rules": {
+                        "1-2": "row2",
+                        "3": "row3",
+                        "4": "grid4",
+                        "5-6": "grid6",
+                        "7-9": "grid9",
+                        "10+": "radial",
+                    }
+                },
+                indent=2,
+            )
+        if action == "styles":
+            return json.dumps({k: v.label for k, v in INFOGRAPHIC_STYLES.items()}, indent=2)
+        if action == "parse":
+            text = str(arguments.get("text") or arguments.get("query") or arguments.get("goal") or "").strip()
+            if not text:
+                raise ValueError("text is required when action=parse")
+            argv = nl_to_argv(text)
+            return json.dumps(
+                {"argv": argv, "command": "infographic create " + " ".join(argv) if argv else ""},
+                indent=2,
+            )
+        if action == "create":
+            title = str(arguments.get("title") or "").strip()
+            if not title:
+                raise ValueError("title is required when action=create")
+            raw_items = arguments.get("items")
+            item_list: list[str] = []
+            if isinstance(raw_items, list):
+                item_list = [str(x).strip() for x in raw_items if str(x).strip()]
+            elif isinstance(raw_items, str) and raw_items.strip():
+                from arka.agent.infographic import _parse_items
+
+                item_list = _parse_items(raw_items, None)
+            repeated = arguments.get("item")
+            if isinstance(repeated, list):
+                item_list.extend(str(x).strip() for x in repeated if str(x).strip())
+            elif isinstance(repeated, str) and repeated.strip():
+                item_list.append(repeated.strip())
+            layout = str(arguments.get("layout") or "auto").strip() or "auto"
+            result = infographic_result(
+                title,
+                item_list,
+                layout=layout,
+                style=str(arguments.get("style") or "").strip() or None,
+                output=str(arguments.get("output") or arguments.get("out") or "").strip() or None,
+            )
+            if arguments.get("preview_layout") and result.get("items"):
+                result = {**result, "chosen_layout": choose_layout(int(result["items"]), layout)}
+            return json.dumps(result, indent=2)
+        raise ValueError("action must be create, parse, layouts, or styles")
+    except (FileNotFoundError, ValueError) as exc:
+        raise ValueError(str(exc)) from exc
+    except ImportError as exc:
+        raise RuntimeError(f"infographic unavailable: {exc}") from exc
+
+
+def _handle_arka_reposition_image(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "check").strip().lower()
+    try:
+        from arka.agent.reposition_image import nl_to_argv, reposition_image_result
+
+        if action == "parse":
+            text = str(arguments.get("text") or arguments.get("query") or arguments.get("goal") or "").strip()
+            if not text:
+                raise ValueError("text is required when action=parse")
+            argv = nl_to_argv(text)
+            return json.dumps(
+                {"argv": argv, "command": "reposition_image " + " ".join(argv) if argv else ""},
+                indent=2,
+            )
+        path = str(arguments.get("path") or arguments.get("image") or "").strip() or None
+        output = str(arguments.get("output") or arguments.get("out") or "").strip() or None
+        folder = str(arguments.get("folder") or arguments.get("output_dir") or "").strip() or None
+        output_dir = str(arguments.get("output_dir") or "").strip() or None
+        shape = str(arguments.get("shape") or "square").strip() or "square"
+        selector = str(arguments.get("selector") or ".avatar img").strip() or ".avatar img"
+        size = _mcp_int_optional(arguments.get("size"))
+        vision = bool(arguments.get("vision"))
+        result = reposition_image_result(
+            action,
+            path,
+            output=output,
+            shape=shape,
+            size=size,
+            context=str(arguments.get("context") or "").strip() or None,
+            selector=selector,
+            vision=vision,
+            folder=folder,
+            output_dir=output_dir,
+        )
+        return json.dumps(result, indent=2)
+    except (FileNotFoundError, NotADirectoryError, ValueError) as exc:
+        raise ValueError(str(exc)) from exc
+    except ImportError as exc:
+        raise RuntimeError(f"reposition_image unavailable: {exc}") from exc
+
+
+def _handle_arka_filter_images(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "score").strip().lower()
+    try:
+        from arka.agent.filter_images import filter_images_result, nl_to_argv
+
+        if action == "parse":
+            text = str(arguments.get("text") or arguments.get("query") or arguments.get("goal") or "").strip()
+            if not text:
+                raise ValueError("text is required when action=parse")
+            argv = nl_to_argv(text)
+            return json.dumps(
+                {"argv": argv, "command": "filter_images " + " ".join(argv) if argv else ""},
+                indent=2,
+            )
+        target = (
+            str(arguments.get("folder") or arguments.get("path") or arguments.get("image") or "").strip() or None
+        )
+        query = str(arguments.get("query") or "").strip() or None
+        output = str(arguments.get("output") or arguments.get("out") or "").strip() or None
+        borderline_raw = arguments.get("borderline_pct")
+        borderline_pct = float(borderline_raw) if borderline_raw is not None else None
+        vlm_pass = bool(arguments.get("vlm_pass"))
+        result = filter_images_result(
+            action,
+            target,
+            query=query,
+            output=output,
+            vlm_pass=vlm_pass,
+            borderline_pct=borderline_pct,
+        )
+        return json.dumps(result, indent=2)
+    except (FileNotFoundError, NotADirectoryError, ValueError) as exc:
+        raise ValueError(str(exc)) from exc
+    except ImportError as exc:
+        raise RuntimeError(f"filter_images unavailable: {exc}") from exc
+
+
+def _handle_arka_media_styles(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "list").strip().lower()
+    try:
+        from arka.media.media_styles import media_styles_catalog
+
+        kind = str(arguments.get("kind") or "all").strip().lower()
+        if action == "list":
+            payload = media_styles_catalog(kind=kind, as_json=True)
+            return json.dumps(payload, indent=2)
+        raise ValueError("action must be list")
+    except ImportError as exc:
+        raise RuntimeError(f"media_styles unavailable: {exc}") from exc
+
+
+def _handle_arka_tech_stack(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "suggest").strip().lower()
+    try:
+        from arka.agent.tech_stack import (
+            extract_project_name,
+            find_similar_folders,
+            nl_to_argv,
+            suggest_tech_stack,
+        )
+
+        if action == "parse":
+            text = str(arguments.get("text") or arguments.get("query") or arguments.get("goal") or "").strip()
+            if not text:
+                raise ValueError("text is required when action=parse")
+            argv = nl_to_argv(text)
+            project = extract_project_name(text)
+            return json.dumps(
+                {
+                    "argv": argv,
+                    "project": project,
+                    "command": "tech_stack " + " ".join(argv) if argv else "",
+                },
+                indent=2,
+            )
+        if action == "search":
+            project = str(arguments.get("project") or arguments.get("query") or "").strip()
+            if not project:
+                raise ValueError("project is required when action=search")
+            roots = arguments.get("roots")
+            root_list = [str(x) for x in roots] if isinstance(roots, list) else None
+            matches = find_similar_folders(project, roots=[Path(r) for r in root_list] if root_list else None)
+            return json.dumps([m.to_dict() for m in matches], indent=2)
+        if action == "suggest":
+            project = str(
+                arguments.get("project")
+                or arguments.get("query")
+                or extract_project_name(str(arguments.get("text") or ""))
+                or ""
+            ).strip()
+            if not project:
+                raise ValueError("project or text with a project name is required when action=suggest")
+            roots = arguments.get("roots")
+            root_list = [str(x) for x in roots] if isinstance(roots, list) else None
+            result = suggest_tech_stack(
+                project,
+                roots=root_list,
+                path=str(arguments.get("path") or "").strip() or None,
+                assume_yes=bool(arguments.get("yes") or arguments.get("assume_yes")),
+                interactive=False if arguments.get("non_interactive") else None,
+                include_candidates=bool(arguments.get("candidates")),
+            )
+            return json.dumps(result, indent=2)
+        raise ValueError("action must be suggest, search, or parse")
+    except (FileNotFoundError, ValueError) as exc:
+        raise ValueError(str(exc)) from exc
+    except ImportError as exc:
+        raise RuntimeError(f"tech_stack unavailable: {exc}") from exc
 
 
 def _handle_arka_google_flow(arguments: dict[str, Any]) -> str:
@@ -1714,6 +2959,52 @@ def _handle_arka_view_data(arguments: dict[str, Any]) -> str:
         raise ValueError(str(exc)) from exc
     except ImportError as exc:
         raise RuntimeError(f"view_data unavailable: {exc}") from exc
+
+
+def _handle_arka_view_output(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "render").strip().lower()
+    try:
+        from arka.web.output_viewer.cli import show_content, show_file
+        from arka.web.output_viewer.render import render_content
+
+        path = str(arguments.get("path") or arguments.get("file") or "").strip()
+        content = arguments.get("content")
+        fmt = str(arguments.get("format") or "").strip() or None
+        title = str(arguments.get("title") or "").strip() or None
+        open_browser = bool(arguments.get("open_browser", False))
+
+        if action == "render":
+            if path:
+                src = Path(path).expanduser()
+                if not src.is_file():
+                    raise ValueError(f"File not found: {path}")
+                text = src.read_text(encoding="utf-8", errors="replace")
+                payload = render_content(text, fmt=fmt, filename=src.name, title=title or src.name)
+                return json.dumps(payload, indent=2, ensure_ascii=False)
+            if content is None:
+                raise ValueError("path or content is required for render")
+            if not isinstance(content, str):
+                content = json.dumps(content, indent=2, ensure_ascii=False)
+            payload = render_content(content, fmt=fmt, title=title or "Arka output")
+            return json.dumps(payload, indent=2, ensure_ascii=False)
+
+        if action == "show":
+            if not path:
+                raise ValueError("path is required for show")
+            result = show_file(path, open_browser=open_browser, fmt=fmt, title=title)
+            return json.dumps(result, indent=2)
+
+        if action == "open" and content is not None:
+            if not isinstance(content, str):
+                content = json.dumps(content, indent=2, ensure_ascii=False)
+            result = show_content(content, open_browser=True, fmt=fmt, title=title or "Arka output")
+            return json.dumps(result, indent=2)
+
+        raise ValueError("action must be render, show, or open")
+    except (FileNotFoundError, ValueError) as exc:
+        raise ValueError(str(exc)) from exc
+    except ImportError as exc:
+        raise RuntimeError(f"view_output unavailable: {exc}") from exc
 
 
 def _handle_arka_share(arguments: dict[str, Any]) -> str:
@@ -2494,6 +3785,97 @@ def _handle_arka_model(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"model selection unavailable: {exc}") from exc
 
 
+def _handle_arka_finetune_model(arguments: dict[str, Any]) -> str:
+    """Plan, validate, and scaffold local LLM fine-tuning jobs."""
+    action = str(arguments.get("action") or "plan").strip().lower()
+    try:
+        from arka.llm.finetune_model import (
+            generate_artifacts,
+            job_status,
+            nl_to_argv,
+            plan_job,
+            validate_dataset,
+        )
+
+        if action == "parse":
+            text = str(arguments.get("text") or arguments.get("query") or arguments.get("task") or "").strip()
+            if not text:
+                raise ValueError("text is required when action=parse")
+            argv = nl_to_argv(text)
+            return json.dumps(
+                {"argv": argv, "command": "finetune_model " + " ".join(argv) if argv else ""},
+                indent=2,
+            )
+
+        if action == "check":
+            from arka.llm.finetune_model import main as finetune_main
+            import io
+            from contextlib import redirect_stdout
+
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                finetune_main(["check"])
+            return buf.getvalue().strip() or json.dumps({"ok": True})
+
+        if action == "validate":
+            path = str(arguments.get("path") or arguments.get("dataset") or "").strip()
+            if not path:
+                raise ValueError("path is required when action=validate")
+            return json.dumps(validate_dataset(Path(path).expanduser()), indent=2)
+
+        if action == "status":
+            output_dir = str(arguments.get("output_dir") or arguments.get("path") or "").strip()
+            if not output_dir:
+                raise ValueError("output_dir is required when action=status")
+            return json.dumps(job_status(output_dir), indent=2)
+
+        if action == "generate":
+            base_model = str(arguments.get("base_model") or arguments.get("model") or "").strip()
+            dataset = str(arguments.get("dataset") or arguments.get("path") or "").strip()
+            if not base_model or not dataset:
+                raise ValueError("base_model and dataset are required when action=generate")
+            apply = bool(arguments.get("apply"))
+            return json.dumps(
+                generate_artifacts(
+                    base_model=base_model,
+                    dataset=dataset,
+                    method=str(arguments.get("method") or "auto"),
+                    backend=str(arguments.get("backend") or "auto"),
+                    output_dir=str(arguments.get("output_dir") or "./finetune-out"),
+                    apply=apply,
+                ),
+                indent=2,
+            )
+
+        if action == "plan":
+            task = str(
+                arguments.get("task")
+                or arguments.get("text")
+                or arguments.get("query")
+                or arguments.get("prompt")
+                or ""
+            ).strip()
+            if not task:
+                raise ValueError("task is required when action=plan")
+            return json.dumps(
+                plan_job(
+                    task,
+                    method=str(arguments.get("method") or "auto"),
+                    backend=str(arguments.get("backend") or "auto"),
+                    base_model=str(arguments.get("base_model") or arguments.get("model") or "") or None,
+                    dataset=str(arguments.get("dataset") or arguments.get("path") or "") or None,
+                    output_dir=str(arguments.get("output_dir") or "") or None,
+                ),
+                indent=2,
+            )
+
+        raise ValueError("action must be plan, validate, generate, status, parse, or check")
+    except ValueError:
+        raise
+    except ImportError as exc:
+        raise RuntimeError(f"finetune_model unavailable: {exc}") from exc
+
+
 def _handle_arka_tunnel(arguments: dict[str, Any]) -> str:
     """Expose local Ollama via authenticated proxy and optional public tunnel."""
     action = str(arguments.get("action") or "status").strip().lower()
@@ -2822,9 +4204,34 @@ def _handle_arka_code_search(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"code_search unavailable: {exc}") from exc
 
 
+def _handle_arka_read_file(arguments: dict[str, Any]) -> str:
+    path = str(arguments.get("path") or arguments.get("file") or "").strip()
+    if not path:
+        raise ValueError("path (or file) is required")
+    try:
+        from arka.agent.read_file import DEFAULT_MAX_BYTES, read_file_payload
+
+        root = str(arguments.get("root") or arguments.get("project") or "").strip() or None
+        limit_raw = arguments.get("limit")
+        limit = _mcp_int_optional(limit_raw) if limit_raw not in (None, "") else None
+        payload = read_file_payload(
+            path,
+            root=root,
+            offset=max(1, _mcp_int(arguments.get("offset"), 1)),
+            limit=limit,
+            max_bytes=max(1024, min(_mcp_int(arguments.get("max_bytes"), DEFAULT_MAX_BYTES), 1_048_576)),
+        )
+        return json.dumps(payload, indent=2)
+    except ValueError:
+        raise
+    except ImportError as exc:
+        raise RuntimeError(f"read_file unavailable: {exc}") from exc
+
+
 def _handle_arka_apply_patch(arguments: dict[str, Any]) -> str:
     try:
         from arka.agent.apply_patch import PatchError, apply_patch_payload
+        from arka.core.edit_guard import EditGuardError
 
         path = str(arguments.get("path") or arguments.get("root") or "").strip() or None
         payload = apply_patch_payload(
@@ -2835,10 +4242,31 @@ def _handle_arka_apply_patch(arguments: dict[str, Any]) -> str:
             replace=str(arguments.get("replace") or arguments.get("new") or ""),
         )
         return json.dumps(payload, indent=2)
-    except (ValueError, PatchError):
+    except (ValueError, PatchError, EditGuardError) as exc:
+        if "edit blocked" in str(exc).lower():
+            return json.dumps({"ok": False, "blocked": True, "error": str(exc)}, indent=2)
         raise
     except ImportError as exc:
         raise RuntimeError(f"apply_patch unavailable: {exc}") from exc
+
+
+def _handle_arka_edit_guard(arguments: dict[str, Any]) -> str:
+    try:
+        from arka.core.edit_guard import guard_payload
+
+        path = str(arguments.get("path") or arguments.get("file") or "").strip()
+        root = str(arguments.get("root") or arguments.get("project") or "").strip() or None
+        payload = guard_payload(
+            action=str(arguments.get("action") or "check").strip().lower(),
+            path=path,
+            root=root,
+            diff=str(arguments.get("diff") or arguments.get("patch") or ""),
+        )
+        return json.dumps(payload, indent=2)
+    except ValueError:
+        raise
+    except ImportError as exc:
+        raise RuntimeError(f"edit_guard unavailable: {exc}") from exc
 
 
 def _handle_arka_repo_health(arguments: dict[str, Any]) -> str:
@@ -2876,6 +4304,8 @@ def _handle_arka_qa(arguments: dict[str, Any]) -> str:
         base = str(arguments.get("base") or "").strip() or None
         if action == "plan":
             return json.dumps(qa.plan_payload(path, feature=feature), indent=2)
+        if action == "extreme":
+            return json.dumps(qa.extreme_payload(path, feature=feature), indent=2)
         if action == "checklist":
             return json.dumps(qa.checklist_payload(path, feature=feature, base=base), indent=2)
         if action == "triage":
@@ -2897,11 +4327,47 @@ def _handle_arka_qa(arguments: dict[str, Any]) -> str:
             )
         if action == "explore":
             return json.dumps(qa.explore_payload(feature=feature), indent=2)
-        raise ValueError("action must be plan, checklist, triage, coverage, report, or explore")
+        raise ValueError("action must be plan, extreme, checklist, triage, coverage, report, or explore")
     except ValueError:
         raise
     except ImportError as exc:
         raise RuntimeError(f"qa_engineering unavailable: {exc}") from exc
+
+
+def _handle_arka_connector(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "status").strip().lower()
+    try:
+        from arka.integrations import cli_connector as cc
+
+        if action == "connect":
+            return json.dumps(
+                cc.connect(
+                    sync=not bool(arguments.get("no_sync")),
+                    unify=bool(arguments.get("unify")),
+                ),
+                indent=2,
+            )
+        if action == "status":
+            return json.dumps(cc.status_payload(), indent=2)
+        if action == "context":
+            goal = str(arguments.get("goal") or arguments.get("text") or "").strip()
+            limit = _mcp_int(arguments.get("limit") or arguments.get("limit_chars"), 2500)
+            block = cc.shared_context_block(goal, limit_chars=limit)
+            return json.dumps({"goal": goal, "context": block, "chars": len(block)}, indent=2)
+        if action == "doctor":
+            return json.dumps(cc.doctor_payload(), indent=2)
+        if action == "disconnect":
+            return json.dumps(cc.disconnect(), indent=2)
+        if action == "shell_init":
+            shell = str(arguments.get("shell") or "auto").strip() or "auto"
+            return json.dumps({"shell": shell, "script": cc.shell_init(shell=shell)}, indent=2)
+        if action == "suggest":
+            return json.dumps(cc.suggest_payload(), indent=2)
+        raise ValueError("action must be connect, status, context, doctor, disconnect, shell_init, or suggest")
+    except ValueError:
+        raise
+    except ImportError as exc:
+        raise RuntimeError(f"cli_connector unavailable: {exc}") from exc
 
 
 def _handle_arka_agent_hub(arguments: dict[str, Any]) -> str:
@@ -3951,6 +5417,256 @@ def _build_tools() -> list[ArkaMcpTool]:
             handler=_handle_arka_dub_video,
         ),
         ArkaMcpTool(
+            name="arka_fetch_lyrics",
+            description=(
+                "Fetch song lyrics (LRCLIB / lyrics.ovh), translate them, and optionally "
+                "generate a new track with translated lyrics via Pollinations. "
+                "Use action=parse for natural language like 'fetch lyrics for X by Y'."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["fetch", "translate", "translate_text", "check", "parse"],
+                        "default": "fetch",
+                    },
+                    "artist": {"type": "string", "description": "Artist name"},
+                    "title": {"type": "string", "description": "Song title"},
+                    "query": {
+                        "type": "string",
+                        "description": "Song as 'Title by Artist' (alternative to artist+title)",
+                    },
+                    "target": {
+                        "type": "string",
+                        "description": "Target language for translate (hindi, ta, es, …)",
+                    },
+                    "lyrics": {
+                        "type": "string",
+                        "description": "Raw lyrics for action=translate_text",
+                    },
+                    "generate": {
+                        "type": "boolean",
+                        "description": "Generate a new song with translated lyrics",
+                        "default": False,
+                    },
+                    "remix": {
+                        "type": "boolean",
+                        "description": "Alias for generate",
+                        "default": False,
+                    },
+                    "style": {
+                        "type": "string",
+                        "description": "Music style prompt when generate=true",
+                    },
+                    "duration": {
+                        "type": "integer",
+                        "description": "Generated song length in seconds",
+                    },
+                    "instrumental": {
+                        "type": "boolean",
+                        "description": "Instrumental only when generating music",
+                        "default": False,
+                    },
+                    "output": {
+                        "type": "string",
+                        "description": "Output path (.txt for fetch, .mp3 when generate=true)",
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "Natural language for action=parse",
+                    },
+                },
+            },
+            handler=_handle_arka_fetch_lyrics,
+        ),
+        ArkaMcpTool(
+            name="arka_play_website_game",
+            description=(
+                "Search for or open browser games in Playwright, or run the experimental vision agent. "
+                "Headed play requires allow_browser=true. "
+                "Disabled by default in MCP — opt in with ARKA_MCP_ENABLE_PERSONAL_SKILLS=1. "
+                "Use action=parse for 'play snake online' or 'open browser game at https://…'. "
+                "Use action=agent with learn=true for pattern learning + lightweight RL."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["open", "search", "agent", "check", "parse"],
+                        "default": "open",
+                    },
+                    "url": {"type": "string", "description": "Game URL for action=open"},
+                    "query": {
+                        "type": "string",
+                        "description": "Search query e.g. snake game (action=search)",
+                    },
+                    "open": {
+                        "type": "boolean",
+                        "description": "Open best search result (action=search)",
+                        "default": False,
+                    },
+                    "headless": {
+                        "type": "boolean",
+                        "description": "Run headless (CI/tests; no allow_browser needed)",
+                        "default": False,
+                    },
+                    "allow_browser": {
+                        "type": "boolean",
+                        "description": "Confirm headed browser open (required unless headless=true)",
+                        "default": False,
+                    },
+                    "auto_start": {
+                        "type": "boolean",
+                        "description": "Try clicking Play/Start and focus canvas",
+                        "default": False,
+                    },
+                    "wait_seconds": {
+                        "type": "integer",
+                        "description": "Seconds to keep headed browser open",
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "Natural language for action=parse",
+                    },
+                    "turns": {
+                        "type": "integer",
+                        "description": "Agent turns for action=agent (default ARKA_GAME_AGENT_TURNS or 10)",
+                    },
+                    "learn": {
+                        "type": "boolean",
+                        "description": "Store successful patterns after agent session (action=agent)",
+                        "default": True,
+                    },
+                    "rl": {
+                        "type": "boolean",
+                        "description": "Enable epsilon-greedy Q-table RL during agent play (experimental)",
+                        "default": True,
+                    },
+                    "vision_backend": {
+                        "type": "string",
+                        "enum": ["vllm", "gemini", "ollama", "auto"],
+                        "description": "Vision backend override for action=agent",
+                    },
+                },
+            },
+            handler=_handle_arka_play_website_game,
+        ),
+        ArkaMcpTool(
+            name="arka_verify_web_interaction",
+            description=(
+                "Verify live website interactions using local code or Playwright/Cypress spec context. "
+                "Optionally verify screenshots with vLLM/Gemini/Ollama vision via describe_source. "
+                "Headed runs require allow_browser=true; headless=true is the CI default. "
+                "Disabled by default in MCP — opt in with ARKA_MCP_ENABLE_PERSONAL_SKILLS=1. "
+                "Use action=parse for NL like 'verify website interactions on https://… with component.tsx'."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["check", "parse", "check-deps"],
+                        "default": "check",
+                    },
+                    "url": {"type": "string", "description": "Site URL for action=check"},
+                    "context": {"type": "string", "description": "Component/source file path"},
+                    "spec": {"type": "string", "description": "Playwright/Cypress spec file path"},
+                    "repo": {"type": "string", "description": "Repo path to auto-find related UI files"},
+                    "output": {"type": "string", "description": "Artifact directory"},
+                    "headless": {
+                        "type": "boolean",
+                        "description": "Run headless (default true unless headed=true)",
+                        "default": True,
+                    },
+                    "headed": {
+                        "type": "boolean",
+                        "description": "Show browser window (requires allow_browser=true)",
+                        "default": False,
+                    },
+                    "allow_browser": {
+                        "type": "boolean",
+                        "description": "Confirm headed browser open",
+                        "default": False,
+                    },
+                    "settle_seconds": {
+                        "type": "number",
+                        "description": "Seconds to wait after page load",
+                    },
+                    "vision": {
+                        "type": "boolean",
+                        "description": "Enable screenshot verification with describe_source vision",
+                        "default": False,
+                    },
+                    "no_vision": {
+                        "type": "boolean",
+                        "description": "Disable vision verification even when ARKA_WEB_VERIFY_VISION=1",
+                        "default": False,
+                    },
+                    "vllm_verify": {
+                        "type": "boolean",
+                        "description": "Enable vision verification using the vLLM backend",
+                        "default": False,
+                    },
+                    "vision_backend": {
+                        "type": "string",
+                        "enum": ["vllm", "gemini", "ollama", "auto"],
+                        "description": "Vision backend (default DESCRIBE_IMAGE_BACKEND or auto)",
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "Natural language for action=parse",
+                    },
+                },
+            },
+            handler=_handle_arka_verify_web_interaction,
+        ),
+        ArkaMcpTool(
+            name="arka_safety_advice",
+            description=(
+                "Curated, inclusive safety guidance for domestic violence, sexual harassment, stalking, "
+                "and abuse — gender-neutral playbooks and vetted hotlines from a fixed playbook, "
+                "not improvised LLM legal advice. Use action=parse for NL detection."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["advice", "resources", "topics", "parse"],
+                        "default": "advice",
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "Describe the situation (advice/parse)",
+                    },
+                    "topic": {
+                        "type": "string",
+                        "enum": [
+                            "domestic_violence",
+                            "sexual_harassment",
+                            "workplace_harassment",
+                            "stalking",
+                            "digital_harassment",
+                        ],
+                        "description": "Force a topic instead of auto-classifying",
+                    },
+                    "region": {
+                        "type": "string",
+                        "enum": ["us", "in", "intl"],
+                        "description": "Hotline region (default from ARKA_SAFETY_REGION or intl)",
+                    },
+                    "json": {
+                        "type": "boolean",
+                        "description": "Return JSON instead of markdown (advice action)",
+                        "default": False,
+                    },
+                },
+            },
+            handler=_handle_arka_safety_advice,
+        ),
+        ArkaMcpTool(
             name="arka_signoz_publish",
             description=(
                 "One-shot SigNoz hackathon publish: update signoz/BLOG.md, git push to GitHub, "
@@ -4094,6 +5810,187 @@ def _build_tools() -> list[ArkaMcpTool]:
             handler=_handle_arka_create_video,
         ),
         ArkaMcpTool(
+            name="arka_model_video",
+            description=(
+                "Create turntable or animated character videos from 3D models (.obj, .glb, .fbx, .stl) "
+                "using Blender headless rendering, or build a slideshow from existing preview frames. "
+                "Use action=animate for rigged FBX run cycles; action=parse for NL routing."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["render", "animate", "check", "parse"],
+                        "default": "render",
+                    },
+                    "source": {
+                        "type": "string",
+                        "description": "3D model path (.obj, .glb, .fbx, .stl)",
+                    },
+                    "model": {
+                        "type": "string",
+                        "description": "Alias for source",
+                    },
+                    "output": {
+                        "type": "string",
+                        "description": "Output MP4 path",
+                    },
+                    "backend": {
+                        "type": "string",
+                        "enum": ["auto", "blender", "turntable", "slideshow"],
+                        "description": "auto: Blender turntable or preview slideshow fallback",
+                    },
+                    "mode": {
+                        "type": "string",
+                        "description": "Alias for backend (e.g. 3d, blender, slideshow)",
+                    },
+                    "frames": {
+                        "type": "integer",
+                        "description": "Turntable frame count (default 120)",
+                    },
+                    "fps": {
+                        "type": "integer",
+                        "description": "Output video FPS (default 30)",
+                    },
+                    "size": {
+                        "type": "integer",
+                        "description": "Square render resolution (default 1024)",
+                    },
+                    "angle": {
+                        "type": "string",
+                        "description": "Camera preset: auto, front, three-quarter, top, etc.",
+                    },
+                    "renders": {
+                        "type": "string",
+                        "description": "Directory of preview PNG/JPG frames (slideshow backend)",
+                    },
+                    "slide_duration": {
+                        "type": "number",
+                        "description": "Seconds per preview image in slideshow mode",
+                        "default": 0.5,
+                    },
+                    "audio": {
+                        "type": "string",
+                        "description": "Optional background audio for slideshow mode",
+                    },
+                    "background": {
+                        "type": "boolean",
+                        "description": "Ground plane for action=animate (default true)",
+                        "default": True,
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "Natural language for action=parse",
+                    },
+                },
+            },
+            handler=_handle_arka_model_video,
+        ),
+        ArkaMcpTool(
+            name="arka_compose_story",
+            description=(
+                "Labeled story videos — LLM narrative script with beat labels (intro, conflict, climax), "
+                "TTS voiceover, captions, stock B-roll, and AI-generated images to auto-fill visual gaps. "
+                "Use action=parse for 'tell a story about a robot learning to paint'."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["compose", "check", "parse"],
+                        "default": "compose",
+                    },
+                    "topic": {
+                        "type": "string",
+                        "description": "Story topic or premise (compose, parse)",
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "Natural language alias for topic",
+                    },
+                    "script": {
+                        "type": "string",
+                        "description": "Optional JSON scene script file path",
+                    },
+                    "output": {
+                        "type": "string",
+                        "description": "Output .mp4 path",
+                    },
+                    "scenes": {
+                        "type": "integer",
+                        "description": "Fixed scene count",
+                    },
+                    "duration": {
+                        "type": "string",
+                        "description": "Target runtime e.g. 2m, 90s",
+                    },
+                    "labeled": {
+                        "type": "boolean",
+                        "description": "Show beat labels on screen (default true)",
+                        "default": True,
+                    },
+                    "auto_fill": {
+                        "type": "boolean",
+                        "description": "AI images when stock misses (default true)",
+                        "default": True,
+                    },
+                    "ai_images_only": {
+                        "type": "boolean",
+                        "description": "Use AI for all stills instead of stock",
+                        "default": False,
+                    },
+                },
+            },
+            handler=_handle_arka_compose_story,
+        ),
+        ArkaMcpTool(
+            name="arka_terminal_video",
+            description=(
+                "Create animated terminal demo videos from Arka CLI captures with optional "
+                "edge-tts voiceover (ffmpeg + Pillow). Actions: build (full MP4), capture "
+                "(record CLI output to text files), export-images (JPG showcase frames), "
+                "check (deps), parse (NL → terminal_video args). Not compose_video or create_video."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["build", "capture", "export-images", "check", "parse"],
+                        "default": "build",
+                    },
+                    "project_dir": {
+                        "type": "string",
+                        "description": "Repo/project root (default: auto-detect from cwd)",
+                    },
+                    "captures": {
+                        "type": "string",
+                        "description": "Directory with *.txt CLI captures (build)",
+                    },
+                    "script": {
+                        "type": "string",
+                        "description": "Voiceover script path with [M:SS] markers (build)",
+                    },
+                    "output": {
+                        "type": "string",
+                        "description": "Output .mp4 (build) or JPG directory (export-images)",
+                    },
+                    "skip_verify": {
+                        "type": "boolean",
+                        "description": "Skip frame visibility checks during build",
+                        "default": False,
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "Natural language for action=parse",
+                    },
+                },
+            },
+            handler=_handle_arka_terminal_video,
+        ),
+        ArkaMcpTool(
             name="arka_music_generate",
             description=(
                 "Generate original music with Pollinations (elevenmusic) or local ffmpeg tone synthesis. "
@@ -4139,6 +6036,46 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_music_generate,
+        ),
+        ArkaMcpTool(
+            name="arka_local_music",
+            description=(
+                "Generate music locally with ffmpeg tone synthesis — no Pollinations or cloud API. "
+                "Instrumental melodies only (no AI vocals). Requires ffmpeg. "
+                "Use action=parse for 'generate music locally …'."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["generate", "parse", "doctor"],
+                        "default": "generate",
+                    },
+                    "prompt": {
+                        "type": "string",
+                        "description": "Music style or theme (generate)",
+                    },
+                    "output": {
+                        "type": "string",
+                        "description": "Optional output .mp3 path",
+                    },
+                    "duration": {
+                        "type": "integer",
+                        "description": "Length in seconds (3–300)",
+                    },
+                    "instrumental": {
+                        "type": "boolean",
+                        "description": "Instrumental only (default true for local synth)",
+                        "default": True,
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "Natural language for action=parse",
+                    },
+                },
+            },
+            handler=_handle_arka_local_music,
         ),
         ArkaMcpTool(
             name="arka_ai_video",
@@ -4187,6 +6124,240 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_ai_video,
+        ),
+        ArkaMcpTool(
+            name="arka_meme",
+            description=(
+                "Local meme templates with optional stock photos — Drake, comparison, caption, "
+                "expanding-brain, two-button, vibe-coding. No AI tokens. "
+                "Use action=parse for 'make a drake meme reject tests accept write tests'."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["create", "parse", "templates"],
+                        "default": "create",
+                    },
+                    "template": {
+                        "type": "string",
+                        "description": "comparison | drake | caption | expanding-brain | two-button | vibe-coding",
+                    },
+                    "style": {
+                        "type": "string",
+                        "description": "Meme visual preset (classic, neon, retro, …)",
+                    },
+                    "output": {"type": "string", "description": "Optional output PNG path"},
+                    "use_stock_images": {
+                        "type": "boolean",
+                        "description": "Fetch relevant stock photos for panels (default env MEME_USE_STOCK_PHOTOS)",
+                    },
+                    "reject": {"type": "string", "description": "Drake top panel text"},
+                    "accept": {"type": "string", "description": "Drake bottom panel text"},
+                    "left_label": {"type": "string"},
+                    "right_label": {"type": "string"},
+                    "left_title": {"type": "string"},
+                    "right_title": {"type": "string"},
+                    "top": {"type": "string", "description": "Caption meme top text"},
+                    "bottom": {"type": "string", "description": "Caption meme bottom text"},
+                    "labels": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Four labels for expanding-brain",
+                    },
+                    "dilemma": {"type": "string", "description": "Two-button dilemma text"},
+                    "button_left": {"type": "string"},
+                    "button_right": {"type": "string"},
+                    "text": {"type": "string", "description": "Natural language for action=parse"},
+                },
+            },
+            handler=_handle_arka_meme,
+        ),
+        ArkaMcpTool(
+            name="arka_infographic",
+            description=(
+                "Adaptive infographic PNG — layout auto-picks row/grid/radial from item count. "
+                "Local Pillow only, exact typography. "
+                "Use action=parse for 'infographic about headaches items: tension, migraine'."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["create", "parse", "layouts", "styles"],
+                        "default": "create",
+                    },
+                    "title": {"type": "string", "description": "Main headline"},
+                    "items": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Cell labels (layout follows count)",
+                    },
+                    "item": {
+                        "type": "string",
+                        "description": "Single item label (repeat via array in clients that support it)",
+                    },
+                    "layout": {
+                        "type": "string",
+                        "enum": ["auto", "row2", "row3", "grid4", "grid6", "grid9", "radial"],
+                        "default": "auto",
+                    },
+                    "style": {
+                        "type": "string",
+                        "enum": ["clean", "doodle", "dark", "meme"],
+                        "description": "Infographic visual preset",
+                    },
+                    "output": {"type": "string", "description": "Optional output PNG path"},
+                    "text": {"type": "string", "description": "Natural language for action=parse"},
+                },
+            },
+            handler=_handle_arka_infographic,
+        ),
+        ArkaMcpTool(
+            name="arka_reposition_image",
+            description=(
+                "Detect bad avatar/profile image crops (head clipped in circles) and reframe images "
+                "or suggest CSS object-position. Local Pillow + optional face detection/vision. "
+                "Use action=parse for 'fix profile picture cropping on photo.jpg'."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["check", "fix", "css", "fix-ui", "batch", "parse"],
+                        "default": "check",
+                    },
+                    "path": {"type": "string", "description": "Image path for check/fix/css/fix-ui"},
+                    "output": {"type": "string", "description": "Output path when action=fix"},
+                    "folder": {"type": "string", "description": "Folder path when action=batch"},
+                    "context": {"type": "string", "description": "Component/stylesheet path for fix-ui"},
+                    "shape": {
+                        "type": "string",
+                        "enum": ["square", "circle"],
+                        "default": "square",
+                        "description": "Avatar shape context (circle for profile cards)",
+                    },
+                    "selector": {
+                        "type": "string",
+                        "default": ".avatar img",
+                        "description": "CSS selector for css/fix-ui output",
+                    },
+                    "size": {"type": "integer", "description": "Output square size in pixels for fix/batch"},
+                    "vision": {
+                        "type": "boolean",
+                        "description": "Use describe_source vision to refine framing (optional)",
+                    },
+                    "text": {"type": "string", "description": "Natural language for action=parse"},
+                },
+            },
+            handler=_handle_arka_reposition_image,
+        ),
+        ArkaMcpTool(
+            name="arka_filter_images",
+            description=(
+                "Hybrid two-pass image relevance filter: CLIP embeddings for fast scoring, "
+                "VLM only on borderline cases. Score, filter, or check images against a text query. "
+                "Use action=parse for 'filter irrelevant images in ./photos for laptop on desk'."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["score", "filter", "check", "parse"],
+                        "default": "score",
+                    },
+                    "folder": {"type": "string", "description": "Folder of images (score/filter)"},
+                    "path": {"type": "string", "description": "Single image path (check)"},
+                    "image": {"type": "string", "description": "Alias for path"},
+                    "query": {"type": "string", "description": "Relevance query text"},
+                    "output": {"type": "string", "description": "Copy kept images here (filter)"},
+                    "borderline_pct": {
+                        "type": "number",
+                        "description": "Borderline band width percent (default 20)",
+                    },
+                    "vlm_pass": {
+                        "type": "boolean",
+                        "description": "Run VLM on borderline images",
+                    },
+                    "text": {"type": "string", "description": "NL input when action=parse"},
+                },
+            },
+            handler=_handle_arka_filter_images,
+        ),
+        ArkaMcpTool(
+            name="arka_media_styles",
+            description=(
+                "List shared visual style presets for meme templates, video generation, and infographics."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["list"],
+                        "default": "list",
+                    },
+                    "kind": {
+                        "type": "string",
+                        "enum": ["all", "meme", "video", "infographic"],
+                        "default": "all",
+                    },
+                },
+            },
+            handler=_handle_arka_media_styles,
+        ),
+        ArkaMcpTool(
+            name="arka_tech_stack",
+            description=(
+                "Suggest a project's tech stack by searching for a similarly named folder, "
+                "confirming with y/n when the folder name is not an exact match, then reading "
+                "pyproject.toml, package.json, README, and workspace manifests. "
+                "Use action=parse for 'what is the best tech stack for arka-agent'."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["suggest", "search", "parse"],
+                        "default": "suggest",
+                    },
+                    "project": {
+                        "type": "string",
+                        "description": "Project name to search for (e.g. arka-agent)",
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "Natural language query (suggest, parse)",
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "Use this directory instead of fuzzy search",
+                    },
+                    "roots": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Extra search roots (e.g. ~/dev)",
+                    },
+                    "yes": {
+                        "type": "boolean",
+                        "description": "Accept best fuzzy folder match without prompting",
+                    },
+                    "non_interactive": {
+                        "type": "boolean",
+                        "description": "Fail on fuzzy match instead of prompting",
+                    },
+                    "candidates": {
+                        "type": "boolean",
+                        "description": "Include candidate folders when suggest fails",
+                    },
+                },
+            },
+            handler=_handle_arka_tech_stack,
         ),
         ArkaMcpTool(
             name="arka_google_flow",
@@ -4325,6 +6496,46 @@ def _build_tools() -> list[ArkaMcpTool]:
                 "required": ["path"],
             },
             handler=_handle_arka_view_data,
+        ),
+        ArkaMcpTool(
+            name="arka_view_output",
+            description=(
+                "Render JSON, CSV, markdown, or text in the Arka Output Viewer — "
+                "returns HTML metadata or opens a browser for local files."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["render", "show", "open"],
+                        "default": "render",
+                        "description": "render: HTML payload; show: open file in browser; open: open content in browser",
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "Path to a local data file",
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "Inline content when path is omitted",
+                    },
+                    "format": {
+                        "type": "string",
+                        "description": "Optional format override (json, csv, markdown, text, …)",
+                    },
+                    "title": {
+                        "type": "string",
+                        "description": "Viewer title",
+                    },
+                    "open_browser": {
+                        "type": "boolean",
+                        "description": "When action=show, open the browser (default false for MCP)",
+                        "default": False,
+                    },
+                },
+            },
+            handler=_handle_arka_view_output,
         ),
         ArkaMcpTool(
             name="arka_clipboard",
@@ -5096,6 +7307,65 @@ def _build_tools() -> list[ArkaMcpTool]:
             handler=_handle_arka_model,
         ),
         ArkaMcpTool(
+            name="arka_finetune_model",
+            description=(
+                "Plan, validate, and scaffold local LLM fine-tuning (LoRA/QLoRA/full). "
+                "Generates training config and shell script; dry-run by default. "
+                "Use action=parse for NL routing."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["plan", "validate", "generate", "status", "parse", "check"],
+                        "default": "plan",
+                    },
+                    "task": {
+                        "type": "string",
+                        "description": "Natural language fine-tune goal (plan, parse)",
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "Alias for task",
+                    },
+                    "base_model": {
+                        "type": "string",
+                        "description": "HuggingFace or local base model id (generate, plan)",
+                    },
+                    "dataset": {
+                        "type": "string",
+                        "description": "Dataset path (validate, generate, plan)",
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "Alias for dataset or output_dir depending on action",
+                    },
+                    "method": {
+                        "type": "string",
+                        "enum": ["auto", "lora", "qlora", "full"],
+                        "default": "auto",
+                    },
+                    "backend": {
+                        "type": "string",
+                        "enum": ["auto", "mlx", "unsloth", "axolotl", "huggingface", "trl"],
+                        "default": "auto",
+                    },
+                    "output_dir": {
+                        "type": "string",
+                        "description": "Output directory for configs/checkpoints",
+                        "default": "./finetune-out",
+                    },
+                    "apply": {
+                        "type": "boolean",
+                        "description": "When action=generate, write config/script files",
+                        "default": False,
+                    },
+                },
+            },
+            handler=_handle_arka_finetune_model,
+        ),
+        ArkaMcpTool(
             name="arka_tunnel",
             description=(
                 "Expose local Ollama as a production OpenAI-compatible endpoint — "
@@ -5419,8 +7689,42 @@ def _build_tools() -> list[ArkaMcpTool]:
             handler=_handle_arka_code_search,
         ),
         ArkaMcpTool(
+            name="arka_read_file",
+            description=(
+                "Read full contents of a local workspace file (text/source). "
+                "Blocked paths (.env, secrets/, keys) match arka_edit_guard. Max 512KB default; use offset/limit for slices."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "File path (relative to project root or absolute)"},
+                    "file": {"type": "string", "description": "Alias for path"},
+                    "root": {"type": "string", "description": "Optional project root"},
+                    "offset": {
+                        "type": "integer",
+                        "description": "1-based start line (default 1)",
+                        "default": 1,
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max lines to return (default: entire file up to max_bytes)",
+                    },
+                    "max_bytes": {
+                        "type": "integer",
+                        "description": "Max file size in bytes (default 524288, max 1048576)",
+                        "default": 524288,
+                    },
+                },
+                "required": ["path"],
+            },
+            handler=_handle_arka_read_file,
+        ),
+        ArkaMcpTool(
             name="arka_apply_patch",
-            description="Apply a unified diff or search-replace patch inside the code project scope.",
+            description=(
+                "Apply a unified diff or search-replace patch inside the code project scope. "
+                "Protected paths (.env, secrets/, node_modules/, bundled/, keys) are blocked by EDIT_GUARD."
+            ),
             input_schema={
                 "type": "object",
                 "properties": {
@@ -5437,9 +7741,30 @@ def _build_tools() -> list[ArkaMcpTool]:
             handler=_handle_arka_apply_patch,
         ),
         ArkaMcpTool(
+            name="arka_edit_guard",
+            description=(
+                "Check whether a file or diff is allowed to be edited before calling arka_apply_patch. "
+                "Blocks .env, secrets/, node_modules/, bundled/, and custom patterns from BLOCKED_EDIT_PATHS."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["check", "list", "status"],
+                        "default": "check",
+                    },
+                    "path": {"type": "string", "description": "File path to check (relative to project root)"},
+                    "root": {"type": "string", "description": "Optional project root"},
+                    "diff": {"type": "string", "description": "Unified diff to validate when action=check"},
+                },
+            },
+            handler=_handle_arka_edit_guard,
+        ),
+        ArkaMcpTool(
             name="arka_qa",
             description=(
-                "QA Engineering — test strategy plan, PR/feature checklists, coverage analysis, "
+                "QA Engineering — test strategy plan, extreme QA constraints, PR/feature checklists, coverage analysis, "
                 "CI test failure triage, bug report drafts, and exploratory testing guidance."
             ),
             input_schema={
@@ -5447,7 +7772,7 @@ def _build_tools() -> list[ArkaMcpTool]:
                 "properties": {
                     "action": {
                         "type": "string",
-                        "enum": ["plan", "checklist", "triage", "coverage", "report", "explore"],
+                        "enum": ["plan", "extreme", "checklist", "triage", "coverage", "report", "explore"],
                         "default": "plan",
                         "description": "QA workflow action",
                     },
@@ -5581,6 +7906,64 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_rag,
+        ),
+        ArkaMcpTool(
+            name="arka_connector",
+            description=(
+                "Arka CLI connector — connect terminal sessions to Agent Hub shared context "
+                "(memory/context.md, MCP config, skills manifest)."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": [
+                            "connect",
+                            "status",
+                            "context",
+                            "doctor",
+                            "disconnect",
+                            "shell_init",
+                            "suggest",
+                        ],
+                        "default": "status",
+                        "description": (
+                            "connect: sync hub and attach shared context; "
+                            "status: connector state; "
+                            "context: preview shared context block; "
+                            "doctor: verify setup; "
+                            "disconnect: clear connector marker; "
+                            "shell_init: shell snippet for launch.env"
+                        ),
+                    },
+                    "goal": {
+                        "type": "string",
+                        "description": "When action=context: optional goal to filter context",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "When action=context: max characters",
+                        "default": 2500,
+                    },
+                    "unify": {
+                        "type": "boolean",
+                        "description": "When action=connect: run agent_hub sync --unify",
+                        "default": False,
+                    },
+                    "no_sync": {
+                        "type": "boolean",
+                        "description": "When action=connect: skip agent_hub sync",
+                        "default": False,
+                    },
+                    "shell": {
+                        "type": "string",
+                        "description": "When action=shell_init: auto, bash, or fish",
+                        "default": "auto",
+                    },
+                },
+            },
+            handler=_handle_arka_connector,
         ),
         ArkaMcpTool(
             name="arka_agent_hub",

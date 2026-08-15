@@ -73,6 +73,9 @@ _OPEN_URL_PREFIX = re.compile(
 _NON_URL_OPEN = re.compile(
     r"(?i)\b(?:project|news|finance|file|app|folder|directory|terminal|editor|vscode|cursor)\b"
 )
+_PLAY_WEBSITE_GAME_PREFIX = re.compile(
+    r"(?i)^(?:arka\s+)?(?:play[_-]?website[_-]?game|website[_-]?game|browser[_-]?game)\b"
+)
 
 
 def _strip_wrapping_quotes(text: str) -> str:
@@ -162,6 +165,8 @@ def wants_open_url(text: str) -> bool:
     """True when NL should open a URL in the default browser."""
     clean = (text or "").strip()
     if not clean:
+        return False
+    if _PLAY_WEBSITE_GAME_PREFIX.search(clean):
         return False
     if _GREETING_RE.match(clean):
         return False

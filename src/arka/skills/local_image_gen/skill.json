@@ -5,6 +5,12 @@
   "author": "Arka",
   "type": "python",
   "entry": "run.py",
-  "triggers": ["generate image locally", "use local image model", "offline image generation"],
+  "triggers": [
+    "generate image locally",
+    "use local image model",
+    "offline image generation",
+    "stable diffusion generate",
+    "draw picture locally"
+  ],
   "permissions": ["network", "write"]
 }

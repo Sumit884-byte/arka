@@ -36,9 +36,19 @@ DISPATCH_SKILL_REQUIRES: dict[str, dict[str, Any]] = {
         "env_any": ["POLLINATIONS_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"],
         "note": "Set POLLINATIONS_API_KEY or enable Gemini billing on GEMINI_API_KEY.",
     },
+    "music_generate": {
+        "bins": ["ffmpeg"],
+        "env_optional": ["POLLINATIONS_API_KEY", "POLLINATIONS_KEY", "MUSIC_BACKEND"],
+        "note": "Pollinations when a key is set; ffmpeg tone synthesis without a key (MUSIC_BACKEND=auto or synthesize).",
+    },
     "compose_video": {
         "bins": ["ffmpeg"],
         "note": "Needs Pillow + ffmpeg. Stock photos: UNSPLASH_ACCESS_KEY (or Pexels/Pixabay). LLM slides: GEMINI_API_KEY or GROQ_API_KEY.",
+    },
+    "compose_story": {
+        "bins": ["ffmpeg"],
+        "env_any": ["GEMINI_API_KEY", "GROQ_API_KEY"],
+        "note": "Labeled story videos. GEMINI_API_KEY for script + AI gap-fill; stock keys optional (UNSPLASH/PEXELS).",
     },
     "media_transcript": {
         "note": "STT: set GROQ_API_KEY or SARVAM_API_KEY, or install local faster-whisper (pip install faster-whisper).",

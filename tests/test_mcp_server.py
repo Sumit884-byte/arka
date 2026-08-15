@@ -62,11 +62,21 @@ def test_list_tool_definitions_schema(monkeypatch):
     assert "arka_repo_context" in names
     assert "arka_pr_check" in names
     assert "arka_code_search" in names
+    assert "arka_read_file" in names
     assert "arka_apply_patch" in names
+    assert "arka_edit_guard" in names
     assert "arka_qa" in names
     assert "arka_edit_video" in names
     assert "arka_dub_video" in names
     assert "arka_create_video" in names
+    assert "arka_meme" in names
+    assert "arka_infographic" in names
+    assert "arka_reposition_image" in names
+    assert "arka_filter_images" in names
+    assert "arka_media_styles" in names
+    assert "arka_tech_stack" in names
+    assert "arka_terminal_video" in names
+    assert "arka_local_music" in names
     assert "arka_noise_remove" in names
     assert "arka_ocr" in names
     assert "arka_rag" in names
@@ -1788,4 +1798,74 @@ def test_handle_arka_apply_patch_search_replace(tmp_path, monkeypatch):
     )
     assert payload["ok"] is True
     assert target.read_text(encoding="utf-8") == "hello arka\n"
+
+
+def test_handle_arka_meme_vibe_coding(tmp_path, monkeypatch) -> None:
+    from arka.integrations.mcp_server import _handle_arka_meme
+
+    out = tmp_path / "meme.png"
+    monkeypatch.setenv("MEME_USE_STOCK_PHOTOS", "0")
+    payload = json.loads(
+        _handle_arka_meme(
+            {
+                "action": "create",
+                "template": "vibe-coding",
+                "output": str(out),
+                "use_stock_images": False,
+            }
+        )
+    )
+    assert payload["template"] == "comparison"
+    assert out.is_file()
+
+
+def test_handle_arka_infographic_grid(tmp_path) -> None:
+    from arka.integrations.mcp_server import _handle_arka_infographic
+
+    out = tmp_path / "info.png"
+    payload = json.loads(
+        _handle_arka_infographic(
+            {
+                "action": "create",
+                "title": "Demo",
+                "items": ["One", "Two", "Three", "Four"],
+                "output": str(out),
+            }
+        )
+    )
+    assert payload["layout"] == "grid4"
+    assert out.is_file()
+
+
+def test_handle_arka_media_styles() -> None:
+    from arka.integrations.mcp_server import _handle_arka_media_styles
+
+    payload = json.loads(_handle_arka_media_styles({"kind": "all"}))
+    assert "meme" in payload
+    assert "video" in payload
+    assert "infographic" in payload
+    assert "classic" in payload["meme"]
+
+
+def test_handle_arka_tech_stack_suggest(tmp_path, monkeypatch) -> None:
+    from arka.integrations.mcp_server import _handle_arka_tech_stack
+
+    project = tmp_path / "arka"
+    project.mkdir()
+    (project / "pyproject.toml").write_text(
+        '[project]\nname = "arka-agent"\nrequires-python = ">=3.11"\n',
+        encoding="utf-8",
+    )
+    payload = json.loads(
+        _handle_arka_tech_stack(
+            {
+                "action": "suggest",
+                "project": "arka-agent",
+                "roots": [str(tmp_path)],
+                "yes": True,
+            }
+        )
+    )
+    assert payload["ok"] is True
+    assert payload["languages"]
 

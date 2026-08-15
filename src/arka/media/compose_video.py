@@ -41,6 +41,7 @@ from arka.media.stock_videos import (
     stock_video_search_query,
     video_uid,
 )
+from arka.media.media_styles import extract_style_from_text, format_style_catalog, list_video_styles
 from arka.media.unsplash import access_key
 
 
@@ -140,6 +141,8 @@ class Scene:
     chart_path: str = ""
     slide_image: str = ""
     slide_kind: str = ""  # title | section | content (compose_slides layouts)
+    label: str = ""  # story beat tag shown on screen (intro, conflict, climax, …)
+    visual_prompt: str = ""  # AI image prompt override for this scene
 
 
 @dataclass
@@ -170,6 +173,9 @@ class VideoConfig:
     burn_text: bool = False
     video_mode: str = "hybrid"
     use_only_ai_generated_images: bool = False
+    show_labels: bool = False
+    auto_fill_gaps: bool = False
+    visual_style: str = "documentary"
 
 
 def _env(name: str, default: str = "") -> str:
@@ -224,6 +230,18 @@ def _resolve_use_only_ai_generated_images(explicit: bool | None = None) -> bool:
     if explicit is not None:
         return explicit
     return _env_bool("VIDEO_USE_ONLY_AI_GENERATED_IMAGES") or _env_bool("VIDEO_AI_IMAGES_ONLY")
+
+
+def _resolve_show_labels(explicit: bool | None = None) -> bool:
+    if explicit is not None:
+        return explicit
+    return _env_bool("VIDEO_SHOW_LABELS") or _env_bool("VIDEO_LABELED")
+
+
+def _resolve_auto_fill_gaps(explicit: bool | None = None) -> bool:
+    if explicit is not None:
+        return explicit
+    return _env_bool("VIDEO_AUTO_FILL") or _env_bool("VIDEO_AUTO_FILL_GAPS")
 
 
 def _ai_image_generation_available() -> bool:
@@ -317,13 +335,18 @@ def load_config(
     video_mode: str | None = None,
     burn_text: bool | None = None,
     use_only_ai_generated_images: bool | None = None,
+    show_labels: bool | None = None,
+    auto_fill_gaps: bool | None = None,
+    style: str | None = None,
 ) -> VideoConfig:
+    from arka.media.media_styles import apply_video_style, resolve_video_style
     from arka.voice.edge_speak import resolve_voice
 
     font_path = _env("VIDEO_FONT_PATH")
     font_bold = _env("VIDEO_FONT_BOLD_PATH") or _env("VIDEO_FONT_BOLD")
     explicit_voice = _env("VIDEO_TTS_VOICE") or _env("SPEAK_VOICE") or None
-    return VideoConfig(
+    resolved_style = resolve_video_style(style)
+    cfg = VideoConfig(
         width=_env_int("VIDEO_WIDTH", 1920),
         height=_env_int("VIDEO_HEIGHT", 1080),
         fps=_env_int("VIDEO_FPS", 30),
@@ -347,7 +370,11 @@ def load_config(
         burn_text=burn_text if burn_text is not None else _resolve_burn_text(video_mode=video_mode),
         video_mode=_resolve_video_mode(video_mode),
         use_only_ai_generated_images=_resolve_use_only_ai_generated_images(use_only_ai_generated_images),
+        show_labels=_resolve_show_labels(show_labels),
+        auto_fill_gaps=_resolve_auto_fill_gaps(auto_fill_gaps),
+        visual_style=resolved_style.name,
     )
+    return apply_video_style(cfg, resolved_style.name)
 
 
 def _resolve_font(name: str, *, explicit: str = "", bold: bool = False) -> Path | None:
@@ -1057,6 +1084,7 @@ def render_slide(
 
     burn_text = cfg.burn_text if show_text is None else show_text
     if not burn_text:
+        canvas = _draw_scene_label(canvas, scene, cfg, ImageDraw=ImageDraw, ImageFont=ImageFont)
         output.parent.mkdir(parents=True, exist_ok=True)
         canvas.save(output, format="PNG", optimize=True)
         return
@@ -1141,8 +1169,44 @@ def render_slide(
             draw.text((x, y), line, font=body_font, fill=body_color)
             y += body_heights[idx] + (title_gap if idx < len(body_lines) - 1 else 0)
 
+    canvas = _draw_scene_label(canvas, scene, cfg, ImageDraw=ImageDraw, ImageFont=ImageFont)
     output.parent.mkdir(parents=True, exist_ok=True)
     canvas.save(output, format="PNG", optimize=True)
+
+
+def _draw_scene_label(
+    canvas,
+    scene: Scene,
+    cfg: VideoConfig,
+    *,
+    ImageDraw,
+    ImageFont,
+) -> object:
+    """Burn a story-beat label badge (top-left) when show_labels is on."""
+    label = (scene.label or "").strip()
+    if not cfg.show_labels or not label:
+        return canvas
+    draw = ImageDraw.Draw(canvas)
+    badge_font = _load_font(ImageFont, cfg.font_bold_path or cfg.font_path, max(22, cfg.body_size - 8), bold=True)
+    text = label.replace("_", " ").upper()
+    pad_x, pad_y = 14, 8
+    bbox = draw.textbbox((0, 0), text, font=badge_font)
+    text_w = bbox[2] - bbox[0]
+    text_h = bbox[3] - bbox[1]
+    x0, y0 = 28, 28
+    x1 = x0 + text_w + pad_x * 2
+    y1 = y0 + text_h + pad_y * 2
+    accent = _hex_rgb(cfg.accent_color)
+    from PIL import Image
+
+    rgba = canvas.convert("RGBA")
+    overlay = Image.new("RGBA", rgba.size, (0, 0, 0, 0))
+    overlay_draw = ImageDraw.Draw(overlay)
+    overlay_draw.rounded_rectangle([x0, y0, x1, y1], radius=10, fill=(*accent, 210))
+    rgba = Image.alpha_composite(rgba, overlay)
+    draw = ImageDraw.Draw(rgba)
+    draw.text((x0 + pad_x, y0 + pad_y), text, font=badge_font, fill=(255, 255, 255))
+    return rgba.convert("RGB")
 
 
 def _cover_crop(img, target_w: int, target_h: int):
@@ -1373,7 +1437,11 @@ def _fetch_scene_photo(
     orientation: str,
     context_terms: list[str] | None = None,
     segment_idx: int = 0,
+    visual_style: str | None = None,
 ) -> StockPhoto:
+    from arka.media.media_styles import styled_stock_query
+
+    query = styled_stock_query(query, visual_style, for_meme=False)
     variants = diverse_photo_queries(query, limit=8)
     if segment_idx:
         offset = segment_idx % len(variants)
@@ -1395,7 +1463,46 @@ def _fetch_scene_photo(
     raise SystemExit(f"No unused stock photos found for query: {query!r}")
 
 
-def _build_ai_image_prompt(scene: Scene, query: str, topic: str) -> str:
+def _try_fetch_scene_photo(
+    query: str,
+    used_photo_ids: set[str],
+    *,
+    orientation: str,
+    context_terms: list[str] | None = None,
+    segment_idx: int = 0,
+    visual_style: str | None = None,
+) -> StockPhoto | None:
+    """Like _fetch_scene_photo but returns None instead of exiting."""
+    from arka.media.media_styles import styled_stock_query
+
+    query = styled_stock_query(query, visual_style, for_meme=False)
+    variants = diverse_photo_queries(query, limit=8)
+    if segment_idx:
+        offset = segment_idx % len(variants)
+        variants = variants[offset:] + variants[:offset]
+
+    for try_query in variants:
+        photos = search_stock_photos(
+            try_query,
+            count=12,
+            orientation=orientation,
+            context_terms=context_terms,
+            exclude_ids=used_photo_ids,
+        )
+        if photos:
+            photo = photos[0]
+            used_photo_ids.add(photo_uid(photo))
+            return photo
+    return None
+
+
+def _build_ai_image_prompt(scene: Scene, query: str, topic: str, *, visual_style: str = "documentary") -> str:
+    from arka.media.media_styles import styled_ai_prompt
+
+    if scene.visual_prompt.strip():
+        prompt = scene.visual_prompt.strip()
+        base = f"{prompt}, high quality, photorealistic, no text overlay"
+        return styled_ai_prompt(base, visual_style)
     parts: list[str] = []
     if query.strip():
         parts.append(query.strip())
@@ -1409,7 +1516,8 @@ def _build_ai_image_prompt(scene: Scene, query: str, topic: str) -> str:
         if hook and hook.lower() not in " ".join(parts).lower():
             parts.append(hook)
     prompt = ", ".join(parts)
-    return f"{prompt}, high quality, cinematic, photorealistic, no text overlay"
+    base = f"{prompt}, high quality, photorealistic, no text overlay"
+    return styled_ai_prompt(base, visual_style)
 
 
 def _generate_scene_ai_image(
@@ -1437,7 +1545,7 @@ def _fetch_scene_ai_image(
     segment_idx: int,
     cfg: VideoConfig,
 ) -> Path:
-    prompt = _build_ai_image_prompt(scene, query, topic)
+    prompt = _build_ai_image_prompt(scene, query, topic, visual_style=cfg.visual_style)
     out = work / f"ai-image-{scene_idx:02d}-{segment_idx:02d}.png"
     return _generate_scene_ai_image(prompt, out, cfg, scene_idx=scene_idx)
 
@@ -1515,6 +1623,7 @@ def _build_broll_slides(
         media_path = work / f"slide-{scene_idx:02d}-{out_idx:02d}.png"
         credit: dict = {
             "scene": scene.title,
+            "label": scene.label,
             "query": seg_query,
             "source": "",
             "photographer": "",
@@ -1584,34 +1693,69 @@ def _build_broll_slides(
                     }
                 )
             else:
-                photo = _fetch_scene_photo(
+                photo = _try_fetch_scene_photo(
                     seg_query,
                     used_photo_ids,
                     orientation=cfg.orientation,
                     context_terms=context_terms,
                     segment_idx=seg_idx,
+                    visual_style=cfg.visual_style,
                 )
-                if seg_idx == 0 and segment_offset == 0:
-                    scene.photo = photo
-                _render_photo_slide(
-                    scene,
-                    photo,
-                    work=work,
-                    scene_idx=scene_idx,
-                    segment_idx=out_idx,
-                    slide=media_path,
-                    cfg=cfg,
-                    body_override=seg_body if cfg.burn_text else "",
-                )
-                credit.update(
-                    {
-                        "source": photo.source,
-                        "photographer": photo.photographer,
-                        "url": photo.photographer_url,
-                        "media": "photo",
-                        "media_type": "image",
-                    }
-                )
+                if photo is None and cfg.auto_fill_gaps and _ai_image_generation_available():
+                    img_path = _fetch_scene_ai_image(
+                        scene,
+                        seg_query,
+                        topic,
+                        work=work,
+                        scene_idx=scene_idx,
+                        segment_idx=out_idx,
+                        cfg=cfg,
+                    )
+                    if seg_idx == 0 and segment_offset == 0:
+                        scene.slide_image = str(img_path)
+                    render_slide(
+                        img_path,
+                        scene,
+                        media_path,
+                        cfg,
+                        body_override=seg_body if cfg.burn_text else "",
+                    )
+                    credit.update(
+                        {
+                            "source": "ai-generated",
+                            "photographer": "",
+                            "url": "",
+                            "media": "ai-image-gap-fill",
+                            "media_type": "image",
+                        }
+                    )
+                elif photo is None:
+                    raise SystemExit(
+                        f"No stock photos for {seg_query!r} and AI gap-fill unavailable "
+                        "(set GEMINI_API_KEY or use --auto-fill with AI keys configured)"
+                    )
+                else:
+                    if seg_idx == 0 and segment_offset == 0:
+                        scene.photo = photo
+                    _render_photo_slide(
+                        scene,
+                        photo,
+                        work=work,
+                        scene_idx=scene_idx,
+                        segment_idx=out_idx,
+                        slide=media_path,
+                        cfg=cfg,
+                        body_override=seg_body if cfg.burn_text else "",
+                    )
+                    credit.update(
+                        {
+                            "source": photo.source,
+                            "photographer": photo.photographer,
+                            "url": photo.photographer_url,
+                            "media": "photo",
+                            "media_type": "image",
+                        }
+                    )
 
         credits.append(credit)
         segments.append(BrollSegment(media_path, seg_duration, media_kind))
@@ -2036,7 +2180,10 @@ def compose(
             if not _ai_image_generation_available():
                 raise SystemExit(_ai_image_setup_hint())
         elif not any_source_available():
-            raise SystemExit(stock_setup_hint("compose_video"))
+            if cfg.auto_fill_gaps and _ai_image_generation_available():
+                print("  Stock sources unavailable — using AI gap-fill for visuals", file=sys.stderr)
+            else:
+                raise SystemExit(stock_setup_hint("compose_video"))
 
     work = Path(tempfile.mkdtemp(prefix="arka-video-"))
     clips: list[Path] = []
@@ -2162,9 +2309,11 @@ def compose(
                     "scenes": [
                         {
                             "title": s.title,
+                            "label": s.label,
                             "narration": s.narration,
                             "body": s.body,
                             "captions": s.captions,
+                            "visual_prompt": s.visual_prompt,
                             "image_query": s.image_query,
                             "image_keywords": s.image_keywords,
                             "media_type": s.media_type or _heuristic_media_type(s),
@@ -2175,6 +2324,7 @@ def compose(
                         }
                         for s in scenes
                     ],
+                    "media_credits": credits,
                     "unsplash_credits": credits,
                     "output": str(output),
                     "source": "arka-compose-video",
@@ -2231,6 +2381,8 @@ def _parse_scenes_json(raw: str) -> list[Scene]:
                 chart_path=str(row.get("chart_path") or row.get("chart_png") or "").strip(),
                 slide_image=str(row.get("slide_image") or row.get("slide") or "").strip(),
                 slide_kind=str(row.get("slide_kind") or row.get("kind") or "").strip().lower(),
+                label=str(row.get("label") or row.get("beat") or row.get("story_beat") or "").strip(),
+                visual_prompt=str(row.get("visual_prompt") or row.get("image_prompt") or "").strip(),
             )
         )
     return scenes
@@ -2247,6 +2399,7 @@ def _llm_script(
     *,
     scenes: int | None = None,
     target_duration_sec: float | None = None,
+    story_mode: bool = False,
 ) -> list[Scene]:
     try:
         from arka.llm.fallback import llm_complete
@@ -2256,18 +2409,31 @@ def _llm_script(
     min_scenes, max_scenes = _scene_bounds()
     if target_duration_sec and scenes is None:
         scenes = _scenes_for_duration(target_duration_sec)
-    system = (
-        "You write YouTube tech/info video scripts. "
-        "Return ONLY a JSON array (no markdown). Each item: "
-        '{"title":"...", "narration":"spoken voiceover text", '
-        '"body":"very short on-screen headline (max 12 words)", '
-        '"captions":["short line 1","short line 2"] (2-6 lines, max 12 words each, synced on screen), '
-        '"image_keywords":["desktop monitor","laptop keyboard","home office"] (3-6 short visual phrases, 2-3 words each), '
-        '"media_type":"video|image" (video for landscapes/action/motion footage; image for charts/concepts/portraits/diagrams), '
-        '"image_query":"optional fallback 2-4 word search OR omit when using chart", '
-        '"chart":{"type":"bar|barh|pie|line|grouped_bar", "title":"...", '
-        '"data":"Label:10,Other:20 or Label:$4.7T,Other:$1.2T", "ylabel":"...", "source":"..."}}'
-    )
+    if story_mode:
+        system = (
+            "You write labeled story videos with cinematic visuals. "
+            "Return ONLY a JSON array (no markdown). Each item: "
+            '{"title":"...", "label":"intro|hook|context|conflict|turning_point|climax|resolution|call_to_action|outro", '
+            '"narration":"spoken voiceover", '
+            '"body":"short on-screen headline (max 12 words)", '
+            '"captions":["line 1","line 2"] (2-6 lines, max 12 words each), '
+            '"visual_prompt":"detailed AI image prompt for this beat — cinematic, specific, no text in image", '
+            '"image_keywords":["phrase 1","phrase 2"] (3-6 stock-search fallbacks), '
+            '"media_type":"video|image"}'
+        )
+    else:
+        system = (
+            "You write YouTube tech/info video scripts. "
+            "Return ONLY a JSON array (no markdown). Each item: "
+            '{"title":"...", "narration":"spoken voiceover text", '
+            '"body":"very short on-screen headline (max 12 words)", '
+            '"captions":["short line 1","short line 2"] (2-6 lines, max 12 words each, synced on screen), '
+            '"image_keywords":["desktop monitor","laptop keyboard","home office"] (3-6 short visual phrases, 2-3 words each), '
+            '"media_type":"video|image" (video for landscapes/action/motion footage; image for charts/concepts/portraits/diagrams), '
+            '"image_query":"optional fallback 2-4 word search OR omit when using chart", '
+            '"chart":{"type":"bar|barh|pie|line|grouped_bar", "title":"...", '
+            '"data":"Label:10,Other:20 or Label:$4.7T,Other:$1.2T", "ylabel":"...", "source":"..."}}'
+        )
     if scenes is not None:
         scene_hint = f"Scenes: exactly {scenes}"
     else:
@@ -2277,12 +2443,20 @@ def _llm_script(
         )
     user = (
         f"Topic: {topic_label(topic)}\n{scene_hint}\n"
-        "Style: clear tech explainer for YouTube. "
-        "Provide captions as 2-6 short on-screen lines per scene (max 12 words each). "
-        "Provide image_keywords as 3-6 short visual search phrases (2-3 words each, e.g. desktop tower, laptop desk). "
-        "Set media_type per scene: video when motion footage fits (landscapes, action, travel); "
-        "image for charts, concepts, portraits, diagrams, or abstract ideas. "
-        "Narration can be longer; captions are what viewers read while listening."
+        + (
+            "Style: narrative story arc with emotional beats. "
+            "Every scene needs a distinct label and a rich visual_prompt for AI image generation. "
+            "Write like a short film or documentary storyteller — hook, rising action, payoff. "
+            "image_keywords are fallbacks when stock search is needed."
+            if story_mode
+            else
+            "Style: clear tech explainer for YouTube. "
+            "Provide captions as 2-6 short on-screen lines per scene (max 12 words each). "
+            "Provide image_keywords as 3-6 short visual search phrases (2-3 words each, e.g. desktop tower, laptop desk). "
+            "Set media_type per scene: video when motion footage fits (landscapes, action, travel); "
+            "image for charts, concepts, portraits, diagrams, or abstract ideas. "
+            "Narration can be longer; captions are what viewers read while listening."
+        )
     )
     if target_duration_sec:
         minutes = target_duration_sec / 60
@@ -2551,6 +2725,41 @@ def nl_to_argv(text: str) -> list[str]:
         argv.append("--no-text")
     if re.search(r"(?i)\b(video\s+b[- ]?roll|stock\s+video|video\s+clips?)\b", t):
         argv.append("--video-broll")
+    if re.search(
+        r"(?i)\b(story\s+video|labeled\s+story|tell\s+(?:a\s+)?story|storytelling\s+video|"
+        r"narrative\s+video|compose\s+story|story\s+about)\b",
+        t,
+    ):
+        argv.extend(["--story", "--llm"])
+    t_style, style = extract_style_from_text(t)
+    if style:
+        argv.extend(["--style", style])
+    return argv
+
+
+def _is_compose_story_request(text: str) -> bool:
+    return bool(nl_to_story_argv(text))
+
+
+def nl_to_story_argv(text: str) -> list[str]:
+    """Natural language → compose_story / compose --story args."""
+    t = text.strip()
+    if not t:
+        return []
+    if not re.search(
+        r"(?i)\b(story|storytelling|narrative|tell\s+(?:me\s+)?(?:a\s+)?story|labeled\s+video)\b",
+        t,
+    ):
+        return []
+    topic = normalize_topic(t)
+    if not topic:
+        return []
+    argv = ["compose", "--story", "--llm", "--topic", topic]
+    duration = parse_duration_seconds(t)
+    if duration:
+        argv.extend(["--duration", format_duration_arg(duration)])
+    if re.search(r"(?i)\b(portrait|vertical|shorts?|reels?|9:16)\b", t):
+        os.environ.setdefault("VIDEO_ORIENTATION", "portrait")
     return argv
 
 
@@ -2614,7 +2823,33 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Generate scene images with AI (Gemini/Pollinations) instead of stock photos",
     )
+    p_compose.add_argument(
+        "--story",
+        action="store_true",
+        help="Story mode: LLM script with labeled beats, on-screen labels, AI gap-fill",
+    )
+    p_compose.add_argument(
+        "--labeled",
+        action="store_true",
+        help="Show story-beat labels on each scene (intro, conflict, climax, …)",
+    )
+    p_compose.add_argument(
+        "--auto-fill",
+        dest="auto_fill",
+        action="store_true",
+        help="Generate AI images when stock photos/videos miss a segment",
+    )
+    p_compose.add_argument(
+        "--style",
+        choices=sorted(list_video_styles()),
+        default=None,
+        help="Visual style preset (colors, pacing, stock/AI look)",
+    )
     p_compose.set_defaults(func=cmd_compose)
+
+    p_styles = sub.add_parser("styles", aliases=["list-styles"], help="List video style presets")
+    p_styles.add_argument("--json", action="store_true")
+    p_styles.set_defaults(func=cmd_list_styles)
 
     p_parse = sub.add_parser("parse", help="Parse natural language → compose args")
     p_parse.add_argument("text", nargs="+")
@@ -2624,6 +2859,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_check.set_defaults(func=cmd_check)
 
     return p
+
+
+def cmd_list_styles(args: argparse.Namespace) -> int:
+    from arka.media.media_styles import VIDEO_STYLES
+
+    if args.json:
+        print(json.dumps({name: VIDEO_STYLES[name].label for name in list_video_styles()}, indent=2))
+    else:
+        print(format_style_catalog(kind="video"))
+    return 0
 
 
 def cmd_check(_args: argparse.Namespace) -> int:
@@ -2710,6 +2955,11 @@ def cmd_compose(args: argparse.Namespace) -> int:
     if not scenes and topic:
         mode = _script_mode(args)
         provider = (getattr(args, "script_provider", "") or "auto").lower()
+        story_mode = bool(getattr(args, "story", False))
+        if story_mode and not args.script:
+            mode = "llm"
+            provider = "llm"
+            args.llm = True
         if provider == "builtin":
             scenes = _template_script(topic)
         elif provider == "custom":
@@ -2727,6 +2977,7 @@ def cmd_compose(args: argparse.Namespace) -> int:
                 print(f"  Custom script API failed ({exc}); using template.", file=sys.stderr)
                 scenes = _template_script(topic)
         elif mode == "llm" or provider == "llm":
+            story_mode = bool(getattr(args, "story", False))
             if args.scenes is not None:
                 print(f"Writing script with LLM ({args.scenes} scenes) …", file=sys.stderr)
             elif target_duration_sec:
@@ -2737,12 +2988,14 @@ def cmd_compose(args: argparse.Namespace) -> int:
                     file=sys.stderr,
                 )
             else:
-                print("Writing script with LLM (auto scene count) …", file=sys.stderr)
+                kind = "story" if story_mode else "script"
+                print(f"Writing {kind} with LLM (auto scene count) …", file=sys.stderr)
             try:
                 scenes = _llm_script(
                     topic,
                     scenes=args.scenes,
                     target_duration_sec=target_duration_sec,
+                    story_mode=story_mode,
                 )
                 if _script_needs_shortening(scenes):
                     print(
@@ -2783,23 +3036,33 @@ def cmd_compose(args: argparse.Namespace) -> int:
     video_mode = _resolve_video_mode(getattr(args, "mode", None))
     if getattr(args, "video_broll", False):
         video_mode = "video"
+    story_mode = bool(getattr(args, "story", False))
+    show_labels = bool(getattr(args, "labeled", False)) or story_mode
+    auto_fill = bool(getattr(args, "auto_fill", False)) or story_mode
     burn_text: bool | None = None
     if getattr(args, "text", False):
         burn_text = True
     elif getattr(args, "no_text", False):
         burn_text = False
+    elif story_mode:
+        burn_text = True
     elif video_mode == "photos":
         burn_text = True
     cfg = load_config(
         video_mode=video_mode,
         burn_text=burn_text,
         use_only_ai_generated_images=getattr(args, "use_only_ai_generated_images", False),
+        show_labels=show_labels,
+        auto_fill_gaps=auto_fill,
+        style=getattr(args, "style", None),
     )
 
     label = topic_label(topic)
     print(f"Topic: {label}", file=sys.stderr)
     print(
-        f"Mode: {cfg.video_mode} | on-screen text: {'on' if cfg.burn_text else 'off'} | "
+        f"Mode: {cfg.video_mode} | style: {cfg.visual_style} | on-screen text: {'on' if cfg.burn_text else 'off'} | "
+        f"labels: {'on' if cfg.show_labels else 'off'} | "
+        f"AI gap-fill: {'on' if cfg.auto_fill_gaps else 'off'} | "
         f"AI images only: {'on' if cfg.use_only_ai_generated_images else 'off'}",
         file=sys.stderr,
     )
@@ -2828,7 +3091,7 @@ def main(argv: list[str] | None = None) -> int:
     if not argv:
         build_parser().print_help()
         return 0
-    if argv[0] not in {"compose", "parse", "check", "-h", "--help"}:
+    if argv[0] not in {"compose", "parse", "check", "styles", "list-styles", "-h", "--help"}:
         nl = nl_to_argv(" ".join(argv))
         if nl:
             argv = nl

@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import json
 import os
 import unittest
 from unittest import mock
 
+import pytest
+
 from arka.integrations import docker_status as ds
+from arka.integrations.mcp_server import _handle_arka_docker
 from arka.router import route
 
 
@@ -45,6 +49,61 @@ class DockerStatusTests(unittest.TestCase):
         self.assertIsNotNone(result)
         assert result is not None
         self.assertEqual(result.skill.split()[0], "docker_status")
+
+    def test_cmd_health_running_daemon(self) -> None:
+        with mock.patch.object(
+            ds,
+            "health_payload",
+            return_value={
+                "docker_cli": True,
+                "daemon_running": True,
+                "running_containers": 3,
+                "detail": "",
+            },
+        ):
+            with mock.patch("sys.stdout", new_callable=mock.MagicMock) as stdout:
+                code = ds.cmd_health(argparse_namespace())
+        self.assertEqual(code, 0)
+        output = "".join(call.args[0] for call in stdout.write.call_args_list)
+        self.assertIn("docker_cli=ok", output)
+        self.assertIn("daemon=running", output)
+        self.assertIn("running_containers=3", output)
+
+    def test_mcp_docker_health_matches_payload(self) -> None:
+        sample = {
+            "docker_cli": True,
+            "daemon_running": False,
+            "running_containers": 0,
+            "detail": "stopped",
+        }
+        with mock.patch.object(ds, "health_payload", return_value=sample):
+            raw = _handle_arka_docker({"action": "health"})
+        self.assertEqual(json.loads(raw), sample)
+
+    def test_mcp_docker_invalid_action(self) -> None:
+        with self.assertRaises(ValueError):
+            _handle_arka_docker({"action": "restart"})
+
+
+@pytest.mark.docker
+@pytest.mark.docker_linux
+def test_docker_status_health_in_linux_container(linux_cli_image: str) -> None:
+    from tests import docker_harness as dh
+
+    result = dh.run_linux_container(
+        ["python", "-m", "arka.integrations.docker_status", "ps"],
+        image=linux_cli_image,
+        env={
+            "ARKA_AUTO_REFETCH": "0",
+            "CONFIG_DIR": "/tmp/arka-docker-config",
+            "CACHE_DIR": "/tmp/arka-docker-cache",
+        },
+        mount_docker_sock=True,
+    )
+    if result.returncode == 0:
+        assert "Running containers:" in result.stdout or "No running containers." in result.stdout
+    else:
+        assert "Docker daemon is not running" in result.stderr or "Docker CLI not found" in result.stderr
 
 
 def argparse_namespace():

@@ -12,6 +12,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from arka.core.screenshot_paths import resolve_screenshot_output, screenshot_path
+
 DEFAULT_SELECTORS = (
     "[data-testid]",
     "[data-component]",
@@ -89,16 +91,16 @@ def _element_name(item: Any, selector: str, index: int) -> str:
 
 def _unique_filename(base: str, used: set[str]) -> str:
     stem = slugify(base) or "component"
-    candidate = f"component-{stem}.png"
+    candidate = f"component-{stem}"
     if candidate not in used:
         used.add(candidate)
         return candidate
     index = 2
     while True:
-        candidate = f"component-{stem}-{index}.png"
-        if candidate not in used:
-            used.add(candidate)
-            return candidate
+        alt = f"component-{stem}-{index}"
+        if alt not in used:
+            used.add(alt)
+            return alt
         index += 1
 
 
@@ -205,7 +207,7 @@ def capture(
             page.wait_for_timeout(int(settle * 1000))
 
             root = _storybook_root(page) if use_storybook else page
-            full_page_path = target / "full-page.png"
+            full_page_path = screenshot_path("full-page", target)
             if use_storybook:
                 try:
                     root.locator("body").screenshot(path=str(full_page_path))
@@ -225,7 +227,7 @@ def capture(
                 try:
                     item.scroll_into_view_if_needed(timeout=5_000)
                     page.wait_for_timeout(150)
-                    out_path = target / component["file"]
+                    out_path = screenshot_path(component["file"], target)
                     item.screenshot(path=str(out_path))
                     captured.append({**component, "path": str(out_path), "status": "ok"})
                 except Exception as exc:

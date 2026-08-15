@@ -553,7 +553,12 @@ def nl_to_argv(text: str) -> list[str] | None:
 
     if re.search(r"(?i)\b(?:service\s+autostart|autostart\s+service)\s+list\b", raw):
         return ["list"]
+    if re.search(r"(?i)\b(?:list|show)\b.*\b(?:autostart|login)\s+services?\b", raw):
+        return ["list"]
     if re.search(r"(?i)\b(?:service\s+autostart|autostart\s+service)\s+status\b", raw):
+        m = re.search(r"(?i)\bstatus\s+([a-z][a-z0-9_-]+)\b", raw)
+        return ["status", m.group(1)] if m else ["status"]
+    if re.search(r"(?i)\b(?:autostart|login)\s+service\s+status\b", raw):
         m = re.search(r"(?i)\bstatus\s+([a-z][a-z0-9_-]+)\b", raw)
         return ["status", m.group(1)] if m else ["status"]
 

@@ -16,6 +16,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from arka.core.screenshot_paths import screenshot_path
+
 DEFAULT_FLOW_URL = "https://labs.google/fx/tools/flow"
 DEFAULT_GEMINI_MODEL = "veo-3.1-generate-preview"
 ALLOWED_ASPECTS = {"16:9", "9:16", "1:1"}
@@ -34,6 +36,16 @@ _GENERATE_SELECTORS = (
     'button:has-text("Create")',
     '[aria-label*="Generate" i]',
     '[data-testid*="generate" i]',
+)
+_FLOW_ENTRY_SELECTORS = (
+    'button:has-text("Create with Google Flow")',
+    'a:has-text("Create with Google Flow")',
+    'button:has-text("Get started")',
+    'a:has-text("Get started")',
+    'button:has-text("Try Flow")',
+    'a:has-text("Try Flow")',
+    '[aria-label*="Create with Google Flow" i]',
+    '[href*="/tools/flow/"]',
 )
 
 
@@ -121,6 +133,67 @@ def generate_gemini(
     return _generate_gemini(prompt, output, aspect, model, duration)
 
 
+def _has_prompt_field(page: Any) -> bool:
+    for selector in _PROMPT_SELECTORS:
+        try:
+            if page.locator(selector).count() > 0:
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def _is_sign_in_page(page: Any) -> bool:
+    try:
+        url = (page.url or "").lower()
+        if "accounts.google.com" in url or "signin" in url:
+            return True
+        if page.locator('input[type="email"]').count() > 0:
+            return True
+        if page.get_by_text("Sign in", exact=False).count() > 0 and page.get_by_text(
+            "AI Test Kitchen", exact=False
+        ).count() > 0:
+            return True
+    except Exception:
+        return False
+    return False
+
+
+def _wait_for_flow_editor(page: Any, *, timeout: int) -> bool:
+    """Wait for sign-in + editor load; return True when prompt field appears."""
+    deadline = time.time() + timeout
+    prompted = False
+    while time.time() < deadline:
+        if _has_prompt_field(page):
+            return True
+        if _is_sign_in_page(page) and not prompted:
+            print(
+                "  Google sign-in required — complete login in the Chromium window "
+                f"(up to {timeout}s) …",
+                file=sys.stderr,
+            )
+            prompted = True
+        elif not _is_sign_in_page(page):
+            _try_open_flow_editor(page)
+        page.wait_for_timeout(3000)
+    return False
+
+
+def _try_open_flow_editor(page: Any) -> bool:
+    """Leave the marketing landing page and open the Flow editor when possible."""
+    for selector in _FLOW_ENTRY_SELECTORS:
+        locator = page.locator(selector)
+        if locator.count() == 0:
+            continue
+        try:
+            locator.first.click(timeout=8000)
+            page.wait_for_timeout(2500)
+            return True
+        except Exception:
+            continue
+    return False
+
+
 def _try_fill_prompt(page: Any, prompt: str) -> bool:
     for selector in _PROMPT_SELECTORS:
         locator = page.locator(selector)
@@ -190,35 +263,43 @@ def generate_browser(
 
     artifacts_dir.mkdir(parents=True, exist_ok=True)
     url = _flow_url()
+    profile = user_data_dir or str(Path.home() / ".arka" / "google-flow-profile")
+    Path(profile).mkdir(parents=True, exist_ok=True)
     print(f"  Google Flow browser — opening {url}", file=sys.stderr)
+    print(f"  Profile: {profile} (sign in once if prompted)", file=sys.stderr)
 
     with sync_playwright() as playwright:
-        browser = None
-        if user_data_dir:
-            context = playwright.chromium.launch_persistent_context(
-                user_data_dir,
-                headless=headless,
-                accept_downloads=True,
-            )
-            page = context.new_page()
-        else:
-            browser = playwright.chromium.launch(headless=headless)
-            context = browser.new_context(accept_downloads=True)
-            page = context.new_page()
+        context = playwright.chromium.launch_persistent_context(
+            profile,
+            headless=headless,
+            accept_downloads=True,
+        )
+        page = context.new_page()
 
         try:
             page.goto(url, wait_until="domcontentloaded", timeout=60_000)
             page.wait_for_timeout(int(float(os.environ.get("ARKA_BROWSER_SETTLE_SECONDS", "3")) * 1000))
 
+            _try_open_flow_editor(page)
+            wait_budget = timeout if not headless else min(timeout, 120)
+            if not _wait_for_flow_editor(page, timeout=wait_budget):
+                shot = screenshot_path("prompt-field-missing", artifacts_dir)
+                page.screenshot(path=str(shot), full_page=True)
+                raise RuntimeError(
+                    f"Could not reach Flow editor — sign in at {url} "
+                    f"(screenshot: {shot}). Profile: {profile}"
+                )
+
             if not _try_fill_prompt(page, prompt):
-                shot = artifacts_dir / "prompt-field-missing.png"
+                shot = screenshot_path("prompt-field-missing", artifacts_dir)
                 page.screenshot(path=str(shot), full_page=True)
                 raise RuntimeError(
                     f"Could not find Flow prompt field — sign in at {url} "
-                    f"(screenshot: {shot}). Set GOOGLE_FLOW_USER_DATA_DIR for a saved session."
+                    f"(screenshot: {shot}). Profile: {profile}"
                 )
 
-            page.screenshot(path=str(artifacts_dir / "prompt-filled.png"), full_page=True)
+            filled = screenshot_path("prompt-filled", artifacts_dir)
+            page.screenshot(path=str(filled), full_page=True)
             clicked = _try_click_generate(page)
             if clicked:
                 print("  Clicked Generate — waiting for video …", file=sys.stderr)
@@ -230,7 +311,7 @@ def generate_browser(
                 print(f"  Downloading video from Flow …", file=sys.stderr)
                 return _download_url(video_url, output, timeout=min(timeout, 600))
 
-            shot = artifacts_dir / "awaiting-download.png"
+            shot = screenshot_path("awaiting-download", artifacts_dir)
             page.screenshot(path=str(shot), full_page=True)
             if not headless:
                 print(
@@ -248,8 +329,6 @@ def generate_browser(
             )
         finally:
             context.close()
-            if browser is not None:
-                browser.close()
 
 
 def open_flow(*, prompt: str = "") -> dict[str, str]:

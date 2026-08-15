@@ -19,6 +19,61 @@ defaults to `~/Pictures/arka-generated/` (override with `IMAGE_OUTPUT_DIR`).
 | Two button | `two-button` | Dilemma with two red buttons |
 | Vibe coding preset | `vibe-coding` | Built-in architecture comparison |
 
+## Stock photos (real images)
+
+By default, meme panels try to fetch **relevant stock photos** (Unsplash, Pexels,
+Pixabay, Openverse, web) when you do not pass `--left` / `--right` / `--image`
+paths. Labels are overlaid on top of the photo. If lookup fails, Arka falls back
+to the text-only panels.
+
+```bash
+# Uses stock photos automatically (you have UNSPLASH_ACCESS_KEY or openverse/web)
+arka meme vibe-coding
+
+# Force text-only panels (previous behavior)
+arka meme vibe-coding --no-stock-images
+
+# Custom stock search queries for comparison panels
+arka meme comparison \
+  --left-title "MONOLITH" --right-title "MICROSERVICES" \
+  --left-label "One deploy\nOne repo" \
+  --right-label "Many services\nMany repos" \
+  --left-query "legacy server room" \
+  --right-query "cloud architecture diagram office"
+```
+
+Set `MEME_USE_STOCK_PHOTOS=0` in `.env` to disable stock lookup globally.
+
+## Visual styles
+
+Meme and video generation share style presets in `arka/media/media_styles.py`.
+
+```bash
+# List meme styles
+arka meme styles
+
+# Neon vibe-coding meme with stock photos
+arka meme vibe-coding --style neon
+
+# NL
+arka make a retro drake meme reject "skip tests" accept "write tests"
+
+# List video styles
+arka compose_video styles
+
+# Cinematic explainer video
+arka compose_video compose --topic "quantum computing" --llm --style cinematic
+
+# AI video (Veo / Pollinations)
+arka ai_video "drone over mountains" --style cinematic -d 6
+```
+
+| Meme styles | Video styles |
+|-------------|--------------|
+| classic, dark, neon, retro, corporate, comic, cinematic, minimal, vaporwave, newspaper | documentary, cinematic, tech, minimal, neon, retro, news, social, corporate, nature |
+
+Defaults: `MEME_STYLE=classic`, `VIDEO_STYLE=documentary`.
+
 ## Examples
 
 Text-only comparison (no image assets needed):

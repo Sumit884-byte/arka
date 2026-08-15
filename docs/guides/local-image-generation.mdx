@@ -17,6 +17,15 @@ Arka sends the prompt and generation settings to the local server only; no
 cloud API key is required. If the endpoint is unavailable, the error includes
 the exact local setup hint rather than silently falling back to the cloud.
 
+Natural language routes to this path (not cloud `generate_image`) when you say
+**local**, **offline**, or **stable diffusion**:
+
+```fish
+arka "generate image locally of a moonlit observatory"
+arka route "create picture with stable diffusion of a robot"
+# → image generate …
+```
+
 For an automatic start/stop lifecycle, configure the command used to launch
 your local server:
 

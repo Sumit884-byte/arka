@@ -1,0 +1,24 @@
+{
+  "name": "finetune_model",
+  "description": "Plan, validate, and scaffold local LLM fine-tuning jobs (LoRA/QLoRA/full) with dry-run config generation",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "finetune model",
+    "fine tune model",
+    "fine-tune model",
+    "train model",
+    "lora training",
+    "qlora training",
+    "fine tune llm",
+    "finetune llm",
+    "generate training config",
+    "validate fine tune dataset"
+  ],
+  "permissions": ["read", "write", "shell"],
+  "requires": {
+    "note": "Planning and validation only; training runs via external runners (MLX-LM, Unsloth, Axolotl, HF TRL)."
+  }
+}

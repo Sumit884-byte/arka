@@ -1,0 +1,26 @@
+{
+  "name": "safety_advice",
+  "description": "Curated, inclusive safety guidance for domestic violence, sexual harassment, stalking, and abuse — gender-neutral playbooks and vetted hotlines, not improvised LLM legal advice",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "safety advice",
+    "domestic violence",
+    "domestic abuse",
+    "sexual harassment",
+    "workplace harassment",
+    "family violence",
+    "partner abuse",
+    "caregiver abuse",
+    "roommate abuse",
+    "abuse at home",
+    "stalking help",
+    "harassment help"
+  ],
+  "permissions": ["read"],
+  "requires": {
+    "env_optional": ["ARKA_SAFETY_REGION", "ARKA_REGION"]
+  }
+}

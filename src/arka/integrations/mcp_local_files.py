@@ -25,9 +25,13 @@ VERIFY_AFTER_FIX_NOTICE = (
 
 MCP_AGENT_EXECUTION_RULES: tuple[dict[str, str], ...] = (
     {
-        "id": "verify_after_fix",
-        "summary": "Verify every fix; iterate until verification passes before marking done.",
-        "rule": VERIFY_AFTER_FIX_NOTICE,
+        "id": "edit_guard_before_patch",
+        "summary": "Call arka_edit_guard before arka_apply_patch on sensitive or unknown paths.",
+        "rule": (
+            "Before editing files via arka_apply_patch, call arka_edit_guard with action=check "
+            "for the target path or diff. Protected paths include .env, secrets/, node_modules/, "
+            "bundled/, and custom BLOCKED_EDIT_PATHS patterns."
+        ),
     },
     {
         "id": "incremental_verify",
@@ -62,6 +66,7 @@ MCP_LOCAL_FILE_TOOLS = frozenset(
         "arka_repo_context",
         "arka_pr_check",
         "arka_code_search",
+        "arka_read_file",
         "arka_apply_patch",
         "arka_qa",
         "arka_disk",

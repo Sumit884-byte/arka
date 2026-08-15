@@ -128,8 +128,8 @@ class _FakePlaywrightManager:
 def test_slugify_and_unique_filename():
     assert slugify("Hero Button!") == "hero-button"
     used: set[str] = set()
-    assert _unique_filename("hero", used) == "component-hero.png"
-    assert _unique_filename("hero", used) == "component-hero-2.png"
+    assert _unique_filename("hero", used) == "component-hero"
+    assert _unique_filename("hero", used) == "component-hero-2"
 
 
 def test_boxes_overlap():
@@ -207,5 +207,5 @@ def test_main_prints_paths(monkeypatch, tmp_path, capsys):
     code = main(["http://localhost:3000", "--output", str(tmp_path), "--settle", "0"])
     out = capsys.readouterr().out
     assert code == 0
-    assert "full-page.png" in out
+    assert "full-page-" in out
     assert "manifest.json" in out

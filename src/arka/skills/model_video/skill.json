@@ -1,0 +1,25 @@
+{
+  "name": "model_video",
+  "description": "Create turntable or animated character videos from 3D models (.obj, .glb, .fbx) using Blender, or slideshow from preview frames. Rigged FBX run cycles: mixamo.com → character + animation → Download FBX → model_video animate",
+  "version": "1.1.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "3d model video",
+    "turntable video",
+    "video from 3d model",
+    "create 3d model video",
+    "model turntable",
+    "spinning 3d model",
+    "animated 3d character",
+    "fbx run cycle video",
+    "rigged character animation video",
+    "character animation video"
+  ],
+  "permissions": ["read", "write", "shell"],
+  "requires": {
+    "bins": ["ffmpeg"],
+    "env_optional": ["MODEL_VIDEO_BACKEND", "MODEL_VIDEO_FRAMES", "MODEL_VIDEO_FPS", "MODEL_VIDEO_OUTPUT_DIR"]
+  }
+}

@@ -108,6 +108,47 @@ def route_meme(cmd: str) -> str | None:
     return "meme " + " ".join(shlex.quote(a) for a in argv)
 
 
+def route_infographic(cmd: str) -> str | None:
+    try:
+        from arka.agent.infographic import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "infographic create " + " ".join(shlex.quote(a) for a in argv)
+
+
+def route_reposition_image(cmd: str) -> str | None:
+    try:
+        from arka.agent.reposition_image import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "reposition_image " + " ".join(shlex.quote(a) for a in argv)
+
+
+def route_filter_images(cmd: str) -> str | None:
+    try:
+        from arka.agent.filter_images import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "filter_images " + " ".join(shlex.quote(a) for a in argv)
+
+
+def route_tech_stack(cmd: str) -> str | None:
+    try:
+        from arka.agent.tech_stack import route_command
+    except ImportError:
+        return None
+    return route_command(cmd.strip()) or None
+
+
 def route_symbolic_image(cmd: str) -> str | None:
     if re.search(r"(?i)\bmeme\b", cmd):
         return None
@@ -239,6 +280,14 @@ def route_prompt_optimize(cmd: str) -> str | None:
     m = re.search(r"(?i)\b(?:optimize|improve|rewrite)\s+(?:this\s+)?prompt\s*[:\-]?\s*(.+)$", cmd.strip())
     return "prompt_optimize " + m.group(1) if m else None
 
+
+def route_prompt_coach(cmd: str) -> str | None:
+    try:
+        from arka.routing.prompt_coach import route_command
+    except ImportError:
+        return None
+    return route_command(cmd)
+
 def route_deploy(cmd: str) -> str | None:
     if re.search(r"(?i)\bdeploy\s+(?:this\s+)?(?:app|site|project|backend|api)\s+(?:to|on)\s+(?:vercel|netlify|railway|render)\b", cmd):
         platform = re.search(r"(?i)\b(vercel|netlify|railway|render)\b", cmd).group(1).lower()
@@ -301,6 +350,27 @@ def route_app_automation(cmd: str) -> str | None:
         return None
     urls = re.findall(r"https?://[^\s]+", cmd)
     return "automate " + (urls[0] if urls else "http://127.0.0.1:3000")
+
+
+def route_verify_web_interaction(cmd: str) -> str | None:
+    if not re.search(
+        r"(?i)\b(?:verify|check|test)\b.*\b(?:website|web|site|ui|interaction|component)\b",
+        cmd,
+    ):
+        return None
+    if re.search(r"(?i)\b(?:browser|rendered|frontend)\b", cmd) and not re.search(
+        r"(?i)\b(?:interaction|component|code|spec)\b", cmd
+    ):
+        return None
+    try:
+        from arka.agent.verify_web_interaction import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd)
+    if not argv or argv[0] != "check":
+        urls = re.findall(r"https?://[^\s]+", cmd)
+        argv = ["check", urls[0] if urls else "http://127.0.0.1:3000"]
+    return "verify_web_interaction " + " ".join(shlex.quote(a) for a in argv)
 
 
 def route_design_from_screenshot(cmd: str) -> str | None:
@@ -617,6 +687,17 @@ def route_dub_video(cmd: str) -> str | None:
     return "dub_video " + " ".join(shlex.quote(a) for a in argv)
 
 
+def route_fetch_lyrics(cmd: str) -> str | None:
+    try:
+        from arka.media.fetch_lyrics import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "fetch_lyrics " + " ".join(shlex.quote(a) for a in argv)
+
+
 def route_compose_slides(cmd: str) -> str | None:
     try:
         from arka.media.compose_slides import nl_to_argv
@@ -626,6 +707,17 @@ def route_compose_slides(cmd: str) -> str | None:
     if not argv:
         return None
     return "compose_slides " + " ".join(shlex.quote(a) for a in argv)
+
+
+def route_compose_story(cmd: str) -> str | None:
+    try:
+        from arka.media.compose_story import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "compose_story " + " ".join(shlex.quote(a) for a in argv)
 
 
 def route_compose_video(cmd: str) -> str | None:
@@ -708,6 +800,8 @@ def route_compose_3d(cmd: str) -> str | None:
 def route_model_to_image(cmd: str) -> str | None:
     if not re.search(r"(?i)\b(?:render|turn|convert|generate)\b.*\b(?:3d|model|mesh)\b.*\b(?:image|png|picture|render)\b", cmd):
         return None
+    if re.search(r"(?i)\b(?:video|animation|turntable|movie|clip)\b", cmd):
+        return None
     path = re.search(r"(?:~|/|\./|\.\./)?[^\s]+\.(?:obj|stl|glb|gltf)\b", cmd, re.I)
     if not path:
         return None
@@ -715,6 +809,17 @@ def route_model_to_image(cmd: str) -> str | None:
     route = f"model_to_image {shlex.quote(source)} --output {shlex.quote(Path(source).stem + '-render.png')}"
     task = re.search(r"(?i)\b(?:for|to show|from)\s+(.+)$", cmd)
     return route + (f" --task {shlex.quote(task.group(1))}" if task else "")
+
+
+def route_model_video(cmd: str) -> str | None:
+    try:
+        from arka.media.model_video import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "model_video " + " ".join(shlex.quote(a) for a in argv)
 
 
 def route_three_d(cmd: str) -> str | None:
@@ -846,6 +951,13 @@ def route_council(cmd: str) -> str | None:
 
 def route_generate_image(cmd: str) -> str | None:
     try:
+        from arka.agent.local_image_gen import wants_local_image
+
+        if wants_local_image(cmd):
+            return None
+    except ImportError:
+        pass
+    try:
         from arka.generate.image import nl_to_argv
     except ImportError:
         return None
@@ -855,7 +967,33 @@ def route_generate_image(cmd: str) -> str | None:
     return "generate_image " + " ".join(shlex.quote(a) for a in argv)
 
 
+def route_local_image_gen(cmd: str) -> str | None:
+    try:
+        from arka.agent.local_image_gen import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd.strip())
+    return route or None
+
+
+def route_local_music_gen(cmd: str) -> str | None:
+    try:
+        from arka.agent.local_music_gen import route_command
+
+        route = route_command(cmd.strip())
+    except ImportError:
+        return None
+    return route or None
+
+
 def route_generate_music(cmd: str) -> str | None:
+    try:
+        from arka.agent.local_music_gen import wants_local_music
+
+        if wants_local_music(cmd):
+            return None
+    except ImportError:
+        pass
     try:
         from arka.media.music_generate import nl_to_argv
     except ImportError:
@@ -1218,6 +1356,15 @@ def route_md_doc(cmd: str) -> str | None:
     return route or None
 
 
+def route_read_file(cmd: str) -> str | None:
+    try:
+        from arka.agent.read_file import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
+
+
 def route_view_data(cmd: str) -> str | None:
     try:
         from arka.agent.view_data import route_command
@@ -1279,6 +1426,11 @@ def route_markdown_style(cmd: str) -> str | None:
         return None
     route = route_command(cmd)
     return route or None
+
+
+def route_write_readme(cmd: str) -> str | None:
+    """Route README/changelog write requests to human_docs with disk apply."""
+    return route_human_docs(cmd)
 
 
 def route_project_docs(cmd: str) -> str | None:
@@ -1498,6 +1650,17 @@ def route_model_optimizer(cmd: str) -> str | None:
     match = re.search(r"(?i)\b(?:switch|use)\s+(?:to\s+)?model\s+([\w./:-]+)", cmd)
     return f"model-optimizer switch {match.group(1)}" if match else None
 
+def route_finetune_model(cmd: str) -> str | None:
+    try:
+        from arka.llm.finetune_model import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "finetune_model " + " ".join(shlex.quote(a) for a in argv)
+
+
 def route_train_plan(cmd: str) -> str | None:
     if re.search(r"(?i)\b(?:train|fine[- ]?tune|qlora|lora)\b.*\b(?:model|llm|dataset)\b", cmd):
         return "train-plan plan " + cmd
@@ -1647,6 +1810,14 @@ def route_interesting_fact(cmd: str) -> str | None:
     return None
 
 
+def route_safety_advice(cmd: str) -> str | None:
+    try:
+        from arka.routing.safety_advice import route_command
+    except ImportError:
+        return None
+    return route_command(cmd)
+
+
 def route_nudge(cmd: str) -> str | None:
     try:
         from arka.routing.nudge import route_command
@@ -1734,6 +1905,31 @@ def route_agent_hub(cmd: str) -> str | None:
     return "agent_hub " + " ".join(shlex.quote(a) for a in argv)
 
 
+def route_cli_connector(cmd: str) -> str | None:
+    try:
+        from arka.integrations.cli_connector import route_command
+    except ImportError:
+        try:
+            from arka.integrations.cli_connector import nl_to_argv
+        except ImportError:
+            return None
+        argv = nl_to_argv(cmd.strip())
+        if not argv:
+            return None
+        return "connector " + " ".join(shlex.quote(a) for a in argv)
+    route = route_command(cmd)
+    return route or None
+
+
+def route_edit_guard(cmd: str) -> str | None:
+    try:
+        from arka.core.edit_guard import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
+
+
 def route_sandbox(cmd: str) -> str | None:
     clean = re.sub(r"\s+", " ", cmd.strip().lower())
     if not clean:
@@ -1810,6 +2006,19 @@ def route_game_studio(cmd: str) -> str | None:
         return None
     title = re.sub(r"(?i)\b(?:arka\s+)?(?:create|build|make|scaffold|generate)\b", "", cmd).strip() or "Neon Core"
     return "game create " + title
+
+
+def route_play_website_game(cmd: str) -> str | None:
+    try:
+        from arka.agent.play_website_game import nl_to_argv
+    except ImportError:
+        return None
+    if re.search(r"(?i)\b(?:check|test|verify|record|capture|qa)\b.*\bgame\b", cmd):
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "play_website_game " + " ".join(shlex.quote(a) for a in argv)
 
 
 def route_game_control(cmd: str) -> str | None:
@@ -2087,6 +2296,14 @@ def route_move_file(cmd: str) -> str | None:
     return "move_file " + shlex.quote(candidates[-2]) + " " + shlex.quote(candidates[-1]) + suffix
 
 
+def route_to_folder(cmd: str) -> str | None:
+    try:
+        from arka.core.to_folder import route_command
+    except ImportError:
+        return None
+    return route_command(cmd.strip())
+
+
 def route_hackathon(cmd: str) -> str | None:
     clean = cmd.strip()
     if not re.search(r"(?i)\b(?:hackathon|hackathons)\b", clean):
@@ -2154,6 +2371,16 @@ def route_jules(cmd: str) -> str | None:
         return None
     line = route_command(cmd.strip())
     return line or None
+
+
+def route_model_info(cmd: str) -> str | None:
+    try:
+        from arka.output import is_model_identity_question
+    except ImportError:
+        return None
+    if is_model_identity_question(cmd.strip()):
+        return "model_info"
+    return None
 
 
 def route_help(cmd: str) -> str | None:
@@ -2269,6 +2496,7 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         return not is_disabled(route.split()[0].replace("-", "_"))
 
     for fn in (
+        route_safety_advice,
         route_greeting,
         route_coding_tui,
         route_scene_3d,
@@ -2278,9 +2506,11 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_three_js_model,
         route_hybrid_models,
         route_help,
+        route_model_info,
         route_sessions,
         route_model_host_setup,
         route_model_optimizer,
+        route_finetune_model,
         route_train_plan,
         route_stock_analyze,
         route_code_convert,
@@ -2291,6 +2521,7 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_integration_setup,
         route_sandbox,
         route_text_edit,
+        route_to_folder,
         route_move_file,
         route_surgical_edit,
         route_word_counter,
@@ -2298,6 +2529,7 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_cool_build,
         route_hackathon,
         route_game_studio,
+        route_play_website_game,
         route_game_control,
         route_play,
         route_hallmark,
@@ -2309,6 +2541,7 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_visual_diagnose,
         route_ui_copy,
         route_component_screenshots,
+        route_verify_web_interaction,
         route_web_screenshot,
         route_capture_video,
         route_app_automation,
@@ -2341,10 +2574,13 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_background_processes,
         route_jsonkit,
         route_markdown_style,
+        route_write_readme,
         route_project_docs,
         route_human_docs,
         route_website_pages,
+        route_cli_connector,
         route_agent_hub,
+        route_edit_guard,
         route_mcp,
         route_clipboard_history,
         route_learned,
@@ -2371,6 +2607,7 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_github_resume,
         route_data_collect,
         route_view_data,
+        route_read_file,
         route_md_doc,
         route_describe_screen,
         route_describe_video,
@@ -2382,6 +2619,7 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_env_setup,
         route_research_math,
         route_prompt_optimize,
+        route_prompt_coach,
         route_deploy,
         route_geo_seo,
         route_templates,
@@ -2439,6 +2677,10 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_bi_dashboard,
         route_usage_dashboard,
         route_meme,
+        route_infographic,
+        route_reposition_image,
+        route_filter_images,
+        route_tech_stack,
         route_symbolic_image,
         route_routines,
         route_service_autostart,
@@ -2449,6 +2691,7 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_quiz_practice,
         route_council,
         route_model_to_image,
+        route_model_video,
         route_text_to_3d,
         route_compose_3d,
         route_scene_3d,
@@ -2464,7 +2707,9 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_metallurgy,
         route_flow,
         route_backup,
+        route_local_image_gen,
         route_generate_image,
+        route_local_music_gen,
         route_generate_music,
         route_download,
         route_convert_media,
@@ -2472,6 +2717,9 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_create_video,
         route_edit_video,
         route_dub_video,
+        route_fetch_lyrics,
+        route_play_website_game,
+        route_compose_story,
         route_compose_video,
         route_terminal_video,
         route_timer,

@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from arka.core.screenshot_paths import screenshot_path
+
 DEFAULT_VIEWPORT = (1440, 900)
 DEFAULT_WALKTHROUGH_URL = os.environ.get("ARKA_WALKTHROUGH_URL", "http://127.0.0.1:5173")
 
@@ -121,8 +123,9 @@ def _run_action(page: Any, action: dict[str, Any], output_dir: Path, index: int)
             page.keyboard.type(str(text))
         return None
     if kind == "screenshot":
-        name = action.get("name") or f"step-{index:03d}.png"
-        path = output_dir / name
+        name = action.get("name") or f"step-{index:03d}"
+        stem = Path(str(name)).stem if str(name).endswith(".png") else str(name)
+        path = screenshot_path(stem, output_dir)
         page.screenshot(path=str(path), full_page=bool(action.get("full_page", False)))
         return path
     raise ValueError(f"step {index}: unknown action type {kind!r}")

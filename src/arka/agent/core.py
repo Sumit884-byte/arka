@@ -304,6 +304,19 @@ def memory_context_for(goal: str, *, limit: int = 3) -> str:
 
 
 def _memory_context_body(goal: str, *, limit: int = 3) -> str:
+    hub_ctx = ""
+    try:
+        from arka.integrations.cli_connector import shared_context_block
+
+        hub_ctx = shared_context_block(goal, limit_chars=2000)
+    except ImportError:
+        pass
+
+    def _finish(body: str) -> str:
+        if hub_ctx and body:
+            return hub_ctx + "\n\n" + body
+        return hub_ctx or body
+
     try:
         from arka.core.unified_memory import _enabled as unified_enabled
         from arka.core.unified_memory import recall as unified_recall
@@ -311,7 +324,7 @@ def _memory_context_body(goal: str, *, limit: int = 3) -> str:
         if unified_enabled():
             ctx = unified_recall(goal, limit_chars=3500, include_channel=True)
             if ctx:
-                return ctx
+                return _finish(ctx)
     except ImportError:
         pass
 
@@ -320,7 +333,7 @@ def _memory_context_body(goal: str, *, limit: int = 3) -> str:
 
         ctx = context_for(goal, limit_chars=3500)
         if ctx:
-            return ctx
+            return _finish(ctx)
     except ImportError:
         pass
     except Exception:
@@ -337,8 +350,8 @@ def _memory_context_body(goal: str, *, limit: int = 3) -> str:
     items = load_json(MEMORY_FILE, [])
     if not isinstance(items, list) or not items:
         if session_ctx:
-            return session_ctx
-        return _channel_memory_fallback()
+            return _finish(session_ctx)
+        return _finish(_channel_memory_fallback())
     try:
         from arka.integrations.supermemory import recall_query_terms, _term_matches
 
@@ -349,8 +362,8 @@ def _memory_context_body(goal: str, *, limit: int = 3) -> str:
         term_matches = lambda term, hay: term in hay  # noqa: E731
     if not terms:
         if session_ctx:
-            return session_ctx
-        return _channel_memory_fallback()
+            return _finish(session_ctx)
+        return _finish(_channel_memory_fallback())
     scored: list[tuple[float, str]] = []
     for row in items:
         text = row.get("text") or ""
@@ -361,13 +374,13 @@ def _memory_context_body(goal: str, *, limit: int = 3) -> str:
     scored.sort(key=lambda x: x[0], reverse=True)
     if not scored:
         if session_ctx:
-            return session_ctx
-        return _channel_memory_fallback()
+            return _finish(session_ctx)
+        return _finish(_channel_memory_fallback())
     lines = [t for _, t in scored[:limit]]
     local = "Relevant memories:\n" + "\n".join(f"- {line}" for line in lines)
     if session_ctx:
-        return session_ctx + "\n\n" + local
-    return local
+        return _finish(session_ctx + "\n\n" + local)
+    return _finish(local)
 
 
 def _channel_memory_fallback() -> str:
@@ -1596,6 +1609,28 @@ def main() -> int:
     p = sub.add_parser("price-check")
     p.add_argument("query", nargs="+")
 
+    p = sub.add_parser("meme", help="Create a local meme PNG (MCP: arka_meme)")
+    p.add_argument("text", nargs="*", help="Natural language meme request")
+    p.add_argument("--template", choices=["comparison", "drake", "caption", "expanding-brain", "two-button", "vibe-coding"])
+    p.add_argument("--style")
+    p.add_argument("-o", "--output")
+    p.add_argument("--no-stock", action="store_true")
+    p.add_argument("--reject")
+    p.add_argument("--accept")
+    p.add_argument("--left-label")
+    p.add_argument("--right-label")
+    p.add_argument("--top")
+    p.add_argument("--bottom")
+    p.add_argument("--label", action="append", help="Panel label (expanding-brain)")
+
+    p = sub.add_parser("infographic", help="Create adaptive infographic PNG (MCP: arka_infographic)")
+    p.add_argument("text", nargs="*", help="Natural language infographic request")
+    p.add_argument("--title")
+    p.add_argument("--item", action="append")
+    p.add_argument("--layout", default="auto")
+    p.add_argument("--style")
+    p.add_argument("-o", "--output")
+
     p = sub.add_parser("goal")
     p.add_argument("goal", nargs="*")
     p.add_argument("-n", "--max", type=int, default=None)
@@ -1705,6 +1740,56 @@ def main() -> int:
         product_reviewer(" ".join(args.query))
     elif args.cmd == "price-check":
         price_check(" ".join(args.query))
+    elif args.cmd == "meme":
+        from arka.agent.meme_templates import meme_result, nl_to_argv
+
+        text = " ".join(args.text).strip()
+        if text and not args.template:
+            argv = nl_to_argv(text)
+            if argv:
+                from arka.agent.meme_templates import main as meme_main
+
+                return meme_main(argv)
+        template = (args.template or "vibe-coding").strip()
+        result = meme_result(
+            template,
+            style=args.style,
+            output=args.output,
+            use_stock_images=False if args.no_stock else None,
+            reject=args.reject,
+            accept=args.accept,
+            left_label=args.left_label,
+            right_label=args.right_label,
+            top=args.top or "",
+            bottom=args.bottom or "",
+            labels=args.label if args.label else None,
+        )
+        print(json.dumps(result, indent=2))
+        return 0
+    elif args.cmd == "infographic":
+        from arka.agent.infographic import infographic_result, nl_to_argv
+
+        text = " ".join(args.text).strip() if args.text else ""
+        title = (args.title or "").strip()
+        items = list(args.item or [])
+        if text and not title:
+            argv = nl_to_argv(text)
+            if argv:
+                from arka.agent.infographic import main as infographic_main
+
+                return infographic_main(argv)
+        if not title:
+            print("infographic requires --title or natural language text", file=sys.stderr)
+            return 2
+        result = infographic_result(
+            title,
+            items,
+            layout=args.layout,
+            style=args.style,
+            output=args.output,
+        )
+        print(json.dumps(result, indent=2))
+        return 0
     elif args.cmd == "goal":
         from arka.agent.goal import DEFAULT_MAX, run_goal
         from arka.integrations.butterfish import launch_shell

@@ -369,6 +369,64 @@ Saved SigNoz trace filters: [dashboards/README.md](dashboards/README.md#trace-ex
 
 ---
 
+## Arka benchmarking (adoption)
+
+Observability tells you *what happened* on a run; benchmarks tell you *whether Arka is good enough to adopt* — routing accuracy, provider cost, and end-to-end agent quality, all measured with the same OTel signals this hackathon instruments.
+
+### Why benchmarks matter
+
+| Question | Without benchmarks | With Arka benches + SigNoz |
+| -------- | ------------------ | -------------------------- |
+| Does NL routing work? | Anecdotal “it routed correctly” | Accuracy % over ~100+ NL cases; offline vs LLM split |
+| Is zero-token routing worth it? | Guess from one trace | `arka.route.decision=symbolic` latency vs `arka.route.llm` + token cost |
+| Which model should I use? | Manual trial and error | Ranked providers per task profile (`chat`, `route`, `agent`) |
+| Can Arka compete with other agents? | Marketing claims | Harness tasks with completion rate, steps, wall time, and cost |
+
+### Three benchmark suites
+
+| Suite | Measures | Existing infra | Rollout |
+| ----- | -------- | -------------- | ------- |
+| **ArkaRouteBench** | Routing accuracy, offline hit rate, zero-token vs LLM routing | `tests/test_nl_routing_coverage.py` (~107 NL cases), `arka dev route-audit`, `ROUTE_MODE=symbolic_only` | **1 — first** |
+| **ArkaModelBench** | Provider/model comparison by task profile; quality + cost tradeoffs | `arka benchmark run\|show\|apply`, `~/.config/arka/benchmark-results.json`, default suite in `src/arka/llm/templates/benchmark-default.yaml` | **2** |
+| **ArkaHarnessBench Lite** | 25 real tasks — Arka vs OpenClaw / Claude Code on completion, steps, cost | Goal loop + skill chain (same spans as live agent demos) | **3** |
+
+**Rollout order:** RouteBench → docs/badges → ModelBench → HarnessBench Lite. RouteBench ships first because routing is the front door — every request passes through `arka.route` before planning or LLM calls.
+
+### Planned metrics
+
+| Suite | Primary metrics | SigNoz / OTel signals |
+| ----- | --------------- | --------------------- |
+| **RouteBench** | Top-1 skill accuracy, offline hit rate (%), symbolic p50/p99 latency, LLM-route token cost | `arka.route`, `arka.route.decision`, `arka.route.latency_ms`, `arka.route.source` (`offline` / `llm` / `fish`) |
+| **ModelBench** | Score per candidate × task profile, cost per 1k tokens, p50/p99 `arka.llm.duration_ms`, failover rate | `arka.llm.attempt`, `gen_ai.provider.name`, `gen_ai.request.model`, `arka.llm.attempt_index` |
+| **HarnessBench** | Task pass rate, median steps to done, total wall time, aggregate token spend | `arka.request` → `arka.agent.goal` → `arka.agent.goal.step` waterfall; group by `arka.benchmark.suite` (planned attribute) |
+
+Scenario 3 ([Semantic Router Split](#scenario-3--semantic-router-split-agent-observability)) is the preview: symbolic routes finish in ~1 ms with no LLM child; semantic routes add `arka.route.llm` and measurable token cost. RouteBench scales that comparison across the full NL coverage table.
+
+### Run what exists today
+
+```bash
+# Routing coverage (offline symbolic path)
+ROUTE_MODE=symbolic_only pytest tests/test_nl_routing_coverage.py -v
+
+# Symbolic / fish / test parity audit
+arka dev route-audit
+
+# Provider benchmark (dry-run needs no API keys)
+arka benchmark init
+arka benchmark run --dry-run
+arka benchmark show
+arka benchmark apply --dry-run
+
+# Live benchmark run with OTEL enabled → traces in SigNoz
+OTEL_TRACES_ENABLED=1 SIGNOZ_ENDPOINT=http://localhost:4318 arka benchmark run
+```
+
+With tracing on, filter **SigNoz → Traces** by `service.name = arka` and compare `arka.route.decision=symbolic` vs `llm` side-by-side — the same panels used for [demo-router](#scenario-3--semantic-router-split-agent-observability) become adoption dashboards once benchmark suites run in CI.
+
+Planned additions: README badges (offline hit rate, route accuracy), a RouteBench CI job, and dashboard panels grouped by `arka.benchmark.suite` for HarnessBench cost/latency regressions.
+
+---
+
 ## Span hierarchy (E2E)
 
 ```
@@ -436,6 +494,8 @@ arka signoz demo-rag [--synthetic]
 arka signoz demo-router [--synthetic]
 arka signoz demo-scenarios [--synthetic]
 arka signoz vllm
+arka benchmark run|show|apply          # ModelBench — provider rankings
+arka dev route-audit                   # RouteBench — routing parity audit
 python3 bin/arka_llm.py trace-status
 python3 bin/arka_signoz.py setup -y
 foundryctl cast -f casting.yaml
@@ -468,5 +528,6 @@ LLM_FALLBACK=vllm-cloud:meta-llama/Llama-3.2-3B-Instruct,gemini:gemini-2.0-flash
 - [MCP_INTEGRATION.md](https://github.com/sumitmishra884byte-cpu/arka/releases/download/signoz-hackathon-media/MCP_INTEGRATION.md) — SigNoz MCP for SRE Sidekick / Cursor
 - [BLOG.md](https://github.com/sumitmishra884byte-cpu/arka/releases/download/signoz-hackathon-media/BLOG.md) — submission narrative + screenshots
 - [dashboards/README.md](dashboards/README.md) — Query Builder panels + alert recipes
+- [Arka benchmarking (adoption)](#arka-benchmarking-adoption) — RouteBench, ModelBench, HarnessBench Lite + SigNoz tie-in
 - [SigNoz Foundry docs](https://signoz.io/docs/install/docker/)
 - [SigNoz MCP server docs](https://signoz.io/docs/ai/signoz-mcp-server/)

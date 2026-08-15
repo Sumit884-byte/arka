@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 from PIL import Image
@@ -36,6 +37,7 @@ class TestComparison(unittest.TestCase):
                 right=str(right),
                 left_title="AI FIRST",
                 right_title="DATA FIRST",
+                use_stock_images=False,
                 output=str(out),
             )
             self.assertEqual(result["token_cost"], "local-only")
@@ -49,6 +51,7 @@ class TestComparison(unittest.TestCase):
                 right_label="Solid engineering",
                 left_title="VIBE",
                 right_title="CRAFT",
+                use_stock_images=False,
                 output=str(out),
             )
             self.assertEqual(result["template"], "comparison")
@@ -77,7 +80,7 @@ class TestTemplates(unittest.TestCase):
     def test_drake(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "drake.png"
-            result = drake(reject="Manual deploys", accept="CI/CD pipeline", output=str(out))
+            result = drake(reject="Manual deploys", accept="CI/CD pipeline", use_stock_images=False, output=str(out))
             self.assertEqual(result["template"], "drake")
             self.assertTrue(out.is_file())
 
@@ -101,6 +104,7 @@ class TestTemplates(unittest.TestCase):
             out = Path(tmp) / "brain.png"
             result = expanding_brain(
                 ["Use print()", "Use a debugger", "Write tests", "Observability"],
+                use_stock_images=False,
                 output=str(out),
             )
             self.assertEqual(result["template"], "expanding_brain")
@@ -114,6 +118,7 @@ class TestTemplates(unittest.TestCase):
                 left="Rollback",
                 right="Deploy a fix",
                 highlight="left",
+                use_stock_images=False,
                 output=str(out),
             )
             self.assertEqual(result["template"], "two_button")
@@ -122,7 +127,7 @@ class TestTemplates(unittest.TestCase):
     def test_vibe_coding_preset(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "vibe.png"
-            result = vibe_coding_comparison(output=str(out))
+            result = vibe_coding_comparison(output=str(out), use_stock_images=False)
             self.assertTrue(out.is_file())
             self.assertEqual(result["template"], "comparison")
 
@@ -164,11 +169,79 @@ class TestRouting(unittest.TestCase):
         self.assertEqual(argv.count("--label"), 4)
 
 
+class TestStockPhotos(unittest.TestCase):
+    def test_comparison_uses_stock_when_enabled(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stock = root / "stock-left.jpg"
+            Image.new("RGB", (200, 150), "red").save(stock)
+            out = root / "stock-comparison.png"
+
+            def _fake_fetch(query, *, cache_dir, exclude_ids=None, context_terms=None):
+                if exclude_ids is not None:
+                    exclude_ids.add("unsplash:fake1")
+                return str(stock)
+
+            with unittest.mock.patch(
+                "arka.agent.meme_templates._fetch_stock_image_path",
+                side_effect=_fake_fetch,
+            ):
+                result = comparison(
+                    left_label="Fast hacks",
+                    right_label="Solid craft",
+                    left_title="VIBE",
+                    right_title="CRAFT",
+                    use_stock_images=True,
+                    output=str(out),
+                )
+            self.assertTrue(out.is_file())
+            self.assertTrue(result["stock_images"])
+
+    def test_comparison_text_only_when_stock_disabled(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "text-only.png"
+            result = comparison(
+                left_label="Fast hacks",
+                right_label="Solid craft",
+                use_stock_images=False,
+                output=str(out),
+            )
+            self.assertTrue(out.is_file())
+            self.assertFalse(result.get("stock_images"))
+
+    def test_vibe_coding_stock_queries(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            left = root / "left.jpg"
+            right = root / "right.jpg"
+            Image.new("RGB", (120, 90), "blue").save(left)
+            Image.new("RGB", (120, 90), "green").save(right)
+            out = root / "vibe-stock.png"
+            calls: list[str] = []
+
+            def _fake_fetch(query, *, cache_dir, exclude_ids=None, context_terms=None):
+                calls.append(query)
+                if len(calls) == 1:
+                    return str(left)
+                return str(right)
+
+            with unittest.mock.patch(
+                "arka.agent.meme_templates._fetch_stock_image_path",
+                side_effect=_fake_fetch,
+            ):
+                result = vibe_coding_comparison(use_stock_images=True, output=str(out))
+            self.assertTrue(out.is_file())
+            self.assertTrue(result["stock_images"])
+            self.assertEqual(len(calls), 2)
+            self.assertIn("coding", calls[0].lower())
+            self.assertIn("architecture", calls[1].lower())
+
+
 class TestCli(unittest.TestCase):
     def test_cli_vibe_coding(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "cli-vibe.png"
-            code = main(["vibe-coding", "--output", str(out)])
+            code = main(["vibe-coding", "--output", str(out), "--no-stock-images"])
             self.assertEqual(code, 0)
             self.assertTrue(out.is_file())
 
@@ -207,7 +280,7 @@ class TestRouterIntegration(unittest.TestCase):
             out = Path(tmp) / "cli-route.png"
             buf = StringIO()
             with patch("sys.stdout", buf):
-                code = cli.main(["meme", "vibe-coding", "--output", str(out)])
+                code = cli.main(["meme", "vibe-coding", "--output", str(out), "--no-stock-images"])
             self.assertEqual(code, 0)
             self.assertTrue(out.is_file())
             self.assertIn("Created meme", buf.getvalue())
@@ -227,7 +300,7 @@ class TestRouterIntegration(unittest.TestCase):
             with patch("sys.stdout", buf):
                 with patch("arka.platform_info.has_full_fish_agent", return_value=True):
                     with patch("arka.fish_bridge.delegate_to_fish", side_effect=_fish_should_not_run):
-                        code = cli.main(["meme", "vibe-coding", "--output", str(out)])
+                        code = cli.main(["meme", "vibe-coding", "--output", str(out), "--no-stock-images"])
             self.assertEqual(code, 0)
             self.assertTrue(out.is_file())
 
@@ -242,7 +315,7 @@ class TestRouterIntegration(unittest.TestCase):
             buf = StringIO()
             with patch("sys.stdout", buf):
                 with patch("subprocess.run", side_effect=AssertionError("fish must not run")):
-                    code = delegate_to_fish(["meme", "vibe-coding", "--output", str(out)])
+                    code = delegate_to_fish(["meme", "vibe-coding", "--output", str(out), "--no-stock-images"])
             self.assertEqual(code, 0)
             self.assertTrue(out.is_file())
             self.assertIn("Created meme", buf.getvalue())

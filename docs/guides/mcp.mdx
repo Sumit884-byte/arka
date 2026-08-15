@@ -9,7 +9,7 @@ boost: 1.5
 Arka can connect to **any MCP server** from the terminal — the same [Model Context Protocol](https://modelcontextprotocol.io) used by Cursor, Claude Desktop, and other AI clients.
 
 <Note>
-  **Summary:** Arka is both an MCP client (call external servers like SigNoz or filesystem) and an MCP server (expose Arka skills to Cursor). Config lives at `~/.config/arka/mcp.json` in Cursor-compatible format. Quick start: `arka mcp list`, `arka mcp add`, `arka mcp tools`, `arka mcp call`. See also [How to code with Arka](/guides/code-with-arka) for IDE workflow.
+  **Summary:** Arka is both an MCP client (call external servers like SigNoz or filesystem) and an MCP server (expose Arka skills to Cursor). Config lives at `~/.config/arka/mcp.json` in Cursor-compatible format. Quick start: `arka mcp list`, `arka mcp add`, `arka mcp tools`, `arka mcp call`. **AI agents:** see [AI agent guide](/guides/ai-agents) for routing, verification rules, and tool selection. Humans coding in the IDE: [How to code with Arka](/guides/code-with-arka).
 </Note>
 
 MCP servers can also participate in Arka’s universal plugin catalog. After
@@ -367,6 +367,14 @@ Run `arka mcp install` to print the correct command for your machine.
 | `arka_session_memory` | OpenClaw markdown memory — append, search, context, status, clear |
 | `arka_subagent` | Hermes sub-agent delegation — spawn, list, status, resume |
 | `arka_project_rules` | Cursor-style project rules — AGENTS.md, CLAUDE.md, `.cursor/rules` |
+| `arka_music_generate` | Generate music — Pollinations elevenmusic or ffmpeg tone synthesis |
+| `arka_meme` | Local meme templates — Drake, comparison, vibe-coding, stock photos optional |
+| `arka_infographic` | Adaptive infographic PNG — grid/radial layout from item count |
+| `arka_media_styles` | List meme, video, and infographic visual style presets |
+| `arka_tech_stack` | Fuzzy-find project folder, confirm if not exact, read manifests, suggest stack |
+| `arka_fetch_lyrics` | Fetch song lyrics, translate them, optionally generate a translated cover |
+| `arka_safety_advice` | Curated crisis guidance — domestic violence, harassment (fixed playbook, not LLM legal advice) |
+| `arka_local_music` | Offline music — local ffmpeg melodies (no cloud API) |
 | `arka_webhook` | Webhook gateway — status or health |
 | `arka_view_data` | Preview CSV/TSV tables as plain text |
 | `arka_clipboard` | Clipboard history — list, save, get, or clear |

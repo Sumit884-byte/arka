@@ -36,6 +36,9 @@ class TestGenerateMusicRouting:
     def test_route_not_video(self) -> None:
         assert route_generate_music("generate video of a cat") is None
 
+    def test_route_defers_local_music(self) -> None:
+        assert route_generate_music("generate music locally calm ambient") is None
+
     def test_route_trailing_track_noun(self) -> None:
         routed = route_generate_music("create a summer pop track")
         assert routed is not None
@@ -139,3 +142,21 @@ def test_mcp_generate_mocked(tmp_path: Path):
         payload = json.loads(_handle_arka_music_generate({"action": "generate", "prompt": "jazz", "duration": 10}))
     assert payload["provider"] == "synthesize"
     assert payload["output"] == str(out)
+
+
+def test_skill_direct_routes_to_music_generate_mcp():
+    from arka.integrations.mcp_server import _direct_mcp_from_skill
+
+    routed = _direct_mcp_from_skill("music_generate", ["upbeat", "jazz", "--instrumental"])
+    assert routed is not None
+    tool, args = routed
+    assert tool == "arka_music_generate"
+    assert args["action"] == "generate"
+    assert args["prompt"] == "upbeat jazz"
+    assert args["instrumental"] is True
+
+    routed = _direct_mcp_from_skill("music_generate", ["check"])
+    assert routed is not None
+    tool, args = routed
+    assert tool == "arka_music_generate"
+    assert args["action"] == "check"

@@ -345,6 +345,13 @@ def is_real_world_subject(prompt: str, *, full_text: str = "") -> bool:
 def should_generate_image(text: str) -> bool:
     """Return False for search/research on real subjects; allow clearly creative prompts."""
     t = (text or "").strip()
+    try:
+        from arka.agent.local_image_gen import wants_local_image
+
+        if wants_local_image(t):
+            return False
+    except ImportError:
+        pass
     if not t or not _EXPLICIT_GENERATION_RE.search(t):
         return False
     if is_search_or_research_intent(t):
@@ -363,6 +370,14 @@ def nl_to_argv(text: str) -> list[str]:
     t = text.strip()
     if not t:
         return []
+
+    try:
+        from arka.agent.local_image_gen import wants_local_image
+
+        if wants_local_image(t):
+            return []
+    except ImportError:
+        pass
 
     if re.search(
         r"(?i)(?:^|\b)(?:generate|create|make|draw|design)\s+(?:an?\s+)?(?:youtube\s+)?thumbnail\b",

@@ -19,8 +19,8 @@
   ],
   "permissions": ["read", "write", "network", "shell"],
   "requires": {
-    "env": ["POLLINATIONS_API_KEY"],
-    "env_optional": ["MUSIC_BACKEND", "MUSIC_MODEL", "MUSIC_DURATION"],
-    "bins": ["ffmpeg"]
+    "bins": ["ffmpeg"],
+    "env_optional": ["POLLINATIONS_API_KEY", "POLLINATIONS_KEY", "MUSIC_BACKEND", "MUSIC_MODEL", "MUSIC_DURATION"],
+    "note": "Pollinations elevenmusic when a key is set; ffmpeg tone synthesis without a key (MUSIC_BACKEND=auto or synthesize)."
   }
 }

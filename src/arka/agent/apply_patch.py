@@ -11,6 +11,27 @@ class PatchError(ValueError):
     """Raised when a patch cannot be applied safely."""
 
 
+try:
+    from arka.core.edit_guard import EditGuardError, assert_edit_allowed, check_edit_paths, files_in_unified_diff
+except ImportError:
+    EditGuardError = PatchError  # type: ignore[misc, assignment]
+
+    def assert_edit_allowed(path, *, root=None):  # type: ignore[misc]
+        del path, root
+
+    def check_edit_paths(paths, *, root=None):  # type: ignore[misc]
+        class _R:
+            allowed = True
+            reason = ""
+            path = ""
+
+        del paths, root
+        return _R()
+
+    def files_in_unified_diff(diff):  # type: ignore[misc]
+        return []
+
+
 def _project_root(path: str | Path | None = None) -> Path:
     if path:
         return Path(path).expanduser().resolve()
@@ -45,6 +66,10 @@ def _assert_in_scope(target: Path, root: Path) -> None:
 
 
 def _apply_search_replace(root: Path, *, file: str, old: str, new: str) -> dict[str, Any]:
+    try:
+        assert_edit_allowed(file, root=root)
+    except EditGuardError as exc:
+        raise PatchError(str(exc)) from exc
     target = (root / file).resolve()
     _assert_in_scope(target, root)
     if not target.is_file():
@@ -58,6 +83,11 @@ def _apply_search_replace(root: Path, *, file: str, old: str, new: str) -> dict[
 
 
 def _apply_unified_diff(root: Path, diff: str) -> dict[str, Any]:
+    touched = files_in_unified_diff(diff)
+    guard = check_edit_paths(touched, root=root)
+    if not guard.allowed:
+        raise PatchError(guard.reason or f"edit blocked: {guard.path}")
+
     import tempfile
 
     with tempfile.NamedTemporaryFile("w", suffix=".patch", delete=False, encoding="utf-8") as handle:
@@ -86,7 +116,6 @@ def _apply_unified_diff(root: Path, diff: str) -> dict[str, Any]:
             raise PatchError((apply.stderr or apply.stdout or "git apply failed").strip())
     finally:
         patch_path.unlink(missing_ok=True)
-    touched = re.findall(r"^\+\+\+ b/(.+)$", diff, flags=re.MULTILINE)
     for rel in touched:
         _assert_in_scope((root / rel).resolve(), root)
     return {"mode": "unified_diff", "files": touched}

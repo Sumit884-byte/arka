@@ -74,5 +74,51 @@ arka route "create a lo-fi beat"
 
 ## Related
 
+- [MCP integration](/guides/mcp) — call `arka_music_generate` from Cursor or Claude
 - [Browser video capture](/guides/video-capture) — walkthrough recordings
 - [Meme templates](/guides/meme-templates) — local image memes
+
+## MCP (Cursor / Claude)
+
+From Cursor chat, ask the agent to call `arka_music_generate`:
+
+```json
+{
+  "action": "generate",
+  "prompt": "upbeat lo-fi hip hop",
+  "instrumental": true,
+  "duration": 30
+}
+```
+
+To start from an existing song, fetch and translate lyrics first with `arka_fetch_lyrics`, then generate:
+
+```json
+{
+  "action": "translate",
+  "artist": "Queen",
+  "title": "Bohemian Rhapsody",
+  "target": "hindi",
+  "generate": true,
+  "style": "hindi pop ballad"
+}
+```
+
+Parse natural language first:
+
+```json
+{ "action": "parse", "text": "create an instrumental cinematic track for 45 seconds" }
+```
+
+Check backend setup:
+
+```json
+{ "action": "check" }
+```
+
+Terminal equivalent:
+
+```bash
+arka mcp call arka arka_music_generate --args '{"action":"generate","prompt":"jazz piano","instrumental":true}'
+arka mcp call arka arka_music_generate --args '{"action":"parse","text":"compose a song about summer"}'
+```

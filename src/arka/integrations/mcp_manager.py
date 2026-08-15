@@ -663,6 +663,21 @@ def nl_to_argv(cmd: str) -> list[str] | None:
     if re.search(r"(?i)\bmcp\b.*\blogs?\b|\blogs?\b.*\bmcp\b", clean):
         return ["logs"]
 
+    if re.search(r"(?i)\b(?:mcp|arka\s+mcp)\b.*\b(?:doctor|health\s+check|diagnose)\b", clean):
+        return ["doctor"]
+    if re.search(r"(?i)\b(?:doctor|diagnose|health\s+check)\b.*\b(?:mcp|model\s+context)\b", clean):
+        return ["doctor"]
+    if re.search(r"(?i)\b(?:install|connect|wire|setup|configure)\b.*\b(?:arka\s+)?mcp\b", clean):
+        agent = "claude" if re.search(r"(?i)\bclaude\b", clean) else "cursor"
+        argv = ["install", "--agent", agent]
+        if re.search(r"(?i)\b(?:write|save)\b.*\bconfig\b", clean):
+            argv.append("--write-config")
+        return argv
+    if re.search(r"(?i)\b(?:serve|start|run)\b.*\b(?:arka\s+)?mcp\b(?:\s+server)?\b", clean):
+        return ["serve"]
+    if re.search(r"(?i)\b(?:mcp|model\s+context)\b.*\b(?:serve|start)\b", clean):
+        return ["serve"]
+
     if re.search(r"(?i)\b(?:mcp|model\s+context\s+protocol)\b.*\b(?:status|health|connections?)\b", clean):
         return ["status"]
     if re.search(r"(?i)\b(?:connect|check)\b.*\bmcp\b", clean):
@@ -699,8 +714,18 @@ def nl_to_argv(cmd: str) -> list[str] | None:
     m = re.search(r"(?i)\b(?:call|invoke|run|use)\s+(?:the\s+)?(?:mcp\s+)?tool\s+([a-zA-Z0-9._-]+)\s+(?:on|from)\s+([a-zA-Z0-9._-]+)", clean)
     if m:
         return ["call", m.group(2), m.group(1)]
-    if lower in {"mcp", "mcp list", "list mcp", "mcp servers"}:
-        return ["list"]
+    if lower in {"mcp", "mcp list", "list mcp", "mcp servers", "mcp doctor", "mcp status", "mcp install", "mcp serve"}:
+        mapping = {
+            "mcp": ["list"],
+            "mcp list": ["list"],
+            "list mcp": ["list"],
+            "mcp servers": ["list"],
+            "mcp doctor": ["doctor"],
+            "mcp status": ["status"],
+            "mcp install": ["install"],
+            "mcp serve": ["serve"],
+        }
+        return mapping.get(lower, ["list"])
     return None
 
 

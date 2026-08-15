@@ -41,6 +41,53 @@ PLUGIN_RESULT_LIMIT = 64 * 1024
 SKILL_NAME_RE = re.compile(r"^[a-z][a-z0-9_-]{1,48}$")
 
 
+def _builtin_skills_dir() -> Path:
+    return package_dir() / "skills"
+
+
+def _is_under_builtin_skills(path: Path) -> bool:
+    try:
+        resolved = path.resolve()
+        builtin = _builtin_skills_dir().resolve()
+    except OSError:
+        return False
+    return resolved == builtin or builtin in resolved.parents
+
+
+def skill_origin(root: str | Path | None, *, adapter: str = "") -> str:
+    """Classify a skill as built-in (shipped), third-party (installed), or MCP."""
+    if adapter == "mcp" or root in (None, ""):
+        return "mcp"
+    return "builtin" if _is_under_builtin_skills(Path(root)) else "third-party"
+
+
+def _format_requires(requires: dict[str, Any]) -> str:
+    if not requires:
+        return ""
+    labels = {
+        "env": "env",
+        "env_optional": "env (optional)",
+        "env_any": "env (any of)",
+        "bins": "bins",
+        "anyBins": "any bin",
+        "any_bins": "any bin",
+        "checks": "checks",
+    }
+    parts: list[str] = []
+    for key, label in labels.items():
+        val = requires.get(key)
+        if not val:
+            continue
+        if isinstance(val, list):
+            parts.append(f"{label}: {', '.join(str(v) for v in val)}")
+        else:
+            parts.append(f"{label}: {val}")
+    note = requires.get("note")
+    if isinstance(note, str) and note.strip():
+        parts.append(f"note: {note.strip()}")
+    return "; ".join(parts)
+
+
 def skills_search_paths() -> list[Path]:
     paths: list[Path] = []
     for raw in (os.environ.get("SKILLS_PATH") or "").split(os.pathsep):
@@ -93,8 +140,10 @@ def _skill_from_manifest(manifest_path: Path) -> dict[str, Any] | None:
     if isinstance(triggers, str):
         triggers = [triggers]
     triggers = [str(t).strip().lower() for t in triggers if str(t).strip()]
-    if name not in [t.split()[0] for t in triggers if t]:
-        triggers.insert(0, name.replace("_", " "))
+    auto_trigger = name.replace("_", " ")
+    if auto_trigger not in triggers and name not in [t.split()[0] for t in triggers if t]:
+        triggers.insert(0, auto_trigger)
+    triggers = list(dict.fromkeys(triggers))
 
     requires = data.get("requires") or {}
     if not isinstance(requires, dict):
@@ -135,6 +184,7 @@ def _skill_from_manifest(manifest_path: Path) -> dict[str, Any] | None:
         "capabilities": [str(x) for x in (data.get("capabilities") or [])],
         "source": str(data.get("source") or root),
         "health": "ok",
+        "origin": skill_origin(root),
     }
 
 
@@ -162,6 +212,7 @@ def _skill_from_external(root: Path) -> dict[str, Any] | None:
         "voice_ack": "", "requires": {}, "os": [], "permissions": ["read"],
         "root": str(root), "manifest": "", "adapter": adapter,
         "capabilities": ["execute"], "source": str(root), "health": "ok",
+        "origin": skill_origin(root),
     }
 
 
@@ -187,6 +238,7 @@ def _skill_from_fish(fish_path: Path) -> dict[str, Any] | None:
         "voice_ack": "",
         "root": str(fish_path.parent),
         "manifest": str(fish_path),
+        "origin": skill_origin(fish_path.parent),
     }
 
 
@@ -225,7 +277,7 @@ def discover_skills(*, refresh: bool = False) -> list[dict[str, Any]]:
                     sk = _skill_from_fish(fish_file)
                     if sk:
                         by_name[sk["name"]] = sk
-                else:
+                elif not _is_under_builtin_skills(child):
                     sk = _skill_from_external(child)
                     if sk:
                         by_name[sk["name"]] = sk
@@ -246,13 +298,14 @@ def discover_skills(*, refresh: bool = False) -> list[dict[str, Any]]:
                 "triggers": [str(name).replace("_", " ")], "enabled": True,
                 "voice_ack": "", "requires": {}, "os": [], "permissions": ["network"],
                 "root": "", "manifest": "", "adapter": "mcp", "capabilities": ["tools"],
-                "source": endpoint, "health": "unknown",
+                "source": endpoint, "health": "unknown", "origin": "mcp",
             })
     except (ImportError, OSError, ValueError):
         pass
     skills.sort(key=lambda s: s["name"])
     for sk in skills:
         _annotate_gates(sk)
+        sk["audit_issues"] = _audit_skill_manifest(sk)
     names: dict[str, int] = {}
     triggers: dict[str, list[str]] = {}
     for sk in skills:
@@ -315,6 +368,22 @@ def match_command(text: str) -> str:
     raw = (text or "").strip()
     if not raw:
         return ""
+    try:
+        from arka.integrations.project_docs import route_command as project_docs_route
+
+        hit = project_docs_route(raw)
+        if hit:
+            return hit
+    except ImportError:
+        pass
+    try:
+        from arka.agent.human_docs import route_command as human_docs_route
+
+        hit = human_docs_route(raw)
+        if hit:
+            return hit
+    except ImportError:
+        pass
     low = _normalize(raw)
 
     skills = [
@@ -372,6 +441,44 @@ def _py() -> str:
 
 def _which(bin_name: str) -> bool:
     return shutil.which(bin_name) is not None
+
+
+def _audit_skill_manifest(sk: dict[str, Any]) -> list[str]:
+    """Return non-fatal manifest issues — duplicate triggers, strict env vs documented fallback, etc."""
+    issues: list[str] = []
+    triggers = [str(t) for t in (sk.get("triggers") or []) if str(t).strip()]
+    if len(triggers) != len(set(triggers)):
+        dupes = list(dict.fromkeys(t for t in triggers if triggers.count(t) > 1))
+        issues.append("duplicate triggers: " + ", ".join(dupes))
+
+    requires = sk.get("requires") or {}
+    if not isinstance(requires, dict):
+        requires = {}
+    desc = (sk.get("description") or "").lower()
+    fallback_hint = any(
+        phrase in desc
+        for phrase in (
+            "fallback",
+            "without a key",
+            "no api key",
+            "no cloud api",
+            "offline",
+            "when no api key",
+            "tone synthesis",
+            "tone-synthesis",
+        )
+    )
+    for env_name in requires.get("env") or []:
+        if fallback_hint:
+            issues.append(
+                f"required env {env_name} but description documents a no-key/offline fallback — "
+                "move key to env_optional or env_any"
+            )
+
+    if not triggers:
+        issues.append("no triggers declared")
+
+    return issues
 
 
 def _annotate_gates(sk: dict[str, Any]) -> None:
@@ -591,41 +698,85 @@ def install_skill(source: str) -> int:
     return 0
 
 
+def _print_skill_entry(sk: dict[str, Any], *, verbose: bool = False) -> None:
+    flag = "on " if sk.get("enabled") else "off"
+    line = f"  [{flag}] {sk['name']} v{sk.get('version', '?')}"
+    if sk.get("description"):
+        line += f" — {sk['description']}"
+    if not sk.get("gate_ok", True):
+        line += f" [gated: {sk.get('gate_reason', '?')}]"
+    print(line)
+    if verbose:
+        print(
+            f"       adapter={sk.get('adapter', 'arka-manifest')} type={sk.get('type')} "
+            f"origin={sk.get('origin', 'third-party')} root={sk.get('root')}"
+        )
+        if sk.get("triggers"):
+            print(f"       triggers: {', '.join(sk['triggers'][:8])}")
+        req_text = _format_requires(sk.get("requires") or {})
+        if req_text:
+            print(f"       requires: {req_text}")
+        if sk.get("permissions"):
+            print(f"       permissions: {', '.join(sk['permissions'])}")
+        if not sk.get("gate_ok", True):
+            print(f"       gate: blocked ({sk.get('gate_reason', '?')})")
+        for issue in sk.get("audit_issues") or []:
+            print(f"       audit: {issue}")
+
+
 def print_list(*, verbose: bool = False) -> None:
     skills = discover_skills(refresh=True)
     if not skills:
-        print("No third-party skills installed.")
+        print("No skills discovered.")
         print(f"  Install dir: {config_dir() / 'skills'}")
         print("  Try: arka skills install /path/to/skill  or  arka skills install <git-url>")
         return
-    print(f"Third-party skills ({len(skills)}):")
-    for sk in skills:
-        flag = "on " if sk.get("enabled") else "off"
-        line = f"  [{flag}] {sk['name']} v{sk.get('version', '?')}"
-        if sk.get("description"):
-            line += f" — {sk['description']}"
-        if not sk.get("gate_ok", True):
-            line += f" [gated: {sk.get('gate_reason', '?')}]"
-        print(line)
-        if verbose:
-            print(f"       adapter={sk.get('adapter', 'arka-manifest')} type={sk.get('type')} root={sk.get('root')}")
-            if sk.get("triggers"):
-                print(f"       triggers: {', '.join(sk['triggers'][:8])}")
-            if sk.get("requires"):
-                print(f"       requires: {sk['requires']}")
-            if sk.get("permissions"):
-                print(f"       permissions: {', '.join(sk['permissions'])}")
-            if not sk.get("gate_ok", True):
-                print(f"       gate: blocked ({sk.get('gate_reason', '?')})")
+    groups = [
+        ("Built-in skills", [s for s in skills if s.get("origin") == "builtin"]),
+        ("Third-party skills", [s for s in skills if s.get("origin") == "third-party"]),
+        ("MCP plugins", [s for s in skills if s.get("origin") == "mcp"]),
+    ]
+    for title, group in groups:
+        if not group:
+            continue
+        print(f"{title} ({len(group)}):")
+        for sk in group:
+            _print_skill_entry(sk, verbose=verbose)
+
+
+def plugin_audit() -> int:
+    """Report manifest quality issues across the skill catalog."""
+    skills = discover_skills(refresh=True)
+    flagged = [s for s in skills if s.get("audit_issues")]
+    print(f"Skills audited: {len(skills)}")
+    if not flagged:
+        print("No manifest audit issues found.")
+        return 0
+    print(f"Issues found: {len(flagged)}")
+    for sk in flagged:
+        print(f"  {sk['name']}:")
+        for issue in sk.get("audit_issues") or []:
+            print(f"    - {issue}")
+    return 1
 
 
 def plugin_doctor() -> int:
     skills = discover_skills(refresh=True)
     failed = [s for s in skills if not s.get("gate_ok", True) or s.get("health") != "ok"]
+    audited = [s for s in skills if s.get("audit_issues")]
     print(f"Plugins checked: {len(skills)}")
     for sk in skills:
         state = "ok" if sk not in failed else f"blocked: {sk.get('gate_reason', 'unhealthy')}"
-        print(f"  {sk['name']}: {state}")
+        extra = ""
+        if sk.get("audit_issues"):
+            extra = f" (+{len(sk['audit_issues'])} audit)"
+        print(f"  {sk['name']}: {state}{extra}")
+    if audited:
+        print("\nManifest audit hints (run `arka skills audit` for details):")
+        for sk in audited[:10]:
+            print(f"  {sk['name']}: {sk['audit_issues'][0]}")
+        if len(audited) > 10:
+            print(f"  … and {len(audited) - 10} more")
     return 1 if failed else 0
 
 
@@ -635,6 +786,7 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("list")
     sub.add_parser("doctor")
+    sub.add_parser("audit")
     p_search = sub.add_parser("search")
     p_search.add_argument("query")
     p_inspect = sub.add_parser("inspect")
@@ -672,6 +824,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.cmd == "doctor":
         return plugin_doctor()
+    if args.cmd == "audit":
+        return plugin_audit()
     if args.cmd == "search":
         query = args.query.lower()
         for sk in discover_skills(refresh=True):

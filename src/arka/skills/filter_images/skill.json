@@ -1,0 +1,27 @@
+{
+  "name": "filter_images",
+  "description": "Hybrid two-pass image relevance filter — fast CLIP embeddings plus VLM only on borderline cases",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "filter images",
+    "filter irrelevant images",
+    "find outliers in photo batch",
+    "score images for query",
+    "image relevance",
+    "hybrid image filter",
+    "remove irrelevant photos"
+  ],
+  "permissions": ["read", "write"],
+  "requires": {
+    "packages_optional": ["sentence-transformers", "transformers", "torch", "scikit-learn", "Pillow"],
+    "env_optional": [
+      "ARKA_IMAGE_FILTER_CLIP_MODEL",
+      "ARKA_IMAGE_FILTER_VLM_PASS",
+      "ARKA_IMAGE_FILTER_BORDERLINE_PCT",
+      "DESCRIBE_IMAGE_BACKEND"
+    ]
+  }
+}

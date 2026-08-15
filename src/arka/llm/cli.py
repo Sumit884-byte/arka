@@ -378,7 +378,18 @@ def _null_context():
     return nullcontext()
 
 
-def cmd_active_model(_args: argparse.Namespace) -> int:
+def cmd_active_model(args: argparse.Namespace) -> int:
+    if getattr(args, "footer", False):
+        try:
+            from arka.output import format_model_footer
+
+            line = format_model_footer()
+            if line:
+                print(line)
+                return 0
+        except ImportError:
+            pass
+        return 1
     label = model_label()
     if label:
         print(label)
@@ -766,6 +777,11 @@ def main() -> int:
     p_models.set_defaults(func=cmd_models)
 
     p_active = sub.add_parser("active-model", help="Show last-used or preferred LLM model")
+    p_active.add_argument(
+        "--footer",
+        action="store_true",
+        help="Print model label with response time (for answer footers)",
+    )
     p_active.set_defaults(func=cmd_active_model)
 
     p_reset = sub.add_parser("reset-exhaustion", help="Clear session provider/model exhaustion cache")

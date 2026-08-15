@@ -179,10 +179,18 @@ def run_skill(skill_line: str) -> int:
             else:
                 print("Could not get a fact (check LLM API keys)", file=sys.stderr)
                 code = 1
+        elif head in ("prompt_coach", "prompt-coach", "prompt_coaching", "prompt-coaching"):
+            from arka.agent.prompt_coach import main as prompt_coach_main
+
+            code = prompt_coach_main(rest)
         elif head in ("nudge", "arka-nudge", "arka_nudge"):
             from arka.agent.nudge import main as nudge_main
 
             code = nudge_main(rest)
+        elif head in ("safety_advice", "safety-advice", "crisis_advice", "support_advice"):
+            from arka.agent.safety_advice import main as safety_advice_main
+
+            code = safety_advice_main(rest)
         elif head in ("contextual_answer", "contextual-answer", "context_answer", "with_context"):
             from arka.agent.contextual_answer import main as contextual_main
 
@@ -268,6 +276,11 @@ def run_skill(skill_line: str) -> int:
         elif head in ("model_optimizer", "model-optimizer") or (head == "model" and rest and rest[0] in {"recommend", "switch"}):
             from arka.llm.model_optimizer import main as optimizer_main
             code = optimizer_main(rest if head != "model" else rest)
+        elif head in ("finetune_model", "finetune-model", "model_finetune") or (
+            head == "model" and rest and rest[0] in {"finetune", "finetune_model", "finetune-model"}
+        ):
+            from arka.llm.finetune_model import main as finetune_model_main
+            code = finetune_model_main(rest[1:] if head == "model" else rest)
         elif head in ("train_plan", "train-plan", "model_train") or (head == "model" and rest and rest[0] in {"train-plan", "train_plan"}):
             from arka.llm.train_plan import main as train_plan_main
             code = train_plan_main(rest[1:] if head == "model" else rest)
@@ -333,6 +346,18 @@ def run_skill(skill_line: str) -> int:
         elif head in ("human_docs", "human-docs", "write_readme", "human-readme"):
             from arka.agent.human_docs import main as human_docs_main
 
+            if head in ("write_readme", "human-readme"):
+                if not rest:
+                    rest = ["write", "write README for this project", "--apply"]
+                elif rest[0] not in ("write", "guide", "status", "route"):
+                    rest = ["write", *rest, "--apply"]
+                elif (
+                    rest[0] == "write"
+                    and "--apply" not in rest
+                    and "--preview" not in rest
+                    and not any(token.startswith("-") and "preview" in token for token in rest)
+                ):
+                    rest = [*rest, "--apply"]
             code = human_docs_main(rest or ["guide"])
         elif head in (
             "website_pages",
@@ -449,6 +474,9 @@ def run_skill(skill_line: str) -> int:
         elif head in ("model_to_image", "model-to-image", "render_3d"):
             from arka.agent.model_to_image import main as model_image_main
             code = model_image_main(rest)
+        elif head in ("model_video", "model-video", "3d_model_video", "turntable_video", "3d-video"):
+            from arka.media.model_video import main as model_video_main
+            code = model_video_main(rest)
         elif head in ("text", "text_edit", "text-edit"):
             from arka.agent.text_edit import main as text_main
             code = text_main(rest)
@@ -501,6 +529,9 @@ def run_skill(skill_line: str) -> int:
         elif head in ("dub_video", "dub-video", "video_dub", "dubbing"):
             from arka.media.dub_video import main as dub_video_main
             code = dub_video_main(rest)
+        elif head in ("fetch_lyrics", "fetch-lyrics", "song_lyrics", "lyrics_fetch"):
+            from arka.media.fetch_lyrics import main as fetch_lyrics_main
+            code = fetch_lyrics_main(rest)
         elif head in ("chart_from_pdf", "chart-from-pdf", "pdf_chart", "pdf-chart"):
             from arka.charts.chart_from_pdf import main as chart_from_pdf_main
             code = chart_from_pdf_main(rest)
@@ -523,6 +554,10 @@ def run_skill(skill_line: str) -> int:
             else:
                 from arka.agent.usage_dashboard import main as usage_dashboard_main
                 code = usage_dashboard_main(rest, default_action="serve")
+        elif head == "output":
+            from arka.web.output_viewer.cli import main as output_viewer_main
+
+            code = output_viewer_main(rest)
         elif head in ("video_evidence", "video-evidence", "video_bug", "video-bug"):
             from arka.agent.video_evidence import main as video_evidence_main
 
@@ -610,9 +645,17 @@ def run_skill(skill_line: str) -> int:
         elif head in ("browser_check", "browser-check", "ui_check"):
             from arka.agent.browser_check import main as browser_main
             code = browser_main(rest)
+        elif head in ("play_website_game", "play-website-game", "website_game", "website-game", "browser_game"):
+            from arka.agent.play_website_game import main as play_website_game_main
+
+            code = play_website_game_main(rest)
         elif head in ("automate", "app_automate", "app-automate"):
             from arka.agent.automation import main as automation_main
             code = automation_main(rest)
+        elif head in ("verify_web_interaction", "verify-web-interaction", "web_interaction_check", "site_verify"):
+            from arka.agent.verify_web_interaction import main as verify_web_interaction_main
+
+            code = verify_web_interaction_main(rest)
         elif head == "skill" and rest and rest[0] == "usage":
             from arka.core.skill_usage import report
 
@@ -788,6 +831,34 @@ def run_skill(skill_line: str) -> int:
         elif head in ("meme", "meme_template", "meme-template", "meme_templates"):
             from arka.agent.meme_templates import main as meme_main
             code = meme_main(rest)
+        elif head in ("infographic", "infographic-maker", "listicle"):
+            from arka.agent.infographic import main as infographic_main
+            code = infographic_main(rest)
+        elif head in (
+            "reposition_image",
+            "reposition-image",
+            "fix_image_crop",
+            "fix-image-crop",
+            "smart_image_frame",
+            "smart-image-frame",
+        ):
+            from arka.agent.reposition_image import main as reposition_image_main
+
+            code = reposition_image_main(rest)
+        elif head in (
+            "filter_images",
+            "filter-images",
+            "image_relevance",
+            "image-relevance",
+            "hybrid_image_filter",
+            "hybrid-image-filter",
+        ):
+            from arka.agent.filter_images import main as filter_images_main
+
+            code = filter_images_main(rest)
+        elif head in ("tech_stack", "tech-stack", "techstack"):
+            from arka.agent.tech_stack import main as tech_stack_main
+            code = tech_stack_main(rest)
         elif head in ("generate_music", "generate-music", "music_generate"):
             from arka.media.music_generate import main as music_main
 
@@ -814,6 +885,12 @@ def run_skill(skill_line: str) -> int:
         elif head in ("image", "image_generate", "image-generate") and rest and rest[0] in ("generate", "create"):
             from arka.agent.local_image_gen import main as local_image_main
             code = local_image_main(rest[1:])
+        elif head == "music" and rest and rest[0] == "local":
+            from arka.agent.local_music_gen import main as local_music_main
+            code = local_music_main(rest[1:])
+        elif head in ("local_music_gen", "local_music", "local-music"):
+            from arka.agent.local_music_gen import main as local_music_main
+            code = local_music_main(rest)
         elif head in ("visual", "visuals") and rest and rest[0] in ("space-tech", "space_tech"):
             from arka.agent.space_visual import main as space_visual_main
             code = space_visual_main(rest[1:])
@@ -867,6 +944,18 @@ def run_skill(skill_line: str) -> int:
             from arka.agent.qa_engineering import main as qa_main
 
             code = qa_main(rest)
+        elif head == "connector":
+            from arka.integrations.cli_connector import main as cli_connector_main
+
+            code = cli_connector_main(rest or ["status"])
+        elif head in ("docker_status", "docker-status", "docker"):
+            from arka.integrations.docker_status import main as docker_status_main
+
+            code = docker_status_main(rest or ["ps"])
+        elif head in ("edit_guard", "edit-guard"):
+            from arka.core.edit_guard import main as edit_guard_main
+
+            code = edit_guard_main(rest or ["status"])
         elif head.endswith(".py") and script_path(head).is_file():
             code = run_script(head, rest)
         else:

@@ -11,10 +11,15 @@ import pytest
 
 from arka.integrations.mcp_server import _handle_arka_ai_video
 from arka.media.ai_video import (
+    AI_VIDEO_SUBCOMMANDS,
     _extract_video_prompt,
     _gemini_models,
     _is_ai_video_request,
     _is_compose_video_request,
+    _is_subcommand,
+    _normalize_argv,
+    clamp_veo_duration,
+    main,
     nl_to_argv,
 )
 from arka.routing.symbolic import route_ai_video, route_compose_video, route_create_video
@@ -76,6 +81,78 @@ class TestAiVideoDetection:
         assert models[0] == "veo-3.1-generate-preview"
         assert "veo-3.1-fast-generate-preview" in models
         assert "veo-3.1-lite-generate-preview" in models
+
+
+class TestAiVideoSubcommands:
+    def test_subcommand_registry(self) -> None:
+        assert "styles" in AI_VIDEO_SUBCOMMANDS
+        assert _is_subcommand(["styles"])
+
+    def test_normalize_argv_strips_leading_dashes(self) -> None:
+        assert _normalize_argv(["--", "styles"]) == ["styles"]
+        assert _normalize_argv(["--", "--", "check"]) == ["check"]
+
+    def test_main_styles_not_generate(self) -> None:
+        from io import StringIO
+
+        buf = StringIO()
+        with patch("sys.stdout", buf):
+            code = main(["--", "styles"])
+        assert code == 0
+        assert "Video styles:" in buf.getvalue()
+        assert "Generating full AI video" not in buf.getvalue()
+
+    def test_main_styles_direct(self) -> None:
+        from io import StringIO
+
+        buf = StringIO()
+        with patch("sys.stdout", buf):
+            code = main(["styles"])
+        assert code == 0
+        assert "documentary" in buf.getvalue()
+
+
+class TestVeoDuration:
+    def test_clamp_veo_duration_bounds(self) -> None:
+        assert clamp_veo_duration(3) == 4
+        assert clamp_veo_duration(5) == 5
+        assert clamp_veo_duration(15) == 8
+        assert clamp_veo_duration("7") == 7
+        assert clamp_veo_duration(None) == 5
+
+    @mock.patch("google.genai.types.GenerateVideosSource")
+    @mock.patch("google.genai.types.GenerateVideosConfig")
+    @mock.patch("google.genai.Client")
+    def test_generate_gemini_clamps_duration(
+        self,
+        mock_client_cls: mock.Mock,
+        mock_config_cls: mock.Mock,
+        _mock_source_cls: mock.Mock,
+        tmp_path: Path,
+    ) -> None:
+        from arka.media.ai_video import generate_gemini
+
+        captured: dict[str, object] = {}
+
+        def _capture_config(**kwargs):
+            captured.update(kwargs)
+            return mock.Mock()
+
+        mock_config_cls.side_effect = _capture_config
+        mock_client = mock.Mock()
+        mock_client_cls.return_value = mock_client
+        operation = mock.Mock()
+        operation.done = True
+        operation.error = None
+        operation.result = mock.Mock(generated_videos=[])
+        mock_client.models.generate_videos.return_value = operation
+
+        out = tmp_path / "clip.mp4"
+        with mock.patch.dict("os.environ", {"GEMINI_API_KEY": "test-key"}, clear=False):
+            with pytest.raises(RuntimeError, match="no video"):
+                generate_gemini("test", out, "16:9", "veo-3.1-generate-preview", 15)
+
+        assert captured.get("duration_seconds") == 8
 
 
 class TestAiVideoCli:

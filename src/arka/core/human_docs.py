@@ -110,6 +110,16 @@ def read_guide(*, max_chars: int = _DEFAULT_MAX_CHARS) -> str:
         return text
 
 
+def screenshot_context(*, limit: int = 5) -> str:
+    """Recent screenshot paths for human-facing doc generation."""
+    try:
+        from arka.core.screenshot_paths import docs_screenshot_context
+
+        return docs_screenshot_context(limit=limit)
+    except ImportError:
+        return ""
+
+
 def context_for(
     goal: str = "",
     *,
@@ -127,15 +137,22 @@ def context_for(
                 path = guide_path()
                 label = path.name if path else _GUIDE_NAME
                 parts.append(f"Human docs guide ({label}):\n{body}")
+        shot_ctx = screenshot_context(limit=5)
+        if shot_ctx and (is_human_doc_goal(goal) or wants_file_write(goal)):
+            parts.append(shot_ctx)
         return "\n\n".join(parts).strip()
     if not should_include(goal, coding=coding):
         return ""
     body = read_guide(max_chars=limit_chars)
-    if not body:
-        return _COMPACT_RULE
-    path = guide_path()
-    label = path.name if path else _GUIDE_NAME
-    return f"Human docs guide ({label}):\n{body}".strip()
+    parts = [_COMPACT_RULE]
+    if body:
+        path = guide_path()
+        label = path.name if path else _GUIDE_NAME
+        parts.append(f"Human docs guide ({label}):\n{body}")
+    shot_ctx = screenshot_context(limit=5)
+    if shot_ctx and (is_human_doc_goal(goal) or wants_file_write(goal)):
+        parts.append(shot_ctx)
+    return "\n\n".join(parts).strip()
 
 
 def suggest_output_path(goal: str, *, cwd: Path | None = None) -> str:

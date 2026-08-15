@@ -1,0 +1,66 @@
+---
+title: "Infographics"
+description: "Adaptive listicle and mind-map PNGs — layout follows item count, local Pillow only."
+icon: "layout-grid"
+---
+
+Compose **infographic-style images** locally with Pillow. Arka picks the layout
+from how many items you provide — no AI tokens, exact typography.
+
+## Layout auto-selection
+
+| Items | Layout |
+| ----- | ------ |
+| 1–2 | Horizontal row |
+| 3 | Three-column row |
+| 4 | 2×2 grid |
+| 5–6 | Multi-column grid |
+| 7–9 | 3×3 grid |
+| 10+ | Radial hub (mind-map) |
+
+Override with `--layout radial` (or `grid4`, `row3`, etc.) when you want a
+fixed template.
+
+## Quick start
+
+```bash
+# 4 items → 2×2 grid
+arka infographic --title "Types of Headaches" \
+  --item Tension --item Migraine --item Cluster --item Sinus
+
+# 10+ items → radial mind-map
+arka infographic create --title "GitHub Repos" \
+  --item frontend --item backend --item infra --item docs \
+  --item mobile --item cli --item docs-site --item playground \
+  --item design-system --item analytics --item infra-tools
+
+# Styles: clean (default), doodle, dark, meme
+arka infographic --title "Daily habits" --style doodle \
+  --items "Walk, Read, Code, Sleep"
+
+# List layouts and styles
+arka infographic layouts
+arka infographic styles
+```
+
+Output defaults to `~/Pictures/arka-generated/` (override with
+`IMAGE_OUTPUT_DIR`). Default style: `INFOGRAPHIC_STYLE=clean`.
+
+## Natural language
+
+Phrases like **infographic about …**, **listicle**, or **mind map** route
+offline before chat:
+
+```bash
+arka 'infographic about "Types of Headaches" items: tension, migraine, cluster, sinus'
+arka route 'listicle titled "Startup stack" with items: Postgres, Redis, Kafka'
+```
+
+## CLI aliases
+
+- `arka infographic …`
+- `arka infographic-maker …`
+- `arka listicle …`
+
+Each cell uses a simple glyph icon and wrapped label text. For photo-based
+memes with stock images, see [Meme templates](/guides/meme-templates).

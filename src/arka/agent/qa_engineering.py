@@ -48,6 +48,12 @@ _TRIGGER_RE = re.compile(
     r"run\s+qa\b|"
     r"qa\s+(?:on|for)\b|"
     r"test\s+(?:strategy|plan|checklist)|"
+    r"production[-\s]+ready\s+(?:constraints?|gate|checklist|qa)\b|"
+    r"prod(?:uction)?\s+readiness\b|"
+    r"extreme\s+(?:qa|test(?:ing)?|constraints?)\b|"
+    r"gherkin\s+tests?\b|"
+    r"mutation\s+testing\b|"
+    r"quality\s+metrics\b|"
     r"triage\s+(?:test|ci|pytest|e2e)\b|"
     r"test\s+coverage\b|"
     r"bug\s+report\b|"
@@ -85,6 +91,15 @@ def route_command(text: str) -> str:
         rest = re.sub(r"(?i)^(?:arka\s+)?qa_engineering\s*", "", clean).strip()
         return f"qa_engineering {rest}".strip() if rest else "qa_engineering plan"
 
+    if re.search(
+        r"(?i)\b(?:production[-\s]+ready\s+(?:constraints?|gate|checklist|qa)|prod(?:uction)?\s+readiness|"
+        r"extreme\s+(?:qa|test(?:ing)?|constraints?)|gherkin\s+tests?|mutation\s+testing|quality\s+metrics)\b",
+        low,
+    ):
+        feature = _extract_feature(clean)
+        if feature:
+            return f"qa_engineering extreme --feature {json.dumps(feature)}"
+        return "qa_engineering extreme"
     if re.search(r"(?i)\b(?:triage|diagnos\w*)\b.*\b(?:test|ci|pytest|e2e|failures?)\b", low):
         return "qa_engineering triage"
     if re.search(r"(?i)\b(?:test|code)\s+coverage\b|\bcoverage\s+(?:report|analysis)\b", low):
@@ -269,6 +284,199 @@ def plan_payload(root: Path | str | None = None, *, feature: str | None = None) 
             "qa_engineering coverage",
         ],
     }
+
+
+def extreme_payload(root: Path | str | None = None, *, feature: str | None = None) -> dict:
+    """Return an opt-in, high-rigor production-readiness constraint pack."""
+    path = _project_root(str(root) if root is not None else None)
+    stack = detect_test_stack(path)
+    subject = feature or "the changed behavior"
+    constraint_groups = _production_constraint_groups(subject)
+    return {
+        "path": str(path),
+        "feature": feature or "",
+        "mode": "extreme_constraints",
+        "principle": (
+            "Use this when production readiness matters. Prefer evidence from executable checks, "
+            "reviewable configs, and documented procedures; do not invent passing status, coverage "
+            "numbers, security posture, SLOs, or quality metrics."
+        ),
+        "constraint_groups": constraint_groups,
+        "constraints": [item for group in constraint_groups for item in group["constraints"]],
+        "suggested_commands": _extreme_commands(stack),
+        "definition_of_done": [
+            "All relevant automated tests pass, with command names recorded.",
+            "Coverage and mutation results are reported honestly, including unavailable tooling.",
+            "Gherkin/acceptance scenarios cover at least happy path, main failure path, and one edge case.",
+            "Manual QA procedure is reproducible by another developer.",
+            "Security/privacy checks are complete or explicit exceptions are documented.",
+            "Observability, rollback, and deployment smoke paths are documented and verified.",
+            "No quality, performance, security, SLO, or readiness claim is made without evidence.",
+        ],
+    }
+
+
+def _production_constraint_groups(subject: str) -> list[dict]:
+    return [
+        {
+            "group": "Correctness and tests",
+            "constraints": [
+                {
+                    "name": "Unit tests",
+                    "requirement": f"Cover pure logic, edge cases, and regressions for {subject}.",
+                    "evidence": "Focused unit-test command plus changed test files.",
+                },
+                {
+                    "name": "Gherkin / acceptance tests",
+                    "requirement": "Write Given/When/Then scenarios for user-visible behavior and business rules.",
+                    "evidence": "Feature files or equivalent acceptance-test cases linked to the implementation.",
+                },
+                {
+                    "name": "Integration and contract tests",
+                    "requirement": "Verify API, database, queue, filesystem, and external-service boundaries.",
+                    "evidence": "Integration/contract command output or documented mocked boundary.",
+                },
+                {
+                    "name": "End-to-end and smoke tests",
+                    "requirement": "Exercise critical user journeys and a fast deploy smoke path.",
+                    "evidence": "E2E/smoke command output, URL/environment, screenshots or traces when UI-related.",
+                },
+                {
+                    "name": "Regression and compatibility",
+                    "requirement": "Retest adjacent flows and supported platforms/browsers/runtimes touched by the change.",
+                    "evidence": "Regression matrix with pass/fail notes for each supported target.",
+                },
+            ],
+        },
+        {
+            "group": "Quality gates",
+            "constraints": [
+                {
+                    "name": "Test coverage",
+                    "requirement": "Report line/branch coverage and changed-code coverage; avoid raw percentage theater.",
+                    "evidence": "Coverage command output and uncovered high-risk paths.",
+                },
+                {
+                    "name": "Mutation testing",
+                    "requirement": "Run mutation testing for critical logic or list the smallest mutation target when unavailable.",
+                    "evidence": "Mutation score/report, surviving mutants, or documented blocker.",
+                },
+                {
+                    "name": "Static analysis and lint",
+                    "requirement": "Run formatter/linter/type/security scanners that match the detected stack.",
+                    "evidence": "Commands and outputs for lint, type check, dependency scan, and secret scan.",
+                },
+                {
+                    "name": "Quality metrics",
+                    "requirement": "Track defect risk, flaky tests, runtime budget, performance, accessibility, and error rates.",
+                    "evidence": "Measured metrics or an explicit 'not measured' note with rationale.",
+                },
+            ],
+        },
+        {
+            "group": "Security and privacy",
+            "constraints": [
+                {
+                    "name": "Auth and authorization",
+                    "requirement": "Verify role boundaries, ownership checks, session expiry, and denied paths.",
+                    "evidence": "Tests or manual QA notes for allowed and forbidden actions.",
+                },
+                {
+                    "name": "Input validation and abuse cases",
+                    "requirement": "Test invalid input, malformed data, injection strings, rate limits, and oversized payloads.",
+                    "evidence": "Negative tests or fuzz/property checks for high-risk parsers and endpoints.",
+                },
+                {
+                    "name": "Secrets and data privacy",
+                    "requirement": "Do not log, expose, snapshot, or commit tokens, PII, credentials, or trade-secret payload values.",
+                    "evidence": "Secret scan plus log/output review; use schemas or redacted samples for sensitive data.",
+                },
+                {
+                    "name": "Dependency and supply-chain safety",
+                    "requirement": "Check dependency vulnerabilities, licenses, lockfiles, install scripts, and untrusted plugins.",
+                    "evidence": "Dependency audit output and license/security exceptions if any.",
+                },
+            ],
+        },
+        {
+            "group": "Reliability and operations",
+            "constraints": [
+                {
+                    "name": "Error handling and recovery",
+                    "requirement": "Handle retries, timeouts, partial failures, idempotency, cancellation, and graceful degradation.",
+                    "evidence": "Failure-mode tests or chaos/manual scenarios for dependency outages.",
+                },
+                {
+                    "name": "Observability",
+                    "requirement": "Emit useful logs, metrics, traces, correlation IDs, and alerts for new failure modes.",
+                    "evidence": "Dashboard/alert/query links or local telemetry verification notes.",
+                },
+                {
+                    "name": "Performance and scalability",
+                    "requirement": "Check latency, memory, CPU, concurrency, payload size, and algorithmic complexity.",
+                    "evidence": "Benchmark/load-test output or justified small-scale measurement.",
+                },
+                {
+                    "name": "Runbook and rollback",
+                    "requirement": "Document deploy, rollback, feature-flag, migration, and incident steps.",
+                    "evidence": "Runbook/checklist entry with owner, command, and safe fallback.",
+                },
+            ],
+        },
+        {
+            "group": "Release readiness",
+            "constraints": [
+                {
+                    "name": "Configuration and environments",
+                    "requirement": "Validate required env vars, defaults, hosted/offline modes, and missing-credential fallbacks.",
+                    "evidence": "Config validation output and examples with secrets redacted.",
+                },
+                {
+                    "name": "Backward compatibility",
+                    "requirement": "Preserve public CLI/API/schema behavior or document migrations and deprecations.",
+                    "evidence": "Compatibility tests or migration notes.",
+                },
+                {
+                    "name": "Documentation and user experience",
+                    "requirement": "Update docs, examples, help text, error messages, and troubleshooting for the changed behavior.",
+                    "evidence": "Changed docs/help output and a quick user-facing smoke check.",
+                },
+                {
+                    "name": "Data migration and integrity",
+                    "requirement": "Make migrations reversible or resumable; verify backups, idempotency, and data correctness.",
+                    "evidence": "Migration dry run, rollback notes, or explicit 'no data migration' statement.",
+                },
+            ],
+        },
+    ]
+
+
+def _extreme_commands(stack: dict) -> list[str]:
+    frameworks = set(stack.get("frameworks") or [])
+    commands: list[str] = []
+    if "pytest" in frameworks:
+        commands.extend(
+            [
+                "pytest -q",
+                "pytest --cov --cov-branch",
+                "mutmut run || cosmic-ray run",
+                "behave || pytest-bdd",
+            ]
+        )
+    if {"jest", "vitest"} & frameworks:
+        commands.extend(["npm test", "npm test -- --coverage", "stryker run", "cucumber-js"])
+    if "playwright" in frameworks:
+        commands.append("npx playwright test")
+    if "go" in frameworks:
+        commands.extend(["go test ./...", "go test -cover ./...", "go-mutesting ./..."])
+    if "cargo" in frameworks:
+        commands.extend(["cargo test", "cargo tarpaulin", "cargo mutants"])
+    return commands or [
+        "repo_health run --test",
+        "qa_engineering coverage",
+        "qa_engineering checklist",
+        "Document Gherkin scenarios and mutation-testing availability",
+    ]
 
 
 def checklist_payload(
@@ -518,6 +726,28 @@ def plan_text(payload: dict) -> str:
     return "\n".join(lines).strip()
 
 
+def extreme_text(payload: dict) -> str:
+    lines = [f"Extreme production-readiness constraints: {payload.get('feature') or Path(payload['path']).name}", ""]
+    lines.append(payload["principle"])
+    lines.append("")
+    lines.append("Required constraints:")
+    groups = payload.get("constraint_groups") or [{"group": "General", "constraints": payload.get("constraints") or []}]
+    for group in groups:
+        lines.append(f"## {group['group']}")
+        for item in group.get("constraints") or []:
+            lines.append(f"- {item['name']}: {item['requirement']}")
+            lines.append(f"  Evidence: {item['evidence']}")
+        lines.append("")
+    lines.append("Suggested commands:")
+    for cmd in payload.get("suggested_commands") or []:
+        lines.append(f"  - {cmd}")
+    lines.append("")
+    lines.append("Definition of done:")
+    for item in payload.get("definition_of_done") or []:
+        lines.append(f"  [ ] {item}")
+    return "\n".join(lines).strip()
+
+
 def checklist_text(payload: dict) -> str:
     lines = [f"QA checklist: {payload.get('feature') or Path(payload['path']).name}", ""]
     if payload.get("changed_files"):
@@ -588,6 +818,12 @@ def cmd_plan(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_extreme(args: argparse.Namespace) -> int:
+    payload = extreme_payload(args.path, feature=args.feature or None)
+    print(extreme_text(payload) if not args.json else json.dumps(payload, indent=2))
+    return 0
+
+
 def cmd_checklist(args: argparse.Namespace) -> int:
     payload = checklist_payload(args.path, feature=args.feature or None, base=args.base or None)
     print(checklist_text(payload) if not args.json else json.dumps(payload, indent=2))
@@ -654,6 +890,7 @@ def main(argv: list[str] | None = None) -> int:
 
     for name, handler in (
         ("plan", cmd_plan),
+        ("extreme", cmd_extreme),
         ("checklist", cmd_checklist),
         ("triage", cmd_triage),
         ("coverage", cmd_coverage),

@@ -21,6 +21,7 @@ _PROJECT_DOCS_TRIGGER = re.compile(
     r"first.?person readme|first.?person blog|"
     r"update readme.*(?:code|changes?|git|repo|commit)|"
     r"update blog.*(?:code|changes?|git|repo|commit)|"
+    r"write blog|write a blog|blog post|"
     r"write blog.*first.?person|"
     r"sync readme|auto.?sync docs?|"
     r"docs? (?:from|with|to match) (?:code|changes?|git)"
@@ -233,6 +234,14 @@ def _build_user_prompt(ctx: dict[str, Any], *, doc_kind: str, focus: str = "") -
         parts.append(f"Diff summary:\n{ctx['diff_stat']}")
     if ctx.get("project_hints"):
         parts.append(f"Project files:\n{ctx['project_hints']}")
+    try:
+        from arka.core.screenshot_paths import docs_screenshot_context
+
+        shot_ctx = docs_screenshot_context(limit=5)
+        if shot_ctx:
+            parts.append(shot_ctx)
+    except ImportError:
+        pass
     existing = ctx.get("existing_readme") if doc_kind == "README" else ctx.get("existing_blog")
     if existing:
         parts.append(f"Existing {doc_kind} (revise in place, preserve accurate facts):\n{existing}")
@@ -303,6 +312,8 @@ def update_docs(
     blog: bool = True,
     post: bool = False,
     focus: str = "",
+    prompt: str = "",
+    assume_defaults: bool = False,
 ) -> dict[str, Any]:
     project = repo_root(root)
     ctx = collect_context(project, since=since)
@@ -319,14 +330,33 @@ def update_docs(
         result["docs"]["readme"] = entry
 
     if blog and (ctx["blog_exists"] or apply):
-        blog_body, _ = generate_blog(project, since=since, focus=focus)
+        blog_args = argparse.Namespace(
+            path=str(project),
+            since=since,
+            focus=focus,
+            prompt=prompt,
+            yes=assume_defaults,
+            non_interactive=assume_defaults,
+            apply=False,
+            post=post,
+            draft=False,
+        )
+        blog_focus, meta = _resolve_blog_focus(ctx, blog_args)
+        blog_body, _ = generate_blog(project, since=since, focus=blog_focus)
         blog_path = Path(ctx["blog_path"])
-        entry = {"bytes": len(blog_body.encode("utf-8")), "preview_lines": len(blog_body.splitlines())}
+        entry: dict[str, Any] = {
+            "bytes": len(blog_body.encode("utf-8")),
+            "preview_lines": len(blog_body.splitlines()),
+        }
+        if meta:
+            entry["brief"] = meta["brief"]
         if apply:
             entry.update(write_doc(blog_path, blog_body))
         else:
             entry["body"] = blog_body
         result["docs"]["blog"] = entry
+        if blog_args.post:
+            post = True
     elif blog and not ctx["blog_exists"]:
         result["docs"]["blog"] = {"skipped": True, "reason": f"{BLOG_NAME} not found — use blog --apply to create"}
 
@@ -359,7 +389,10 @@ def route_command(text: str) -> str:
     import shlex as _shlex
 
     post = bool(re.search(r"(?i)\b(?:post|publish)\b.*\bdev\.?to\b|\bdev\.?to\b.*\b(?:post|publish)\b", clean))
-    apply = bool(re.search(r"(?i)\b(?:apply|write|save|update|sync|refresh)\b", clean))
+    apply = bool(
+        re.search(r"(?i)\b(?:apply|write|save|update|sync|refresh)\b", clean)
+        or re.search(r"(?i)\bwrite\s+(?:a\s+)?blog", clean)
+    )
     blog_only = bool(re.search(r"(?i)\bblog\b", clean)) and not re.search(r"(?i)\breadme\b", clean)
     readme_only = bool(re.search(r"(?i)\breadme\b", clean)) and not re.search(r"(?i)\bblog\b", clean)
 
@@ -378,7 +411,8 @@ def route_command(text: str) -> str:
         m = re.search(r"(?i)\b(?:from|since)\s+(?:commit\s+)?([0-9a-f]{6,40})\b", clean)
         if m:
             cmd += f" --since {m.group(1)}"
-    return cmd + " " + _shlex.quote(clean)
+    cmd += " --prompt " + _shlex.quote(clean)
+    return cmd
 
 
 def cmd_status(args: argparse.Namespace) -> int:
@@ -417,10 +451,34 @@ def cmd_readme(args: argparse.Namespace) -> int:
     return 0
 
 
+def _resolve_blog_focus(
+    ctx: dict[str, Any],
+    args: argparse.Namespace,
+) -> tuple[str, dict[str, Any] | None]:
+    from arka.integrations.blog_interview import prepare_blog_brief
+
+    user_text = str(getattr(args, "prompt", None) or "").strip()
+    assume = bool(getattr(args, "yes", False) or getattr(args, "non_interactive", False))
+    brief, focus = prepare_blog_brief(
+        ctx,
+        user_text=user_text,
+        focus=str(getattr(args, "focus", None) or ""),
+        interactive=not assume,
+        assume_defaults=assume,
+    )
+    meta = {"brief": brief.to_dict(), "focus": focus}
+    if brief.publish_devto and not getattr(args, "post", False):
+        args.post = True
+    return focus, meta
+
+
 def cmd_blog(args: argparse.Namespace) -> int:
     root = Path(args.path).expanduser() if args.path else None
+    project = repo_root(root)
+    ctx = collect_context(project, since=args.since)
     try:
-        body, ctx = generate_blog(root, since=args.since, focus=args.focus or "")
+        focus, meta = _resolve_blog_focus(ctx, args)
+        body, ctx = generate_blog(project, since=args.since, focus=focus)
     except (OSError, ValueError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
@@ -428,6 +486,8 @@ def cmd_blog(args: argparse.Namespace) -> int:
     if args.apply:
         result = write_doc(path, body)
         print(f"Wrote {result['path']} ({result['bytes']} bytes)")
+        if meta:
+            print(f"brief\t{json.dumps(meta['brief'], ensure_ascii=False)}")
         if args.post:
             from arka.integrations.devto_post import cmd_post
 
@@ -442,7 +502,10 @@ def cmd_blog(args: argparse.Namespace) -> int:
                 )
             )
         return 0
-    print(json.dumps({"path": str(path), "bytes": len(body.encode()), "body": body}, indent=2))
+    payload: dict[str, Any] = {"path": str(path), "bytes": len(body.encode()), "body": body}
+    if meta:
+        payload["brief"] = meta["brief"]
+    print(json.dumps(payload, indent=2))
     return 0
 
 
@@ -459,6 +522,8 @@ def cmd_update(args: argparse.Namespace) -> int:
             blog=not readme_only,
             post=args.post,
             focus=args.focus or "",
+            prompt=str(getattr(args, "prompt", None) or ""),
+            assume_defaults=bool(getattr(args, "yes", False) or getattr(args, "non_interactive", False)),
         )
     except (OSError, ValueError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
@@ -512,6 +577,9 @@ def main(argv: list[str] | None = None) -> int:
     p_blog.add_argument("--apply", action="store_true", help="Write blog-post.md")
     p_blog.add_argument("--post", action="store_true", help="Publish to dev.to after writing")
     p_blog.add_argument("--draft", action="store_true", help="dev.to draft (with --post)")
+    p_blog.add_argument("--prompt", help="Original NL request (used for blog interview)")
+    p_blog.add_argument("--yes", "-y", action="store_true", help="Skip interview questions; use defaults")
+    p_blog.add_argument("--non-interactive", action="store_true", help="Same as --yes")
     p_blog.set_defaults(handler=cmd_blog)
 
     p_update = sub.add_parser("update", help="Update README and blog from code changes")
@@ -521,6 +589,9 @@ def main(argv: list[str] | None = None) -> int:
     p_update.add_argument("--draft", action="store_true", help="dev.to draft (with --post)")
     p_update.add_argument("--readme-only", action="store_true")
     p_update.add_argument("--blog-only", action="store_true")
+    p_update.add_argument("--prompt", help="Original NL request (used for blog interview)")
+    p_update.add_argument("--yes", "-y", action="store_true", help="Skip interview questions; use defaults")
+    p_update.add_argument("--non-interactive", action="store_true", help="Same as --yes")
     p_update.set_defaults(handler=cmd_update)
 
     p_parse = sub.add_parser("parse", help="Parse NL into project_docs command")

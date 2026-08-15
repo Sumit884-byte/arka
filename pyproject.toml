@@ -82,6 +82,11 @@ video = [
 vision = [
     "Pillow>=10.0",
 ]
+image-filter = [
+    "Pillow>=10.0",
+    "sentence-transformers>=3.0",
+    "scikit-learn>=1.4",
+]
 whatsapp = [
     "selenium>=4.0",
     "pywhatkit>=5.4",
@@ -120,6 +125,12 @@ Issues = "https://github.com/Sumit884-byte/arka/issues"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+markers = [
+    "docker: requires Docker CLI and daemon",
+    "docker_linux: Linux container integration tests",
+    "docker_windows: Windows container integration tests",
+    "windows_cli: Windows host CLI smoke tests",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

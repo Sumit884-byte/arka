@@ -104,6 +104,17 @@ The bridge serves the built app from `dist/` on port **8766**.
 | `VITE_ARKA_TOKEN` | — | Optional dev token in the frontend |
 | `ARKA_WALKTHROUGH_URL` | `http://127.0.0.1:5173` | URL for dashboard walkthrough capture |
 
+## Output viewer (lightweight)
+
+For rendering arbitrary JSON, CSV, markdown, or text — without the React dashboard — use the [Output viewer](/guides/output-viewer):
+
+```bash
+arka output show data.json
+arka output serve --open
+```
+
+This is the recommended way to preview agent output, exports, and tabular data locally.
+
 ## CLI helpers
 
 ```bash

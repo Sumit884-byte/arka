@@ -39,6 +39,7 @@ def main() -> int:
     for name in ("config.fish",):
         if copy_file(SRC / "fish" / name, BUNDLED / name):
             n += 1
+    n += copy_tree(SRC / "fish" / "functions", BUNDLED / "functions")
     for sh in ("arka_boot.sh", "arka_voice_hf.sh", "termux-boot-arka.sh"):
         if copy_file(SRC / "fish" / "scripts" / sh, BUNDLED / sh):
             n += 1

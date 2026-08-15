@@ -22,6 +22,10 @@ class QAEngineeringTests(unittest.TestCase):
         self.assertEqual(qa.route_command("run qa on this"), "qa_engineering plan")
         self.assertEqual(qa.route_command("triage test failures"), "qa_engineering triage")
         self.assertEqual(qa.route_command("test coverage report"), "qa_engineering coverage")
+        self.assertEqual(qa.route_command("extreme constraints for checkout"), 'qa_engineering extreme --feature "checkout"')
+        self.assertEqual(qa.route_command("production ready constraints for checkout"), 'qa_engineering extreme --feature "checkout"')
+        self.assertEqual(qa.route_command("production readiness"), "qa_engineering extreme")
+        self.assertEqual(qa.route_command("mutation testing plan"), "qa_engineering extreme")
         self.assertIn("checklist", qa.route_command("qa checklist for feature checkout"))
         self.assertIn("explore", qa.route_command("exploratory testing for payments"))
 
@@ -46,6 +50,38 @@ class QAEngineeringTests(unittest.TestCase):
             self.assertIn("unit", layers)
             self.assertIn("smoke", layers)
             self.assertEqual(payload["feature"], "checkout")
+
+    def test_extreme_payload_names_high_rigor_constraints(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "pyproject.toml").write_text("[project]\nname='demo'\n", encoding="utf-8")
+            (root / "tests").mkdir()
+            payload = qa.extreme_payload(root, feature="payments")
+            names = {row["name"] for row in payload["constraints"]}
+            groups = {row["group"] for row in payload["constraint_groups"]}
+            self.assertIn("Unit tests", names)
+            self.assertIn("Gherkin / acceptance tests", names)
+            self.assertIn("Integration and contract tests", names)
+            self.assertIn("Static analysis and lint", names)
+            self.assertIn("Secrets and data privacy", names)
+            self.assertIn("Observability", names)
+            self.assertIn("Runbook and rollback", names)
+            self.assertIn("Configuration and environments", names)
+            self.assertIn("Quality metrics", names)
+            self.assertIn("Mutation testing", names)
+            self.assertIn("Test coverage", names)
+            self.assertIn("Security and privacy", groups)
+            self.assertIn("Reliability and operations", groups)
+            self.assertGreaterEqual(len(names), 20)
+            self.assertTrue(any("pytest" in cmd for cmd in payload["suggested_commands"]))
+
+    def test_extreme_text_is_evidence_oriented(self) -> None:
+        text = qa.extreme_text(qa.extreme_payload(feature="auth"))
+        self.assertIn("Extreme production-readiness constraints: auth", text)
+        self.assertIn("No quality, performance, security, SLO, or readiness claim is made without evidence", text)
+        self.assertIn("Mutation testing", text)
+        self.assertIn("Security and privacy", text)
+        self.assertIn("Release readiness", text)
 
     def test_checklist_payload(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

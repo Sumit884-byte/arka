@@ -1,0 +1,21 @@
+{
+  "name": "fetch_lyrics",
+  "description": "Fetch song lyrics from LRCLIB or lyrics.ovh, translate them, and optionally generate a new track with translated lyrics",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "fetch lyrics",
+    "get lyrics",
+    "find lyrics",
+    "song lyrics",
+    "translate lyrics",
+    "translate song",
+    "remix song"
+  ],
+  "permissions": ["read", "write", "network"],
+  "requires": {
+    "env_optional": ["LYRICS_OUTPUT_DIR", "POLLINATIONS_API_KEY", "MUSIC_BACKEND"]
+  }
+}

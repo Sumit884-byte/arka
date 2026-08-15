@@ -11,6 +11,8 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from arka.core.screenshot_paths import screenshot_path
+
 SUPPORTED = {"goto", "click", "fill", "press", "type", "hotkey", "wait", "assert_text", "screenshot"}
 
 
@@ -54,7 +56,9 @@ def run_web(url: str, steps: list[dict[str, Any]], *, headless: bool = True, out
             elif action == "assert_text":
                 page.locator(step["selector"]).get_by_text(str(step.get("text", "")), exact=False).wait_for(timeout=15_000)
             elif action == "screenshot":
-                path = target / str(step.get("name", f"step-{index}.png"))
+                name = str(step.get("name", f"step-{index}"))
+                stem = Path(name).stem if name.endswith(".png") else name
+                path = screenshot_path(stem, target)
                 page.screenshot(path=str(path), full_page=True)
                 screenshots.append(str(path))
             events.append({"step": index, "action": action, "status": "passed"})
@@ -92,7 +96,9 @@ def run_desktop(steps: list[dict[str, Any]], *, output: str | None = None) -> di
             import time
             time.sleep(min(30, max(0, float(step.get("seconds", step.get("ms", 500) / 1000)))))
         elif action == "screenshot":
-            path = target / str(step.get("name", f"step-{index}.png"))
+            name = str(step.get("name", f"step-{index}"))
+            stem = Path(name).stem if name.endswith(".png") else name
+            path = screenshot_path(stem, target)
             pyautogui.screenshot(str(path))
             screenshots.append(str(path))
         events.append({"step": index, "action": action, "status": "passed"})

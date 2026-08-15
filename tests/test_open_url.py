@@ -123,6 +123,12 @@ class OpenUrlRoutingTests(unittest.TestCase):
         self.assertIsNone(route_open_url("hello"))
         self.assertFalse((route_offline_extras("hi") or "").startswith("open_url "))
 
+    def test_play_website_game_open_is_not_open_url(self) -> None:
+        phrase = "play_website_game open https://shadowfight2.com/play/"
+        self.assertFalse(wants_open_url(phrase))
+        self.assertEqual(route_command(phrase), "")
+        self.assertIsNone(route_open_url(phrase))
+
     def test_router_symbolic_only(self) -> None:
         phrase = "open github.com"
         with mock.patch.dict(os.environ, {"ROUTE_MODE": "symbolic_only"}, clear=False):

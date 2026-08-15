@@ -1,0 +1,19 @@
+{
+  "name": "local_music_gen",
+  "description": "Generate music locally with ffmpeg tone synthesis — no cloud API key",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "generate music locally",
+    "create song offline",
+    "local music generation",
+    "synthesize music with ffmpeg",
+    "generate track without cloud"
+  ],
+  "permissions": ["write", "shell"],
+  "requires": {
+    "bins": ["ffmpeg"]
+  }
+}

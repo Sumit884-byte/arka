@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{TITLE}}</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b1020;
+      --panel: #121829;
+      --panel-soft: #17213c;
+      --text: #edf2ff;
+      --muted: #9eacce;
+      --line: #2b385d;
+      --accent: #6366f1;
+      --accent-soft: rgba(99, 102, 241, 0.14);
+      --ok: #22c55e;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      --radius: 12px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 16px/1.55 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: radial-gradient(circle at 20% -10%, rgba(99,102,241,.18), transparent 28rem), var(--bg);
+      color: var(--text);
+    }
+    .page { max-width: 1180px; margin: 0 auto; padding: 28px 20px 48px; }
+    .hero { margin-bottom: 24px; }
+    .hero h1 { margin: 0 0 8px; font-size: 1.75rem; letter-spacing: -0.02em; }
+    .hero p { margin: 0; color: var(--muted); }
+    .toolbar {
+      display: grid;
+      gap: 12px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+    .toolbar-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    textarea, input[type=text], input[type=file] {
+      width: 100%;
+      background: var(--panel-soft);
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px 14px;
+      font: inherit;
+    }
+    textarea { min-height: 140px; resize: vertical; font-family: var(--mono); font-size: 0.92rem; }
+    button, .button {
+      appearance: none;
+      border: 0;
+      border-radius: 10px;
+      padding: 10px 16px;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      background: linear-gradient(135deg, #6366f1, #818cf8);
+      color: white;
+    }
+    button.secondary { background: var(--panel-soft); color: var(--text); border: 1px solid var(--line); }
+    .view-shell {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .view-header {
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .view-header h1 { margin: 0; font-size: 1.1rem; }
+    .view-body { padding: 18px 20px 24px; }
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: #c7d2fe;
+      font-size: 0.82rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .muted { color: var(--muted); }
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.95rem;
+    }
+    .table-wrap { overflow: auto; max-height: 70vh; border: 1px solid var(--line); border-radius: 10px; }
+    .data-table th, .data-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+    .data-table th {
+      position: sticky;
+      top: 0;
+      background: #1a2440;
+      color: #c7d4f7;
+      z-index: 1;
+    }
+    .data-table tr:hover td { background: rgba(255,255,255,0.02); }
+    .kv-table th { width: 220px; white-space: nowrap; }
+    .code-block, .text-block {
+      margin: 0;
+      padding: 16px;
+      overflow: auto;
+      background: #0d1324;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      font-family: var(--mono);
+      font-size: 0.92rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .inline-json {
+      margin: 0;
+      white-space: pre-wrap;
+      font-family: var(--mono);
+      font-size: 0.88rem;
+    }
+    .markdown-body h1, .markdown-body h2, .markdown-body h3 { margin-top: 1.2em; }
+    .markdown-body p, .markdown-body blockquote, .markdown-body ul { margin: 0.8em 0; }
+    .markdown-body code {
+      font-family: var(--mono);
+      background: rgba(255,255,255,0.06);
+      padding: 0.1em 0.35em;
+      border-radius: 6px;
+    }
+    .markdown-body blockquote {
+      border-left: 3px solid var(--accent);
+      padding-left: 14px;
+      color: var(--muted);
+    }
+    .media-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 16px;
+    }
+    .media-card {
+      background: var(--panel-soft);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .media-card img, .media-card video, .media-card audio { width: 100%; display: block; }
+    .media-card figcaption, .file-card {
+      padding: 10px 12px;
+      font-size: 0.88rem;
+      color: var(--muted);
+      word-break: break-all;
+    }
+    .empty-state { color: var(--muted); padding: 28px; text-align: center; }
+    .status { min-height: 1.2em; color: var(--muted); font-size: 0.92rem; }
+    .status.error { color: #f87171; }
+    @media (max-width: 720px) {
+      .view-header { align-items: flex-start; }
+      .kv-table th { width: 120px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="hero">
+      <h1>Arka Output Viewer</h1>
+      <p>Paste JSON, CSV, markdown, or plain text — Arka picks the best representation.</p>
+    </div>
+
+    <section class="toolbar">
+      <textarea id="input" placeholder='Paste data here, e.g. [{"name":"Ada","score":98}] or CSV rows…'></textarea>
+      <div class="toolbar-row">
+        <input id="path" type="text" placeholder="Optional local file path (/path/to/data.json)" style="flex:1 1 320px">
+        <input id="file" type="file" style="flex:0 1 220px">
+        <button id="renderBtn" type="button">Render</button>
+        <button id="clearBtn" type="button" class="secondary">Clear</button>
+      </div>
+      <div id="status" class="status"></div>
+    </section>
+
+    <section class="view-shell">
+      <div id="view">{{INITIAL_VIEW}}</div>
+    </section>
+  </div>
+
+  <script>
+    const input = document.getElementById('input');
+    const pathInput = document.getElementById('path');
+    const fileInput = document.getElementById('file');
+    const view = document.getElementById('view');
+    const status = document.getElementById('status');
+
+    async function renderPayload(payload) {
+      status.textContent = 'Rendering…';
+      status.classList.remove('error');
+      const res = await fetch('/api/render', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        status.textContent = data.error || 'Render failed';
+        status.classList.add('error');
+        return;
+      }
+      view.innerHTML = `
+        <header class="view-header">
+          <h1>${escapeHtml(data.title || 'Arka output')}</h1>
+          <div class="meta"><span class="badge">${escapeHtml(data.format || 'text')}</span>
+          ${data.filename ? `<span class="muted">${escapeHtml(data.filename)}</span>` : ''}</div>
+        </header>
+        <main class="view-body">${data.body_html || ''}</main>`;
+      status.textContent = `Rendered as ${data.format}.`;
+    }
+
+    function escapeHtml(text) {
+      return String(text)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;');
+    }
+
+    document.getElementById('renderBtn').addEventListener('click', async () => {
+      const path = pathInput.value.trim();
+      const content = input.value;
+      if (path) {
+        await renderPayload({ path });
+        return;
+      }
+      if (!content.trim()) {
+        status.textContent = 'Paste content or provide a file path.';
+        status.classList.add('error');
+        return;
+      }
+      const file = fileInput.files && fileInput.files[0];
+      await renderPayload({
+        content,
+        filename: file ? file.name : undefined,
+      });
+    });
+
+    document.getElementById('clearBtn').addEventListener('click', () => {
+      input.value = '';
+      pathInput.value = '';
+      fileInput.value = '';
+      view.innerHTML = '<div class="empty-state">Paste data or load a file to begin.</div>';
+      status.textContent = '';
+      status.classList.remove('error');
+    });
+
+    fileInput.addEventListener('change', async () => {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) return;
+      const text = await file.text();
+      input.value = text;
+      pathInput.value = '';
+      await renderPayload({ content: text, filename: file.name });
+    });
+
+    if (!view.innerHTML.trim()) {
+      view.innerHTML = '<div class="empty-state">Paste data or load a file to begin.</div>';
+    }
+  </script>
+</body>
+</html>

@@ -5,17 +5,15 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
-import shlex
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 
 from arka.agent.pr_check import _run, gh_available, git_root, resolve_pr
 
 CODERABBIT_BOTS = ("coderabbitai", "coderabbitai[bot]")
+_CODERABBIT_BOT_IDS = frozenset(bot.lower() for bot in CODERABBIT_BOTS)
 TRIGGER_INCREMENTAL = "@coderabbitai review"
 TRIGGER_FULL = "@coderabbitai full review"
 
@@ -43,8 +41,19 @@ def repo_slug(root: Path) -> str | None:
 
 
 def _is_coderabbit_user(login: str) -> bool:
-    low = (login or "").lower()
-    return any(low == bot or low.startswith("coderabbit") for bot in CODERABBIT_BOTS)
+    return (login or "").lower() in _CODERABBIT_BOT_IDS
+
+
+def resolve_git_project(root: Path | str | None = None) -> Path | None:
+    """Return the Git top-level directory for root, or None if not a worktree."""
+    project = Path(root).expanduser().resolve() if root else git_root()
+    if project is None or not project.is_dir():
+        return None
+    code, out, _ = _run(["git", "rev-parse", "--show-toplevel"], cwd=project)
+    if code != 0:
+        return None
+    top = Path(out.strip())
+    return top if top.is_dir() else None
 
 
 def run_local_review(
@@ -73,9 +82,6 @@ def run_local_review(
         cmd.append("--uncommitted")
     if base:
         cmd.extend(["--base", base])
-    api_key = os.environ.get("CODERABBIT_API_KEY", "").strip()
-    if api_key:
-        cmd.extend(["--api-key", api_key])
     code, out, err = _run(cmd, cwd=root, timeout=600)
     text = (out or err).strip()
     return code, text or "(no output from CodeRabbit CLI)"
@@ -299,8 +305,8 @@ def route_command(text: str) -> str:
 
 
 def coderabbit_payload(action: str = "comments", *, root: Path | str | None = None, pr: int | None = None, full: bool = False) -> dict:
-    project = Path(root).expanduser().resolve() if root else git_root()
-    if project is None or not project.is_dir():
+    project = resolve_git_project(root)
+    if project is None:
         return {"ok": False, "error": "not a git repository"}
     act = (action or "comments").strip().lower()
     if act == "trigger":
@@ -313,6 +319,7 @@ def coderabbit_payload(action: str = "comments", *, root: Path | str | None = No
             "cli_installed": cr_cli_available(),
             "gh_authenticated": gh_available(),
             "path": str(project),
+            "git_root": str(project),
         }
     if act == "review":
         code, text = run_local_review(project)

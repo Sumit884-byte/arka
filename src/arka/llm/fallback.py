@@ -396,6 +396,7 @@ def _log_exhaustion_once(message: str, *, verbose: bool) -> None:
         _LAST_EXHAUSTION_LOG = now
 _LAST_MODEL: tuple[str, str] | None = None
 _LAST_ERROR: str = ""
+_LAST_LLM_DURATION_MS: float | None = None
 
 
 def is_retryable_error(msg: str) -> bool:
@@ -2726,7 +2727,11 @@ def llm_complete(
         )
     else:
         engine = _DEFAULT_ENGINE
+    start = time.perf_counter()
     result = engine.complete(system, user, temperature=temperature)
+    if result.text and not result.error:
+        global _LAST_LLM_DURATION_MS
+        _LAST_LLM_DURATION_MS = (time.perf_counter() - start) * 1000
     if result.text:
         return result.text
     if result.error:
@@ -2769,6 +2774,10 @@ def llm_last_error() -> str:
 
 def llm_last_model() -> tuple[str, str] | None:
     return _LAST_MODEL
+
+
+def llm_last_duration_ms() -> float | None:
+    return _LAST_LLM_DURATION_MS
 
 
 def ordered_model_candidates(*, task: str | None = None, skill: str | None = None) -> list[tuple[str, str]]:

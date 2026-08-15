@@ -66,10 +66,34 @@ def _capture_stdio_enabled() -> bool:
 def delegate_to_fish(argv: list[str]) -> int | None:
     """Run `arka <request>` via fish config.fish. Returns exit code, or None if unavailable."""
     try:
+        from arka.agent.infographic import is_infographic_cli_argv, run_infographic_cli
+
+        if is_infographic_cli_argv(argv):
+            return run_infographic_cli(argv)
+    except ImportError:
+        pass
+
+    try:
         from arka.agent.meme_templates import is_meme_cli_argv, run_meme_cli
 
         if is_meme_cli_argv(argv):
             return run_meme_cli(argv)
+    except ImportError:
+        pass
+
+    try:
+        from arka.media.model_video import is_model_video_cli_argv, run_model_video_cli
+
+        if is_model_video_cli_argv(argv):
+            return run_model_video_cli(argv)
+    except ImportError:
+        pass
+
+    try:
+        from arka.agent.play_website_game import is_play_website_game_cli_argv, run_play_website_game_cli
+
+        if is_play_website_game_cli_argv(argv):
+            return run_play_website_game_cli(argv)
     except ImportError:
         pass
 

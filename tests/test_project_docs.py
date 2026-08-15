@@ -27,6 +27,7 @@ def test_route_command_blog_post_devto() -> None:
     assert hit is not None
     assert "project_docs blog" in hit
     assert "--post" in hit
+    assert "--prompt" in hit
 
 
 def test_route_command_skips_unrelated() -> None:

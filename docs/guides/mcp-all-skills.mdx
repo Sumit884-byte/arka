@@ -4,6 +4,10 @@ description: "Discover and invoke dispatch-backed Arka capabilities from MCP cli
 icon: "table-cells"
 ---
 
+<Note>
+  **AI agents:** Read the dedicated [AI agent guide](/guides/ai-agents) first — routing table, execution rules, and session flow. This page covers dispatch-backed skills and opt-in personal tools.
+</Note>
+
 Arka exposes three generic MCP entry points:
 
 - `arka_capabilities` lists the current MCP tools and dispatch-backed skills.
@@ -69,3 +73,17 @@ Spotify playback/search, Brave/browser-opening helpers, media playback, and
 `daily_brief` are hidden or blocked unless the MCP server is started with
 `ARKA_MCP_ENABLE_PERSONAL_SKILLS=1` or a narrow
 `ARKA_MCP_ENABLED_TOOLS` / `ARKA_MCP_ENABLED_SKILLS` override.
+
+## Routing cheat sheet
+
+| Situation | Tool |
+| --- | --- |
+| Unsure which Arka tool fits | `arka_route` with full user `prompt` |
+| Know the skill name | `arka_skill` with `skill` + optional `args` |
+| Need live tool list + rules | `arka_capabilities` |
+| Repo layout / symbols | `arka_repo_map` |
+| Fuzzy-find a project folder | `arka_tech_stack` (`action: search`) |
+| OCR or document RAG | `arka_ocr`, `arka_rag` (local paths) |
+| Patch files | `arka_edit_guard` → `arka_apply_patch` |
+
+Full decision table and examples: [AI agent guide](/guides/ai-agents#routing-decision-table).

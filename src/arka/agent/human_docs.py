@@ -21,6 +21,9 @@ def route_command(text: str) -> str:
         r"(?i)\b(?:readme|changelog|contributing)\b.*"
         r"\b(?:write|draft|create|update|rewrite|human|sound)\b",
         clean,
+    ) and not re.search(
+        r"(?i)\b(?:preview|dry[- ]?run|show(?:\s+me)?)\b.*\b(?:readme|changelog|contributing|markdown)\b",
+        clean,
     ):
         return ""
     if not re.search(
@@ -30,7 +33,17 @@ def route_command(text: str) -> str:
         return ""
     import shlex
 
-    return "human_docs write " + shlex.quote(clean)
+    preview = bool(re.search(r"(?i)\b(?:preview|dry[- ]?run|show(?:\s+me)?)\b", clean))
+    apply = bool(
+        re.search(
+            r"(?i)\b(?:apply|write|save|update|rewrite|generate|create|draft|compose)\b",
+            clean,
+        )
+    )
+    cmd = "human_docs write " + shlex.quote(clean)
+    if apply and not preview:
+        cmd += " --apply"
+    return cmd
 
 
 def _llm_write(system: str, user: str) -> str:
@@ -78,6 +91,14 @@ def write_doc(
 ) -> dict[str, object]:
     target = Path(out or suggest_output(prompt)).expanduser()
     user_parts = [f"Task: {prompt}", f"Target file: {target.name}"]
+    try:
+        from arka.core.human_docs import screenshot_context
+
+        shot_ctx = screenshot_context(limit=5)
+        if shot_ctx:
+            user_parts.append(shot_ctx)
+    except ImportError:
+        pass
     if context_path:
         ctx = Path(context_path).expanduser()
         if ctx.is_file():
@@ -128,8 +149,17 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("guide", help="Print the human-docs writing guide")
     sub.add_parser("status", help="Show bias configuration")
 
+    route_p = sub.add_parser("route", help="Map NL to human_docs command")
+    route_p.add_argument("text", nargs="+")
+
     args = parser.parse_args(list(argv if argv is not None else sys.argv[1:]))
 
+    if args.cmd == "route":
+        hit = route_command(" ".join(args.text))
+        if not hit:
+            return 1
+        print(hit)
+        return 0
     if args.cmd == "guide":
         from arka.core.human_docs import read_guide
 

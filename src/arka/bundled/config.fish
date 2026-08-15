@@ -1913,6 +1913,21 @@ function _arka_load_third_party_skills --description "Source fish-based plugin s
     end
 end
 
+function _arka_load_package_functions --description "Source bundled fish/functions/*.fish (internal)"
+    for base in \
+            (path dirname (status filename))/functions \
+            "$_ARKA_ROOT/src/arka/fish/functions" \
+            "$_ARKA_ROOT/fish/functions"
+        if test -d "$base"
+            for f in $base/*.fish
+                test -f "$f"; or continue
+                source "$f"
+            end
+            return 0
+        end
+    end
+end
+
 function _arka_run_third_party_skills --description "Run third-party plugin via arka_skills.py (internal)"
     set -l name $argv[1]
     set -e argv[1]
@@ -1988,6 +2003,45 @@ function _agent_dispatch_one --description "Run one skill by name or shell via _
         set -e gargv[1]
         $py (_arka_py_script arka_google.py) $gargv
         return $status
+    end
+    if test "$first" = image
+        if _arka_routing_trace_enabled
+            echo (set_color cyan)"▶ Running skill: $cmd_trim"(set_color normal)
+        end
+        set -lx ARKA_SKILL local_image_gen
+        set -l py (_arka_python)
+        set -l iargv (_agent_shlex_split "$cmd_trim")
+        set -e iargv[1]
+        if test (count $iargv) -ge 1; and test "$iargv[1]" = generate
+            set -e iargv[1]
+        end
+        if test (count $iargv) -lt 1
+            echo (set_color red)"Usage: image generate <prompt>"(set_color normal) >&2
+            return 1
+        end
+        $py (_arka_py_script arka_local_image_gen.py) $iargv
+        return $status
+    end
+    if test "$first" = music
+        if test (count $tokens) -ge 2; and test "$tokens[2]" = local
+            if _arka_routing_trace_enabled
+                echo (set_color cyan)"▶ Running skill: $cmd_trim"(set_color normal)
+            end
+            set -lx ARKA_SKILL local_music_gen
+            set -l py (_arka_python)
+            set -l margv (_agent_shlex_split "$cmd_trim")
+            set -e margv[1]
+            set -e margv[1]
+            if test (count $margv) -ge 1; and test "$margv[1]" = generate
+                set -e margv[1]
+            end
+            if test (count $margv) -lt 1
+                echo (set_color red)"Usage: music local generate <prompt>"(set_color normal) >&2
+                return 1
+            end
+            $py (_arka_py_script arka_local_music_gen.py) $margv
+            return $status
+        end
     end
     if test "$first" = github
         if test (count $tokens) -ge 2; and contains -- $tokens[2] resume cv
@@ -2084,7 +2138,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         weather hyperlocal_weather timer screenshot set_wallpaper system_info \
         search_web open_urls open_url open browse open_finance open_news git_summary disk_usage disk_breakdown \
         pdf_ask pdf_ingest pdf_ingest_dir pdf_list doc_ask doc_ingest doc_list drawing_ask describe_image describe_screen describe_video port_scan speedtest clipboard todo translate survive_lang \
-        generate_password ip_info open_project create_folder list_folders show_folder \
+        generate_password ip_info open_project create_folder list_folders show_folder to \
         store_password pass \
         open_file list_files search_files find_files_by_size browse_web activate_venv create_venv fix_venv \
         write_script run_script ollama_run lint_python cheat qr_code shorten_url \
@@ -2099,10 +2153,10 @@ function _agent_all_skills --description "Canonical registered agent skill names
         agent_resume agent_research day_research interval_research research_session agent_nudge agent_watch agent_routine agent_fanout \
         agent_code agent_handoff agent_browser transcript_ask media_ask \
         meeting_agent study_agent inbox_agent compare_agent product_reviewer price_check profession pr_check self_improve coding_tui github_repo competitions route_learn \
-        bookmarks repo_health repo_context repo_map generate_data data_gen data_ask ask_data query_data analyze_data view_data view_csv show_csv docker_status clipboard_history jsonkit markdown_style style_markdown heartbeat mcp agent_hub gemini_cli harvard_ark persona elon talk_to_elon elon_chat \
+        bookmarks repo_health repo_context repo_map read_file generate_data data_gen data_ask ask_data query_data analyze_data view_data view_csv show_csv docker_status clipboard_history jsonkit markdown_style style_markdown heartbeat mcp agent_hub gemini_cli harvard_ark persona elon talk_to_elon elon_chat \
         arka_ask semantic_memory supermemory speak_research voice_session handoff_notify remind routines predictions stock \
         rag_setup rag_status voice_agent wake_control \
-        greeting agent_ask web_answer deep_web_answer web_essay platform_howto interesting_fact calc chat_reset set_location files_preference_help google \
+        greeting agent_ask web_answer deep_web_answer web_essay platform_howto interesting_fact prompt_coach calc chat_reset set_location files_preference_help google \
         select_model model_select best_model model_advisor \
         free_credits free_models free-models free_models_list \
         personalize \
@@ -2515,6 +2569,8 @@ function skills --description "Show what commands the agent can auto-run"
                 echo (set_color green)"  data_ask / query_data"(set_color normal)" <file|folder> [--format] [question] — Q&A over CSV/JSON/TSV"
             case view_data view_csv show_csv pretty_csv display_csv
                 echo (set_color green)"  view_data / view_csv"(set_color normal)" <file.csv> [--formats csv,json] — colored table + save to ~/arka-generated/"
+            case read_file readfile cat_file show_file view_file
+                echo (set_color green)"  read_file       "(set_color normal)" <path> [--offset N] [--limit N] — read workspace file contents"
             case drawing_ask
                 echo (set_color green)"  drawing_ask     "(set_color normal)"<file.pdf|image> <question> — vision analysis (Gemini)"
             case describe_image
@@ -5616,6 +5672,24 @@ sys.exit(0 if is_interesting_fact_request(sys.argv[1]) else 1)
 " (string escape --style=script -- $argv[1])
 end
 
+function _agent_is_prompt_coach_request --description "True for prompt-writing coaching requests (internal)"
+    set -l py (_arka_python)
+    $py -c "
+from arka.routing.prompt_coach import is_prompt_coach_request
+import sys
+sys.exit(0 if is_prompt_coach_request(sys.argv[1]) else 1)
+" (string escape --style=script -- $argv[1])
+end
+
+function _agent_build_prompt_coach_cmd --description "Build prompt_coach args from NL (internal)"
+    set -l cmd "$argv[1]"
+    set -l py (_arka_python)
+    set -l rest ($py -c 'import sys, shlex; from arka.routing.prompt_coach import nl_to_argv; argv=nl_to_argv(" ".join(sys.argv[1:])); print(" ".join(shlex.quote(a) for a in argv) if argv else "", end="")' (string escape --style=script -- $cmd) 2>/dev/null)
+    if test -n "$rest"
+        echo "prompt_coach $rest"
+    end
+end
+
 function _agent_parse_usage_period --description "Parse today/week from usage question (internal)"
     set -l clean (string lower "$argv[1]")
     if string match -qr '(?i)(yesterday|last\s+night)' "$clean"
@@ -6679,8 +6753,14 @@ function ai_video --description "Full AI text-to-video (Pollinations → Gemini 
                 if test $i -le $argc
                     set -a flags $argv[$i]
                 end
-            case --no-audio check parse
+            case --no-audio check parse styles list-styles setup-pollinations
                 set -a flags $argv[$i]
+            case --style
+                set -a flags $argv[$i]
+                set i (math $i + 1)
+                if test $i -le $argc
+                    set -a flags $argv[$i]
+                end
             case '-*'
                 set -a flags $argv[$i]
             case '*'
@@ -7761,6 +7841,16 @@ function show_csv --description "Alias for view_data — colored CSV table"
     view_data $argv
 end
 
+function read_file --description "Read full contents of a local workspace file"
+    if test (count $argv) -eq 0
+        echo "Usage: read_file <path> [--offset N] [--limit N]"
+        return 1
+    end
+    set -l py (_arka_python)
+    set -l script (_arka_py_script arka_read_file.py)
+    $py $script read $argv
+end
+
 function docker_status --description "Docker containers, images, logs, and daemon health"
     set -l py (_arka_python)
     set -l script (_arka_py_script arka_docker_status.py)
@@ -8223,11 +8313,15 @@ function _arka_ui_model --description "Model footer under answer blocks (interna
     if set -q SHOW_MODEL; and test "$SHOW_MODEL" = 0 -o "$SHOW_MODEL" = false
         return
     end
-    set -l model (_arka_llm_model_label 2>/dev/null)
-    test -z "$model"; and return
+    set -l py (_arka_python)
+    set -l footer (string trim -- ($py (_arka_py_script arka_llm.py) active-model --footer 2>/dev/null))
+    if test -z "$footer"
+        set footer (string trim -- (_arka_llm_model_label 2>/dev/null))
+    end
+    test -z "$footer"; and return
     echo ""
     set_color brblack
-    echo "  Model: $model"
+    echo "  Model: $footer"
     set_color normal
 end
 
@@ -10737,6 +10831,30 @@ function _agent_route_markdown_style --description "Build markdown_style invocat
     echo "$route"
 end
 
+function _agent_is_human_docs_request --description "True if user wants README/markdown written to disk (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_human_docs.py) route "$argv[1]" 2>/dev/null | string trim)
+    test -n "$route"
+end
+
+function _agent_route_human_docs --description "Build human_docs invocation from NL (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_human_docs.py) route "$argv[1]" 2>/dev/null | string trim)
+    echo "$route"
+end
+
+function _agent_is_project_docs_request --description "True if user wants first-person README/blog sync (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_project_docs.py) route "$argv[1]" 2>/dev/null | string trim)
+    test -n "$route"
+end
+
+function _agent_route_project_docs --description "Build project_docs invocation from NL (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_project_docs.py) route "$argv[1]" 2>/dev/null | string trim)
+    echo "$route"
+end
+
 function _agent_is_repo_health_request --description "True if user wants repo health checks (internal)"
     set -l py (_arka_python)
     set -l route ($py (_arka_py_script arka_repo_health.py) route "$argv[1]" 2>/dev/null | string trim)
@@ -10806,6 +10924,18 @@ end
 function _agent_route_view_data --description "Build view_data invocation from NL (internal)"
     set -l py (_arka_python)
     set -l route ($py (_arka_py_script arka_view_data.py) route "$argv[1]" 2>/dev/null | string trim)
+    echo "$route"
+end
+
+function _agent_is_read_file_request --description "True if user wants to read a workspace file (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_read_file.py) route "$argv[1]" 2>/dev/null | string trim)
+    test -n "$route"
+end
+
+function _agent_route_read_file --description "Build read_file invocation from NL (internal)"
+    set -l py (_arka_python)
+    set -l route ($py (_arka_py_script arka_read_file.py) route "$argv[1]" 2>/dev/null | string trim)
     echo "$route"
 end
 
@@ -11053,6 +11183,41 @@ function _agent_parse_youtube_research_query --description "Extract search query
     set q (string replace -r -i '^.*\byt\s+research\s+(?:about\s+|on\s+|for\s+)?' '' "$q")
     set q (string trim -- "$q")
     echo $q
+end
+
+function _agent_route_to_folder --description "Map NL to to <folder> (internal)"
+    set -l cmd (string trim -- "$argv[1]")
+    set -l clean (string lower "$cmd")
+    if string match -qr '(?i)\b(?:convert|translate|send|post|dub|rename|move|copy|export|save|write|listen|remind)\b' "$clean"
+        return 1
+    end
+    set -l m (string match -r '(?i)^to\s+(.+)$' -- "$cmd")
+    if test (count $m) -ge 2
+        set -l name (string trim $m[2])
+        test -n "$name"; and echo "to $name"
+        return
+    end
+    set m (string match -r '(?i)^(?:go|cd|change|navigate)\s+to\s+(?:folder|directory)\s+(.+)$' -- "$cmd")
+    if test (count $m) -ge 2
+        set -l name (string trim $m[2])
+        test -n "$name"; and echo "to $name"
+        return
+    end
+    set m (string match -r '(?i)^(?:go|cd|change|navigate)\s+to\s+(?:the\s+)?(?:my\s+)?(downloads?|documents?|desktop|pictures?|photos?|music|videos?|projects?|home)\b(?:\s+(?:folder|directory))?\s*$' -- "$cmd")
+    if test (count $m) -ge 2
+        echo "to $m[2]"
+        return
+    end
+    set m (string match -r '(?i)^(?:go|cd|change|navigate)\s+to\s+(?:the\s+)?(?:my\s+)?(.+?)(?:\s+(?:folder|directory))?\s*$' -- "$cmd")
+    if test (count $m) -ge 2
+        set -l name (string trim $m[2])
+        if test -n "$name"
+            if string match -qr '(?i)\b(?:youtube|spotify|gym|bed|sleep|work|school|store|shop|url|site|page)\b' "$name"
+                return 1
+            end
+            echo "to $name"
+        end
+    end
 end
 
 function _agent_parse_folder_path --description "Extract directory path from NL (internal)"
@@ -11437,6 +11602,9 @@ function _agent_is_knowledge_question --description "True if user wants a factua
     if _agent_is_view_data_request "$argv[1]"
         return 1
     end
+    if _agent_is_read_file_request "$argv[1]"
+        return 1
+    end
     if _agent_is_data_ask_request "$argv[1]"
         return 1
     end
@@ -11468,6 +11636,15 @@ function _agent_is_knowledge_question --description "True if user wants a factua
         return 1
     end
     if _agent_is_meme_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_infographic_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_prompt_coach_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_connector_request "$argv[1]"
         return 1
     end
     if _agent_is_chart_request "$argv[1]"
@@ -11670,10 +11847,19 @@ function _agent_is_general_chat --description "True if plain conversational inpu
     if _agent_is_platform_howto_question "$argv[1]"
         return 1
     end
-    if _agent_is_interesting_fact_request "$cmd"
+    if _agent_is_interesting_fact_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_prompt_coach_request "$argv[1]"
         return 1
     end
     if _agent_is_meme_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_infographic_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_connector_request "$argv[1]"
         return 1
     end
     if _agent_is_system_info_question "$argv[1]"
@@ -11732,6 +11918,9 @@ function _agent_is_general_chat --description "True if plain conversational inpu
         return 1
     end
     if _agent_is_view_data_request "$argv[1]"
+        return 1
+    end
+    if _agent_is_read_file_request "$argv[1]"
         return 1
     end
     if _agent_is_data_ask_request "$argv[1]"
@@ -11831,6 +12020,10 @@ function _agent_route_general_chat --description "Pick web_answer vs agent_ask f
     end
     if _agent_is_interesting_fact_request "$cmd"
         echo "interesting_fact $cmd"
+        return
+    end
+    if _agent_is_prompt_coach_request "$cmd"
+        echo (_agent_build_prompt_coach_cmd "$cmd")
         return
     end
     if _agent_is_platform_howto_question "$cmd"
@@ -12160,6 +12353,14 @@ function _agent_offline_route_cmd --description "Full symbolic NL to skill comma
         echo (_agent_build_meme_cmd "$cmd")
         return 0
     end
+    if _agent_is_infographic_request "$cmd"
+        echo (_agent_build_infographic_cmd "$cmd")
+        return 0
+    end
+    if _agent_is_connector_request "$cmd"
+        echo (_agent_build_connector_cmd "$cmd")
+        return 0
+    end
     if _agent_is_preferred_model_set_request "$cmd"
         echo (_agent_build_preferred_model_cmd "$cmd")
         return 0
@@ -12222,6 +12423,14 @@ function _agent_offline_route_cmd --description "Full symbolic NL to skill comma
     end
     if _agent_is_generate_thumbnail_request "$cmd"
         echo (_agent_build_generate_thumbnail_cmd "$cmd")
+        return 0
+    end
+    if _agent_is_local_image_request "$cmd"
+        echo (_agent_build_local_image_cmd "$cmd")
+        return 0
+    end
+    if _agent_is_local_music_request "$cmd"
+        echo (_agent_build_local_music_cmd "$cmd")
         return 0
     end
     if _agent_is_generate_image_request "$cmd"
@@ -12323,6 +12532,14 @@ function _agent_offline_route_cmd --description "Full symbolic NL to skill comma
         echo (_agent_route_markdown_style "$cmd")
         return 0
     end
+    if _agent_is_project_docs_request "$cmd"
+        echo (_agent_route_project_docs "$cmd")
+        return 0
+    end
+    if _agent_is_human_docs_request "$cmd"
+        echo (_agent_route_human_docs "$cmd")
+        return 0
+    end
     if _agent_is_repo_context_request "$cmd"
         echo (_agent_route_repo_context "$cmd")
         return 0
@@ -12337,6 +12554,10 @@ function _agent_offline_route_cmd --description "Full symbolic NL to skill comma
     end
     if _agent_is_view_data_request "$cmd"
         echo (_agent_route_view_data "$cmd")
+        return 0
+    end
+    if _agent_is_read_file_request "$cmd"
+        echo (_agent_route_read_file "$cmd")
         return 0
     end
     if _agent_is_data_ask_request "$cmd"
@@ -12369,6 +12590,10 @@ function _agent_offline_route_cmd --description "Full symbolic NL to skill comma
     end
     if _agent_is_interesting_fact_request "$cmd"
         echo "interesting_fact $cmd"
+        return 0
+    end
+    if _agent_is_prompt_coach_request "$cmd"
+        echo (_agent_build_prompt_coach_cmd "$cmd")
         return 0
     end
     if _agent_is_platform_howto_question "$cmd"
@@ -12413,6 +12638,45 @@ end
 
 function _agent_is_meme_request --description "True if user wants a meme template (internal)"
     test -n "$(_agent_build_meme_cmd "$argv[1]")"
+end
+
+function _agent_build_infographic_cmd --description "Build infographic args from NL (internal)"
+    set -l cmd "$argv[1]"
+    set -l py (_arka_python)
+    set -l rest ($py -c 'import sys, shlex; from arka.agent.infographic import nl_to_argv; argv=nl_to_argv(" ".join(sys.argv[1:])); print(" ".join(shlex.quote(a) for a in argv) if argv else "", end="")' (string escape --style=script -- $cmd) 2>/dev/null)
+    if test -n "$rest"
+        echo "infographic create $rest"
+    end
+end
+
+function _agent_is_infographic_request --description "True if user wants an infographic (internal)"
+    test -n "$(_agent_build_infographic_cmd "$argv[1]")"
+end
+
+function _agent_build_tech_stack_cmd --description "Build tech_stack args from NL (internal)"
+    set -l cmd "$argv[1]"
+    set -l py (_arka_python)
+    set -l rest ($py -c 'import sys, shlex; from arka.agent.tech_stack import nl_to_argv; argv=nl_to_argv(" ".join(sys.argv[1:])); print(" ".join(shlex.quote(a) for a in argv) if argv else "", end="")' (string escape --style=script -- $cmd) 2>/dev/null)
+    if test -n "$rest"
+        echo "tech_stack $rest"
+    end
+end
+
+function _agent_is_tech_stack_request --description "True if user asks for a project tech stack (internal)"
+    test -n "$(_agent_build_tech_stack_cmd "$argv[1]")"
+end
+
+function _agent_build_connector_cmd --description "Build connector args from NL (internal)"
+    set -l cmd "$argv[1]"
+    set -l py (_arka_python)
+    set -l rest ($py -c 'import sys, shlex; from arka.integrations.cli_connector import nl_to_argv; argv=nl_to_argv(" ".join(sys.argv[1:])); print(" ".join(shlex.quote(a) for a in argv) if argv else "", end="")' (string escape --style=script -- $cmd) 2>/dev/null)
+    if test -n "$rest"
+        echo "connector $rest"
+    end
+end
+
+function _agent_is_connector_request --description "True if user wants CLI connector help (internal)"
+    test -n "$(_agent_build_connector_cmd "$argv[1]")"
 end
 
 function _agent_build_preferred_model_cmd --description "Build provider set --model from NL (internal)"
@@ -12642,8 +12906,37 @@ function _agent_is_describe_image_request --description "True if user wants vLLM
     test -n "$(_agent_build_describe_image_cmd "$argv[1]")"
 end
 
+function _agent_build_local_image_cmd --description "Build local image generate args from NL (internal)"
+    set -l cmd "$argv[1]"
+    set -l py (_arka_python)
+    set -l rest ($py (_arka_py_script arka_local_image_gen.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
+    if test (count $rest) -gt 0
+        echo "image $rest"
+    end
+end
+
+function _agent_is_local_image_request --description "True if user wants local Stable Diffusion image generation (internal)"
+    test -n "$(_agent_build_local_image_cmd "$argv[1]")"
+end
+
+function _agent_build_local_music_cmd --description "Build local music generate args from NL (internal)"
+    set -l cmd "$argv[1]"
+    set -l py (_arka_python)
+    set -l rest ($py (_arka_py_script arka_local_music_gen.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
+    if test (count $rest) -gt 0
+        echo "music local $rest"
+    end
+end
+
+function _agent_is_local_music_request --description "True if user wants local ffmpeg music synthesis (internal)"
+    test -n "$(_agent_build_local_music_cmd "$argv[1]")"
+end
+
 function _agent_build_generate_image_cmd --description "Build generate_image args from NL (internal)"
     set -l cmd "$argv[1]"
+    if _agent_is_local_image_request "$cmd"
+        return 1
+    end
     set -l py (_arka_python)
     set -l rest ($py (_arka_py_script arka_generate_image.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
     if test (count $rest) -gt 0
@@ -14699,6 +14992,28 @@ print(interesting_fact_user_prompt(sys.argv[1]))
     return 1
 end
 
+function prompt_coach --description "Coach users to write clearer, more effective LLM prompts"
+    if test (count $argv) -eq 0
+        echo "Usage: prompt_coach <request>"
+        echo "Example: prompt_coach help me write better prompts"
+        echo "Example: prompt_coach write a better prompt for summarizing PDFs"
+        return 1
+    end
+    if not _arka_ensure_venv
+        return 1
+    end
+    set -l request (_agent_with_voice_context (string join " " $argv))
+    _arka_ui_header "$request" query
+    set -l py (_arka_python)
+    set -l answer ($py -m arka.agent.prompt_coach $argv 2>/dev/null)
+    if test -n "$answer"
+        _arka_print_answer_block "$answer"
+        return 0
+    end
+    echo (set_color red)"Could not coach (check GEMINI_API_KEY or GROQ_API_KEY)"(set_color normal)
+    return 1
+end
+
 function web_answer --description "Answer factual questions via web lookup + AI (auto deep search when needed)"
     if test (count $argv) -eq 0
         echo "Usage: web_answer [--deep] [--no-session] <question>"
@@ -15123,6 +15438,21 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         end
     end
 
+    if _agent_is_connector_request "$cmd"
+        set -l conn_cmd (_agent_build_connector_cmd "$cmd")
+        if test -n "$conn_cmd"
+            echo "skill|$conn_cmd|CLI connector — shared Agent Hub context"
+            return
+        end
+    end
+
+    if set -l to_cmd (_agent_route_to_folder "$cmd")
+        if test -n "$to_cmd"
+            echo "skill|$to_cmd|cd to folder by name"
+            return
+        end
+    end
+
     if _agent_is_mcp_request "$cmd"
         set -l mcp_cmd (_agent_route_mcp "$cmd")
         if test -n "$mcp_cmd"
@@ -15390,6 +15720,20 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         set -l parts (_agent_build_meme_cmd "$cmd")
         if test -n "$parts"
             echo "skill|$parts|Local meme template compositor (Drake, comparison, vibe-coding, …)"
+            return
+        end
+    end
+    if _agent_is_infographic_request "$cmd"
+        set -l parts (_agent_build_infographic_cmd "$cmd")
+        if test -n "$parts"
+            echo "skill|$parts|Adaptive infographic PNG (grid or radial mind-map)"
+            return
+        end
+    end
+    if _agent_is_connector_request "$cmd"
+        set -l parts (_agent_build_connector_cmd "$cmd")
+        if test -n "$parts"
+            echo "skill|$parts|CLI connector — shared Agent Hub context"
             return
         end
     end
@@ -15675,6 +16019,13 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
             return
         end
     end
+    if _agent_is_read_file_request "$cmd"
+        set -l rf (_agent_route_read_file "$cmd")
+        if test -n "$rf"
+            echo "skill|$rf|Read workspace file contents"
+            return
+        end
+    end
     if _agent_is_data_ask_request "$cmd"
         set -l da (_agent_route_data_ask "$cmd")
         if test -n "$da"
@@ -15686,6 +16037,7 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         and not _agent_is_repo_health_request "$cmd"
         and not _agent_is_jsonkit_request "$cmd"
         and not _agent_is_view_data_request "$cmd"
+        and not _agent_is_read_file_request "$cmd"
         and not _agent_is_data_ask_request "$cmd"
         set -l ticker (string upper (string match -r '(?i)([A-Z][A-Z0-9.-]{1,12})\s*$' "$cmd")[2])
         echo "skill|stock analyze $ticker|AI stock strategy backtest"
@@ -15699,6 +16051,13 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         set -l vd (_agent_route_view_data "$cmd")
         if test -n "$vd"
             echo "skill|$vd|Colored CSV display and export"
+            return
+        end
+    end
+    if _agent_is_read_file_request "$cmd"
+        set -l rf (_agent_route_read_file "$cmd")
+        if test -n "$rf"
+            echo "skill|$rf|Read workspace file contents"
             return
         end
     end
@@ -15765,11 +16124,26 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
             return
         end
     end
-    if string match -qr '(?i)^(generate|create|make|draw|paint|sketch|show)\s+(?:an?\s+)?(?:image|picture|photo|art|drawing|sketch|painting|illustration|portrait|landscape)\b|^(draw|paint|sketch)\s+' "$clean"
-        and not string match -qr '(?i)\bascii\s+(?:art|banner)\b' "$clean"
-        and not string match -qr '(?i)\bfiglet\b' "$clean"
-        echo "skill|generate_image|Generate images with Gemini API (gemini-2.5-flash-image)"
-        return
+    if _agent_is_local_image_request "$cmd"
+        set -l parts (_agent_build_local_image_cmd "$cmd")
+        if test -n "$parts"
+            echo "skill|$parts|Local Stable Diffusion image generation"
+            return
+        end
+    end
+    if _agent_is_local_music_request "$cmd"
+        set -l parts (_agent_build_local_music_cmd "$cmd")
+        if test -n "$parts"
+            echo "skill|$parts|Local ffmpeg music synthesis"
+            return
+        end
+    end
+    if _agent_is_generate_image_request "$cmd"
+        set -l parts (_agent_build_generate_image_cmd "$cmd")
+        if test -n "$parts"
+            echo "skill|$parts|Generate images with Gemini API (gemini-2.5-flash-image)"
+            return
+        end
     end
     if string match -qr '(?i)wallpaper|desktop\s+background|set\s+(?:this|it)\s+as\s+wallpaper|background\s+image' "$clean"
         set -l words (string split " " -- "$cmd")
@@ -15946,6 +16320,13 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
         set -l vd (_agent_route_view_data "$cmd")
         if test -n "$vd"
             echo "skill|$vd|Colored CSV display and export"
+            return
+        end
+    end
+    if _agent_is_read_file_request "$cmd"
+        set -l rf (_agent_route_read_file "$cmd")
+        if test -n "$rf"
+            echo "skill|$rf|Read workspace file contents"
             return
         end
     end
@@ -16167,6 +16548,18 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
     set -l learned ($py (_arka_py_script arka_route_learn.py) match "$cmd" 2>/dev/null | string trim)
     if test -n "$learned"
         echo "skill|$learned|Learned route"
+        return
+    end
+    if _agent_is_prompt_coach_request "$cmd"
+        echo "skill|"(_agent_build_prompt_coach_cmd "$cmd")"|Prompt-writing coach with examples and rewrites"
+        return
+    end
+    if _agent_is_project_docs_request "$cmd"
+        echo "skill|"(_agent_route_project_docs "$cmd")"|First-person README/blog synced to repo changes"
+        return
+    end
+    if _agent_is_human_docs_request "$cmd"
+        echo "skill|"(_agent_route_human_docs "$cmd")"|Human-sounding README/markdown written to disk"
         return
     end
     set -l tp ($py (_arka_py_script arka_skills.py) match "$cmd" 2>/dev/null)
@@ -16432,6 +16825,18 @@ function _agent_guess_route --description "Suggest route: skill|shell|llm|llm_co
     end
     if _agent_is_meme_request "$cmd"
         echo "skill|"(_agent_build_meme_cmd "$cmd")"|Local meme template compositor"
+        return
+    end
+    if _agent_is_infographic_request "$cmd"
+        echo "skill|"(_agent_build_infographic_cmd "$cmd")"|Adaptive infographic PNG compositor"
+        return
+    end
+    if _agent_is_prompt_coach_request "$cmd"
+        echo "skill|"(_agent_build_prompt_coach_cmd "$cmd")"|Prompt-writing coach with examples and rewrites"
+        return
+    end
+    if _agent_is_connector_request "$cmd"
+        echo "skill|"(_agent_build_connector_cmd "$cmd")"|CLI connector — shared Agent Hub context"
         return
     end
     if _agent_is_general_chat "$cmd"
@@ -17926,6 +18331,9 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                     set -l py (_arka_python)
                     $py -m arka route $argv[2..-1]
                     return $status
+                case to
+                    to $argv[2..-1]
+                    return $status
                 case refetch update sync
                     set -l py (_arka_python)
                     set -l flags $argv[2..-1]
@@ -17960,8 +18368,12 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                                 return 1
                             end
                             $py (_arka_py_script arka_skills.py) info $argv[3]
+                        case doctor check
+                            $py (_arka_py_script arka_skills.py) doctor
+                        case audit lint
+                            $py (_arka_py_script arka_skills.py) audit
                         case '*'
-                            echo "Usage: $name skills list|install <path|git-url>|refresh|info <name>"
+                            echo "Usage: $name skills list|doctor|audit|install <path|git-url>|refresh|info <name>"
                             return 1
                     end
                     return $status
@@ -18109,6 +18521,14 @@ function _agent_register_call_name --description "Register AGENT_NAME as a comma
                             if test -n "$vd"
                                 echo (set_color yellow)"💡 [View CSV]"(set_color normal)
                                 _agent_dispatch_one "$vd"
+                                return $status
+                            end
+                        end
+                        if _agent_is_read_file_request "$raw"
+                            set -l rf (_agent_route_read_file "$raw")
+                            if test -n "$rf"
+                                echo (set_color yellow)"💡 [Read file]"(set_color normal)
+                                _agent_dispatch_one "$rf"
                                 return $status
                             end
                         end
@@ -18990,6 +19410,18 @@ function agent --description "Run commands safely: executes safe commands automa
         return $status
     end
 
+    if test "$first_word" = infographic; or test "$first_word" = infographic-maker; or test "$first_word" = listicle
+        set -l py (_arka_python)
+        $py -m arka infographic $argv[2..-1]
+        return $status
+    end
+
+    if test "$first_word" = tech_stack; or test "$first_word" = tech-stack; or test "$first_word" = techstack
+        set -l py (_arka_python)
+        $py -m arka tech_stack $argv[2..-1]
+        return $status
+    end
+
     # 2. Direct Skill Execution
     if contains -- "$first_word" $available_skills
         $argv
@@ -19078,6 +19510,33 @@ function agent --description "Run commands safely: executes safe commands automa
 
     if test -z "$interpreted"; and _agent_is_meme_request "$cmd"
         set interpreted (_agent_build_meme_cmd "$cmd")
+        set route_source offline
+    end
+
+    if test -z "$interpreted"; and _agent_is_infographic_request "$cmd"
+        set interpreted (_agent_build_infographic_cmd "$cmd")
+        set route_source offline
+    end
+
+    if test -z "$interpreted"; and set -l to_cmd (_agent_route_to_folder "$cmd")
+        if test -n "$to_cmd"
+            set interpreted $to_cmd
+            set route_source offline
+        end
+    end
+
+    if test -z "$interpreted"; and _agent_is_tech_stack_request "$cmd"
+        set interpreted (_agent_build_tech_stack_cmd "$cmd")
+        set route_source offline
+    end
+
+    if test -z "$interpreted"; and _agent_is_connector_request "$cmd"
+        set interpreted (_agent_build_connector_cmd "$cmd")
+        set route_source offline
+    end
+
+    if test -z "$interpreted"; and _agent_is_prompt_coach_request "$cmd"
+        set interpreted (_agent_build_prompt_coach_cmd "$cmd")
         set route_source offline
     end
 
@@ -19291,6 +19750,21 @@ function agent --description "Run commands safely: executes safe commands automa
         else
             set interpreted "play_movie $play_target"
         end
+    else if string match -qr '(?i)^to\s+\S' "$clean_cmd"
+        set -l folder_name (string replace -r -i '^to\s+' '' "$cmd" | string trim)
+        if test -n "$folder_name"
+            set interpreted "to $folder_name"
+        end
+    else if string match -qr '(?i)^(?:go|cd|change|navigate)\s+to\s+(?:folder|directory)\s+\S' "$clean_cmd"
+        set -l folder_name (string replace -r -i '^.*(?:go|cd|change|navigate)\s+to\s+(?:folder|directory)\s+' '' "$cmd" | string trim)
+        if test -n "$folder_name"
+            set interpreted "to $folder_name"
+        end
+    else if string match -qr '(?i)^(?:go|cd|change|navigate)\s+to\s+(?:the\s+)?(?:my\s+)?(?:downloads?|documents?|desktop|pictures?|photos?|music|videos?|projects?|home)\b' "$clean_cmd"
+        set -l folder_name (string replace -r -i '^.*(?:go|cd|change|navigate)\s+to\s+(?:the\s+)?(?:my\s+)?' '' "$cmd" | string replace -r -i '\s+(?:folder|directory)\s*$' '' | string trim)
+        if test -n "$folder_name"
+            set interpreted "to $folder_name"
+        end
     else if string match -qr '(list.*folder|show.*folder|folder.*names|what.*folders|name.*of.*folders)' "$clean_cmd"
         set -l folder_path ""
         set -l m (string match -r '(?i)(?:folders?\s+in|folders?\s+under|folders?\s+at)\s+(.+)$' -- "$cmd")
@@ -19471,6 +19945,9 @@ function agent --description "Run commands safely: executes safe commands automa
     else if _agent_is_view_data_request "$cmd"
         set interpreted (_agent_route_view_data "$cmd")
         set route_source offline
+    else if _agent_is_read_file_request "$cmd"
+        set interpreted (_agent_route_read_file "$cmd")
+        set route_source offline
     else if _agent_is_data_ask_request "$cmd"
         set interpreted (_agent_route_data_ask "$cmd")
         set route_source offline
@@ -19527,6 +20004,9 @@ function agent --description "Run commands safely: executes safe commands automa
     else if _agent_is_metallurgy_request "$clean_cmd"
         set interpreted (_agent_build_metallurgy_cmd "$cmd")
         set route_source offline
+    else if _agent_is_local_image_request "$clean_cmd"
+        set interpreted (_agent_build_local_image_cmd "$cmd")
+        set route_source offline
     else if _agent_is_generate_image_request "$clean_cmd"
         set interpreted (_agent_build_generate_image_cmd "$cmd")
         set route_source offline
@@ -19550,6 +20030,9 @@ function agent --description "Run commands safely: executes safe commands automa
         set route_source offline
     else if _agent_is_compose_video_request "$clean_cmd"
         set interpreted (_agent_build_compose_video_cmd "$cmd")
+        set route_source offline
+    else if _agent_is_local_music_request "$clean_cmd"
+        set interpreted (_agent_build_local_music_cmd "$cmd")
         set route_source offline
     else if string match -qr '(?i)^(generate|create|make|compose|produce)\s+(?:an?\s+)?(?:music|song|track|tune|melody|beat)\b' "$clean_cmd"
         set -l py (_arka_python)
@@ -19753,6 +20236,9 @@ function agent --description "Run commands safely: executes safe commands automa
         set route_source offline
     else if _agent_is_view_data_request "$cmd"
         set interpreted (_agent_route_view_data "$cmd")
+        set route_source offline
+    else if _agent_is_read_file_request "$cmd"
+        set interpreted (_agent_route_read_file "$cmd")
         set route_source offline
     else if _agent_is_data_ask_request "$cmd"
         set interpreted (_agent_route_data_ask "$cmd")
@@ -20294,6 +20780,10 @@ function agent --description "Run commands safely: executes safe commands automa
         set -l meme_cmd (_agent_build_meme_cmd "$cmd")
         echo (set_color yellow)"💡 [Meme → $meme_cmd]"(set_color normal)
         _agent_dispatch_one "$meme_cmd"
+    else if _agent_is_infographic_request "$cmd"
+        set -l info_cmd (_agent_build_infographic_cmd "$cmd")
+        echo (set_color yellow)"💡 [Infographic → $info_cmd]"(set_color normal)
+        _agent_dispatch_one "$info_cmd"
     else if _agent_is_preferred_model_set_request "$cmd"
         set -l model_cmd (_agent_build_preferred_model_cmd "$cmd")
         echo (set_color yellow)"💡 [Model select → $model_cmd]"(set_color normal)
@@ -21032,6 +21522,7 @@ _arka_ensure_path
 
 # --- First Run Setup ---
 set -g _ARKA_RELOAD_STAMP (_arka_reload_stamp)
+_arka_load_package_functions 2>/dev/null
 _arka_load_third_party_skills 2>/dev/null
 _agent_register_call_name
 if status is-interactive

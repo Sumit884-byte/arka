@@ -111,6 +111,14 @@ AGENTS: dict[str, dict[str, Any]] = {
         "mcp_merge_key": "mcpServers",
         "memory_hint": "Set ARKA_MEMORY_DIR for lightweight memory exports",
     },
+    "cli": {
+        "name": "Arka CLI",
+        "ollama_launch": "",
+        "aliases": ["terminal", "shell", "arka cli"],
+        "mcp_paths": [],
+        "memory_hint": "Run `arka connector connect` or source hub/launch.env for shared context",
+        "memory_paths": [],
+    },
 }
 
 ADAPTER_TARGETS: dict[str, Path] = {
@@ -1494,7 +1502,19 @@ def nl_to_argv(cmd: str) -> list[str] | None:
         return ["adapters"]
     if re.search(r"(?i)\b(?:agent\s+hub|hub)\b.*\b(?:mcp\s+)?(?:tools?|servers?)\b", clean):
         return ["tools"]
-    if re.search(r"(?i)\b(?:import|ingest)\b.*\b(?:hub\s+)?memory\b", clean):
+    if re.search(r"(?i)\b(?:shared\s+context|hub\s+memory)\b.*\b(?:sync|refresh|update|export)\b", clean):
+        if re.search(r"(?i)\b(?:cli|terminal|shell|connector|command\s+line)\b", clean):
+            return None
+        return ["sync"]
+    if re.search(r"(?i)\b(?:sync|refresh|update|export)\b.*\b(?:shared\s+context|hub\s+memory)\b", clean):
+        if re.search(r"(?i)\b(?:cli|terminal|shell|connector|command\s+line)\b", clean):
+            return None
+        return ["sync"]
+    if re.search(r"(?i)\b(?:unify|merge)\b.*\b(?:agent\s+hub|arka\s+hub|shared\s+mcp|hub\s+mcp)\b", clean):
+        return ["sync", "--unify"]
+    if re.search(r"(?i)\b(?:agent\s+hub|hub)\b.*\b(?:unify|merge)\b", clean):
+        return ["sync", "--unify"]
+    if re.search(r"(?i)\b(?:import|ingest|pull)\b.*\b(?:hub\s+)?memory\b", clean):
         return None
     if re.search(r"(?i)\b(?:agent\s+hub|arka\s+hub)\b.*\b(?:sync|refresh|update)\b", clean):
         return ["sync"]
@@ -1510,8 +1530,28 @@ def nl_to_argv(cmd: str) -> list[str] | None:
         return ["list"]
     if re.search(r"(?i)\b(?:shared|common)\s+mcp\b.*\b(?:agents?|hub)\b", clean):
         return ["status"]
-    if lower in {"agent hub", "agent hub list", "agent hub status", "agent hub sync", "agent hub doctor"}:
-        return ["list"] if lower.endswith("list") else [lower.split()[-1]]
+    if re.search(r"(?i)\b(?:shared\s+context|cross[- ]agent\s+memory)\b", clean):
+        if re.search(r"(?i)\b(?:cli|terminal|shell|connector|command\s+line|show|preview|read|load)\b", clean):
+            return None
+        if re.search(r"(?i)\b(?:agent\s+hub|hub|agents?)\b", clean):
+            return ["sync"]
+        return None
+    if re.search(r"(?i)\b(?:wire|connect)\b.*\b(?:claude|cursor|codex|openclaw)\b.*\b(?:hub|mcp|shared)\b", clean):
+        return ["sync", "--unify"]
+    if re.search(r"(?i)\b(?:launch|start|run|open)\b.*\bopenclaw\b", clean):
+        return ["launch", "openclaw"]
+    if re.search(r"(?i)\b(?:launch|start|run|open)\b.*\bhermes\b", clean):
+        return ["launch", "hermes"]
+    if re.search(r"(?i)\b(?:launch|start|run|open)\b.*\b(?:github\s+)?copilot\b", clean):
+        return ["launch", "copilot"]
+    if lower in {"agent hub", "agent hub list", "agent hub status", "agent hub sync", "agent hub doctor", "sync agent hub", "shared mcp for agents"}:
+        if lower.endswith("list"):
+            return ["list"]
+        if lower.endswith("sync") or lower == "sync agent hub":
+            return ["sync"]
+        if lower == "shared mcp for agents":
+            return ["status"]
+        return [lower.split()[-1]]
 
     m = re.search(
         r"(?i)\b(?:launch|start|run|open)\b.*\b("

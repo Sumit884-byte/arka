@@ -1,6 +1,6 @@
 {
   "name": "qa_engineering",
-  "description": "QA Engineering — test strategy, PR checklists, coverage analysis, CI test triage, bug reports, and exploratory testing guidance",
+  "description": "QA Engineering — test strategy, production-readiness constraints, PR checklists, coverage analysis, CI test triage, bug reports, and exploratory testing guidance",
   "version": "1.0.0",
   "author": "Arka",
   "type": "python",
@@ -12,10 +12,17 @@
     "test coverage analysis",
     "bug report for",
     "exploratory testing",
+    "extreme constraints",
+    "extreme QA",
+    "production ready constraints",
+    "production readiness",
+    "gherkin tests",
+    "mutation testing",
+    "quality metrics",
     "test strategy plan",
     "smoke test plan",
     "regression test plan"
   ],
   "permissions": ["read"],
-  "docs": "Subcommands: plan, checklist, triage, coverage, report, explore. CLI: arka qa <subcommand>. MCP: arka_qa or arka_skill qa_engineering."
+  "docs": "Subcommands: plan, extreme, checklist, triage, coverage, report, explore. CLI: arka qa <subcommand>. MCP: arka_qa or arka_skill qa_engineering."
 }

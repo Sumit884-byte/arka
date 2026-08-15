@@ -1,0 +1,110 @@
+---
+title: "Output viewer"
+description: "Render JSON, CSV, markdown, and plain text beautifully in the browser."
+keywords: ["output", "viewer", "json", "csv", "markdown", "ui"]
+icon: "table"
+---
+
+The **Arka Output Viewer** is a lightweight local web UI that auto-detects your data format and renders the best representation — tables for CSV/JSON arrays, formatted JSON, rendered markdown, key-value layouts for objects, and media cards when paths are present.
+
+No React build step. One HTML shell plus a small Python server from the main package.
+
+## Quick start
+
+Render a file and open your browser:
+
+```bash
+arka output show data.json
+arka output show results.csv
+cat report.md | arka output show -
+```
+
+Start the interactive paste/upload UI:
+
+```bash
+arka output serve --port 8790 --open
+```
+
+Export standalone HTML:
+
+```bash
+arka output render data.json -o preview.html
+```
+
+## Formats
+
+| Input | Detected as | Rendered as |
+| ----- | ----------- | ----------- |
+| `.json` array of objects | `json_array` | Scrollable table |
+| `.json` object | `json_object` | Key-value table |
+| `.csv` / `.tsv` | `csv` | Table |
+| `.md` / markdown text | `markdown` | Headings, lists, code blocks |
+| `.jsonl` | `jsonl` | Table (when rows are objects) |
+| Media paths in JSON | `media` | Image/video/audio cards |
+| Anything else | `text` | Monospace pre block |
+
+Override detection with `--format`:
+
+```bash
+arka output show notes.txt --format markdown
+```
+
+## API (local server)
+
+When `arka output serve` is running (default `http://127.0.0.1:8790`):
+
+| Method | Path | Body / query |
+| ------ | ---- | ------------ |
+| `GET` | `/` | Interactive UI |
+| `POST` | `/api/render` | `{"content":"…","filename":"demo.csv"}` |
+| `GET` | `/api/render?path=/abs/path/data.json` | Load a local file |
+
+Response JSON includes `format`, `title`, `body_html`, and `html` (wrapped view).
+
+## CLI integration
+
+Skills that use `arka.core.output_layout` can push results to the viewer:
+
+```bash
+export ARKA_OPEN_UI=1
+arka some-skill-that-prints-a-result-box
+```
+
+Or call from Python:
+
+```python
+from arka.core.output_layout import push_to_viewer
+
+push_to_viewer('{"status":"ok"}', title="Deploy result")
+```
+
+## MCP
+
+`arka_view_output` renders content for agents:
+
+```json
+{"action": "render", "path": "/abs/path/data.csv"}
+{"action": "open", "content": "# Hello\n\nMarkdown body"}
+```
+
+## Environment
+
+| Variable | Default | Purpose |
+| -------- | ------- | ------- |
+| `ARKA_OUTPUT_VIEWER_HOST` | `127.0.0.1` | Bind host for `output serve` |
+| `ARKA_OUTPUT_VIEWER_PORT` | `8790` | Listen port |
+| `ARKA_OPEN_UI` | — | Open viewer after `result_box` output |
+| `ARKA_OUTPUT_VERIFY` | `0` | Judge-model quality check on text answers |
+| `ARKA_OUTPUT_VERIFY_BLOCK` | `0` | Wait for verify before showing footer |
+| `ARKA_OUTPUT_SLOW_MS` | `8000` | Flag slow responses in timing footer |
+
+When `ARKA_OUTPUT_VERIFY=1` or `arka ask --verify`, a **judge** task profile (default `gemini/gemini-2.5-flash`) scores accuracy, completeness, helpfulness, and safety (1–5). Results appear in the answer footer as `Quality: total 842ms · quality 4.2/5 (pass)`.
+
+Override the judge model: `arka ai-skill-model judge openrouter/openai/gpt-4o-mini`.
+
+Timing (TTFA when streaming, total latency) is recorded automatically and exported to OpenTelemetry when tracing is enabled (`arka.output.total_ms`, `arka.output.verify.overall`, etc.).
+
+## Related
+
+- [Web dashboard](/guides/web-dashboard) — full React chat UI (local checkout only)
+- [Data display (`view_data`)](/guides/data-ask) — terminal CSV preview

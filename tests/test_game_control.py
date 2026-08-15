@@ -155,7 +155,8 @@ def test_game_check_records_video_while_interacting(monkeypatch, tmp_path):
     assert "arrow-key movement" in result["play_strategy"]["edge_cases"]
     assert result["clicked_controls"] >= 2
     assert result["gameplay_started"] is True
-    assert result["screenshots"][0].endswith("frame-000-loaded.png")
+    assert result["screenshots"][0].endswith(".png")
+    assert "frame-loaded-" in Path(result["screenshots"][0]).name
     assert context.page.closed is True
     assert context.closed is True
     assert browser.closed is True

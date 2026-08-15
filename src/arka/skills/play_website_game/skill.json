@@ -1,0 +1,21 @@
+{
+  "name": "play_website_game",
+  "description": "Search for or open browser games in a headed Playwright window",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "play website game",
+    "browser game",
+    "online game",
+    "play snake online",
+    "open browser game",
+    "search browser game"
+  ],
+  "voice_ack": "Opening the browser game.",
+  "permissions": ["read", "network"],
+  "requires": {
+    "env_optional": ["ARKA_BROWSER_SETTLE_SECONDS", "ARKA_WEBSITE_GAME_WAIT_SECONDS"]
+  }
+}

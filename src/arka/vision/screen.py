@@ -19,6 +19,7 @@ except ImportError:
     cache_dir = lambda: Path.home() / ".cache" / "fish-agent"  # noqa: E731
 
 from arka.vision.describe import SCREEN_PROMPT as DEFAULT_PROMPT
+from arka.core.screenshot_paths import screenshot_path
 
 DEFAULT_COUNTDOWN = 5
 
@@ -203,7 +204,7 @@ def _capture_failure_message() -> str:
 def capture_screen(path: Path | None = None) -> Path:
     cache = cache_dir()
     cache.mkdir(parents=True, exist_ok=True)
-    dest = path or cache / f"screen_capture_{datetime.now():%Y%m%d_%H%M%S}.png"
+    dest = path or screenshot_path("screen-capture", cache)
     dest.parent.mkdir(parents=True, exist_ok=True)
 
     plat = _host_platform()

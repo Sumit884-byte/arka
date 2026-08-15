@@ -1,0 +1,17 @@
+{
+  "name": "prompt_coach",
+  "description": "Coach users to write clearer, more effective LLM prompts with examples and rewrites",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "help me write better prompts",
+    "prompt coaching",
+    "prompt writing help",
+    "how to write a good prompt",
+    "teach me prompt engineering",
+    "make my prompts better"
+  ],
+  "permissions": ["network"]
+}

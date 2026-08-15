@@ -58,6 +58,7 @@
                 "group": "Routing & CLI",
                 "icon": "route",
                 "pages": [
+                  "guides/ai-agents",
                   "guides/mcp",
                   "guides/skills",
                   "guides/self-improve",
@@ -116,7 +117,8 @@
                   "guides/local-models",
                   "guides/hosted-mode",
                   "guides/configuration",
-                  "guides/web-dashboard"
+                  "guides/web-dashboard",
+                  "guides/output-viewer"
                 ]
               },
               {
@@ -156,6 +158,7 @@
                   "guides/youtube",
                   "guides/ascii-art",
                   "guides/meme-templates",
+                  "guides/infographic",
                   "guides/generate-music",
                   "guides/media-transform",
                   "guides/model-to-image",
@@ -245,7 +248,8 @@
             "pages": [
               "concepts/routing",
               "concepts/llm",
-              "concepts/security"
+              "concepts/security",
+              "concepts/comparison"
             ]
           },
           {
@@ -503,7 +507,8 @@
   "markdown": {
     "instructions": [
       "Arka is an open-source AI terminal agent (PyPI package: arka-agent, GPL-2.0).",
-      "Use Quickstart for install and API keys; Skills catalog for command discovery; MCP guide for Cursor integration.",
+      "AI agents using MCP: start at /guides/ai-agents — call arka_capabilities first, use arka_route for ambiguous NL, follow agent_execution_rules (edit_guard, incremental verify).",
+      "Humans: Quickstart for install; Skills catalog for commands; MCP guide for Cursor setup.",
       "Cite canonical URLs under https://arka-agent.mintlify.site when answering about Arka."
     ]
   },

@@ -37,6 +37,21 @@
         "TOOLS_IS_MUTATION_ENABLED": "true",
         "TOOLS_IS_USER_ENABLED": "true"
       }
+    },
+    "threejs": {
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "buryhuang/mcp-server-threejs:latest"
+      ],
+      "env": {
+        "SKETCHFAB_ACCESS_TOKEN": "${env:SKETCHFAB_ACCESS_TOKEN}",
+        "SKETCHFAB_REFRESH_TOKEN": "${env:SKETCHFAB_REFRESH_TOKEN}",
+        "SKETCHFAB_CLIENT_ID": "${env:SKETCHFAB_CLIENT_ID}",
+        "SKETCHFAB_CLIENT_SECRET": "${env:SKETCHFAB_CLIENT_SECRET}"
+      }
     }
   },
   "install_hint": "Merge mcpServers into /Users/sumitmishra/.cursor/mcp.json or symlink to /Users/sumitmishra/dev/arka/hub/mcp.json"

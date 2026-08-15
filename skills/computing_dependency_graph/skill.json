@@ -1,0 +1,20 @@
+{
+  "name": "computing_dependency_graph",
+  "description": "Build interactive causal/evolution dependency graphs (vanilla SVG, multicolor edges, drag, hover). Use when the user asks for a dependency graph, influence map, milestone DAG, technology lineage, or computing evolution graph.",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "prompt",
+  "entry": "SKILL.md",
+  "triggers": [
+    "computing dependency graph",
+    "dependency graph",
+    "influence map",
+    "causal graph",
+    "evolution graph",
+    "milestone dag",
+    "technology lineage graph",
+    "breakthrough graph"
+  ],
+  "permissions": ["read"],
+  "capabilities": ["prompt", "frontend", "visualization"]
+}

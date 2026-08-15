@@ -20,9 +20,24 @@ import urllib.request
 from datetime import datetime
 from pathlib import Path
 
+from arka.media.media_styles import extract_style_from_text, format_style_catalog, list_video_styles
+
 DEFAULT_GEMINI_MODEL = "veo-3.1-generate-preview"
 DEFAULT_POLLINATIONS_MODEL = "wan-fast"
 DEFAULT_REPLICATE_MODEL = "minimax/video-01"
+GEMINI_VEO_MIN_DURATION = 4
+GEMINI_VEO_MAX_DURATION = 8
+POLLINATIONS_MAX_DURATION = 15
+AI_VIDEO_SUBCOMMANDS = frozenset(
+    {
+        "parse",
+        "check",
+        "styles",
+        "list-styles",
+        "setup-pollinations",
+        "generate",
+    }
+)
 GEMINI_VEO_MODELS = (
     "veo-3.1-fast-generate-preview",
     "veo-3.1-lite-generate-preview",
@@ -33,6 +48,27 @@ ALLOWED_ASPECTS = {"16:9", "9:16", "1:1"}
 
 def _log(msg: str) -> None:
     print(msg, file=sys.stderr)
+
+
+def clamp_veo_duration(duration: int | float | str | None, *, default: int = 5) -> int:
+    """Gemini Veo accepts 4–8 seconds inclusive."""
+    try:
+        value = int(duration) if duration is not None else default
+    except (TypeError, ValueError):
+        value = default
+    return max(GEMINI_VEO_MIN_DURATION, min(GEMINI_VEO_MAX_DURATION, value))
+
+
+def _normalize_argv(argv: list[str]) -> list[str]:
+    """Fish/legacy wrappers sometimes insert ``--`` before the prompt/subcommand."""
+    args = list(argv)
+    while args and args[0] == "--":
+        args.pop(0)
+    return args
+
+
+def _is_subcommand(argv: list[str]) -> bool:
+    return bool(argv) and argv[0] in AI_VIDEO_SUBCOMMANDS
 
 
 def _api_key() -> str:
@@ -158,12 +194,13 @@ def generate_gemini(
         raise RuntimeError("GEMINI_API_KEY not set")
 
     client = genai.Client(api_key=key)
+    veo_duration = clamp_veo_duration(duration)
     cfg = types.GenerateVideosConfig(
         aspect_ratio=aspect,
         number_of_videos=1,
-    duration_seconds=min(max(int(duration), 4), 8),
+        duration_seconds=veo_duration,
     )
-    _log(f"  Gemini Veo ({model}) — generating real AI video, may take 1–3 minutes …")
+    _log(f"  Gemini Veo ({model}) — generating real AI video ({veo_duration}s), may take 1–3 minutes …")
     operation = client.models.generate_videos(
         model=model,
         source=types.GenerateVideosSource(prompt=prompt),
@@ -317,7 +354,11 @@ def generate(
     model: str,
     duration: int,
     audio: bool,
+    style: str | None = None,
 ) -> tuple[Path, str]:
+    from arka.media.media_styles import styled_ai_video_prompt
+
+    styled_prompt = styled_ai_video_prompt(prompt, style)
     backend = _backend()
     errors: list[str] = []
     attempt = 0
@@ -342,7 +383,7 @@ def generate(
     if backend == "gemini":
         if not _api_key():
             raise SystemExit(_setup_hint())
-        result = _try("gemini", lambda: generate_gemini_chain(prompt, output, aspect, model, duration))
+        result = _try("gemini", lambda: generate_gemini_chain(styled_prompt, output, aspect, model, duration))
         if result:
             return result
         raise SystemExit("\n".join(errors) or "Gemini video generation failed")
@@ -353,7 +394,7 @@ def generate(
         poll_model = os.environ.get("VIDEO_POLLINATIONS_MODEL", DEFAULT_POLLINATIONS_MODEL)
         result = _try(
             "pollinations",
-            lambda: generate_pollinations(prompt, output, aspect, poll_model, duration, audio),
+            lambda: generate_pollinations(styled_prompt, output, aspect, poll_model, duration, audio),
         )
         if result:
             return result
@@ -362,7 +403,7 @@ def generate(
     if backend == "replicate":
         if not _replicate_token():
             raise SystemExit(_setup_hint())
-        result = _try("replicate", lambda: generate_replicate(prompt, output, aspect, duration))
+        result = _try("replicate", lambda: generate_replicate(styled_prompt, output, aspect, duration))
         if result:
             return result
         raise SystemExit("\n".join(errors) or "Replicate video generation failed")
@@ -375,7 +416,7 @@ def generate(
         poll_model = os.environ.get("VIDEO_POLLINATIONS_MODEL", DEFAULT_POLLINATIONS_MODEL)
         result = _try(
             "pollinations",
-            lambda: generate_pollinations(prompt, output, aspect, poll_model, duration, audio),
+            lambda: generate_pollinations(styled_prompt, output, aspect, poll_model, duration, audio),
         )
         if result:
             return result
@@ -383,13 +424,13 @@ def generate(
     if _api_key():
         result = _try(
             "gemini",
-            lambda: generate_gemini_chain(prompt, output, aspect, model, duration),
+            lambda: generate_gemini_chain(styled_prompt, output, aspect, model, duration),
         )
         if result:
             return result
 
     if _replicate_token():
-        result = _try("replicate", lambda: generate_replicate(prompt, output, aspect, duration))
+        result = _try("replicate", lambda: generate_replicate(styled_prompt, output, aspect, duration))
         if result:
             return result
 
@@ -405,9 +446,10 @@ def ai_video_result(
     model: str | None = None,
     duration: int | None = None,
     audio: bool | None = None,
+    style: str | None = None,
 ) -> dict[str, object]:
     asp = aspect or os.environ.get("VIDEO_ASPECT", "16:9")
-    dur = min(max(int(duration or os.environ.get("VIDEO_DURATION") or 5), 4), 15)
+    dur = clamp_veo_duration(duration or os.environ.get("VIDEO_DURATION") or 5)
     aud = audio if audio is not None else os.environ.get("VIDEO_AUDIO", "1") not in ("0", "false")
     out = Path(output).expanduser() if output else _default_output(prompt)
     saved, provider = generate(
@@ -417,6 +459,7 @@ def ai_video_result(
         model=model or os.environ.get("VIDEO_MODEL", DEFAULT_GEMINI_MODEL),
         duration=dur,
         audio=aud,
+        style=style,
     )
     return {
         "prompt": prompt,
@@ -425,6 +468,7 @@ def ai_video_result(
         "aspect": asp,
         "duration": dur,
         "audio": aud,
+        "style": style or os.environ.get("VIDEO_STYLE", "documentary"),
     }
 
 
@@ -453,6 +497,16 @@ def _is_local_video_request(text: str) -> bool:
     if re.search(r"(?i)\b(?:from|with)\s+(?:images?|photos?|pictures?|audio|folder)\b", t):
         return True
     if re.search(r"(?i)\b(?:slideshow|transparent\s+video|image-audio)\b", t):
+        return True
+    if re.search(
+        r"(?i)\b(?:3d|three[\s-]?d|turntable|model|mesh|glb|gltf|obj|stl|fbx)\b.*\b(?:video|animation|movie|clip)\b",
+        t,
+    ):
+        return True
+    if re.search(
+        r"(?i)\b(?:video|animation|movie|clip)\b.*\b(?:3d|three[\s-]?d|turntable|model|mesh)\b",
+        t,
+    ):
         return True
     return False
 
@@ -496,7 +550,10 @@ def nl_to_argv(text: str) -> list[str]:
     if not t or not _is_ai_video_request(t):
         return []
 
+    t, style = extract_style_from_text(t)
     argv: list[str] = []
+    if style:
+        argv.extend(["--style", style])
     if re.search(r"(?i)\b(?:no\s+audio|without\s+audio|silent)\b", t):
         argv.append("--no-audio")
 
@@ -534,7 +591,9 @@ def cmd_generate(args: argparse.Namespace) -> int:
         print(f"Invalid aspect '{aspect}'. Choose: {', '.join(sorted(ALLOWED_ASPECTS))}", file=sys.stderr)
         return 1
 
-    duration = min(max(int(args.duration), 4), 15)
+    duration = min(max(int(args.duration), GEMINI_VEO_MIN_DURATION), POLLINATIONS_MAX_DURATION)
+    if _backend() in {"gemini", "auto"} and _api_key():
+        duration = clamp_veo_duration(duration)
     audio = not args.no_audio and os.environ.get("VIDEO_AUDIO", "1") not in ("0", "false")
     out = Path(args.output) if args.output else _default_output(args.prompt)
 
@@ -547,6 +606,7 @@ def cmd_generate(args: argparse.Namespace) -> int:
             model=args.model,
             duration=duration,
             audio=audio,
+            style=getattr(args, "style", None),
         )
     except SystemExit as exc:
         print(str(exc), file=sys.stderr)
@@ -561,6 +621,16 @@ def cmd_generate(args: argparse.Namespace) -> int:
                 subprocess.Popen(["xdg-open", str(saved)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except OSError:
             pass
+    return 0
+
+
+def cmd_list_styles(args: argparse.Namespace) -> int:
+    from arka.media.media_styles import VIDEO_STYLES
+
+    if args.json:
+        print(json.dumps({name: VIDEO_STYLES[name].label for name in list_video_styles()}, indent=2))
+    else:
+        print(format_style_catalog(kind="video"))
     return 0
 
 
@@ -616,7 +686,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_gen.add_argument("-d", "--duration", type=int, default=int(os.environ.get("VIDEO_DURATION") or "5"))
     p_gen.add_argument("-m", "--model", default=os.environ.get("VIDEO_MODEL", DEFAULT_GEMINI_MODEL))
     p_gen.add_argument("--no-audio", action="store_true", help="Disable Pollinations audio track")
+    p_gen.add_argument(
+        "--style",
+        choices=sorted(list_video_styles()),
+        default=None,
+        help="Visual style preset for AI video prompt",
+    )
     p_gen.set_defaults(func=cmd_generate)
+
+    p_styles = sub.add_parser("styles", aliases=["list-styles"], help="List AI video style presets")
+    p_styles.add_argument("--json", action="store_true")
+    p_styles.set_defaults(func=cmd_list_styles)
 
     p_parse = sub.add_parser("parse", help="Parse natural language → ai_video args")
     p_parse.add_argument("text", nargs="+")
@@ -640,20 +720,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = list(argv if argv is not None else sys.argv[1:])
+    args = _normalize_argv(list(argv if argv is not None else sys.argv[1:]))
     if not args:
         build_parser().print_help()
         return 0
     if args in (["-h"], ["--help"]):
         build_parser().parse_args(["generate", "--help"])
         return 0
-    if args[0] == "parse":
-        ns = build_parser().parse_args(args)
-        return int(ns.func(ns))
-    if args[0] == "check":
-        ns = build_parser().parse_args(args)
-        return int(ns.func(ns))
-    if args[0] == "setup-pollinations":
+    if _is_subcommand(args):
         ns = build_parser().parse_args(args)
         return int(ns.func(ns))
     if args[0] not in {"generate", "-h", "--help"}:

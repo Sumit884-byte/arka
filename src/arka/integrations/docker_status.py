@@ -22,9 +22,12 @@ except ImportError:
 
 _TRIGGER_RE = re.compile(
     r"(?i)\b("
-    r"docker\s+(?:status|containers?|ps|logs?|images?|health)|"
+    r"docker\s+(?:status|containers?|ps|logs?|images?|health|daemon)|"
     r"list\s+docker\s+containers?|show\s+docker|"
-    r"container\s+logs?|running\s+containers?"
+    r"container\s+logs?|running\s+containers?|"
+    r"(?:is\s+)?docker\s+(?:running|up|healthy|available)|"
+    r"what\s+containers?\s+(?:are\s+)?running|"
+    r"check\s+docker\s+(?:daemon|status)"
     r")\b"
 )
 _LOGS_RE = re.compile(r"(?i)\b(?:docker\s+)?logs?\b")
@@ -252,7 +255,10 @@ def route_command(text: str) -> str:
             return f"docker_status logs {shlex.quote(name)}"
     if _IMAGES_RE.search(clean):
         return "docker_status images"
-    if _HEALTH_RE.search(clean):
+    if _HEALTH_RE.search(clean) or re.search(
+        r"(?i)\b(?:is\s+)?docker\s+(?:running|up|healthy|available)\b|check\s+docker",
+        clean,
+    ):
         return "docker_status health"
     if _PS_RE.search(clean) or _TRIGGER_RE.search(clean):
         return "docker_status ps"

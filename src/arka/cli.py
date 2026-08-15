@@ -51,6 +51,7 @@ def main(argv: list[str] | None = None) -> int:
             "shell-init",
             "setup",
             "mcp",
+            "connector",
             "-h",
             "--help",
             "help",
@@ -76,9 +77,16 @@ def main(argv: list[str] | None = None) -> int:
     if args[0] == "capabilities":
         return _cmd_capabilities()
 
+    if args[0] == "model_info":
+        return _cmd_model_info()
+
     if args[0] in ("-V", "--version", "version"):
         print(f"arka {__version__} ({system()})")
         return 0
+
+    infographic_code = _try_infographic_subcommand(args)
+    if infographic_code is not None:
+        return infographic_code
 
     meme_code = _try_meme_subcommand(args)
     if meme_code is not None:
@@ -158,6 +166,37 @@ def main(argv: list[str] | None = None) -> int:
             # argparse uses SystemExit for --help; keep the public CLI API
             # integer-returning like every other Arka subcommand.
             return int(exc.code or 0)
+
+    if args[0] == "skills":
+        plugin_cmds = {
+            "list",
+            "doctor",
+            "audit",
+            "install",
+            "refresh",
+            "info",
+            "inspect",
+            "search",
+            "match",
+            "run",
+            "fish-sources",
+            "list-names",
+        }
+        if len(args) == 1:
+            from arka.agent.skills import print_list
+
+            print_list(verbose=True)
+            return 0
+        if args[1] in plugin_cmds:
+            from arka.agent.skills import main as plugin_main
+
+            try:
+                return plugin_main(args[1:])
+            except SystemExit as exc:
+                return int(exc.code or 0)
+        from arka.core.skill_settings import main as skill_settings_main
+
+        return skill_settings_main(args[1:])
 
     if args[0] in ("three_js_model", "three-js-model", "threejs_model"):
         from arka.agent.three_js_model import main as three_js_main
@@ -301,6 +340,11 @@ def main(argv: list[str] | None = None) -> int:
 
         return design_main([args[0].replace("-", "_"), *args[1:]])
 
+    if args[0] in ("play_website_game", "play-website-game", "website_game", "website-game", "browser_game"):
+        from arka.agent.play_website_game import main as play_website_game_main
+
+        return play_website_game_main(args[1:])
+
     if args[0] in ("urlkit", "url-kit"):
         from arka.core.urlkit import main as urlkit_main
 
@@ -372,6 +416,9 @@ def main(argv: list[str] | None = None) -> int:
     if args[0] in ("ai-pref", "ai-status"):
         print(f"{args[0]} requires fish shell — install fish or use: arka ai-skill-model", file=sys.stderr)
         return 1
+
+    if args[0] == "to":
+        return _cmd_to(args[1:])
 
     if args[0] in ("youtube", "yt"):
         return _cmd_youtube(args[1:])
@@ -492,6 +539,11 @@ def main(argv: list[str] | None = None) -> int:
     if args[0] in ("agent_hub", "agent-hub", "hub"):
         return run_script("arka_agent_hub.py", args[1:])
 
+    if args[0] == "connector":
+        from arka.integrations.cli_connector import main as cli_connector_main
+
+        return cli_connector_main(args[1:])
+
     if args[0] in ("team", "teams"):
         return run_script("arka_teams.py", ["team", *args[1:]])
 
@@ -576,6 +628,11 @@ def main(argv: list[str] | None = None) -> int:
         code = _try_meme_subcommand(args)
         return code if code is not None else 1
 
+    if args[0] in ("prompt_coach", "prompt-coach", "prompt_coaching", "prompt-coaching"):
+        from arka.agent.prompt_coach import main as prompt_coach_main
+
+        return prompt_coach_main(args[1:])
+
     if args[0] == "capture":
         from arka.agent.video_capture import main as video_capture_main
 
@@ -621,6 +678,14 @@ def main(argv: list[str] | None = None) -> int:
 
         try:
             return ai_video_main(args[1:])
+        except SystemExit as exc:
+            return int(exc.code or 0)
+
+    if args[0] in ("model_video", "model-video", "3d_model_video", "turntable_video", "3d-video"):
+        from arka.media.model_video import main as model_video_main
+
+        try:
+            return model_video_main(args[1:])
         except SystemExit as exc:
             return int(exc.code or 0)
 
@@ -713,6 +778,12 @@ def main(argv: list[str] | None = None) -> int:
     code_hit = _try_code_nl(text)
     if code_hit is not None:
         return code_hit
+    local_image_hit = _try_local_image_nl(text)
+    if local_image_hit is not None:
+        return local_image_hit
+    local_music_hit = _try_local_music_nl(text)
+    if local_music_hit is not None:
+        return local_music_hit
     # Plan/ask modes use the Python router so structured plans and read-only
     # guards apply; fish delegation would skip print_plan output.
     from arka.core.mode import get_mode
@@ -721,6 +792,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if get_mode() in ("plan", "ask") or is_just_ai():
         return _run_portable(text)
+    infographic_code = _try_infographic_subcommand(args)
+    if infographic_code is not None:
+        return infographic_code
     meme_code = _try_meme_subcommand(args)
     if meme_code is not None:
         return meme_code
@@ -737,6 +811,16 @@ def main(argv: list[str] | None = None) -> int:
             return code
 
     return _run_portable(text)
+
+
+def _try_infographic_subcommand(args: list[str]) -> int | None:
+    try:
+        from arka.agent.infographic import is_infographic_cli_argv, run_infographic_cli
+    except ImportError:
+        return None
+    if not is_infographic_cli_argv(args):
+        return None
+    return run_infographic_cli(args)
 
 
 def _try_meme_subcommand(args: list[str]) -> int | None:
@@ -784,6 +868,26 @@ def _try_code_nl(text: str) -> int | None:
     if parts[0] == "code":
         return code_main(["code", *rest])
     return None
+
+
+def _try_local_image_nl(text: str) -> int | None:
+    try:
+        from arka.agent.local_image_gen import nl_to_argv, run_nl
+    except ImportError:
+        return None
+    if not nl_to_argv(text):
+        return None
+    return run_nl(text)
+
+
+def _try_local_music_nl(text: str) -> int | None:
+    try:
+        from arka.agent.local_music_gen import nl_to_argv, run_nl
+    except ImportError:
+        return None
+    if not nl_to_argv(text):
+        return None
+    return run_nl(text)
 
 
 def _try_provider_nl(text: str) -> int | None:
@@ -907,6 +1011,8 @@ def _execute_request(text: str, routed=None) -> int:
             return _cmd_help()
         if r.skill == "capabilities":
             return _cmd_capabilities()
+        if r.skill == "model_info":
+            return _cmd_model_info()
         skill_line = r.skill
         if get_mode() == "ask":
             skill_line = ask_mode_skill(r.skill, text)
@@ -1386,6 +1492,41 @@ def _cmd_orchestrate(rest: list[str]) -> int:
     return _run_portable(text)
 
 
+def _cmd_to(rest: list[str]) -> int:
+    """Resolve and cd to a folder by name (fish) or print path (portable)."""
+    print_only = False
+    args = list(rest)
+    if "--print" in args or "-p" in args:
+        print_only = True
+        args = [a for a in args if a not in ("--print", "-p")]
+    name = " ".join(args).strip()
+    if not name:
+        print("Usage: arka to <folder>", file=sys.stderr)
+        print("Example: arka to Downloads", file=sys.stderr)
+        print("       arka to Downloads --print   # print resolved path", file=sys.stderr)
+        return 1
+
+    if has_full_fish_agent():
+        from arka.fish_bridge import delegate_fish_function
+
+        fish_args = ["--print", *args] if print_only else args
+        code = delegate_fish_function("to", fish_args)
+        if code is not None:
+            return code
+
+    from arka.core.to_folder import resolve_folder
+
+    path = resolve_folder(name)
+    if path is None:
+        print(f"No folder matching: {name}", file=sys.stderr)
+        return 1
+    print(path)
+    if not print_only:
+        print(f"→ {path}", file=sys.stderr)
+        print("Tip: cd (arka to " + name + " --print)  or use fish: to " + name, file=sys.stderr)
+    return 0
+
+
 def _cmd_route_preview(text: str) -> int:
     from arka.core.mode import get_mode, print_debug_route
     from arka.router import route_preview
@@ -1648,6 +1789,12 @@ def _cmd_capabilities() -> int:
     from arka.output import show_capabilities
 
     return show_capabilities()
+
+
+def _cmd_model_info() -> int:
+    from arka.output import show_model_info
+
+    return show_model_info()
 
 
 def _cmd_help() -> int:

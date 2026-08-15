@@ -1,0 +1,33 @@
+{
+  "name": "compose_story",
+  "description": "Labeled story videos — LLM script with beat labels (intro, conflict, climax), captions, stock B-roll, AI images auto-fill gaps",
+  "version": "1.0.0",
+  "author": "Arka",
+  "type": "python",
+  "entry": "run.py",
+  "triggers": [
+    "compose story",
+    "story video",
+    "tell a story",
+    "tell me a story about",
+    "labeled story video",
+    "narrative video",
+    "storytelling video",
+    "story about",
+    "create story video",
+    "make a story video"
+  ],
+  "permissions": ["read", "write", "network", "shell"],
+  "requires": {
+    "env_any": ["GEMINI_API_KEY", "GROQ_API_KEY", "UNSPLASH_ACCESS_KEY", "PEXELS_API_KEY"],
+    "env_optional": [
+      "GEMINI_API_KEYS",
+      "POLLINATIONS_API_KEY",
+      "VIDEO_SHOW_LABELS",
+      "VIDEO_AUTO_FILL",
+      "VIDEO_ORIENTATION",
+      "SPEAK_VOICE"
+    ],
+    "bins": ["ffmpeg"]
+  }
+}

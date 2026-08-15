@@ -42,6 +42,21 @@ arka "pytest tests/test_router_show_me.py -v"
 arka "pytest tests/test_currency_convert.py::test_specific_case"
 ```
 
+## Extreme production-readiness constraints
+
+For critical changes, ask Arka for the opt-in high-rigor production-readiness preset:
+
+```bash
+arka extreme constraints for checkout
+arka production ready constraints for checkout
+arka qa extreme --feature checkout
+arka qa extreme --json
+```
+
+This expands the normal QA plan into explicit constraints for correctness, quality gates, security/privacy, reliability/operations, and release readiness. It includes unit tests, Gherkin/acceptance tests, integration and contract tests, e2e/smoke tests, mutation testing, test coverage, static analysis, secrets/privacy checks, dependency safety, observability, performance, rollback, configuration validation, backward compatibility, documentation, and migration integrity.
+
+Arka should treat every claim as evidence-backed: if mutation testing, coverage, security scanning, SLOs, or a production metric cannot be measured in the current project, it reports that honestly instead of inventing a pass.
+
 Install dev extras (includes `pytest` and `ruff`):
 
 ```bash

@@ -97,9 +97,24 @@ def test_local_recall_matches_whole_word_rust_not_corrosion_substring(tmp_path, 
     assert "systems programming language" in hits[0]
 
 
-def test_get_intent_routes_what_is_rust_to_search() -> None:
-    action, _ = chat.get_intent("what is Rust?")
+def test_get_intent_routes_ambiguous_what_is_rust_to_search() -> None:
+    from arka.core.habitat import reset_habitat, set_domain
+
+    with mock.patch("arka.core.habitat.config_dir") as config_dir:
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            config_dir.return_value = Path(tmp)
+            reset_habitat()
+            set_domain("developer")
+            action, _ = chat.get_intent("what is Rust?")
     assert action == "SEARCH"
+
+
+def test_get_intent_routes_unambiguous_what_is_rust_to_answer() -> None:
+    action, _ = chat.get_intent("what is Rust?")
+    assert action == "ANSWER"
 
 
 def test_build_default_chain_excludes_vision_ollama_for_chat() -> None:
