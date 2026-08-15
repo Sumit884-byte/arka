@@ -1,0 +1,26 @@
+---
+title: "Repo map"
+description: "Agent context के लिए lightweight project layout और Python symbol overview।"
+keywords: ["repo", "map", "structure", "codebase", "aider"]
+icon: "map"
+---
+
+वर्तमान git repo का compact view पाएँ — directory layout, detected project type, और top-level Python symbols। Aider/OpenCode repo-awareness से प्रेरित, पूर्ण RAG ingest के बिना।
+
+## प्राकृतिक भाषा
+
+```bash
+arka map this repo
+arka show project structure
+arka codebase overview with symbols
+```
+
+## CLI कमांड
+
+| कमांड | विवरण |
+| --- | --- |
+| `repo_map map [path]` | Layout दिखाएँ (depth 2) |
+| `repo_map map --depth 3` | Deeper tree |
+| `repo_map map --symbols` | Python class/function नाम शामिल करें |
+
+Repository के अंदर होने पर वर्तमान git root का उपयोग करता है, अन्यथा current directory। `node_modules`, `.git`, virtualenvs, और build artifacts को ignore करता है।

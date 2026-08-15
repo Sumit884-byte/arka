@@ -291,6 +291,9 @@
                 "group": "设置与 CLI",
                 "icon": "terminal",
                 "pages": [
+                  "cn/guides/operation-modes",
+                  "cn/guides/env-setup",
+                  "cn/guides/env-bridge",
                   "cn/guides/cli"
                 ]
               },
@@ -312,11 +315,18 @@
                 "group": "路由与 CLI",
                 "icon": "route",
                 "pages": [
+                  "cn/guides/ai-agents",
                   "cn/guides/mcp",
                   "cn/guides/skills",
+                  "cn/guides/self-improve",
                   "cn/guides/agent-hub",
                   "cn/guides/repo-health",
-                  "cn/guides/route-learn"
+                  "cn/guides/council",
+                  "cn/guides/route-learn",
+                  "cn/guides/sessions",
+                  "cn/guides/mcp-all-skills",
+                  "cn/guides/mcp-auto",
+                  "cn/guides/parallel-skills"
                 ]
               },
               {
@@ -330,20 +340,97 @@
                   "cn/guides/agent-teams",
                   "cn/guides/openclaw-features",
                   "cn/guides/hermes-features",
+                  "cn/guides/supermemory",
+                  "cn/guides/design-memory",
                   "cn/guides/daily-brief",
-                  "cn/guides/voice",
-                  "cn/guides/repo-map"
+                  "cn/guides/interesting-fact",
+                  "cn/guides/voice"
                 ]
               },
               {
-                "group": "文档与媒体",
+                "group": "开发者工具",
+                "icon": "code",
+                "pages": [
+                  "cn/guides/dev",
+                  "cn/guides/repo-map",
+                  "cn/guides/repo-graph",
+                  "cn/guides/repo-reverse",
+                  "cn/guides/coding-workflows",
+                  "cn/guides/coding-tui",
+                  "cn/guides/github-actions",
+                  "cn/guides/testing",
+                  "cn/guides/video-evidence",
+                  "cn/guides/structure",
+                  "cn/guides/workspace",
+                  "cn/guides/project-structure-prompt",
+                  "cn/guides/sandbox",
+                  "cn/guides/integrations",
+                  "cn/guides/iterate-loop",
+                  "cn/guides/loop-engineering",
+                  "cn/guides/deploy",
+                  "cn/guides/railway-coding-skills",
+                  "cn/guides/browser-check",
+                  "cn/guides/observability",
+                  "cn/guides/local-models",
+                  "cn/guides/hosted-mode",
+                  "cn/guides/configuration",
+                  "cn/guides/web-dashboard",
+                  "cn/guides/output-viewer"
+                ]
+              },
+              {
+                "group": "Models & inference",
+                "icon": "brain",
+                "pages": [
+                  "cn/guides/select-model",
+                  "cn/guides/multi-llm",
+                  "cn/guides/vllm",
+                  "cn/guides/free-models",
+                  "cn/guides/model-hosting",
+                  "cn/guides/apple-intelligence",
+                  "cn/guides/prompt-optimization",
+                  "cn/guides/local-llm-research",
+                  "cn/guides/research-math",
+                  "cn/guides/llm-guardrails",
+                  "cn/guides/quantization",
+                  "cn/guides/speculative-decoding",
+                  "cn/guides/backends",
+                  "cn/guides/thinking-levels",
+                  "cn/guides/optimization",
+                  "cn/guides/usage-tracking"
+                ]
+              },
+              {
+                "group": "Media & documents",
                 "icon": "file-text",
                 "pages": [
                   "cn/guides/pdf-rag",
+                  "cn/guides/compose-slides",
+                  "cn/guides/compose-video",
+                  "cn/guides/compose-shorts",
                   "cn/guides/compose-3d",
+                  "cn/guides/scene-3d",
                   "cn/guides/charts",
                   "cn/guides/vision",
-                  "cn/guides/youtube"
+                  "cn/guides/youtube",
+                  "cn/guides/ascii-art",
+                  "cn/guides/meme-templates",
+                  "cn/guides/infographic",
+                  "cn/guides/generate-music",
+                  "cn/guides/media-transform",
+                  "cn/guides/model-to-image",
+                  "cn/guides/background-removal",
+                  "cn/guides/spline",
+                  "cn/guides/web-screenshots",
+                  "cn/guides/video-capture",
+                  "cn/guides/pdf-interactive",
+                  "cn/guides/media-quiz",
+                  "cn/guides/super-replica",
+                  "cn/guides/script-understanding",
+                  "cn/guides/text-edit",
+                  "cn/guides/surgical-edit",
+                  "cn/guides/ui-copy-audit",
+                  "cn/guides/vision-evidence"
                 ]
               },
               {
@@ -355,6 +442,7 @@
                   "cn/guides/life-sciences",
                   "cn/guides/gemini-cli",
                   "cn/guides/fugu",
+                  "cn/guides/n8n",
                   "cn/guides/post-x"
                 ]
               },
@@ -366,26 +454,47 @@
                   "cn/guides/kalshi",
                   "cn/guides/kaggle",
                   "cn/guides/generate-data",
-                  "cn/guides/data-ask"
+                  "cn/guides/github-dataset",
+                  "cn/guides/exercise-dataset",
+                  "cn/guides/data-ask",
+                  "cn/guides/spreadsheets"
                 ]
               },
               {
-                "group": "学习与工具",
+                "group": "Workflows & productivity",
                 "icon": "sparkles",
                 "pages": [
-                  "cn/guides/competitions",
-                  "cn/guides/ascii-art",
-                  "cn/guides/professions",
+                  "cn/guides/geo-seo",
+                  "cn/guides/workflow-templates",
+                  "cn/guides/design-first",
+                  "cn/guides/data-collection",
+                  "cn/guides/hackathons",
+                  "cn/guides/ultra-fast-development",
+                  "cn/guides/reusable-blocks",
+                  "cn/guides/agent-race",
+                  "cn/guides/notifications",
+                  "cn/guides/open-url",
                   "cn/guides/bookmarks",
-                  "cn/guides/clipboard-history"
+                  "cn/guides/clipboard-history",
+                  "cn/guides/timezone-convert",
+                  "cn/guides/quiz-practice",
+                  "cn/guides/daily-reading",
+                  "cn/guides/competitions",
+                  "cn/guides/professions",
+                  "cn/guides/ideate",
+                  "cn/guides/build-something-cool",
+                  "cn/guides/play",
+                  "cn/guides/url-app",
+                  "cn/guides/app-check"
                 ]
               },
               {
-                "group": "运维",
-                "icon": "wrench",
+                "group": "More",
+                "icon": "ellipsis",
+                "expanded": false,
                 "pages": [
-                  "cn/guides/observability",
-                  "cn/guides/testing"
+                  "cn/guides/ai-society",
+                  "cn/guides/teammate-review"
                 ]
               }
             ]
@@ -397,7 +506,7 @@
               "cn/concepts/routing",
               "cn/concepts/llm",
               "cn/concepts/security",
-              "cn/guides/select-model"
+              "cn/concepts/comparison"
             ]
           },
           {
@@ -407,6 +516,13 @@
               "cn/reference/configuration",
               "cn/reference/aliases",
               "cn/reference/troubleshooting"
+            ]
+          },
+          {
+            "tab": "更新日志",
+            "icon": "newspaper",
+            "pages": [
+              "cn/changelog/2026-07-13"
             ]
           }
         ]
@@ -421,7 +537,29 @@
               {
                 "group": "परिचय",
                 "pages": [
-                  "hi/index"
+                  "hi/index",
+                  "hi/quickstart",
+                  "hi/guides/code-with-arka",
+                  "hi/guides/personalize",
+                  "hi/guides/free-credits"
+                ]
+              },
+              {
+                "group": "सेटअप और CLI",
+                "icon": "terminal",
+                "pages": [
+                  "hi/guides/operation-modes",
+                  "hi/guides/env-setup",
+                  "hi/guides/env-bridge",
+                  "hi/guides/cli"
+                ]
+              },
+              {
+                "group": "ट्रबलशूटिंग",
+                "icon": "stethoscope",
+                "pages": [
+                  "hi/reference/troubleshooting",
+                  "hi/guides/docker-status"
                 ]
               }
             ]
@@ -431,12 +569,217 @@
             "icon": "book-open",
             "groups": [
               {
-                "group": "सीखना",
-                "icon": "book-open-reader",
+                "group": "रूटिंग और CLI",
+                "icon": "route",
                 "pages": [
-                  "hi/guides/daily-reading"
+                  "hi/guides/ai-agents",
+                  "hi/guides/mcp",
+                  "hi/guides/skills",
+                  "hi/guides/self-improve",
+                  "hi/guides/agent-hub",
+                  "hi/guides/repo-health",
+                  "hi/guides/council",
+                  "hi/guides/route-learn",
+                  "hi/guides/sessions",
+                  "hi/guides/mcp-all-skills",
+                  "hi/guides/mcp-auto",
+                  "hi/guides/parallel-skills"
+                ]
+              },
+              {
+                "group": "एजेंट और मेमोरी",
+                "icon": "robot",
+                "pages": [
+                  "hi/guides/chat",
+                  "hi/guides/personas",
+                  "hi/guides/memory",
+                  "hi/guides/goal-agent",
+                  "hi/guides/agent-teams",
+                  "hi/guides/openclaw-features",
+                  "hi/guides/hermes-features",
+                  "hi/guides/supermemory",
+                  "hi/guides/design-memory",
+                  "hi/guides/daily-brief",
+                  "hi/guides/interesting-fact",
+                  "hi/guides/voice"
+                ]
+              },
+              {
+                "group": "डेवलपर टूल्स",
+                "icon": "code",
+                "pages": [
+                  "hi/guides/dev",
+                  "hi/guides/repo-map",
+                  "hi/guides/repo-graph",
+                  "hi/guides/repo-reverse",
+                  "hi/guides/coding-workflows",
+                  "hi/guides/coding-tui",
+                  "hi/guides/github-actions",
+                  "hi/guides/testing",
+                  "hi/guides/video-evidence",
+                  "hi/guides/structure",
+                  "hi/guides/workspace",
+                  "hi/guides/project-structure-prompt",
+                  "hi/guides/sandbox",
+                  "hi/guides/integrations",
+                  "hi/guides/iterate-loop",
+                  "hi/guides/loop-engineering",
+                  "hi/guides/deploy",
+                  "hi/guides/railway-coding-skills",
+                  "hi/guides/browser-check",
+                  "hi/guides/observability",
+                  "hi/guides/local-models",
+                  "hi/guides/hosted-mode",
+                  "hi/guides/configuration",
+                  "hi/guides/web-dashboard",
+                  "hi/guides/output-viewer"
+                ]
+              },
+              {
+                "group": "Models & inference",
+                "icon": "brain",
+                "pages": [
+                  "hi/guides/select-model",
+                  "hi/guides/multi-llm",
+                  "hi/guides/vllm",
+                  "hi/guides/free-models",
+                  "hi/guides/model-hosting",
+                  "hi/guides/apple-intelligence",
+                  "hi/guides/prompt-optimization",
+                  "hi/guides/local-llm-research",
+                  "hi/guides/research-math",
+                  "hi/guides/llm-guardrails",
+                  "hi/guides/quantization",
+                  "hi/guides/speculative-decoding",
+                  "hi/guides/backends",
+                  "hi/guides/thinking-levels",
+                  "hi/guides/optimization",
+                  "hi/guides/usage-tracking"
+                ]
+              },
+              {
+                "group": "Media & documents",
+                "icon": "file-text",
+                "pages": [
+                  "hi/guides/pdf-rag",
+                  "hi/guides/compose-slides",
+                  "hi/guides/compose-video",
+                  "hi/guides/compose-shorts",
+                  "hi/guides/compose-3d",
+                  "hi/guides/scene-3d",
+                  "hi/guides/charts",
+                  "hi/guides/vision",
+                  "hi/guides/youtube",
+                  "hi/guides/ascii-art",
+                  "hi/guides/meme-templates",
+                  "hi/guides/infographic",
+                  "hi/guides/generate-music",
+                  "hi/guides/media-transform",
+                  "hi/guides/model-to-image",
+                  "hi/guides/background-removal",
+                  "hi/guides/spline",
+                  "hi/guides/web-screenshots",
+                  "hi/guides/video-capture",
+                  "hi/guides/pdf-interactive",
+                  "hi/guides/media-quiz",
+                  "hi/guides/super-replica",
+                  "hi/guides/script-understanding",
+                  "hi/guides/text-edit",
+                  "hi/guides/surgical-edit",
+                  "hi/guides/ui-copy-audit",
+                  "hi/guides/vision-evidence"
+                ]
+              },
+              {
+                "group": "इंटीग्रेशन",
+                "icon": "plug",
+                "pages": [
+                  "hi/guides/google-workspace",
+                  "hi/guides/plugins",
+                  "hi/guides/life-sciences",
+                  "hi/guides/gemini-cli",
+                  "hi/guides/fugu",
+                  "hi/guides/n8n",
+                  "hi/guides/post-x"
+                ]
+              },
+              {
+                "group": "फ़ाइनेंस और डेटा",
+                "icon": "chart-line",
+                "pages": [
+                  "hi/guides/stocks",
+                  "hi/guides/kalshi",
+                  "hi/guides/kaggle",
+                  "hi/guides/generate-data",
+                  "hi/guides/github-dataset",
+                  "hi/guides/exercise-dataset",
+                  "hi/guides/data-ask",
+                  "hi/guides/spreadsheets"
+                ]
+              },
+              {
+                "group": "Workflows & productivity",
+                "icon": "sparkles",
+                "pages": [
+                  "hi/guides/geo-seo",
+                  "hi/guides/workflow-templates",
+                  "hi/guides/design-first",
+                  "hi/guides/data-collection",
+                  "hi/guides/hackathons",
+                  "hi/guides/ultra-fast-development",
+                  "hi/guides/reusable-blocks",
+                  "hi/guides/agent-race",
+                  "hi/guides/notifications",
+                  "hi/guides/open-url",
+                  "hi/guides/bookmarks",
+                  "hi/guides/clipboard-history",
+                  "hi/guides/timezone-convert",
+                  "hi/guides/quiz-practice",
+                  "hi/guides/daily-reading",
+                  "hi/guides/competitions",
+                  "hi/guides/professions",
+                  "hi/guides/ideate",
+                  "hi/guides/build-something-cool",
+                  "hi/guides/play",
+                  "hi/guides/url-app",
+                  "hi/guides/app-check"
+                ]
+              },
+              {
+                "group": "More",
+                "icon": "ellipsis",
+                "expanded": false,
+                "pages": [
+                  "hi/guides/ai-society",
+                  "hi/guides/teammate-review"
                 ]
               }
+            ]
+          },
+          {
+            "tab": "अवधारणाएँ",
+            "icon": "lightbulb",
+            "pages": [
+              "hi/concepts/routing",
+              "hi/concepts/llm",
+              "hi/concepts/security",
+              "hi/concepts/comparison"
+            ]
+          },
+          {
+            "tab": "संदर्भ",
+            "icon": "list",
+            "pages": [
+              "hi/reference/configuration",
+              "hi/reference/aliases",
+              "hi/reference/troubleshooting"
+            ]
+          },
+          {
+            "tab": "चेंजलॉग",
+            "icon": "newspaper",
+            "pages": [
+              "hi/changelog/2026-07-13"
             ]
           }
         ]

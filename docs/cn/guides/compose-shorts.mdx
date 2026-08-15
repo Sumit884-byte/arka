@@ -1,0 +1,117 @@
+---
+title: "合成短视频"
+description: "用 compose_video 制作 30–90 秒竖屏短视频 —— 终端工具提示、混合 B-roll、AI 图像和 CTA 结尾。"
+icon: "mobile-screen"
+---
+
+短视频解说（YouTube Shorts、Reels、TikTok）与长解说视频共用同一套 `compose_video` 流水线，只是场景数更紧凑，并可选择输出 9:16 竖屏。
+
+**适合短视频的默认设置：** 4–5 个场景、30–90 秒总时长、`--no-text`（仅旁白）、混合 B-roll 或 `--ai-images-only`。
+
+```bash
+arka compose_video check   # 检查 ffmpeg、Pillow、素材密钥
+```
+
+另见：[合成视频](/cn/guides/compose-video) 了解混合模式、自定义脚本 API 和环境变量。
+
+## 快速配方（LLM 脚本）
+
+```bash
+arka compose_video compose \
+  --topic "fzf terminal fuzzy finder for developers" \
+  --llm --scenes 4 --duration 60s \
+  --no-text \
+  -o fzf-short.mp4
+```
+
+混合模式（默认）在每个场景中混用素材**视频**与**照片** B-roll。如果想使用 Gemini/Pollinations 生成的图片而非素材照片，加上 `--ai-images-only`（需要 `GEMINI_API_KEY` 或 `POLLINATIONS_API_KEY`）。
+
+```bash
+arka compose_video compose \
+  --topic "fzf terminal fuzzy finder" \
+  --llm --scenes 5 --duration 75s \
+  --no-text --ai-images-only \
+  -o fzf-short-ai.mp4
+```
+
+## 终端工具短视频（自定义脚本 + CTA）
+
+对于可复用的短视频结构（开场 → 价值 → 安装小贴士 → 点赞订阅），使用 JSON 脚本而不是 `--llm`。让旁白短小精悍，最后一个场景是你的 CTA。
+
+`terminal-short-script.json`：
+
+```json
+{
+  "scenes": [
+    {
+      "title": "Meet fzf",
+      "narration": "fzf is a command-line fuzzy finder that makes searching files, history, and processes blazing fast.",
+      "image_query": "terminal fuzzy search developer dark theme",
+      "duration": 8
+    },
+    {
+      "title": "Why devs love it",
+      "narration": "Pipe any list into fzf, type a few letters, and jump exactly where you need.",
+      "image_query": "developer terminal workflow productivity",
+      "duration": 10
+    },
+    {
+      "title": "Try it today",
+      "narration": "Install with your package manager, bind Ctrl-R for history search, and never hunt through output again.",
+      "image_query": "install terminal tool command line",
+      "duration": 8
+    },
+    {
+      "title": "Stay tuned",
+      "narration": "If this helped, like and subscribe for more terminal tips and dev tools.",
+      "image_query": "subscribe like notification",
+      "duration": 10
+    }
+  ]
+}
+```
+
+```bash
+arka compose_video compose \
+  --script terminal-short-script.json \
+  --no-text \
+  -o fzf-short.mp4
+```
+
+需要显式控制时，为每个场景设置 `media_type`（`video` 表示动态 B-roll，`image` 表示图示或 UI 静图）。参见 [合成视频](/cn/guides/compose-video#hybrid-mode-default)。
+
+## 竖屏 9:16（Shorts / Reels）
+
+`compose_video` 目前还没有 `--orientation` 参数。通过环境变量设置竖屏输出和竖屏素材搜索：
+
+```bash
+VIDEO_ORIENTATION=portrait VIDEO_WIDTH=1080 VIDEO_HEIGHT=1920 \
+  arka compose_video compose \
+  --script terminal-short-script.json \
+  --no-text \
+  -o fzf-short-vertical.mp4
+```
+
+如需**完全由 AI 生成的视频**片段（而非素材 B-roll），使用 `ai_video` 并设置 `VIDEO_ASPECT=9:16`：
+
+```bash
+VIDEO_ASPECT=9:16 arka ai_video "cinematic terminal hacker desk neon" -d 8 -o clip.mp4
+```
+
+## 常用参数与环境变量
+
+| 参数 / 环境变量 | 短视频用途 |
+| --- | --- |
+| `--scenes 4` | 覆盖自动场景数（&lt;90s 建议显式指定） |
+| `--duration 60s` | 目标时长（`30s`、`90s`、`1m30s`） |
+| `--no-text` | 仅旁白 —— 混合模式的默认值 |
+| `--ai-images-only` | 使用 AI 生成的场景图像 |
+| `VIDEO_MODE=hybrid` | 素材视频 + 照片（默认） |
+| `VIDEO_SCENE_SEC=5` | 未在场景中指定时长时的默认每场景秒数 |
+| `PEXELS_API_KEY` / `PIXABAY_API_KEY` | 混合 B-roll 所用的素材视频 |
+
+自然语言也能正确路由：
+
+```bash
+arka "make a 60 second video about fzf with no text, 4 scenes"
+```

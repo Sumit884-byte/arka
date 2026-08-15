@@ -1,0 +1,111 @@
+---
+title: "开发者循环"
+description: "统一的 arka dev 工作流 — 在一个入口完成 init、test、review、ship、TUI 和 PR 检查。"
+icon: "repeat"
+---
+
+**开发者循环**是 Arka 每日编码工作流：初始化一个作用域项目，在 [编码 TUI](/cn/guides/coding-tui) 中工作，本地运行测试与评审，然后在你 commit 或开 PR 前放心地 ship。
+
+<Note>
+  **`arka dev`** 将本地 CI、评审、hooks、PR 陪跑与编码 TUI 汇总到一个入口。旧命令（`arka ci`、`arka review`、`arka coding-tui`）仍作为别名可用。
+</Note>
+
+## 心智模型
+
+```text
+arka dev init .   → scope writes to this repo
+arka dev tui      → plan, edit, test in the TUI
+arka dev test     → run changed-only CI gates
+arka dev review   → staged review + test-gap hints
+arka dev ship     → review + CI before commit
+```
+
+## 命令
+
+| 命令 | 描述 |
+| --- | --- |
+| `arka dev init [path]` | 初始化作用域代码项目（别名：`arka code init .`） |
+| `arka dev status [path]` | 代码项目状态 + 仓库开发 doctor 摘要 |
+| `arka dev test [path]` | 只对变更运行 CI 网关（`--full`、`--fix`、`--json`） |
+| `arka dev review [path]` | 评审已暂存变更（`--fail-on-hints`、`--json`） |
+| `arka dev ship [path]` | **评审已暂存变更 + 运行仅变更的 CI** |
+| `arka dev gaps [path]` | 列出没有匹配测试的源文件 |
+| `arka dev doctor [path]` | 仓库开发预检（hooks、ruff、pytest 发现） |
+| `arka dev hooks install` | 安装 pre-commit hooks |
+| `arka dev pr …` | GitHub PR diff、CI、解释、陪跑 |
+| `arka dev tui [path]` | 打开编码 TUI |
+
+### 提交前 ship
+
+`arka dev ship` 是提交前的门槛：
+
+1. 打印已暂存的评审（安全、测试缺口、文档提示）
+2. 只对变更运行 CI 网关（Ruff + 目标测试）
+3. 打印简洁的通过/失败摘要及建议的下一步
+
+```bash
+git add -A
+arka dev ship
+# or skip review hints blocking:
+arka dev ship --no-review
+# or hand CI failures to the goal agent:
+arka dev ship --fix
+```
+
+成功后，Arka 会建议 `git commit`；若你要发 PR，还会建议 `arka dev pr babysit`。
+
+### Doctor 与 dev doctor
+
+| 命令 | 范围 |
+| --- | --- |
+| `arka doctor` | **平台**安装检查（Python、fish、bundled 脚本） |
+| `arka dev doctor` | **仓库**预检（git hooks、本地 CI 工具链、项目规则） |
+
+## 编码 TUI 集成
+
+在 `arka dev tui`（或 `arka coding-tui .`）内：
+
+| 斜杠命令 | 行为 |
+| --- | --- |
+| `/ship` | 等同 `arka dev ship`（暂存评审 + 变更 CI） |
+| `/ship --fix` | Ship 且在 CI 失败时用目标智能体修复 |
+| `/ci` | **运行**仅变更的 CI 网关 |
+| `/ci preview` | 预览网关列表但不执行 |
+| `/review` | 带测试缺口提示的暂存评审 |
+| `/review --fail` | 若存在评审提示则退出 TUI |
+| `/test --max-fixes 2` | 测试失败时最多两次自动修复 |
+
+完整命令参考见 [编码 TUI](/cn/guides/coding-tui)。
+
+## 自然语言
+
+Arka 会把这类短语路由到开发者循环：
+
+```bash
+arka "dev ship"
+arka "prepare to commit"
+arka "run dev checks"
+arka "dev test"
+arka "dev review"
+arka "open dev tui"
+```
+
+## JSON 输出
+
+适合自动化的脚本友好输出：
+
+```bash
+arka dev test --json
+arka dev review --json
+arka dev ship --json
+arka dev gaps --json
+```
+
+Review JSON 包含 `test_gaps` 数组，列出变更源文件中缺少对应测试文件的项。
+
+## 相关指南
+
+- [如何用 Arka 编码](/cn/guides/code-with-arka) — 更宏观的编码工作流
+- [CLI 参考](/cn/guides/cli) — 所有顶层命令
+- [仓库健康](/cn/guides/repo-health) — 通用 lint/测试检测
+- [GitHub Actions](/cn/guides/github-actions) — 与 `arka ci` 对等的 CI

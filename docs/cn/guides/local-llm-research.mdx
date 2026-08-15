@@ -1,0 +1,18 @@
+---
+title: "本地 LLM 研究笔记"
+description: "为改进 Arka 而调研的上游本地模型项目。"
+icon: "magnifying-glass"
+---
+
+Arka 在 `.third_party/local-llm-research/` 中保存了一些浅克隆的上游项目，用于离线参考。它们不会被运行时导入，也会被 Git 忽略。当前的研究集为：
+
+| 项目 | 许可证 | 对 Arka 有用的思路 |
+| --- | --- | --- |
+| [Ollama](https://github.com/ollama/ollama) | MIT | 模型 pull/list/run 生命周期、本地 API 健康检查 |
+| [llama.cpp](https://github.com/ggml-org/llama.cpp) | MIT | 可移植的 CPU/Metal/CUDA 推理与量化模型体积估算 |
+| [vLLM](https://github.com/vllm-project/vllm) | Apache-2.0 | OpenAI 兼容服务、GPU 批处理、以吞吐为导向的部署 |
+| [Aider](https://github.com/Aider-AI/aider) | Apache-2.0 | 仓库映射、编辑/测试循环、本地 Ollama 集成 |
+
+Arka 的本地模型选择器已经在使用已安装的 Ollama 模型和硬件余量。下一步安全的集成是在适配层：改进模型发现、暴露 llama.cpp/vLLM 健康探测，以及复用仓库映射与验证模式。在未审阅每个仓库的许可与声明之前，请勿复制源码或引入依赖；传递性的模型/运行时许可可能与项目本身的许可不同。
+
+这些克隆是为研究而做的浅克隆，如需依赖版本特定的行为，请先刷新。

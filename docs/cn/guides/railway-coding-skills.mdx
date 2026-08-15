@@ -1,0 +1,114 @@
+---
+title: "将编码技能部署到 Railway"
+description: "以安全的托管配置文件在 Railway 上托管 Arka 的编码/开发工具技能。"
+keywords: ["Railway", "deploy", "coding skills", "hosted", "API", "MCP"]
+icon: "train"
+---
+
+Arka 可以在 Railway 上运行一个仅编码用途的托管 API。此配置文件面向仓库/
+开发工具工作流，例如 repo health、CI、PR 上下文、路由审计、审查、仓库图
+以及 GitHub Actions 检查。桌面/媒体/个人类技能保持禁用。
+
+## 部署的内容
+
+Railway 配置文件使用：
+
+- `Dockerfile`
+- `railway.toml`
+- `ARKA_REMOTE_PROFILE=coding`
+- `ARKA_HOSTED_MODE=1`
+- `ARKA_MCP_ENABLE_PERSONAL_SKILLS=0`
+
+HTTP API 暴露：
+
+| 端点 | 用途 |
+| --- | --- |
+| `GET /v1/health` | 健康检查 |
+| `POST /v1/agent` | 运行一次托管安全的编码/开发工具请求 |
+
+## 部署
+
+安装并认证 Railway CLI：
+
+```bash
+npm i -g @railway/cli
+railway login
+```
+
+从此仓库创建一个 Railway 项目：
+
+```bash
+railway init
+railway up
+```
+
+或通过 Arka 预览：
+
+```bash
+arka deploy --platform railway --json
+arka deploy --platform railway --yes
+```
+
+## 必填变量
+
+在 Railway Variables 中设置：
+
+```bash
+ARKA_HOSTED_MODE=1
+ARKA_REMOTE_PROFILE=coding
+ARKA_MCP_ENABLE_PERSONAL_SKILLS=0
+REMOTE_HOST=0.0.0.0
+REMOTE_TOKEN=<long-random-token>
+```
+
+在本地生成 token：
+
+```bash
+python - <<'PY'
+arka "import secrets"
+arka "print(secrets.token_urlsafe(32))"
+arka "PY"
+```
+
+可选的服务提供商/集成密钥：
+
+```bash
+OPENAI_API_KEY=...
+OPENROUTER_API_KEY=...
+GITHUB_TOKEN=...
+```
+
+## 调用托管 API
+
+```bash
+curl -sS "$RAILWAY_URL/v1/health"
+
+curl -sS "$RAILWAY_URL/v1/agent" \
+  -H "Authorization: Bearer $REMOTE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"text":"check repo health","remote_speak":false}'
+```
+
+或使用 Arka 的终端客户端：
+
+```bash
+export ARKA_BACKEND_URL="$RAILWAY_URL"
+export ARKA_BACKEND_TOKEN="$REMOTE_TOKEN"
+
+arka backend status
+arka backend ask "hi"
+arka backend ask "init https://github.com/org/repo as a workspace"
+arka backend ask "check repo health"
+arka backend media ./recordings/bug.png
+```
+
+对于私有 GitHub 仓库，请在 Railway 上设置 `GH_TOKEN` 或 `GITHUB_TOKEN`
+并重新部署。本地终端用户可以用 `gh auth login` 完成 GitHub 认证。
+
+编码配置文件仅允许开发者安全的技能头，例如 `repo_health`、
+`lint_project`、`pr_check`、`review`、`route_audit`、`ci`、`github_actions`、
+`repo_context`、`repo_map`、`repo_graph`、`workspace`、`structure`、
+`security`，以及插件/技能检查命令。
+
+如果请求路由到桌面/媒体/个人类技能，服务器会拦截该请求并返回允许的能力
+列表。

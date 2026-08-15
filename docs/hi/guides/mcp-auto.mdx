@@ -1,0 +1,21 @@
+---
+title: "स्वचालित MCP कॉन्फ़िगरेशन"
+description: "लोकप्रिय MCP सर्वरों को खोजें और सुरक्षित रूप से कॉन्फ़िगर करें।"
+icon: "wand-magic"
+---
+
+```bash
+arka mcp-auto list
+arka mcp-auto configure
+arka mcp-auto configure github context7 --apply
+```
+
+Arka एक curated catalog का उपयोग करता है, आवश्यक credentials जाँचता है, मौजूदा entries को स्किप करता है, और सभी बदलावों का preview दिखाता है। Configuration मौजूदा Agent Hub MCP फ़ाइल में लिखा जाता है ताकि Cursor, Codex, Claude, और अन्य adapters इसे reuse कर सकें।
+
+Catalog में SQLite, time, Puppeteer, Docker, Git, memory, sequential thinking, और reference everything server भी शामिल हैं। Brave Search, Slack, Notion, GitHub, और PostgreSQL credential-gated बने रहते हैं और जब तक उनके environment variable कॉन्फ़िगर नहीं होते, तब तक अनुपलब्ध के रूप में सूचीबद्ध होते हैं।
+
+तेज़ local developer setup के लिए:
+
+```bash
+arka mcp-auto configure filesystem git memory sequential-thinking sqlite time --apply
+```

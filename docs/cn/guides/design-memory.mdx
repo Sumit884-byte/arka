@@ -1,0 +1,21 @@
+---
+title: "设计参考"
+description: "为未来的代码编辑保存截图、设计 URL 或一致性备注。"
+icon: "swatchbook"
+---
+
+为未来的代码编辑保存截图、设计 URL 或一致性备注：
+
+```bash
+arka design-memory remember ./design.png --note "dark cards, 16px radius"
+arka design-memory list
+```
+
+当 Arka 的编码智能体规划编辑时，它会自动纳入已保存的设计
+参考。它会保留良好的视口模式，仅修改受影响的布局，并保持
+按钮和交互顺序不变。参考会被保存在 Arka 的本地缓存里；
+请仅保存你愿意长期保留的文件与 URL。
+
+动画请求还会使用符号化的范围守卫：添加 UI 动画不会修改测试、
+fixture、快照或测试动画。这些文件只有当请求显式指名测试范围
+时才会被纳入变更范围。

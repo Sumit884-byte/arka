@@ -1,0 +1,27 @@
+---
+title: "3D model से transparent image"
+description: "एक mesh render करें और designs में reuse के लिए इसका background हटाएं।"
+icon: "camera"
+---
+
+```bash
+arka model_to_image chair.obj --output chair-render.png
+arka model_to_image asset.glb --output public/assets/asset.png --size 2048
+arka model_to_image asset.glb --output hero.png --task "product hero image"
+arka model_to_image asset.glb --output roof.png --angle top
+```
+
+Arka cross-platform mesh rendering के लिए Blender का उपयोग करता है, एक transparent
+PNG produce करता है, फिर residual pixels हटाने के लिए मौजूदा background-removal skill चलाता है।
+Supported mesh inputs OBJ, STL, GLB, और GLTF हैं। PATH पर Blender install करें और
+background removal के लिए vision extra। जब rembg processing के बिना rendered
+transparent canvas प्राथमिकता हो तो `--keep-background` का उपयोग करें।
+
+Camera defaults semantic हैं, random नहीं। जब composition ज्ञात हो तब
+`--angle front|front-three-quarter|rear|rear-three-quarter|side|three-quarter|top|underside`
+pass करें। एक VLLM server configured (`VLLM_API_URL` और
+वैकल्पिक रूप से `VLLM_MODEL`) के साथ, `--task` local model को उस task के लिए सबसे उपयोगी
+view चुनने देता है। यदि VLLM उपलब्ध नहीं है, तो Arka deterministic
+symbolic rules पर fallback करता है: "roof" `top` select करता है, "side profile" `side` select करता है, और racing
+game vehicle tasks `rear-three-quarter` select करते हैं ताकि car को पीछे से देखा जाए
+जैसे एक सामान्य third-person racing game में।

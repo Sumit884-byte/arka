@@ -1,0 +1,28 @@
+---
+title: "Deterministic coding workflows (नियतात्मक कोडिंग वर्कफ़्लो)"
+description: "Coding agents के लिए Arka skill उपयोग को स्पष्ट (explicit) बनाएँ।"
+icon: "diagram-project"
+---
+
+execution से पहले किसी workflow का preview देखें:
+
+```bash
+arka coding-workflow feature --task "add rate limiting"
+arka coding-workflow bugfix --task "fix the timeout regression" --run
+arka coding-workflow frontend --task "implement the approved screenshot" --run
+arka coding-workflow exhaustive --task "audit and improve this project"
+```
+
+Workflows एक सटीक skill sequence सूचीबद्ध करते हैं ताकि coding models को custom
+skill नाम अनुमान से न निकालने पड़ें। execution approval-gated रहता है; commit
+करने से पहले generated changes और CI results की समीक्षा करें।
+
+`exhaustive` हर public agent skill को खोजता है, प्रत्येक को inspect/plan चरण में
+रखता है, और lint, CI, review, और repo-health verification के साथ समाप्त होता है।
+इससे पूरा skill surface स्पष्ट (explicit) हो जाता है — coding model को custom
+skill नाम याद रखने की आवश्यकता नहीं। Inspect/plan steps कोड को स्वचालित रूप से
+नहीं बदलते।
+
+Coding prompts Arka को यह भी बताते हैं कि पहले मौजूदा skills, MCP tools, और
+integration/library adapters का inspect करे, फिर उस functionality को फिर से
+बनाने के बजाय relevant tool को integrate करे जो पहले से मौजूद है।

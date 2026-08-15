@@ -1,0 +1,30 @@
+---
+title: "Project structure improvement prompt"
+description: "किसी भी repository की structure सुधारने के लिए एक सुरक्षित prompt।"
+icon: "folder-open"
+---
+
+इसे Arka के साथ उपयोग करें:
+
+```text
+Inspect this repository before changing anything. Build a repo graph and identify
+the highest-impact structural problems using dependency centrality, tests,
+coupling, duplicate logic, and feature boundaries. Propose a small, ordered
+refactor plan. Do not change behavior, public APIs, button order, URLs, or
+configuration contracts. For each move, show source, destination, import/reference
+updates, risks, and a rollback path. Ask for approval before applying moves. After
+approval, make surgical edits, run only tests covering edited files after each
+step, then run the broader project gate and report the exact files and results.
+Preserve modules that are already clear and do not reorganize for aesthetics alone.
+```
+
+एक single file move के लिए:
+
+```bash
+arka move_file src/old.py src/new.py
+arka move_file src/old.py src/new.py --yes --update-refs
+```
+
+Moves default रूप से preview करते हैं, destination collisions को अस्वीकार करते
+हैं, और केवल तभी सरल textual references update करते हैं जब स्पष्ट रूप से अनुरोध
+किया गया हो।

@@ -1,0 +1,123 @@
+---
+title: "生成音乐"
+description: "通过 Pollinations 生成 AI 音乐，可选带歌词或纯器乐输出。"
+keywords: ["music", "song", "audio", "lyrics", "instrumental", "pollinations"]
+icon: "music"
+---
+
+通过 Arka 使用 Pollinations 的 **elevenmusic** 模型在本地生成原创音乐。输出默认保存到 `~/Music/arka-generated/`（可用 `MUSIC_OUTPUT_DIR` 覆盖）。
+
+## 配置
+
+```bash
+# .env
+POLLINATIONS_API_KEY=pk_...
+```
+
+在 [enter.pollinations.ai](https://enter.pollinations.ai/) 获取 API Key。
+
+## 示例
+
+arka "纯器乐曲目："
+
+```bash
+arka generate music upbeat lo-fi hip hop --instrumental
+arka generate music cinematic orchestral -d 45
+```
+
+带歌词：
+
+```bash
+arka generate music indie folk --lyrics "Verse one...
+arka "Chorus line..."
+arka generate music pop ballad --lyrics-file lyrics.txt
+```
+
+arka "仅使用提示词（模型可能根据风格描述加入人声)："
+
+```bash
+arka generate music summer dance pop about sunrise
+arka generate_music "jazz piano lounge" -o ~/Music/demo.mp3
+```
+
+## 参数
+
+| 参数 | 描述 |
+| ---- | ---- |
+| `--lyrics "…"` | 要演唱的歌词 |
+| `--lyrics-file path` | 从文件读取歌词 |
+| `--instrumental` | 无人声 |
+| `-d / --duration` | 时长（秒，3–300，默认 30） |
+| `-o / --output` | 输出 `.mp3` 路径 |
+| `-m / --model` | Pollinations 模型（默认 `elevenmusic`） |
+
+## 自然语言
+
+以下短语会自动路由：
+
+```bash
+arka "generate music calm piano instrumental"
+arka "compose a song about coding with lyrics: build, test, ship"
+arka route "create a lo-fi beat"
+```
+
+## 环境变量
+
+  | arka "变量" | arka "默认值" | arka "用途" |
+  | -------- | ------- | ------- |
+  | `POLLINATIONS_API_KEY` | — | arka "必需的 API Key" |
+  | `MUSIC_DURATION` | `30` | arka "默认时长" |
+  | `MUSIC_MODEL` | `elevenmusic` | arka "Pollinations 音频模型" |
+  | `MUSIC_OUTPUT_DIR` | `~/Music/arka-generated` | arka "保存位置" |
+  | `OPEN_MUSIC` | `1` | 生成后是否打开文件（`0` 禁用） |
+
+## 相关
+
+- [MCP 集成](/cn/guides/mcp) —— 从 Cursor 或 Claude 调用 `arka_music_generate`
+- [浏览器视频录制](/cn/guides/video-capture) —— 演示流程录制
+- [梗图模板](/cn/guides/meme-templates) —— 本地图像梗图
+
+## MCP（Cursor / Claude）
+
+在 Cursor 对话中，让 Agent 调用 `arka_music_generate`：
+
+```json
+{
+  "action": "generate",
+  "prompt": "upbeat lo-fi hip hop",
+  "instrumental": true,
+  "duration": 30
+}
+```
+
+要从已有歌曲开始，先用 `arka_fetch_lyrics` 抓取并翻译歌词，然后再生成：
+
+```json
+{
+  "action": "translate",
+  "artist": "Queen",
+  "title": "Bohemian Rhapsody",
+  "target": "hindi",
+  "generate": true,
+  "style": "hindi pop ballad"
+}
+```
+
+先解析自然语言：
+
+```json
+{ "action": "parse", "text": "create an instrumental cinematic track for 45 seconds" }
+```
+
+检查后端配置：
+
+```json
+{ "action": "check" }
+```
+
+终端等价命令：
+
+```bash
+arka mcp call arka arka_music_generate --args '{"action":"generate","prompt":"jazz piano","instrumental":true}'
+arka mcp call arka arka_music_generate --args '{"action":"parse","text":"compose a song about summer"}'
+```

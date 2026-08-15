@@ -1,0 +1,51 @@
+---
+title: "工作流模板"
+description: "使用可复用的提示词与循环模板组合新的 Arka 任务。"
+icon: "copy"
+---
+
+```bash
+arka template list
+arka template show research_brief
+arka template use research_brief --set topic="local LLM serving"
+arka template use repo_release
+```
+
+模板是可检查的文本，而不是隐藏的 agent 行为。提示词模板输出一段
+提示词；循环模板输出一条你可以先审阅再运行的命令。要创建新的
+工作流，可以把模板输出复制到 `arka iterate`、
+
+同时也提供代码起始模板，帮助你快速写出简短且有辨识度的脚本：
+
+```bash
+arka template list
+arka template use python_cli --set description="CSV inspector" --out tools/inspect.py
+arka template use api_health_check --set url="https://example.com/health" --out tools/health.py
+arka template use data_pipeline --out tools/normalize.py
+arka template use browser_smoke --out tests/smoke.py
+arka template use walk_folder --set pattern="*.py" --out tools/list_python.py
+```
+
+`--out` 拒绝覆盖已存在的文件。模板刻意保持简短、可检查，这样
+Arka 可以在不隐藏生成逻辑的前提下对其进行定制。
+
+`walk_folder` 起始模板默认只处理一个文件夹；使用 `--recursive`
+可包含嵌套文件夹：
+
+```bash
+python tools/list_python.py src --recursive --pattern "*.py"
+```
+
+## 自动提示词优化
+
+对于发送到 AI 路由的自然语言请求，Arka 会自动应用一次本地、
+可预期的优化处理。它会澄清目标与期望输出，而不会凭空编造 URL、
+文件、需求或事实。符号化路由会保留原始文本，代码块、JSON、
+shell 命令和 URL 都保持原样。当需要保留精确的提示词文本时，
+可使用 `arka llm route "..." --skills "..." --no-optimize`，
+或全局设置 `ARKA_PROMPT_OPTIMIZE=0`。
+
+`web_screenshot` 与 `browser_check` 采集的截图默认是临时的，
+命令退出时会被清理。若需要保留审阅产物以便日后检查，请传入
+`--output`。
+`arka loop` 或其他技能。

@@ -1,0 +1,42 @@
+---
+title: "开发工作的视频证据"
+description: "将架构录制、UI bug 视频、Loom/Jam 报告和 PR 复现片段转化为开发者可用的产物。"
+keywords: ["video evidence", "bug report", "jira", "loom", "jam", "architecture docs", "pull request"]
+icon: "video"
+---
+
+Arka 可以将开发者的录制转化为结构化的产物，而不是让工程师手动去逐帧
+查看视频。
+
+```bash
+arka video-evidence architecture meeting.mp4
+arka video-evidence pr ui-bug-repro.webm --output pr-context.md
+arka video-evidence bug loom-recording.mp4 --format json --output ticket.json
+```
+
+自然语言会路由到同一个工作流：
+
+```bash
+arka turn architecture whiteboard meeting.mp4 into docs and code stubs
+arka summarize screen recording bug.mp4 as PR reproduction steps
+arka convert Loom bug report bug.mov into a Jira ticket
+arka make a Jam-style ticket from ui-regression.webm
+```
+
+## 模式
+
+| 模式 | 输出 |
+| --- | --- |
+| `architecture` | 系统概览、数据/控制流、决策、待解答问题和代码存根建议 |
+| `pr` | Pull request 复现上下文：步骤、期望与实际、证据以及验证计划 |
+| `bug` | 可直接提交到 Jira 的工单结构：摘要、环境线索、复现步骤、实际/期望、附件和验收标准 |
+
+## 工作原理
+
+`video_evidence` 复用了 Arka 的 `describe_video` 流水线。当 `ffmpeg` 与视觉
+后端可用时，Arka 会采样帧并把这些观察作为原始证据。如果视觉栈不可用，
+它仍会生成产物并明确说明，以避免工作流悄悄地编造视频内容。
+
+首个实现是"文件优先且本地安全"的。与 GitHub、GitLab、Jira、Jam 或 Loom
+的集成应把下载好的录制路径或 URL 传给此技能，然后将生成的 Markdown 或
+JSON 附加到外部系统。

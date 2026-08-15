@@ -1,0 +1,188 @@
+---
+title: "Wake word, STT, और TTS के साथ voice control"
+description: "Wake-word listener, configurable speech-to-text engines, और voice commands के लिए text-to-speech replies के साथ hands-free Arka उपयोग सक्षम करें।"
+keywords: ["voice", "stt", "tts", "wake word"]
+icon: "microphone"
+---
+
+Arka wake-word listener, कई STT engines, और TTS replies के साथ hands-free उपयोग का समर्थन करता है।
+
+## त्वरित शुरुआत
+
+```bash
+arka listen
+# बोलें: "hey arka, what's the weather"
+```
+
+TTS replies default रूप से चालू हैं (`AGENT_SPEAK=1`)। `AGENT_SPEAK=0` से अक्षम करें।
+
+## Wake-word listener
+
+Listener तब तक **default रूप से बंद** है जब तक आप `arka listen` न चलाएँ। Login पर shell autostart के लिए:
+
+```env
+AGENT_WAKE_AUTO=1
+```
+
+Config बदलावों के बाद restart करें:
+
+```bash
+arka reload --listen
+```
+
+## STT engines
+
+Arka स्वचालित रूप से सबसे अच्छा उपलब्ध engine चुनता है (`STT=auto`, `LISTEN_ENGINE=auto`):
+
+| प्राथमिकता | Engine | आवश्यकता |
+| --- | --- | --- |
+| 1 | AssemblyAI | API key |
+| 2 | Sarvam | API key (भारतीय भाषाएँ) |
+| 3 | Groq | API key |
+| 4 | Vosk | Local model (offline) |
+
+स्पष्ट रूप से override करें:
+
+```env
+STT=groq
+LISTEN_ENGINE=vosk
+```
+
+Voice extras install करें:
+
+```bash
+pip install "arka-agent[voice]"
+```
+
+## TTS backends
+
+Arka Edge TTS या Sarvam का उपयोग करके replies बोलता है:
+
+```bash
+arka speak-lang hi-IN    # हिंदी
+arka speak-lang en-US    # अंग्रेज़ी
+```
+
+Sarvam भारतीय भाषाओं का समर्थन करता है। Edge TTS अधिकांश locales के लिए offline काम करता है।
+
+## Remote server
+
+अपने PC agent के साथ phone-आधारित interaction के लिए remote STT/TTS server चलाने के लिए `arka serve` का उपयोग करें:
+
+```bash
+arka serve
+```
+
+### Arka backend को API key के साथ उपयोग करें
+
+Arka का remote backend आपके अपने app, script, या local frontend से भी call किया जा सकता है। Access token API key है: `REMOTE_TOKEN` सेट करें, server शुरू करें, फिर token को bearer token के रूप में pass करें।
+
+```bash
+# ~/.config/arka/.env
+REMOTE_TOKEN=replace-with-a-long-random-token
+REMOTE_HOST=127.0.0.1
+REMOTE_PORT=8765
+
+arka serve
+```
+
+जाँचें कि backend पहुँच योग्य है:
+
+```bash
+curl -s http://127.0.0.1:8765/v1/health
+```
+
+Agent endpoint call करें:
+
+```bash
+curl -s http://127.0.0.1:8765/v1/agent \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $REMOTE_TOKEN" \
+  -d '{"text":"check repo health","remote_speak":false}'
+```
+
+Response shape:
+
+```json
+{
+  "ok": true,
+  "exit_code": 0,
+  "output": "...",
+  "speak_text": ""
+}
+```
+
+JavaScript से:
+
+```js
+const response = await fetch("http://127.0.0.1:8765/v1/agent", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${process.env.REMOTE_TOKEN}`,
+  },
+  body: JSON.stringify({
+    text: "summarize this repo",
+    remote_speak: false,
+  }),
+});
+
+const data = await response.json();
+console.log(data.output);
+```
+
+उपयोगी endpoints:
+
+| Endpoint | Method | उद्देश्य |
+| --- | --- | --- |
+| `/v1/health` | `GET` | Agent चलाए बिना health check |
+| `/v1/agent` | `POST` | API clients से Arka request चलाएँ |
+| `/v1/transcribe` | `POST` | जब local STT कॉन्फ़िगर हो, uploaded WAV audio transcribe करें |
+| `/v1/handoff` | `GET`/`POST` | Handoff items सूचीबद्ध करें या जोड़ें |
+
+Configuration:
+
+| Variable | Default | उद्देश्य |
+| --- | --- | --- |
+| `REMOTE_TOKEN` | पहली `arka serve` रन पर generated | `Authorization: Bearer ...` या `X-Arka-Token` के लिए API key |
+| `REMOTE_HOST` | `0.0.0.0` | Bind address; केवल-local access के लिए `127.0.0.1` उपयोग करें |
+| `REMOTE_PORT` | `8765` | HTTP port |
+| `REMOTE_TIMEOUT` | `600` | एक agent request के लिए अधिकतम सेकंड |
+| `AGENT_SPEAK` | server-side पर `0` forced | API requests पर local TTS को बजने से रोकता है |
+
+एक सख्त inbound automation surface के लिए, इसके बजाय webhook server का उपयोग करें:
+
+```bash
+WEBHOOK_ENABLED=1 WEBHOOK_TOKEN=$REMOTE_TOKEN arka webhook serve
+curl -s http://127.0.0.1:8767/v1/inbox \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $REMOTE_TOKEN" \
+  -d '{"text":"summarize this deployment event","source":"ci","chat_id":"deploy-42"}'
+```
+
+Backend को `127.0.0.1` से bound रखें जब तक आप HTTPS, rate limits, और logs के साथ किसी trusted reverse proxy के पीछे न हों। Request bodies में provider keys न रखें; उन्हें server पर Arka के `.env` में कॉन्फ़िगर करें।
+
+Troubleshooting:
+
+| लक्षण | समाधान |
+| --- | --- |
+| `401 unauthorized` | पुष्टि करें कि request `Authorization: Bearer $REMOTE_TOKEN` का उपयोग करती है और Arka ने वही `.env` file लोड की है |
+| `missing text` | non-empty `text` फ़ील्ड के साथ JSON भेजें |
+| request hangs | `REMOTE_TIMEOUT` कम करें, `arka background processes` चेक करें, और जाँचें कि Arka कौन-सा shell command चला रहा है |
+| local काम करता है पर remotely नहीं | `REMOTE_HOST=127.0.0.1` रखें और इसे HTTPS व rate limits जोड़ने वाले reverse proxy/tunnel के ज़रिए expose करें |
+
+## Multi-turn बातचीत
+
+Voice sessions turns के बीच context बनाए रखते हैं। "hey arka" के बाद अपना request बोलें, फिर session timeout होने तक wake word दोहराए बिना बातचीत जारी रखें।
+
+## Voice से memory
+
+`MEMORY_AUTODETECT=1` (default) के साथ, Arka स्वचालित रूप से voice और chat से "remember that …" phrases detect करता है:
+
+```text
+hey arka, remember that I prefer Hindi TTS
+```
+
+<Note>
+  पूर्ण voice अनुभव के लिए fish shell और voice extras install करें। सेटअप steps के लिए [Quickstart](/hi/quickstart) देखें।
+</Note>

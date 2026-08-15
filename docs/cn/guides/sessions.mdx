@@ -1,0 +1,28 @@
+---
+title: "会话"
+description: "从 CLI 持久化并恢复 Arka 对话会话。"
+icon: "timeline"
+---
+
+Arka 会在本地存储频道对话，以便后续消息能延续其上下文。
+默认 CLI 会话是 `cli/default`；webhook 和消息平台集成使用其
+频道与聊天 ID 作为会话键。
+
+```bash
+arka session status
+arka session list
+arka session resume cli default
+arka session context cli default
+arka session reset cli default
+```
+
+同样的动作也接受自然语言：
+
+```bash
+arka "list my sessions"
+arka "resume my session"
+```
+
+会话文件位于 `~/.config/arka/message-sessions/`（或由
+`ARKA_CONFIG_DIR` 选择的目录）下。使用 `MESSAGE_SESSIONS=0`
+可关闭持久化。

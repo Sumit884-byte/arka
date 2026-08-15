@@ -1,0 +1,50 @@
+---
+title: "स्वायत्त goal agent चलाना"
+description: "Arka के goal agent का उपयोग करके स्वायत्त multi-step terminal कार्य चलाएँ — environments सेट अप करें, debug करें, refactor करें, और step budgets व security gates के साथ tests चलाएँ।"
+keywords: ["goal", "agent", "autonomous", "loop"]
+icon: "bullseye"
+---
+
+Goal agent multi-step कार्य स्वायत्त रूप से चलाता है — environments सेट अप करें, debug करें, refactor करें, और step budget व security gates के साथ tests चलाएँ।
+
+## उपयोग
+
+```bash
+arka goal set up a venv, install requests, and run pytest
+arka goal -y -n 30 debug why nginx fails
+arka goal --butterfish refactor this module and run tests
+```
+
+zsh/bash से (fish की आवश्यकता नहीं):
+
+```bash
+arka goal debug my nginx setup
+arka goal -b -y set up venv and run pytest
+```
+
+## Engines
+
+| Engine | व्यवहार |
+| --- | --- |
+| `auto` / `arka` | Built-in goal agent (default) |
+| `butterfish` | Butterfish shell launch करता है (`!goal`) |
+| `legacy` | केवल मूल JSON loop |
+| `off` | Goal delegation अक्षम करता है |
+
+```env
+GOAL_ENGINE=auto
+GOAL_MAX_STEPS=25
+GOAL_AUTO_CONTINUE=1
+GOAL_OUTPUT_LIMIT=8000
+```
+
+## यह कैसे काम करता है
+
+Goal agent shell history, file reads, और security gates के साथ Butterfish-शैली का run/fix loop उपयोग करता है। हर step किसी भी पंजीकृत skill या safe shell command को invoke कर सकता है।
+
+`-y` का उपयोग केवल तभी करें जब आप environment पर भरोसा करें, ताकि जोखिम भरे steps auto-confirm हो जाएँ।
+
+## संबंधित
+
+- `agent_plan` — upfront JSON planning (reactive goal loop से अलग)
+- `arka loop` — जब `GOAL_ENGINE=auto` हो तो `arka goal` का alias

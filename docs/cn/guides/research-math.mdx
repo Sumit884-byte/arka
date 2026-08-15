@@ -1,0 +1,12 @@
+---
+title: "研究型数学"
+description: "使用 Arka 执行可复现、可审计的数学计算。"
+icon: "square-root-variable"
+---
+
+```bash
+arka research_math "sqrt(16) + 2**3"
+arka math_script "exp(-0.5) / sqrt(2*pi)" --output gaussian.py
+```
+
+Arka 使用受限 AST 验证表达式，在不引入 imports 或 builtins 的情况下求值，并将精确的计算保存为 Python 脚本，便于在 AI 与科学研究工作流中复现。

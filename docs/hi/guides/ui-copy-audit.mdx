@@ -1,0 +1,14 @@
+---
+title: "UI copy audit"
+description: "duplicate button या chip labels के लिए frontend source को audit करें।"
+icon: "spell-check"
+---
+
+LLM-generated interfaces कभी-कभी दो buttons या chips को एक ही phrase दे देते हैं। शिप करने से पहले frontend source को audit करें:
+
+```bash
+arka ui-copy .
+arka ui-copy src --json
+```
+
+यह audit HTML, JSX/TSX, Vue, और Svelte button/chip/link सामग्री की जाँच करता है, case और whitespace को normalize करता है, और duplicate phrases को फ़ाइल और line locations के साथ रिपोर्ट करता है। यह केवल inspection के लिए है; context की समीक्षा करने के बाद labels का नाम सोच-समझकर बदलें।

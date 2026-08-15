@@ -1,0 +1,41 @@
+---
+title: "रोचक तथ्य"
+description: "माँग पर एक चौंकाने वाला तथ्य पाएँ — बिना web search के lightweight LLM trivia।"
+keywords: ["fact", "trivia", "interesting", "fun"]
+icon: "lightbulb"
+---
+
+पूरे web search को trigger किए बिना एक छोटा, चौंकाने वाला तथ्य माँगें। आकस्मिक जिज्ञासा के लिए आदर्श।
+
+## त्वरित शुरुआत
+
+```bash
+arka do tell something interesting
+arka "tell me something interesting"
+arka "give me a fun fact"
+arka "something cool about space"
+arka "random fact about biology"
+```
+
+## किसी topic के साथ
+
+```bash
+arka interesting_fact something interesting about quantum computing
+arka "something cool about the ocean"
+```
+
+Arka 2–4 वाक्य लौटाता है — एक विचार, सरल भाषा।
+
+## Routing
+
+ये phrases general chat या `web_answer` से **पहले** `interesting_fact` पर रूट होते हैं, इसलिए कोई search tokens खर्च नहीं होते।
+
+```bash
+arka route "tell me something interesting"
+# → interesting_fact ...
+```
+
+## संबंधित
+
+- [Quiz practice](/hi/guides/quiz-practice) — scoring के साथ interactive learning
+- [Arka Council](/hi/guides/council) — बहु-perspective विचार-विमर्श

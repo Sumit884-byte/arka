@@ -1,0 +1,137 @@
+---
+title: "YouTube research और downloads"
+description: "Arka से YouTube search करें, video transcripts से research synthesize करें, yt-dlp के साथ individual videos download करें, और पूरी playlists bulk-fetch करें।"
+keywords: ["youtube", "yt-dlp", "research", "download", "transcript"]
+icon: "youtube"
+iconType: "brands"
+---
+
+Arka कई YouTube skills ship करता है जो search, transcripts, downloads, और bulk playlist/channel fetching के लिए **yt-dlp** द्वारा powered हैं।
+
+## Prerequisites
+
+```bash
+brew install yt-dlp    # macOS
+apt install yt-dlp     # Linux
+```
+
+Videos default रूप से `~/Videos/YoutubeDownloads/` में save होते हैं। `.env` में `YOUTUBE_DOWNLOAD_DIR` या `YOUTUBE_BULK_DOWNLOAD_DIR` के साथ override करें।
+
+## YouTube research
+
+YouTube search करें, कई videos से transcripts fetch करें, और एक unified research brief synthesize करें।
+
+```bash
+arka youtube research "how to fix hair loss"
+arka youtube research "python asyncio tutorial" --limit 5
+arka youtube_research "analyze 3 videos on react hooks"
+arka youtube_research "IPL 2025 highlights" --index --ask "who scored most runs"
+```
+
+| Flag | Purpose |
+| --- | --- |
+| `--limit N` | Analyze करने के लिए videos की संख्या (default: `2`, `.env` में `YT_RESEARCH_MAX` set करें) |
+| `--focus "question"` | Synthesis को किसी विशिष्ट प्रश्न पर narrow करें |
+| `--index` | Follow-up questions के लिए session save करें |
+| `--show-items` | प्रति-video summaries print करें |
+
+**Indexed sessions पर follow-up:**
+
+```bash
+arka youtube_research list
+arka youtube_research ask <session-id> "what was the main recommendation"
+```
+
+Alias: `yt_research`, `arka research youtube <query>`।
+
+Natural language count parsing inline काम करती है:
+
+```text
+"analyze 5 videos on rust async"
+"research two youtube videos about kubernetes"
+```
+
+## Videos play करें और खोजें
+
+| Skill | उदाहरण |
+| --- | --- |
+| `play_youtube` | `arka play lofi beats on youtube` |
+| `arka find_videos` | `find_videos swimming tutorial` |
+| `arka youtube_transcript` | `youtube_transcript <url> --summarize` |
+
+## Single video download
+
+एक video या Shorts link download करें:
+
+```bash
+arka download dQw4w9WgXcQ
+arka download "https://youtube.com/watch?v=dQw4w9WgXcQ"
+arka youtube_download youtu.be/abc123 --audio
+arka yt_download <url> --quality 720
+```
+
+| Flag | Purpose |
+| --- | --- |
+| `--audio` | Video के बजाय MP3 के रूप में save करें |
+| `--quality 1080|720|480|best` | Video quality |
+| `-o dir` | Output directory |
+
+Default रूप से `~/Videos/YoutubeDownloads/Singles/` में save होता है।
+
+## Videos और playlists summarize करें
+
+```bash
+arka summarize youtube dQw4w9WgXcQ
+arka summarize youtube PLxxx          # playlist ID
+arka playlist_summarize <playlist-url>
+```
+
+उपलब्ध होने पर captions का उपयोग करता है; आवश्यकतानुसार STT पर fallback होता है।
+
+## Bulk downloads
+
+`http://localhost:5000` पर web UI के साथ पूरी playlists या channels download करें:
+
+```bash
+arka youtube_bulk status
+arka youtube_bulk start
+arka youtube_bulk open
+arka youtube_bulk download "https://youtube.com/playlist?list=PLxxx" --wait
+arka yt_bulk download @mkbhd --channel --limit 5 --audio
+arka youtube_bulk download PLxxx --range 6-9 --wait
+arka youtube_bulk library
+```
+
+| Subcommand | विवरण |
+| --- | --- |
+| `status` | Server \+ download progress (default) |
+| `start` / `stop` / `open` | Bulk download web UI manage करें |
+| `download <url>` | Playlist या channel bulk download करें |
+| `library` | Downloaded folders और files list करें |
+| `logs` | Download logs देखें |
+
+**Download options:**
+
+| Flag | Purpose |
+| --- | --- |
+| `--channel` | Channel URL या `@handle` |
+| `--audio` | Video के बजाय MP3 |
+| `--quality 1080|720|480` | Video quality |
+| `--limit N` | पहले N items |
+| `--range A-B` | Playlist slice, उदा. `6-9` |
+| `--wait` | खत्म होने तक block करें |
+
+Alias: `yt_bulk`.
+
+## Environment variables
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `YT_RESEARCH_MAX` | `2` | Research के लिए default videos |
+| `YT_RESEARCH_POOL` | auto | N captioned videos भरते समय search pool size |
+| `arka "YOUTUBE_DOWNLOAD_DIR"` | `~/Videos/YoutubeDownloads/Singles` | Single downloads |
+| `arka "YOUTUBE_BULK_DOWNLOAD_DIR"` | `~/Videos/YoutubeDownloads` | Bulk downloads |
+
+<Tip>
+  Research `~/.cache/fish-agent/youtube-research/` में transcripts cache करती है। एक ही query को दोबारा run करना बार-बार तेज़ होता है।
+</Tip>

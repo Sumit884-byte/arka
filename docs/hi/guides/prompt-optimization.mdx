@@ -1,0 +1,57 @@
+---
+title: "Prompt optimization"
+description: "Prompts को अधिक स्पष्ट बनाएँ, LLM calls से पहले verbose input को compact करें, और उपयोगकर्ता के सटीक इरादे को संरक्षित करें।"
+keywords: ["prompt optimization", "prompt compaction", "llm", "token efficiency"]
+icon: "sliders"
+---
+
+```bash
+arka prompt_optimize "summarize this research paper" --rounds 3 --role "research assistant"
+arka "optimize this prompt: explain the experiment and cite assumptions"
+```
+
+Arka bounded refinement passes लागू करता है जो objectives, constraints,
+missing-information व्यवहार, verification, और output structure को स्पष्ट करते हैं।
+यह एक मौलिक कार्यान्वयन है, जो
+[Prompt Optimizer](https://github.com/linshenkx/prompt-optimizer) द्वारा वर्णित
+evaluation-oriented workflow से प्रेरित है, जिसका repository AGPL-3.0-only
+licensed है। कोई source code copy या bundle नहीं किया गया है।
+
+## Compact intermediate form
+
+Verbose natural-language inputs के लिए, Arka LLM को भेजने से पहले उपयोगकर्ता
+text को एक compact intermediate representation में भी बदल देता है। मूल text अब भी
+symbolic routing, security checks, exact-command detection, और audit metadata के
+लिए उपयोग होता है।
+
+Compact form रखता है:
+
+- high-signal आवश्यकताएँ
+- थोड़ा-सा context
+- literal URLs, file paths, code blocks, JSON, और shell commands
+- anti-hallucination constraints
+
+यह हटाता या compress करता है:
+
+- दोहराए गए वाक्य
+- low-signal filler
+- अतिरिक्त whitespace
+
+Configuration:
+
+```env
+ARKA_PROMPT_OPTIMIZE=1
+ARKA_PROMPT_COMPACT=1
+ARKA_PROMPT_COMPACT_MIN_CHARS=900
+ARKA_PROMPT_COMPACT_MAX_ITEMS=24
+```
+
+जब सटीक शब्दों को मॉडल तक पहुँचाना ज़रूरी हो तो opt out करें:
+
+```bash
+ARKA_PROMPT_COMPACT=0 arka ask "..."
+arka llm complete --system "You are Arka" --user "..." --no-compact
+```
+
+Routing prompts और पहले से compact `Task IR:` prompts के लिए compaction skip किया
+जाता है ताकि recursive rewriting से बचा जा सके।

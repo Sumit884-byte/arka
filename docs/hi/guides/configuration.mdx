@@ -1,0 +1,57 @@
+---
+title: "Configuration"
+description: "सुरक्षित, hardware-aware Arka defaults और first-run setup।"
+icon: "gear"
+---
+
+बिना कुछ लिखे recommended configuration का preview करें:
+
+```bash
+arka setup --configure --json
+```
+
+इसे स्पष्ट रूप से apply करें:
+
+```bash
+arka setup --configure --apply
+```
+
+Profile local-first और hardware-aware है। यह एक runnable local backend को
+प्राथमिकता देता है, symbolic routing को पहले रखता है, fallback और local memory
+enable करता है, और risky writes के लिए previews आवश्यक करता है। Missing cloud
+credentials को एक सामान्य fallback condition के रूप में handle किया जाता है;
+setup कभी भी secrets create या copy नहीं करता।
+
+केवल Arka की managed configuration का inspect या reset करें:
+
+```bash
+arka config show --json
+arka config reset
+```
+
+Environment values और project `.env` values managed defaults पर वरीयता लेते
+हैं। Profile apply करते समय मौजूदा values preserve की जाती हैं।
+
+## एक configuration share करें
+
+एक portable, safe-to-share bundle export करें:
+
+```bash
+arka config share export --out arka-config-share.json
+```
+
+Bundle में managed defaults, model/provider preferences, और selected non-secret
+environment values शामिल हैं। API keys, tokens, passwords, cookies, webhook
+secrets, और अन्य credentials कभी export नहीं होते; उन्हें `required_env` के
+अंतर्गत list किया जाता है ताकि recipient को पता चले कि उन्हें स्थानीय रूप से
+क्या भरना है।
+
+Import default रूप से preview-only है जब तक `--apply` pass न किया जाए:
+
+```bash
+arka config share import arka-config-share.json --json
+arka config share import arka-config-share.json --apply
+```
+
+प्राकृतिक भाषा भी काम करती है: "share my Arka config" एक share export पर
+route करता है।

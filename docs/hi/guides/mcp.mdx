@@ -1,0 +1,504 @@
+---
+title: "Cursor और Claude के लिए MCP integration"
+description: "Arka को Model Context Protocol servers से जोड़ें — stdio या HTTP — Cursor और Claude Desktop पर 70+ Arka skills expose करें, tools सूचीबद्ध करें, tools call करें, और CLI से health verify करें।"
+keywords: ["mcp", "model context protocol", "Cursor", "Claude Desktop", "integration", "arka mcp server"]
+icon: "network-wired"
+boost: 1.5
+---
+
+Arka **किसी भी MCP server** से terminal से connect कर सकता है — वही [Model Context Protocol](https://modelcontextprotocol.io) जो Cursor, Claude Desktop, और अन्य AI clients उपयोग करते हैं।
+
+<Note>
+  **सारांश:** Arka MCP client भी है (SigNoz या filesystem जैसे external servers call करना) और MCP server भी (Cursor को Arka skills expose करना)। Config `~/.config/arka/mcp.json` पर Cursor-compatible format में है। त्वरित शुरुआत: `arka mcp list`, `arka mcp add`, `arka mcp tools`, `arka mcp call`. **AI agents:** routing, verification rules, और tool selection के लिए देखें [AI agent guide](/hi/guides/ai-agents)। IDE में coding करने वाले मनुष्य: [Arka के साथ code कैसे लिखें](/hi/guides/code-with-arka)।
+</Note>
+
+MCP servers Arka के universal plugin catalog में भी भाग ले सकते हैं। एक server
+जोड़ने के बाद, requests इसे route करने से पहले उसके normalized capabilities और permissions
+जाँचने के लिए `arka plugin doctor` और `arka plugin inspect <name>` का उपयोग करें। Agent Hub
+Arka के skill manifest के साथ वही catalog export करता है।
+
+Config `~/.config/arka/mcp.json` पर Cursor-compatible `mcpServers` format में है।
+
+## त्वरित शुरुआत
+
+```bash
+# Configured servers सूचीबद्ध करें
+arka mcp list
+
+# stdio MCP server जोड़ें (command + args)
+arka mcp add filesystem npx -y @modelcontextprotocol/server-filesystem /tmp
+
+# HTTP/SSE MCP server जोड़ें
+arka mcp add signoz --url http://localhost:8000/mcp \
+  --header SIGNOZ-API-KEY=$SIGNOZ_API_KEY
+
+# एक server से tools सूचीबद्ध करें
+arka mcp tools signoz
+
+# एक tool call करें
+arka mcp call signoz signoz_ask --args '{"question":"error rate last hour"}'
+
+# Connection health जाँचें
+arka mcp status
+```
+
+fish से:
+
+```fish
+arka mcp list
+arka mcp status
+arka mcp tools signoz
+```
+
+प्राकृतिक भाषा (agent routing):
+
+```fish
+arka "list mcp servers"
+arka "mcp status"
+arka "list mcp tools from signoz"
+```
+
+## Config format
+
+`~/.config/arka/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
+    },
+    "signoz": {
+      "url": "http://localhost:8000/mcp",
+      "headers": {
+        "SIGNOZ-API-KEY": "<your-api-key>"
+      }
+    }
+  }
+}
+```
+
+Stdio servers `command` \+ `args` उपयोग करते हैं। Remote servers `url` \+ वैकल्पिक `headers` उपयोग करते हैं। वैकल्पिक `env` values `${env:VAR_NAME}` substitution समर्थन करते हैं।
+
+## Transports
+
+| Transport | Config | उदाहरण |
+| --- | --- | --- |
+| **stdio** | `command` \+ `args` | `npx -y @modelcontextprotocol/server-filesystem /tmp` |
+| **HTTP/SSE** | `url` \+ `headers` | SigNoz MCP `http://localhost:8000/mcp` पर |
+
+Arka remote servers के लिए मौजूदा HTTP MCP client और stdio के लिए एक built-in newline-delimited JSON-RPC client पुनः उपयोग करता है — कोई अतिरिक्त dependencies नहीं चाहिए।
+
+## वैकल्पिक Python SDK
+
+```bash
+pip install mcp
+```
+
+Arka SDK के बिना काम करता है। अगर install है, Arka इसे detect करता है (`arka mcp status` `sdk on` दिखाता है)।
+
+## SigNoz MCP
+
+SigNoz के लिए विशेष रूप से, Arka traced helpers भी देता है (`arka signoz status`, goal self-heal)। Generic `arka mcp` किसी भी MCP server के साथ काम करता है — केवल SigNoz नहीं।
+
+```bash
+arka mcp add signoz --url http://localhost:8000/mcp --header SIGNOZ-API-KEY=$SIGNOZ_API_KEY
+arka mcp tools signoz
+```
+
+## MCP logs
+
+जब Cursor, Claude, या अन्य MCP client production जैसे issues (`Connection closed`,
+invalid tool arguments, unknown tools, या server error states) रिपोर्ट करे तब MCP logs उपयोग करें:
+
+```bash
+arka mcp logs
+arka mcp logs -n 100 --json
+arka mcp logs --event server.tools_call
+```
+
+Logs JSONL हैं और sanitized client/server events store करते हैं: timestamp, component,
+method/tool, status, duration, और एक छोटा error snippet। Secrets, tokens, और
+authorization-like fields redact होते हैं। Default में file Arka की config directory के अंदर
+`logs/mcp.jsonl` पर होती है; tests या hosted deployments के लिए override करने के लिए
+`ARKA_MCP_LOG_PATH` सेट करें।
+
+## Three.js model MCP
+
+Arka [`baryhuang/mcp-threejs`](https://github.com/baryhuang/mcp-threejs) के लिए built-in preset देता है, जो Sketchfab-backed MCP server है, downloadable Three.js-compatible 3D assets खोजने के लिए। यह तब उपयोगी है जब एक scene वास्तविक चीज़ों (satellites, spacecraft, vehicles, rooms, desks, या humans) की माँग करे — Arka को rough geometric placeholders के बजाय licensed GLTF/GLB asset को प्राथमिकता देनी चाहिए।
+
+Config पहले preview करें:
+
+```bash
+arka mcp preset threejs
+```
+
+Arka के MCP config में लागू करें:
+
+```bash
+arka mcp preset threejs --apply
+arka mcp tools threejs
+```
+
+Preset Docker उपयोग करता है:
+
+```json
+{
+  "mcpServers": {
+    "threejs": {
+      "command": "docker",
+      "args": ["run", "--rm", "-i", "buryhuang/mcp-server-threejs:latest"],
+      "env": {
+        "SKETCHFAB_ACCESS_TOKEN": "${env:SKETCHFAB_ACCESS_TOKEN}",
+        "SKETCHFAB_REFRESH_TOKEN": "${env:SKETCHFAB_REFRESH_TOKEN}",
+        "SKETCHFAB_CLIENT_ID": "${env:SKETCHFAB_CLIENT_ID}",
+        "SKETCHFAB_CLIENT_SECRET": "${env:SKETCHFAB_CLIENT_SECRET}"
+      }
+    }
+  }
+}
+```
+
+Live download-link lookup चाहिए तो Sketchfab OAuth variables सेट करें। Tokens के बिना, server शुरू हो सकता है लेकिन model lookup/download URLs upstream API के आधार पर fail हो सकते हैं।
+
+## Commands reference
+
+| Command | विवरण |
+| --- | --- |
+| `arka mcp list` | Configured MCP servers सूचीबद्ध करें |
+| `arka mcp add <name> <command> [args...]` | stdio server जोड़ें |
+| `arka mcp add <name> --url <url>` | HTTP/SSE server जोड़ें |
+| `arka mcp add <name> --url <url> --header KEY=VAL` | Auth header के साथ HTTP server जोड़ें |
+| `arka mcp preset threejs [--apply]` | Three.js model MCP server preset preview/apply करें |
+| `arka mcp remove <name>` | एक server हटाएँ |
+| `arka mcp tools <server>` | एक server से tools सूचीबद्ध करें |
+| `arka mcp call <server> <tool> [--args '{}']` | एक tool call करें |
+| `arka mcp status` | सभी servers के लिए connection health |
+| `arka mcp logs [-n 50] [--json]` | हाल के sanitized MCP client/server events दिखाएँ |
+| `arka mcp self-tools` | Arka के native MCP tools सूचीबद्ध करें |
+| `arka mcp serve` | Arka को local stdio MCP server के रूप में शुरू करें |
+| `arka mcp install` | Cursor/Claude-compatible `mcp.json` snippet प्रिंट करें |
+| `arka mcp doctor` | Verify करें कि local Arka MCP server शुरू होता है |
+
+<Note>
+  MCP tool calls प्रति invocation एक नई connection खोलते हैं। High-frequency उपयोग के लिए, servers को local (stdio) या low-latency HTTP endpoint पर रखें।
+</Note>
+
+## MCP server के रूप में Arka
+
+अन्य agents (Cursor, Claude Desktop, OpenClaw, Codex, आदि) MCP पर Arka skills और memory call कर सकते हैं — वही stdio transport जो Arka MCP **client** के रूप में उपयोग करता है।
+
+### Cursor setup
+
+Cursor के अंदर Arka को MCP server के रूप में उपयोग करें ताकि editor agent `arka_ask`, `arka_recall`, `arka_skill`, और बाकी exported tool surface call कर सके।
+
+<Steps>
+  <Step title="Arka install करें">
+    Repo (editable install) या आपके venv से:
+
+    ```bash
+    cd /path/to/arka
+    python -m venv venv-arka
+    source venv-arka/bin/activate
+    pip install -e .
+    arka mcp doctor
+    ```
+
+    `arka mcp doctor` को `summary ok` पर समाप्त होना चाहिए और वर्तमान tool count रिपोर्ट करना चाहिए।
+  </Step>
+
+  <Step title="MCP config जोड़ें">
+    **Option A — project-level** (Arka repo में काम करते समय अनुशंसित): repo root से `.cursor/mcp.json` copy या symlink करें। Cursor इसे इस workspace के लिए स्वचालित रूप से load करता है।
+
+    **Option B — global**: **Cursor Settings → MCP** खोलें और `arka` entry को `~/.cursor/mcp.json` में merge करें:
+
+    ```bash
+    arka mcp install
+    ```
+
+    उदाहरण snippet (paths machine के अनुसार बदलते हैं — अपना पाने के लिए `arka mcp install` उपयोग करें):
+
+    ```json
+    {
+      "mcpServers": {
+        "arka": {
+          "command": "/Users/you/dev/arka/venv-arka/bin/arka",
+          "args": ["mcp", "serve"],
+          "env": {
+            "ARKA_CONFIG_DIR": "/Users/you/.config/arka"
+          }
+        }
+      }
+    }
+    ```
+
+    Repo helpers:
+
+    | File | Purpose |
+    | --- | --- |
+    | `.cursor/mcp.json` | Project-level Cursor MCP (केवल Arka) |
+    | `hub/adapters/cursor_mcp_snippet.json` | Copy-paste snippet + install steps |
+    | `mcp.json` | Hub-ready config (Arka + वैकल्पिक context7) |
+  </Step>
+
+  <Step title="Cursor restart करें">
+    Cursor को पूरी तरह quit करें और फिर से खोलें, या **Settings → MCP → Reload** उपयोग करें। `arka` server वर्तमान Arka tool count के साथ connected दिखना चाहिए।
+  </Step>
+
+  <Step title="उदाहरण tool calls">
+    Cursor chat में, agent से Arka MCP tools उपयोग करने को कहें:
+
+    - **Memory recall**: `arka_recall` को `{"goal": "project conventions"}` के साथ call करें
+    - **Arka से पूछें**: `arka_ask` को `{"prompt": "summarize this repo"}` के साथ call करें
+    - **एक skill चलाएँ**: `arka_skill` को `{"skill": "repo_map"}` के साथ call करें
+    - **Repo layout**: `arka_repo_map` को `{"depth": 2}` के साथ call करें
+
+    Terminal से (वही tools, Cursor नहीं):
+
+    ```bash
+    arka mcp call arka arka_recall --args '{"goal":"theme"}'
+    arka mcp call arka arka_ask --args '{"prompt":"what is arka?"}'
+    ```
+  </Step>
+</Steps>
+
+## IDE और agent setup
+
+Arka एक standard stdio MCP server expose करता है, तो वही generated entry
+अधिकांश MCP-compatible IDEs में काम करता है। इस पेज से path copy करने के बजाय
+एक machine-specific snippet generate करें:
+
+```bash
+arka mcp install
+```
+
+प्रिंट की गई `mcpServers.arka` entry को client की MCP JSON file में जोड़ें, फिर
+इसका MCP panel restart या reload करें। Entry है:
+
+```json
+{
+  "command": "/absolute/path/to/arka",
+  "args": ["mcp", "serve"]
+}
+```
+
+अगर IDE आपका virtual environment resolve नहीं कर सकता, तो absolute Python
+executable और module invocation उपयोग करें:
+
+```json
+{
+  "command": "/absolute/path/to/venv/bin/python",
+  "args": ["-m", "arka", "mcp", "serve"]
+}
+```
+
+| Client | Configuration location / action |
+| --- | --- |
+| **Cursor** | Settings → MCP, या project `.cursor/mcp.json` |
+| **VS Code / GitHub Copilot** | workspace में `.vscode/mcp.json`, या MCP server settings UI |
+| **Claude Desktop** | macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`; Linux: `~/.config/Claude/claude_desktop_config.json` |
+| **Windsurf** | MCP settings → server जोड़ें, या `~/.codeium/windsurf/mcp_config.json` |
+| **Cline** | Cline MCP Servers panel → JSON से install करें |
+| **Continue** | Continue के MCP configuration में server जोड़ें (generated stdio entry उपयोग करें) |
+| **Zed** | Settings → Context Servers → एक `arka` command server जोड़ें |
+| **Codex CLI** | `~/.codex/config.toml` MCP configuration, या चलाएँ `codex mcp add arka -- arka mcp serve` |
+
+किसी भी client को configure करने के बाद, agent से Arka उपयोग करने को कहने से पहले connection verify करें:
+
+```bash
+arka mcp doctor
+arka mcp self-tools
+```
+
+IDE में, ज़रूरत होने पर स्पष्ट कहें "use the Arka MCP tools"।
+`arka_route` को umbrella Arka MCP tool की तरह मानें: जब आप निश्चित नहीं कि कौन-सा संकीर्ण Arka tool चलना चाहिए, उपयोगकर्ता के पूरे प्राकृतिक-भाषा request को इस पर पास करें।
+उपयोगी पहले checks हैं `arka_heartbeat`, `arka_repo_map`, और `arka_skill`।
+`arka agent_hub sync --unify` उपयोग करने पर मौजूदा MCP servers संरक्षित रहते हैं; कौन सी client files update होंगी इसका preview करने के लिए
+`arka agent_hub adapters` उपयोग करें।
+
+### त्वरित शुरुआत
+
+```bash
+# Server शुरू करें (stdio — MCP clients स्वचालित उपयोग करते हैं)
+arka mcp serve
+
+# Cursor या Claude Desktop के लिए config प्रिंट करें
+arka mcp install
+
+# arka को ~/.config/arka/mcp.json में जोड़ें और snippet प्रिंट करें
+arka mcp install --write-config
+
+# Verify initialize + tools/list
+arka mcp doctor
+```
+
+`arka` PATH पर न होने पर Editable installs:
+
+```json
+{
+  "mcpServers": {
+    "arka": {
+      "command": "python",
+      "args": ["-m", "arka", "mcp", "serve"]
+    }
+  }
+}
+```
+
+अपनी मशीन के लिए सही command प्रिंट करने के लिए `arka mcp install` चलाएँ।
+
+### Exposed tools
+
+| Tool | विवरण |
+| --- | --- |
+| `arka_ask` | Arka से पूछें (web, memory, calc, weather, chat) |
+| `arka_remember` | एक fact, note, या channel turn store करें |
+| `arka_recall` | Goal से unified memory recall करें |
+| `arka_skill` | एक नामित Arka skill invoke करें |
+| `arka_route` | Umbrella tool — Arka skills/MCP-backed capabilities से पूरा प्राकृतिक-भाषा request route और execute करें |
+| `arka_repo_map` | Repository layout और Python symbols |
+| `arka_heartbeat` | Agent heartbeat — ping, status, या हाल की activity history |
+| `arka_sessions` | Channel sessions — list, status, context, resume, silence_check, push, reset |
+| `arka_routines` | Scheduled routines — list, add, remove, enable, या disable |
+| `arka_session_memory` | OpenClaw markdown memory — append, search, context, status, clear |
+| `arka_subagent` | Hermes sub-agent delegation — spawn, list, status, resume |
+| `arka_project_rules` | Cursor-style project rules — AGENTS.md, CLAUDE.md, `.cursor/rules` |
+| `arka_music_generate` | Music generate — Pollinations elevenmusic या ffmpeg tone synthesis |
+| `arka_meme` | Local meme templates — Drake, comparison, vibe-coding, वैकल्पिक stock photos |
+| `arka_infographic` | Adaptive infographic PNG — item count से grid/radial layout |
+| `arka_media_styles` | Meme, video, और infographic visual style presets सूचीबद्ध करें |
+| `arka_tech_stack` | Fuzzy-find project folder, exact न हो तो confirm करें, manifests पढ़ें, stack सुझाएँ |
+| `arka_fetch_lyrics` | Song lyrics fetch करें, translate करें, वैकल्पिक रूप से translated cover generate करें |
+| `arka_safety_advice` | Curated crisis guidance — domestic violence, harassment (fixed playbook, LLM legal advice नहीं) |
+| `arka_local_music` | Offline music — local ffmpeg melodies (कोई cloud API नहीं) |
+| `arka_webhook` | Webhook gateway — status या health |
+| `arka_view_data` | CSV/TSV tables को plain text के रूप में preview करें |
+| `arka_clipboard` | Clipboard history — list, save, get, या clear |
+| `arka_share` | Last LLM response को model, provider, tokens, latency, और output (markdown या JSON) के साथ share करें |
+| `arka_remind` | Reminders — list, add, या cancel |
+| `arka_bookmarks` | Bookmarks — list, save, search, get, या delete |
+| `arka_docker` | Docker — health, containers, images, या logs |
+| `arka_jsonkit` | JSON — validate, pretty, minify, या path से get करें |
+| `arka_timekit` | Time — now, timezone convert, या relative offsets |
+| `arka_urlkit` | URL helpers — parse, normalize, या slugify |
+| `arka_password` | Password — one-shot secret generate करें (store नहीं) |
+| `arka_spotify` | Spotify — tracks खोजें; MCP personal-skill safe mode में default में छुपा |
+| `arka_textkit` | Textkit — UUID, hash, या base64 encode/decode |
+| `arka_calendar` | Calendar — आज के events (macOS Calendar.app) |
+| `arka_platform` | Platform — OS capabilities show या detect करें |
+| `arka_personalize` | Personalize — profile status, skill tips, quickstart |
+| `arka_persona` | Personas — persona configs list या show करें |
+| `arka_github` | GitHub — repo resolve करें या हाल की activity fetch करें |
+| `arka_price` | Price check — retailer sources list करें या query parse करें |
+| `arka_config` | Config — files/dirs list करें या paths show करें (read-only) |
+| `arka_sports` | Sports — live scores या leagues list करें |
+| `arka_qr` | QR code — text/URL को ASCII art के रूप में encode करें |
+| `arka_currency` | Currency — amounts convert करें या NL queries parse करें |
+| `arka_disk` | Disk space — usage summary या category breakdown |
+| `arka_repo_health` | Repo health — scan या lint/test checks चलाएँ |
+| `arka_agent_hub` | Agent Hub — status, adapters, detect, doctor, list, memory sources, या IDE memory import करें |
+| `arka_team_run` | एक agent team workflow चलाएँ |
+
+### MCP-safe defaults
+
+Arka MCP default में personal desktop/device skills को छुपाता या block करता है ताकि IDE
+agents अनपेक्षित रूप से Brave न खोलें, Spotify शुरू न करें, media न चलाएँ, या
+personalized daily brief न चलाएँ। यह local Fish/CLI behavior नहीं बदलता।
+
+Disabled-by-default MCP उदाहरण:
+
+- `arka_spotify`
+- `play_spotify`, `spotify_control`, `spotify_brave_debug`
+- `play_song`, `play_youtube`, `play_movie`, `stop_music`
+- `open_url`, `open`, `browse`, `open_urls`
+- `search_web`, `browse_web`, `agent_browser`
+- `daily_brief`
+
+Headless/dev-safe tools जैसे `browser_check`, `web_screenshot`,
+`automate`, repo tools, code tools, data tools, और `arka_route` उपलब्ध रहते हैं।
+
+केवल तब opt in करें जब MCP client आपके desktop/browser/media state को छूने के लिए trusted हो:
+
+```bash
+ARKA_MCP_ENABLE_PERSONAL_SKILLS=1 arka mcp serve
+```
+
+संकीर्ण override के लिए:
+
+```bash
+ARKA_MCP_ENABLED_TOOLS=arka_spotify arka mcp serve
+ARKA_MCP_ENABLED_SKILLS=daily_brief,open_url arka mcp serve
+```
+
+### Agent Hub
+
+`agent_hub sync` MCP config को hub पर copy करता है और सुनिश्चित करता है कि **arka** self-server entry मौजूद है ताकि अन्य launch agents इसे merge कर सकें:
+
+```bash
+arka agent_hub sync
+arka agent_hub adapters    # देखें कौन-से agent configs में hub servers जोड़े जाएँगे
+```
+
+Hub env vars (`ARKA_MCP_CONFIG`, `ARKA_HUB_DIR`) [Agent Hub](/hi/guides/agent-hub) में documented हैं।
+
+#### MCP से IDE memory import करें
+
+`arka_agent_hub` Cursor, Codex, OpenClaw, Arka session notes, और hub exports से memory list और import कर सकता है:
+
+```bash
+# इस मशीन पर importable memory files सूचीबद्ध करें
+arka mcp call arka arka_agent_hub --args '{"action":"memory_sources"}'
+
+# एक IDE source या सब कुछ detected import करें
+arka mcp call arka arka_agent_hub --args '{"action":"import_memory","source":"cursor"}'
+arka mcp call arka arka_agent_hub --args '{"action":"import_memory","all":true}'
+
+# एक explicit export file import करें
+arka mcp call arka arka_agent_hub --args '{"action":"import_memory","path":"~/.config/arka/hub/memory/summary.json"}'
+```
+
+| `action` | Parameters | Returns |
+| --- | --- | --- |
+| `memory_sources` | — | Local रूप से मौजूद sources के लिए `{ id, name, ide, files, file_count }` का array |
+| `import_memory` | `path` **या** `source` / `ide` / `agent` **या** `all: true` | `{ ok, facts_imported, notes_imported, imports, errors }` |
+
+अन्य `arka_agent_hub` actions: `status`, `adapters`, `detect`, `doctor`, `list`। source ids और formats के लिए देखें [Agent Hub — Memory import](/hi/guides/agent-hub#memory-import)।
+
+## Arka को Arka MCP से extend करना
+
+Skills जोड़ते समय MCP workflow को dogfood करें: gaps discover करने के लिए Arka के अपने MCP tools का उपयोग करें, फिर नई capabilities को CLI routing में वापस wire करें।
+
+### उदाहरण workflow
+
+```bash
+# Local MCP server verify करें
+arka mcp doctor
+
+# Repo layout और health inspect करें (वही tools जो Cursor agents call करते हैं)
+arka mcp call arka arka_repo_map --args '{"depth":2,"path":"/path/to/arka"}'
+arka mcp call arka arka_repo_health --args '{"path":"/path/to/arka"}'
+
+# Arka के native MCP surface सूचीबद्ध करें
+arka mcp self-tools
+
+# fish / NL से
+arka "list arka mcp tools"
+arka "show agent heartbeat"
+arka "validate json package.json"
+```
+
+जब एक tool MCP server पर मौजूद है लेकिन प्राकृतिक-भाषा routing नहीं है (उदाहरण के लिए `arka_heartbeat` या `arka_jsonkit`), जोड़ें:
+
+1. Python module में `route_command()`
+2. `src/arka/routing/symbolic.py` में `route_*()`
+3. `config.fish` में Fish helpers `_agent_is_*_request` / `_agent_route_*`
+4. `tests/test_*_routing.py` और `tests/test_nl_routing_coverage.py` में tests
+
+यह Cursor MCP, terminal NL, और `ROUTE_MODE=symbolic_only` को sync में रखता है।
+## Browser safety
+
+MCP requests implicitly websites या desktop browser windows नहीं खोलतीं। Inspection के लिए
+headless skills जैसे `browser_check`, `web_screenshot`, या `automate` उपयोग करें। अगर एक workflow
+सचमुच headed tab चाहता है, तो user approval प्राप्त करने के बाद `allow_browser: true` के साथ `arka_skill`
+tool call करें। यह model-generated URL को अनपेक्षित रूप से browser launch करने से रोकता है।

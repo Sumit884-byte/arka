@@ -1,0 +1,17 @@
+---
+title: "GEO 与 AI 搜索 SEO 审计"
+description: "审计网站的传统 SEO 基础与 AI 引用就绪度。"
+icon: "location-dot"
+---
+
+```bash
+arka geo_seo .
+arka geo_seo ./site --json
+arka "audit this site for AI search SEO"
+```
+
+Arka 会检查标题、描述、结构化数据、FAQ 覆盖、`llms.txt`
+以及适合被引用的内容块，然后返回透明的评分与按优先级排列的
+改进建议。这是一个原创实现，灵感来自
+[geo-seo-claude](https://github.com/zubair-trabzada/geo-seo-claude)
+的 GEO 工作流（MIT 许可证），未复制其源代码。

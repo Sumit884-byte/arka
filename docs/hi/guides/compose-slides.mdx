@@ -1,0 +1,101 @@
+---
+title: "Slides बनाएं"
+description: "किसी topic से executive-quality slide decks generate करें — style presets और visual themes के साथ pptx, pdf, html, या markdown।"
+keywords: ["slides", "presentation", "pptx", "deck", "pitch", "theme"]
+icon: "presentation-screen"
+---
+
+किसी topic से structured slide decks बनाएं। Arka presentation-specific prompts (action titles, speaker notes, section dividers) का उपयोग करता है — video scripts का नहीं।
+
+## Quick start
+
+```bash
+arka make slides about kubernetes networking
+arka pitch deck on AI infrastructure
+arka academic presentation on quantum computing
+arka compose_slides compose --topic "Python asyncio" --llm --style executive -f pptx
+```
+
+## Style presets
+
+| Style | किसके लिए सर्वश्रेष्ठ | Default theme |
+| --- | --- | --- |
+| `executive` | Business updates, KPI-focused action titles | `dark` |
+| `pitch` | Startup decks — problem → solution → market → ask | `dark` |
+| `academic` | Research talks — methodology, citations | `light` |
+
+```bash
+arka compose_slides compose --topic "Series A" --style pitch -f pptx
+arka compose_slides compose --topic "CRISPR" --style academic -f all
+```
+
+## Visual themes
+
+`--theme` के साथ colors और typography को नियंत्रित करें:
+
+| Theme | Look |
+| --- | --- |
+| `dark` | High-contrast slides (executive/pitch के लिए default) |
+| `light` | Clean light background (academic के लिए default) |
+| `minimal` | White/neutral, print-friendly |
+
+```bash
+arka compose_slides compose --topic "Q4 review" --style executive --theme light -f pptx
+arka pitch deck on terminal AI agents --theme dark
+```
+
+प्रत्येक deck के लिए Design features:
+
+- **Title slide** subtitle और logo placeholder के साथ
+- **Section dividers** (pitch decks Problem/Solution sections का उपयोग करते हैं)
+- **Left-aligned action titles** accent bar और slide numbers के साथ
+- **Footer bar** content slides पर slide title और page number के साथ
+- **Image/chart placeholder** panel text-only content slides पर
+- **Metric callout boxes** pitch traction slides पर
+- **8px spacing grid** और सभी themes पर WCAG-friendly contrast
+- **अधिकतम 4 bullets** प्रति slide (≤8 words each)
+- **Speaker notes** `narration` में; न्यूनतम on-screen text
+
+### Export से पहले plan करें
+
+Files generate किए बिना design improvement steps preview करने के लिए [plan mode](/hi/guides/operation-modes) का उपयोग करें:
+
+```bash
+arka mode plan
+arka "improve pitch slide design for terminal AI agents"
+arka mode agent
+arka compose_slides compose --topic "terminal AI agents" --style pitch --theme dark -f pptx
+```
+
+## Export formats
+
+| Flag | Output |
+| --- | --- |
+| `-f pptx` | PowerPoint (`python-pptx` की आवश्यकता है) |
+| `-f pdf` | PDF export |
+| `-f html` | HTML slideshow |
+| `-f md` | Marp markdown outline |
+| `-f all` | सभी formats |
+
+Slides default रूप से `~/Documents/arka-slides/` में save होते हैं।
+
+<Note>
+  यदि pptx validation विफल होता है, तो Arka invalid file हटाता है और उसके स्थान पर एक **markdown outline** save करता है। Keynote users के लिए, PPTX exports default रूप से conservative रहते हैं; speaker notes को केवल `SLIDES_PPTX_NOTES=1` के साथ enable करें।
+</Note>
+
+## मौजूदा decks convert करें
+
+```bash
+arka compose_slides convert deck.pptx --format pdf
+```
+
+## Quality bar
+
+- प्रति slide एक idea
+- Action titles (generic "Background" नहीं)
+- सामान्यतः 6–12 slides
+- Speaker notes `narration` में; अधिकतम 4 on-screen bullets
+
+## संबंधित
+
+- [Skills catalog](/hi/guides/skills) — Media section में `compose_slides` row

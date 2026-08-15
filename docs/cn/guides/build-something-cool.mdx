@@ -1,0 +1,16 @@
+---
+title: "构建一个很酷的东西"
+description: "从创意到构建与部署，运行一个带守卫的产品工作流。"
+icon: "wand-magic-sparkles"
+---
+
+运行一个带守卫的产品工作流：
+
+```bash
+arka build-something-cool "a visual notes app"
+arka build-something-cool "a visual notes app" --build
+arka build-something-cool "a visual notes app" --build --deploy --yes
+arka build-something-cool "a cool feature for the dashboard"
+```
+
+该工作流会进行创意构思、生成计划、构建/测试项目，并在你使用 `--yes` 明确批准之前阻止部署。构建或测试失败之后它不会执行部署。在添加 `--build` 之前请先审阅计划。同一守卫工作流既处理功能请求，也能构建完整的应用。

@@ -1,0 +1,54 @@
+---
+title: "Hackathons और ML competitions search"
+description: "Kaggle, Devpost, MLH, HackerEarth और अन्य curated sources में सक्रिय hackathons और machine-learning competitions खोजें।"
+keywords: ["competitions", "hackathons", "kaggle", "ml"]
+icon: "trophy"
+---
+
+Arka DuckDuckGo site-biased queries का उपयोग करके curated platforms में **hackathons और ML competitions** खोजता है।
+
+## Natural language
+
+```bash
+arka find hackathons for computer vision
+arka show me kaggle competitions for NLP
+arka search competitions for time series forecasting
+arka list competition data sources
+```
+
+## CLI commands
+
+| Command | विवरण |
+| --- | --- |
+| `competitions sources` | सभी समर्थित data sources सूचीबद्ध करें |
+| `competitions search <topic>` | सभी sources खोजें |
+| `competitions search <topic> --source kaggle` | एक source खोजें |
+| `competitions search <topic> --source kaggle,devpost` | कई sources खोजें |
+| `competitions search <topic> --limit 8` | प्रति source अधिकतम परिणाम (default 5) |
+
+## समर्थित sources
+
+| Source ID | Platform |
+| --- | --- |
+| `kaggle` | Kaggle competitions |
+| `devpost` | Devpost hackathons |
+| `wemakedevs` | WeMakeDevs hackathons |
+| `mlh` | Major League Hacking |
+| `hackerearth` | HackerEarth challenges |
+| `drivendata` | DrivenData competitions |
+| `zindi` | Zindi Africa |
+| `aicrowd` | AIcrowd challenges |
+| `topcoder` | Topcoder challenges |
+| `codalab` | Codabench / Codalab |
+
+## आवश्यकताएँ
+
+Competition search के लिए chat extra (DuckDuckGo search) आवश्यक है:
+
+```bash
+pip install 'arka-agent[chat]'
+```
+
+<Note>
+  Stock "competition" queries (peer analysis, rivals) stock skill पर route होती हैं — इस search पर नहीं।
+</Note>

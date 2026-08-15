@@ -1,0 +1,13 @@
+---
+title: "Usage tracking"
+description: "Prompt content एकत्र किए बिना लोकल स्तर पर Arka skill उपयोग निरीक्षण करें।"
+icon: "chart-pie"
+---
+
+```bash
+arka usage
+```
+
+Arka केवल 5,000 तक लोकल events स्टोर करता है जिनमें skill name, success state,
+duration, और timestamp शामिल होते हैं। Prompts, arguments, file contents, और
+model responses रिकॉर्ड नहीं होते। इसे `ARKA_USAGE_TRACKING=0` से अक्षम करें।

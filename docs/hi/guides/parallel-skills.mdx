@@ -1,0 +1,13 @@
+---
+title: "समानांतर स्किल्स"
+description: "स्वतंत्र Arka स्किल्स एक साथ चलाएँ।"
+icon: "grip"
+---
+
+स्वतंत्र Arka स्किल्स को समानांतर (concurrently) चलाएँ:
+
+```bash
+arka parallel --job "ci" --job "route audit" --job "security"
+```
+
+Concurrency सीमित करने के लिए `--workers` का उपयोग करें। Arka report में job क्रम को बनाए रखता है और यदि कोई भी job विफल हो तो failure लौटाता है। केवल स्वतंत्र काम को समानांतर करें; एक ही समय पर एक ही फ़ाइल्स को edit करने वाले commands को एक साथ चलाने से बचें। प्राकृतिक भाषा में request जैसे “run `ci` and `route audit` in parallel” तब रूट होते हैं जब हर job quote में हो।

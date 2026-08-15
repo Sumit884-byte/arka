@@ -1,0 +1,73 @@
+---
+title: "Life sciences (Anthropic marketplace)"
+description: "Arka से Anthropic के life-sciences marketplace का उपयोग करें — PubMed, single-cell QC, Nextflow pipelines, और evidence-backed biomedical research install करें।"
+keywords: ["life sciences", "pubmed", "bioinformatics", "genomics", "plugins"]
+icon: "dna"
+---
+
+Arka [Anthropic के life-sciences marketplace](https://github.com/anthropics/life-sciences) को integrate करता है — biomedical research, genomics, और drug discovery के लिए MCP servers और workflow skills।
+
+## यह क्या प्रदान करता है
+
+| Type | उदाहरण | Arka support |
+| --- | --- | --- |
+| **MCP servers** | PubMed, BioRender, Synapse, ClinicalTrials.gov | PubMed NCBI के माध्यम से स्थानीय रूप से काम करता है; अन्य guidance के साथ stubs के रूप में install होते हैं |
+| **Workflow skills** | single-cell-rna-qc, nextflow-development | उपलब्ध होने पर runnable scripts के साथ install |
+| **Guidance skills** | scientific-problem-selection, scvi-tools | LLM-guided SKILL.md workflows के साथ install |
+
+## Quick start
+
+```bash
+arka life_sciences list
+arka life_sciences install pubmed
+arka pubmed crispr base editing
+arka life_sciences install single-cell-rna-qc
+```
+
+## Marketplace commands
+
+```bash
+arka life_sciences list                 # catalog all plugins
+arka life_sciences info pubmed          # plugin details
+arka life_sciences install pubmed       # install one plugin as an Arka skill
+arka life_sciences doctor               # check cache and install status
+```
+
+प्राकृतिक भाषा भी काम करती है:
+
+```bash
+arka "life sciences list"
+arka "install pubmed"
+```
+
+## Citations के साथ research
+
+evidence-first उत्तरों के लिए bundled **life\_sciences** profession domain का उपयोग करें:
+
+```bash
+arka profession ask life_sciences what are latest CAR-T trial endpoints
+arka "as a biomedical researcher summarize crispr off-target risks"
+```
+
+## MCP बनाम Arka skills
+
+Upstream repo **Claude Code** को target करता है (`/plugin marketplace add anthropics/life-sciences`)। Arka इसे terminal के लिए adapt करता है:
+
+1. **`life_sciences` meta-skill** — marketplace plugins को `~/.config/arka/skills/` में सूचीबद्ध और install करता है
+2. **Per-plugin skills** — प्रत्येक install को Arka triggers के साथ `skill.json` \+ `run.py` मिलता है
+3. **Profession domain** — `life_sciences` cited research के लिए PubMed/NIH-biased source registries जोड़ता है
+
+Authentication की आवश्यकता वाले Remote MCP servers (BioRender, Synapse, Cortellis) stubs के रूप में install होते हैं। पूर्ण MCP access के लिए Claude Code का उपयोग करें, या `profession ask life_sciences` के माध्यम से पूछें।
+
+## लोकप्रिय plugins
+
+| Plugin | install के बाद command |
+| --- | --- |
+| PubMed | `arka pubmed <query>` |
+| Single-cell QC | `arka single-cell-rna-qc data.h5ad` |
+| Nextflow | `arka nextflow-development` (Docker \+ Nextflow आवश्यक) |
+| Scientific problem selection | `arka scientific-problem-selection <research question>` |
+
+<Tip>
+  plugins install करने के बाद `arka life_sciences doctor` चलाएँ। यदि triggers तुरंत route नहीं होते तो `arka skills refresh` का उपयोग करें।
+</Tip>

@@ -1,0 +1,60 @@
+---
+title: "在浏览器中打开 URL"
+description: "从终端在默认浏览器中打开网站 —— YouTube、GitHub、Google 以及完整 URL。"
+keywords: ["open", "browser", "url", "website"]
+icon: "arrow-up-right-from-square"
+---
+
+无需离开终端，即可在系统默认浏览器中打开网站。
+
+## 快速开始
+
+```bash
+arka open youtube
+arka open github.com
+arka open https://news.ycombinator.com
+arka browse google
+open google in browser
+```
+
+## 站点别名
+
+常见名称会自动映射到 URL：
+
+| 名称 | 打开 |
+| --- | --- |
+| `youtube` | https://youtube.com |
+| `google` | https://google.com |
+| `github` | https://github.com |
+| `reddit` | https://reddit.com |
+| `wikipedia` | https://wikipedia.org |
+| `hackernews` / `hn` | https://news.ycombinator.com |
+
+完整的 `https://` URL 以及 `domain.tld` 形式都可以直接使用。
+
+Arka 会保留你提供的路径与查询参数。因此 `open https://example.com/docs?a=1`
+会打开这个精确的 URL，而不会自行捏造一个新的。
+
+自然语言示例：
+
+```bash
+arka open this exact url https://example.com/docs?a=1
+arka repair broken links in this file
+```
+
+## 与 play_youtube 的区别
+
+| 说法 | 使用的技能 |
+| --- | --- |
+| `arka open youtube` | 在浏览器中打开 youtube.com |
+| `arka play lofi on youtube` | YouTube 播放技能 |
+
+Arka 会区分 **open**（浏览器）与 **play** / **watch**（媒体）。
+
+## 命令
+
+| 命令 | 描述 |
+| --- | --- |
+| `arka open <site-or-url>` | 在默认浏览器中打开 |
+| `arka browse <site-or-url>` | 别名 |
+| `open_url <target>` | 直接调用的技能（fish） |

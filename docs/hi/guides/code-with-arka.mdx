@@ -1,0 +1,245 @@
+---
+title: "Arka के साथ कोड कैसे लिखें"
+description: "Arka के साथ टर्मिनल coding workflow — arka code init, agent mode, repo health checks, CI fixes, और CLI से बाहर निकले बिना पूरे edit-review-test loop के लिए Cursor MCP integration।"
+keywords: ["coding with arka", "terminal copilot", "Cursor MCP", "agent mode", "repo health", "developer workflow"]
+icon: "laptop-code"
+boost: 1.5
+---
+
+Arka एक **टर्मिनल coding copilot** है। आप सादी अंग्रेज़ी में बताते हैं कि क्या चाहिए; Arka सही skill पर request route करता है, स्थानीय रूप से चलाता है, और जोखिम भरे writes को आपके project तक सीमित रखता है। CLI को **agent mode**, **Cursor में MCP tools**, और **repo health gates** के साथ मिलाकर टर्मिनल से बाहर निकले बिना पूरा coding loop चलाएँ।
+
+<Note>
+  **सारांश:** `arka code init .` से repo initialize करें, skill execution के लिए security gates के साथ agent mode चालू रखें, Cursor के अंदर Arka को expose करने के लिए [MCP](/hi/guides/mcp) उपयोग करें, और merges से पहले [repo health](/hi/guides/repo-health) चलाएँ। Arka आपके editor का पूरक है — तेज़ asks, reviews, और CI के लिए टर्मिनल; MCP पर जुड़ने पर inline diffs के लिए Cursor।
+</Note>
+
+<Tip>
+  नए हैं? पहले [Quickstart](/hi/quickstart) पूरा करें, फिर जिस repo पर काम कर रहे हैं वहाँ `arka code init .` चलाएँ।
+</Tip>
+
+## अवलोकन
+
+Coding करते समय तीन हिस्से साथ काम करते हैं:
+
+| हिस्सा | यह क्या करता है |
+| --- | --- |
+| **Routing** | Offline symbolic rules skill चुनते हैं; ज़रूरत पर ही LLM fallback। देखें [Routing कैसे काम करता है](/concepts/routing)। |
+| **Agent mode** | Security gates के साथ पूरा skill execution (default)। `arka mode agent` से switch करें। |
+| **MCP** | Cursor और अन्य agents को Arka skills दिखाएँ, या CLI से external MCP servers को call करें। देखें [MCP integration](/hi/guides/mcp)। |
+
+Arka आपके editor का विकल्प नहीं है — यह उसका पूरक है। तेज़ asks, reviews, CI, और autonomous edits के लिए टर्मिनल का उपयोग करें; जब Arka MCP पर जुड़ा हो तो inline diffs के लिए Cursor का उपयोग करें।
+
+## Coding के लिए setup
+
+रोज़ के workflow से पहले, प्रति मशीन (या प्रति repo) यह एक बार चलाएँ।
+
+<Steps>
+  <Step title="Agent mode की पुष्टि करें">
+    Agent mode default है। जाँच या switch:
+
+    ```bash
+    arka mode list
+    arka mode agent
+    ```
+  </Step>
+
+  <Step title="कोड project initialize करें">
+    writes को एक repository root तक सीमित करें:
+
+    ```bash
+    cd ~/dev/myapp
+    arka dev init .
+    arka dev status
+    ```
+
+    या पुराना alias उपयोग करें: `arka code init .`। goal agent, `self improve --apply`, और अन्य write skills इसी folder में रहेंगे जब तक आप `arka code clear` न करें या दूसरा path init न करें।
+  </Step>
+
+  <Step title="Spaces वाले Paths">
+    जब किसी अन्य directory से initialize करें, तो project path को एक बार quote में डालें; Arka
+    उसे बाद के CLI और MCP calls के लिए internal रूप से संभालता है:
+
+    ```bash
+    arka code init "/Users/sumitmishra/dev/3d space simulation"
+    ```
+  </Step>
+
+  <Step title="वैकल्पिक: fish shell">
+    Fish पूरे 70+ skill router और प्राकृतिक-भाषा aliases (`agent "…"`, `pr_check babysit`, आदि) को अनलॉक करता है। bash/zsh से, स्पष्ट `arka` subcommands का उपयोग करें — वे उसी तरह काम करते हैं।
+
+    ```bash
+    brew install fish   # macOS
+    ```
+  </Step>
+
+  <Step title="Cursor जोड़ें (अनुशंसित)">
+    IDE agent को MCP पर Arka skills call करने दें:
+
+    ```bash
+    arka mcp doctor
+    arka mcp install
+    ```
+
+    प्रिंट किया गया snippet **Cursor Settings → MCP** में paste करें (या Arka repo में project-level `.cursor/mcp.json` उपयोग करें)। एकाधिक coding agents के लिए साझा MCP के लिए, `arka agent_hub sync --unify` चलाएँ। देखें [Agent Hub](/hi/guides/agent-hub) और [MCP integration](/hi/guides/mcp)।
+  </Step>
+</Steps>
+
+## रोज़ का workflow
+
+प्राकृतिक भाषा या स्पष्ट commands उपयोग करें — Arka दोनों को route करता है।
+
+### पूछें और समझें
+
+अनजान codebase में खुद को उन्मुख करें:
+
+```bash
+arka ask "where is routing handled?"
+arka gemini explain asyncio
+arka repo_map
+```
+
+`arka ask` web-answer skill चलाता है; `gemini explain` कोड-केंद्रित explanations के लिए Gemini CLI integration उपयोग करता है। वर्तमान project के structured tree के लिए [repo map](/guides/repo-map) उपयोग करें।
+
+### कोड edit करें
+
+| कार्य | कमांड |
+| --- | --- |
+| Multi-step autonomous काम | `arka goal refactor auth and run pytest` |
+| Deterministic skill sequence | `arka coding-workflow feature --task "add rate limiting"` |
+| लक्षित text replacement | `arka surgical-edit edit src/app.py "old" "new" --yes` |
+| Layout / hygiene audit | `arka structure .` |
+| केंद्रित TUI workspace | `arka dev tui .` (alias: `arka coding-tui .`) |
+
+[goal agent](/guides/goal-agent) open-ended कार्यों (debug, env setup, tests चलाना) के लिए सर्वश्रेष्ठ है। [Coding workflows](/guides/coding-workflows) execution से पहले स्पष्ट skill sequence सूचीबद्ध करते हैं — जब आप predictable steps चाहते हैं तब उपयोगी। [Structure](/guides/structure) read-only है; यह moves सुझाता है लेकिन कभी files नहीं हटाता।
+
+### Review
+
+Commit से पहले issues पकड़ें:
+
+```bash
+arka dev review
+arka dev ship
+arka council "is this API change safe to ship?"
+arka teammate-review .
+```
+
+`arka dev ship` एक ही step में staged review + changed-only CI चलाता है। `arka dev review` (या `arka review --staged`) project rules के विरुद्ध diff जाँचता है और बिना matching tests वाली बदली गई source files के लिए **test-gap** hints सामने लाता है। [Council](/hi/guides/council) design decisions के लिए multi-persona deliberation चलाता है। [Teammate review](/guides/teammate-review) workspace discovery से cross-service impact flag करता है।
+
+पूरा [Developer loop](/guides/dev) guide देखें।
+
+### Test और CI
+
+PR खोलने से पहले locally बदलाव gate करें:
+
+```bash
+arka dev test
+arka dev test --fix
+arka ci
+arka repo_health run
+arka dev pr babysit
+```
+
+`arka dev test` changed-only CI gates चलाता है (जैसे `arka ci --changed`)। किसी भी project में generic lint/test detection के लिए `repo_health` उपयोग करें। `arka dev pr babysit` GitHub CI पर तब तक loop करता है जब तक PR merge-ready न हो। देखें [Repo health](/hi/guides/repo-health) और [Developer loop](/guides/dev)।
+
+<Note>
+  incremental gates के लिए pre-commit hooks install करें: `arka dev hooks install` हर commit पर `arka ci --changed` और `arka review --staged --fail-on-hints` चलाता है।
+</Note>
+
+### Self-improve
+
+जब आप Arka पर ही (या tests और routing वाले किसी भी repo पर) काम कर रहे हैं:
+
+```bash
+arka self improve              # केवल plan
+arka self improve routing      # केंद्रित plan
+arka self improve routing --apply   # goal agent fixes लागू करता है
+```
+
+Plan-only default है; `--apply` के लिए agent mode ज़रूरी है। देखें [Self-improve loop](/hi/guides/self-improve)।
+
+## Coding के दौरान operation modes
+
+| Mode | कब उपयोग करें |
+| --- | --- |
+| `agent` | **Default** — skills चलाएँ, edits लागू करें, shell execute करें |
+| `ask` | Read-only exploration; जोखिम भरे कार्य blocked |
+| `plan` | बिना execution के steps sketch करें (जैसे बड़े refactor से पहले) |
+| `debug` | Routing traces और LLM fallback देखें (troubleshooting) |
+
+```bash
+arka mode plan
+arka "refactor the auth module and add tests"
+arka mode agent
+arka goal refactor the auth module and add tests
+```
+
+Arka क्या करेगा इसका preview देखने के लिए **plan** उपयोग करें; execute करने के लिए **agent** पर वापस switch करें। पूरी जानकारी: [Operation modes](/hi/guides/operation-modes)।
+
+## Cursor और IDE integration
+
+| Integration | Command / path |
+| --- | --- |
+| Cursor में Arka MCP server के रूप में | `arka mcp install` → `~/.cursor/mcp.json` में merge करें |
+| Agents के लिए project rules | `arka_project_rules` MCP tool, या repo `AGENTS.md` / `.cursor/rules` |
+| एकाधिक agents के लिए साझा hub | `arka agent_hub sync --unify` |
+| Hub status | `arka agent_hub status` |
+
+Cursor chat में, agent से `arka_ask`, `arka_skill`, `arka_repo_map`, या `arka_recall` को call करने को कहें। टर्मिनल से, वही tools `arka mcp call arka <tool>` के माध्यम से उपलब्ध हैं।
+
+## उदाहरण सत्र
+
+अभी clone किए गए repo में एक असली पाँच-मिनट का flow:
+
+<CodeGroup>
+
+```bash Setup
+cd myapp
+arka code init .
+arka mode agent
+```
+
+```bash Explore
+arka ask "where is routing handled?"
+arka repo_map
+```
+
+```bash Review & gate
+git add -p
+arka review --staged
+arka ci --changed
+```
+
+```bash Improve (Arka repo)
+arka self improve routing
+```
+
+</CodeGroup>
+
+आपने codebase में खुद को उन्मुख किया, staged changes review किए, तेज़ CI mirror चलाया, और (Arka repo पर) एक self-improvement plan बनाया — बिना टर्मिनल से बाहर निकले।
+
+## अगले कदम
+
+<CardGroup cols={2}>
+  <Card title="Goal agent" icon="bullseye" href="/guides/goal-agent">
+    Step budgets के साथ autonomous multi-step coding कार्य।
+  </Card>
+
+  <Card title="Coding workflows" icon="diagram-project" href="/guides/coding-workflows">
+    Feature, bugfix, और audit work के लिए deterministic skill sequences।
+  </Card>
+
+  <Card title="MCP integration" icon="network-wired" href="/hi/guides/mcp">
+    Arka को Cursor और external MCP servers से जोड़ें।
+  </Card>
+
+  <Card title="Self-improve" icon="arrows-rotate" href="/hi/guides/self-improve">
+    Routing, tests, और docs का विश्लेषण; safety gates के साथ fixes लागू करें।
+  </Card>
+
+  <Card title="Repo health" icon="heart-pulse" href="/hi/guides/repo-health">
+    Local CI mirror, review gates, और pre-commit hooks।
+  </Card>
+
+  <Card title="Agent Hub" icon="hub" href="/hi/guides/agent-hub">
+    ollama launch agents के लिए साझा MCP, memory, और skills।
+  </Card>
+</CardGroup>

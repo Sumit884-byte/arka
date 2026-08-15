@@ -1,0 +1,15 @@
+---
+title: "Repository structure audit"
+description: "गलत जगह रखी गई files और cleanup opportunities को सुरक्षित रूप से खोजें।"
+icon: "sitemap"
+---
+
+```bash
+arka structure .
+arka structure . --json
+```
+
+Audit read-only है। यह top-level runtime files, cache directories, और सुझाए गए
+moves की रिपोर्ट करता है; यह files को कभी भी स्वचालित रूप से relocate नहीं
+करता क्योंकि imports, packaging, और deployment paths की पहले समीक्षा होनी
+चाहिए।

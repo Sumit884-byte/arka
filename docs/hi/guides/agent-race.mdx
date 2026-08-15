@@ -1,0 +1,22 @@
+---
+title: "Agentic race"
+description: "एक ही task पर प्रतिस्पर्धी models चलाएँ और सबसे मजबूत उत्तर चुनने के लिए judge रखें।"
+icon: "flag-checkered"
+---
+
+कई configured models को concurrently चलाएँ:
+
+```bash
+arka race "design a test plan for this API" \
+  --models openrouter/model-a,ollama/qwen3:8b,groq/llama-3.3-70b-versatile \
+  --judge openrouter/model-a --json
+```
+
+प्रत्येक contestant अपने declared provider/model से bound है। Judge को
+केवल task और contestant outputs प्राप्त होते हैं और वह correctness, completeness,
+testability और safety को score करता है। असफल contestants report में बनाए रखे जाते हैं, और
+judge failure चुपचाप एक answer चुनने के बजाय स्पष्ट है।
+
+Natural language काम करती है: “race several agents on a coding task.” Result का
+एक recommendation के रूप में उपयोग करें; Arka race winner से स्वचालित रूप से कुछ भी
+write, deploy, register या submit नहीं करता।

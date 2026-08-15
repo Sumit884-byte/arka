@@ -1,0 +1,18 @@
+---
+title: "vLLM fallback"
+description: "एक लोकल vLLM OpenAI-compatible सर्वर को Arka fallback provider के रूप में उपयोग करें।"
+icon: "fire"
+---
+
+vLLM शुरू करें, फिर इसे Arka की fallback chain में सक्षम करें:
+
+```bash
+export VLLM_HOST=127.0.0.1:8000
+export VLLM_MODEL=your-loaded-model
+export VLLM_FALLBACK=1
+arka doctor
+```
+
+जब vLLM उपलब्ध हो या स्पष्ट रूप से configured हो तो Arka उसे आज़माता है, फिर लोकल
+सर्वर विफल होने पर सामान्य provider chain में आगे बढ़ता है। Opt-in fallback
+व्यवहार को अक्षम करने के लिए `VLLM_FALLBACK=0` सेट करें।

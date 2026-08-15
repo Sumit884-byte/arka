@@ -1,0 +1,156 @@
+---
+title: "pytest suite के साथ Arka का Testing"
+description: "Arka के pytest suite को स्थानीय रूप से और CI में चलाएँ, समझें कि test coverage areas क्या exercise करते हैं, और skills या plugins contribute करते समय नए tests जोड़ें।"
+keywords: ["testing", "pytest", "ci", "development"]
+icon: "flask"
+---
+
+Arka automated tests के लिए **pytest** का उपयोग करता है। Suite routing, LLM failover, vision, integrations, telemetry, और skill-specific behavior को कवर करता है।
+
+## Continuous integration
+
+Pull requests और `main` पर pushes [`.github/workflows/ci.yml`](https://github.com/Sumit884-byte/arka/blob/main/.github/workflows/ci.yml) चलाते हैं:
+
+1. **Ruff** — `ruff check src/ tests/`
+2. **Pytest gate** — MCP, OpenClaw/Hermes, clipboard, agent hub, और LLM fallback suites (जैसे-जैसे अन्य modules stabilize हों, इसे बढ़ाएँ)
+
+Tag pushes अभी भी PyPI के लिए अलग [Publish](https://github.com/Sumit884-byte/arka/blob/main/.github/workflows/publish.yml) workflow का उपयोग करते हैं।
+
+स्थानीय रूप से आप अभी भी `pytest tests/` के साथ पूरा suite चला सकते हैं।
+
+Docs changes को local docs reliability checker भी pass करना चाहिए:
+
+```bash
+python scripts/check_docs.py docs
+```
+
+## Tests चलाना
+
+एक dev checkout से:
+
+```bash
+cd arka
+pip install -e ".[dev]"
+arka "pytest tests/"
+```
+
+एक single file या test चलाएँ:
+
+```bash
+arka "pytest tests/test_llm_fallback.py"
+arka "pytest tests/test_router_show_me.py -v"
+arka "pytest tests/test_currency_convert.py::test_specific_case"
+```
+
+## Extreme production-readiness constraints
+
+Critical changes के लिए, Arka से opt-in उच्च-कठोरता वाला production-readiness preset माँगें:
+
+```bash
+arka extreme constraints for checkout
+arka production ready constraints for checkout
+arka qa extreme --feature checkout
+arka qa extreme --json
+```
+
+यह सामान्य QA plan को correctness, quality gates, security/privacy, reliability/operations, और release readiness के लिए स्पष्ट constraints में विस्तारित करता है। इसमें unit tests, Gherkin/acceptance tests, integration और contract tests, e2e/smoke tests, mutation testing, test coverage, static analysis, secrets/privacy checks, dependency safety, observability, performance, rollback, configuration validation, backward compatibility, documentation, और migration integrity शामिल हैं।
+
+Arka को हर claim को evidence-backed मानना चाहिए: यदि mutation testing, coverage, security scanning, SLOs, या कोई production metric वर्तमान project में measure नहीं किया जा सकता, तो वह ईमानदारी से यह report करता है — pass का आविष्कार करने के बजाय।
+
+Dev extras install करें (इसमें `pytest` और `ruff` शामिल हैं):
+
+```bash
+pip install -e ".[dev]"
+```
+
+## Test suite overview
+
+`tests/` directory area के अनुसार organized है:
+
+### Routing और NL parsing
+
+| Module | यह क्या test करता है |
+| --- | --- |
+| `test_router_show_me.py` | "Show me" queries `describe_image` पर route नहीं होनी चाहिए |
+| `test_router_github_repo.py` | GitHub repo skill routing |
+| `test_router_find_files_by_size.py` | File-size search routing |
+
+### LLM और providers
+
+| Module | यह क्या test करता है |
+| --- | --- |
+| `test_llm_fallback.py` | Provider chain parsing, failover, per-skill models |
+| `test_vllm_cloud.py` | vLLM cloud provider integration |
+| `test_vllm_cross_platform.py` | macOS/Linux/Windows पर vLLM |
+| `test_word_limit.py` | Output word-limit enforcement |
+
+### Vision और media
+
+| Module | यह क्या test करता है |
+| --- | --- |
+| `test_describe_image_resize.py` | vision API calls से पहले image resize |
+| `test_describe_image_ocr_output.py` | OCR output formatting |
+| `test_describe_screen.py` | Screen description skill |
+| `test_compose_video_captions.py` | Video composition captions |
+| `test_compose_slides.py` | Presentation slide deck generation और format conversion |
+| `test_chart_fetch.py` | Chart external data fetch |
+
+### Integrations
+
+| Module | यह क्या test करता है |
+| --- | --- |
+| `test_currency_convert.py` | Currency conversion skill |
+| `test_price_check.py` | Price check skill |
+| `test_github_repo.py` | GitHub repo stats |
+| `test_gmail_draft.py` | Gmail draft creation |
+| `test_install_app_platform.py` | Cross-platform app install |
+| `test_product_reviewer.py` | Product review skill |
+| `test_memory_search_fallback.py` | Memory search fallback chain |
+| `test_openclaw_features.py` | OpenClaw compatibility features |
+| `test_hermes_features.py` | Hermes-inspired sessions और sub-agents |
+
+### Observability
+
+| Module | यह क्या test करता है |
+| --- | --- |
+| `test_telemetry.py` | OpenTelemetry tracing setup |
+| `test_signoz_setup.py` | SigNoz configuration |
+| `test_supermemory_obs.py` | Supermemory observability hooks |
+| `test_mcp_obs.py` | MCP client observability |
+
+## नए tests लिखना
+
+Tests को `test_` prefix के साथ `tests/` में रखें। मौजूदा patterns का पालन करें:
+
+```python
+import pytest
+
+def test_my_skill_routes_correctly():
+    from arka.router import route
+    result = route("convert 100 USD to INR")
+    assert "currency" in result.lower()
+```
+
+Routing tests के लिए, सीधे `arka.routing.symbolic` helpers या `arka.router.route()` का उपयोग करें। जब tests को network hit नहीं करना चाहिए तो external APIs (LLM, web search) को mock करें।
+
+## Linting
+
+```bash
+arka "ruff check src/ tests/"
+```
+
+`ruff` `[dev]` extra में शामिल है।
+
+## Local verification scripts
+
+pytest के अलावा, repo में helper scripts शामिल हैं:
+
+```bash
+python3 scripts/verify_features.py   # live feature smoke tests
+python3 scripts/sync_bundled.py      # wheel build से पहले bundled/ sync करें
+python3 scripts/check_docs.py docs   # internal docs links + frontmatter
+```
+
+<Note>
+  कुछ tests को optional extras (`[chat]`, `[charts]`, `[drawings]`) या API keys की आवश्यकता होती है। जिन tests को network access की आवश्यकता होती है, वे आमतौर पर mock किए जाते हैं — यदि कोई test import पर fail हो, तो पहले matching extra install करें।
+</Note>

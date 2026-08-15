@@ -1,0 +1,11 @@
+---
+title: "用量追踪"
+description: "在本地查看 Arka 的技能使用情况，不会收集提示内容。"
+icon: "chart-pie"
+---
+
+```bash
+arka usage
+```
+
+Arka 最多在本地存储 5,000 条事件，仅包含技能名、成功状态、时长与时间戳。提示、参数、文件内容与模型响应都不会被记录。可通过 `ARKA_USAGE_TRACKING=0` 关闭。

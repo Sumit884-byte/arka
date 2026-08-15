@@ -1,0 +1,39 @@
+---
+title: "Reusable application blocks"
+description: "Stack notes के साथ सामान्य auth और payment building blocks scaffold करें।"
+icon: "cubes"
+---
+
+```bash
+arka blocks list
+arka blocks show auth_login
+arka blocks show payments_stripe
+arka blocks use auth_signup --stack "Next.js + Auth.js" --out components/signup.tsx
+arka blocks create "create a crypto wallet page and save it as a block"
+```
+
+उपलब्ध blocks में login, sign-up, password reset, OAuth, email
+verification, Stripe checkout/subscriptions, PayPal और webhook receivers शामिल हैं। हर block
+compatible technology stacks और security/implementation notes सूचीबद्ध करता है। Generated files
+जानबूझकर छोटी और inspectable हैं; मौजूदा files कभी overwrite नहीं होतीं
+जब तक `--force` न दिया गया हो। ये starters हैं, production-ready auth या
+payment systems नहीं: shipping से पहले server validation, tests, secret management, webhooks और
+provider-specific configuration जोड़ें। Generated output में अब
+production-readiness gates और आवश्यक environment variables शामिल हैं; deployment से पहले
+हर gate implement करें और verify करें। Arka केवल इसलिए किसी scaffold को production
+ready mark नहीं करता क्योंकि यह generate हुआ था।
+
+Natural language काम करती है: “show reusable login blocks” या “list available app
+blocks.” Arka एक requested page/component को reusable block
+spec में भी बदल सकता है, उदाहरण के लिए: “create a crypto wallet page and save it as a block.”
+
+Web3 blocks भी उपलब्ध हैं:
+
+```bash
+arka blocks show web3_wallet
+arka blocks show web3_sign_in
+arka blocks use web3_token_transfer --stack "Next.js + viem" --out web3/transfer.md
+```
+
+इनमें chain और contract allowlists, nonce-bound signature verification,
+transaction simulation, receipt checks और स्पष्ट production-readiness gates शामिल हैं।

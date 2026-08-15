@@ -1,0 +1,15 @@
+---
+title: "Arka Super Replica"
+description: "获取针对初创和成长阶段的代码仓库模式建议。"
+icon: "clone"
+---
+
+使用 Super Replica 获取仓库模式建议：
+
+```bash
+arka super-replica .
+arka super-replica . --stage startup
+arka super-replica . --stage growth --json
+```
+
+Arka 会读取仓库结构和常见的前端/后端文件模式，但不会修改代码。如果技术栈或应用形态没有指定，它会针对性地提问，而不是凭空指定一项技术。建议按阶段区分：初创项目优先关注用户价值和迭代，成长和规模阶段则基于证据引入可观测性、性能和扩展工作。

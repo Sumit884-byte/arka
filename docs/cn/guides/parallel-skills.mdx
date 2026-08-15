@@ -1,0 +1,17 @@
+---
+title: "并行技能"
+description: "并发运行独立的 Arka 技能。"
+icon: "grip"
+---
+
+并发运行独立的 Arka 技能：
+
+```bash
+arka parallel --job "ci" --job "route audit" --job "security"
+```
+
+使用 `--workers` 限制并发数。Arka 会在报告中保留作业顺序，且
+只要任一作业失败就会返回失败。仅并行化互相独立的工作；避免
+同时运行会编辑相同文件的命令。像"run `ci` and `route audit`
+in parallel"这样的自然语言请求，只要每个作业都被引号包围，
+就能被正确路由。

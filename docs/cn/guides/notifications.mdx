@@ -1,0 +1,18 @@
+---
+title: "开发者工具通知"
+description: "当开发者工具完成或失败时收到通知。"
+icon: "bell"
+---
+
+Arka 可以在开发者工具完成或失败时通知你：
+
+```bash
+arka ci
+arka review --staged
+arka route audit
+arka security
+```
+
+通知覆盖 CI、代码评审、路由审计、安全扫描以及技能脚手架。
+它们是尽力而为的，不会改变命令的退出码。可通过
+`ARKA_NOTIFICATIONS=0` 关闭。

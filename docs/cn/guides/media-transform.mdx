@@ -1,0 +1,17 @@
+---
+title: "媒体到媒体的转换"
+description: "将媒体内容转换为书籍、播客和其他可用格式。"
+icon: "film"
+---
+
+Arka 支持内容感知的转换，而不仅仅是修改文件扩展名：
+
+```bash
+arka media_transform podcast.mp3 --to book --output podcast-book.md
+arka media_transform notes.md --to podcast --output notes.mp3
+arka media_transform "https://youtube.com/playlist?list=PLAYLIST_ID" --to book --output playlist-book.md
+arka media_transform presentation.pptx --to book --output presentation-book.md
+arka media_transform slide.png --to book --output slide-book.md
+```
+
+音频/视频源使用字幕或转录内容，YouTube 播放列表会把可用视频的字幕合并成章节，而文本/书籍源可以用 Arka 的 TTS 后端朗读。安装 FFmpeg/Whisper 以支持本地媒体转录；当 Edge TTS 不可用时，运行 `arka tts-setup` 以支持播客输出。缺少字幕或依赖时会产生明确的错误；Arka 绝不会在没有内容的情况下悄悄生成空的书籍或音频文件。

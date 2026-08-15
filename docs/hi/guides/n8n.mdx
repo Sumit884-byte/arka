@@ -1,0 +1,160 @@
+---
+title: "n8n workflow automation"
+description: "n8n को Arka के remote agent API और verified webhook inbox से connect करें — session continuity और bidirectional triggers के साथ।"
+keywords: ["n8n", "workflow", "automation", "webhook", "HTTP Request", "integration"]
+icon: "diagram-project"
+---
+
+[n8n](https://n8n.io/) एक workflow automation tool है। Arka अलग से n8n server नहीं भेजता — यह दो HTTP surfaces expose करता है जिन्हें आप n8n **HTTP Request** nodes से call करते हैं:
+
+| Endpoint | Arka service | सर्वश्रेष्ठ उपयोग |
+| --- | --- | --- |
+| `POST /v1/agent` | `arka serve` (port 8765) | पूर्ण agent runs, coding profile, media |
+| `POST /v1/inbox` | `arka webhook serve` (port 8767) | Verified ingress, session continuity, silence tokens |
+
+```bash
+# Inspect endpoints and copy-paste hints
+arka n8n status
+arka n8n example
+arka n8n example --json
+```
+
+## Prerequisites
+
+1. `~/.config/arka/.env` में Arka env vars configure करें ([Configuration](/hi/guides/configuration) देखें)।
+2. कम से कम एक HTTP listener शुरू करें:
+
+```bash
+# Remote agent API (recommended for general automation)
+arka serve
+
+# Verified webhook inbox (recommended for multi-turn channel sessions)
+WEBHOOK_ENABLED=1 WEBHOOK_TOKEN=$REMOTE_TOKEN arka webhook serve
+```
+
+3. Health confirm करें:
+
+```bash
+curl -s http://127.0.0.1:8765/v1/health
+curl -s http://127.0.0.1:8767/v1/health -H "Authorization: Bearer $REMOTE_TOKEN"
+```
+
+## Environment variables
+
+| Variable | डिफ़ॉल्ट | उद्देश्य |
+| --- | --- | --- |
+| `REMOTE_TOKEN` | पहले `arka serve` पर जनरेट होता है | `/v1/agent` और `/v1/health` के लिए Bearer token |
+| `REMOTE_HOST` | `0.0.0.0` | remote server के लिए Bind address |
+| `REMOTE_PORT` | `8765` | Remote server port |
+| `ARKA_BACKEND_URL` | `http://127.0.0.1:8765` | base URL override करें (n8n दूसरे host पर, Railway, आदि) |
+| `WEBHOOK_ENABLED` | `0` | webhook server शुरू करने के लिए `1` होना चाहिए |
+| `WEBHOOK_TOKEN` | `REMOTE_TOKEN` पर fall back करता है | `/v1/inbox` के लिए Bearer token |
+| `WEBHOOK_HOST` | `127.0.0.1` | Webhook bind address |
+| `WEBHOOK_PORT` | `8767` | Webhook port |
+| `MESSAGE_SESSIONS` | `1` | enable होने पर, inbox continuity के लिए `source` + `chat_id` का उपयोग करता है |
+
+## n8n → Arka: HTTP Request (agent)
+
+जब आप पूर्ण Arka agent (skills, repo context, coding profile) चाहते हैं तो इसका उपयोग करें।
+
+**Node settings:**
+
+- **Method:** `POST`
+- **URL:** `http://127.0.0.1:8765/v1/agent` (या आपका `ARKA_BACKEND_URL`)
+- **Authentication:** Header `Authorization: Bearer {{ $env.REMOTE_TOKEN }}`
+- **Body (JSON):**
+
+```json
+{
+  "text": "{{ $json.prompt }}",
+  "remote_speak": false
+}
+```
+
+**Response:** JSON body से `output` पढ़ें। `ok` और `exit_code` जाँचें।
+
+copy-paste node definition के लिए `arka n8n example` चलाएँ।
+
+## n8n → Arka: HTTP Request (inbox + sessions)
+
+[Hermes-style session continuity](/hi/guides/hermes-features) के साथ verified inbound automation के लिए इसका उपयोग करें।
+
+**Node settings:**
+
+- **Method:** `POST`
+- **URL:** `http://127.0.0.1:8767/v1/inbox`
+- **Authentication:** Header `Authorization: Bearer {{ $env.WEBHOOK_TOKEN }}`
+- **Body (JSON):**
+
+```json
+{
+  "text": "{{ $json.message }}",
+  "source": "n8n",
+  "chat_id": "{{ $json.session_id || 'default' }}"
+}
+```
+
+Conversation context को preserve करने के लिए workflow runs में `source` और `chat_id` को stable रखें। जब `MESSAGE_SESSION_CHANNEL` / `MESSAGE_SESSION_CHAT_ID` match करते हैं तो `arka ask` के साथ वही session keys काम करते हैं।
+
+**Response:** `output` (`"silent": true` होने पर खाली), साथ ही `source` और `chat_id`।
+
+## Session continuity pattern
+
+```text
+Workflow 1 (chat_id=deploy-42): "What failed in the last deploy?"
+Workflow 2 (chat_id=deploy-42): "Draft a rollback checklist."
+```
+
+दोनों POSTs `"source":"n8n"` और `"chat_id":"deploy-42"` का उपयोग करते हैं। Arka agent चलाने से पहले prior turns inject करता है।
+
+## Arka → n8n (bidirectional)
+
+Arka से n8n में events push करने के लिए:
+
+1. अपने workflow में एक **n8n Webhook** trigger node जोड़ें और **Production URL** copy करें।
+2. shell step, routine, या agent-generated command से POST करें:
+
+```bash
+curl -s "$N8N_WEBHOOK_URL" \
+  -H "Content-Type: application/json" \
+  -d '{"event":"arka.completed","task":"nightly-health","output":"All checks passed"}'
+```
+
+Arka के `.env` में `N8N_WEBHOOK_URL` स्टोर करें। scheduled pushes के लिए, [routines](/hi/guides/openclaw-features) या एक n8n **Schedule** trigger का उपयोग करें जो Arka health को poll करे।
+
+## Railway hosted option
+
+cloud-hosted Arka API (coding profile) के लिए, Railway profile के साथ deploy करें और n8n को public URL पर point करें:
+
+```bash
+arka deploy --platform railway --yes
+export ARKA_BACKEND_URL="https://your-arka.up.railway.app"
+export REMOTE_TOKEN="your-railway-remote-token"
+arka n8n status
+```
+
+Railway Variables में `REMOTE_TOKEN` और provider keys सेट करें। पूर्ण hosted setup के लिए [Deploy coding skills to Railway](/hi/guides/railway-coding-skills) देखें। HTTPS को प्राथमिकता दें और tokens को n8n credentials में रखें — workflow JSON exports में नहीं।
+
+## CLI reference
+
+```bash
+arka webhook serve          # start verified inbox
+arka webhook status         # listener status
+arka webhook status --json
+arka n8n status             # endpoints + n8n hints
+arka n8n example            # curl + HTTP Request JSON
+```
+
+## Troubleshooting
+
+| लक्षण | समाधान |
+| --- | --- |
+| `401 unauthorized` | Arka के `.env` में `REMOTE_TOKEN` / `WEBHOOK_TOKEN` से `Authorization: Bearer` token match करें |
+| Webhook शुरू नहीं होगा | `WEBHOOK_ENABLED=1` और `WEBHOOK_TOKEN` (या `REMOTE_TOKEN`) सेट करें |
+| runs के बीच session memory नहीं | stable `source` + `chat_id` के साथ `/v1/inbox` का उपयोग करें; `MESSAGE_SESSIONS=1` confirm करें |
+| n8n timeout | HTTP Request timeout बढ़ाएँ (डिफ़ॉल्ट agent: 600s; webhook: 300s) |
+| स्थानीय रूप से काम करता है, n8n Cloud से नहीं | HTTPS tunnel/reverse proxy के माध्यम से expose करें या Railway-hosted Arka का उपयोग करें |
+
+<Note>
+  Workflows चलाने से पहले listeners शुरू करें। agent को invoke किए बिना URLs और tokens verify करने के लिए `arka webhook status` और `arka n8n status` का उपयोग करें।
+</Note>

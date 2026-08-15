@@ -1,0 +1,135 @@
+---
+title: "Web 仪表盘"
+description: "运行用于聊天、技能和状态的 React Web UI — 会话历史存储在 Arka 中。"
+keywords: ["web", "dashboard", "frontend", "bridge", "chat", "vite"]
+icon: "window-maximize"
+---
+
+<Warning>
+  **实验性 / 仅本地。** `web/` 前端不会发布到 PyPI，并且**故意不在 git 中
+  跟踪**（有 bug 的进行中项目）。日常使用与黑客松演示请使用 CLI 和 MCP。
+  本页仅面向从本地检出运行 UI 的贡献者。
+</Warning>
+
+Web 仪表盘是仓库中位于 `web/` 目录下的 React 应用。它通过一个小型的 Python
+**桥接**与本地 Arka 实例通信，桥接添加了 CORS、路由预览、能力查询、
+doctor 检查和**会话历史**端点。
+
+## 前置条件
+
+1. **Arka 远端服务器** — 执行聊天命令：
+
+```bash
+arka serve
+```
+
+默认 URL：`http://127.0.0.1:8765`。在 `.env` 中设置 `REMOTE_TOKEN`，并把
+同一个 token 粘贴到仪表盘侧栏（开发时也可设置 `VITE_ARKA_TOKEN`）。
+
+2. **桥接服务器** — 带额外端点的本地 HTTP 代理：
+
+```bash
+cd web
+python3 bridge.py
+```
+
+默认 URL：`http://127.0.0.1:8766`
+
+## 开发
+
+终端 1 — 保持 `arka serve` 运行，然后启动桥接：
+
+```bash
+cd web
+python3 bridge.py
+```
+
+终端 2 — Vite 开发服务器（将 `/v1/*` 代理到桥接）：
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+打开 [http://localhost:5173](http://localhost:5173)。
+
+## 界面
+
+| 界面 | 端点 | 备注 |
+| ------ | -------- | ----- |
+| **Chat** | `POST /v1/agent` | 代理到 `arka serve`；路由预览来自本地 `/v1/route` |
+| **Skills** | `GET /v1/capabilities` | 列出 `src/arka/agent/` 中的调度模块 |
+| **Status** | `GET /v1/health` + `GET /v1/doctor` | 健康来自远端；doctor 在进程内运行 |
+
+## 会话历史
+
+聊天轮次存储在 Arka 的 [消息会话](/cn/guides/sessions) 中，频道为 `web`，
+每个浏览器一个 `chat_id`（保存在 `localStorage` 中的 `arka.chatId`）。
+
+```bash
+arka session list
+arka session resume web <chat-id>
+arka session reset web <chat-id>
+```
+
+arka "Bridge endpoints:"
+
+  | arka "Method" | arka "Path" | arka "Purpose" |
+  | ------ | ---- | ------- |
+  | `GET` | `/v1/sessions/resume?channel=web&chat_id=…` | arka "为仪表盘加载对话" |
+  | `POST` | `/v1/sessions/reset` | arka "清空一个 web 会话" |
+  | `POST` | `/v1/agent` | arka "运行命令并自动推送用户/助手轮次" |
+
+文件位于 `~/.config/arka/message-sessions/` 下（或 `MESSAGE_SESSIONS_DIR`）。
+
+## 生产预览
+
+```bash
+cd web
+npm run build
+python3 bridge.py
+```
+
+桥接会在 **8766** 端口从 `dist/` 提供构建后的应用。
+
+## 环境变量
+
+| 变量 | 默认值 | 用途 |
+| -------- | ------- | ------- |
+| `ARKA_BACKEND_URL` | `http://127.0.0.1:8765` | 用于 agent/health 的远端服务器 |
+| `ARKA_BRIDGE_PORT` | `8766` | 桥接监听端口 |
+| `REMOTE_TOKEN` / `ARKA_BACKEND_TOKEN` | — | `/v1/agent` 的鉴权 |
+| `VITE_ARKA_TOKEN` | — | 前端可选的开发 token |
+| `ARKA_WALKTHROUGH_URL` | `http://127.0.0.1:5173` | 用于仪表盘走查录制的 URL |
+
+## 输出查看器（轻量级）
+
+用于渲染任意 JSON、CSV、markdown 或文本 — 无需 React 仪表盘 — 请使用
+[输出查看器](/cn/guides/output-viewer)：
+
+```bash
+arka output show data.json
+arka output serve --open
+```
+
+这是在本地预览智能体输出、导出结果与表格数据的推荐方式。
+
+## CLI 辅助命令
+
+```bash
+arka backend status
+arka backend ask "what can you do?"
+arka capture video --walkthrough
+```
+
+参见 [浏览器视频捕获](/cn/guides/video-capture) 了解走查录制。
+
+## 疑难排解
+
+  | arka "Symptom" | arka "Fix" |
+  | ------- | --- |
+  | arka "聊天返回 401" | 把 `.env` 中的 `REMOTE_TOKEN` 粘贴到 Settings |
+  | arka "刷新后历史为空" | 重启桥接（`python3 bridge.py`） — 旧桥接缺少会话路由 |
+  | arka "桥接端口被占用" | `lsof -i :8766`，然后停止旧进程 |
+  | `backend status` connection refused | 先运行 `arka serve` |

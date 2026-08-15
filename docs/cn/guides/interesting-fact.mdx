@@ -1,0 +1,41 @@
+---
+title: "有趣的知识"
+description: "按需获取一条出人意料的事实 — 轻量 LLM 冷知识，无需网络搜索。"
+keywords: ["fact", "trivia", "interesting", "fun"]
+icon: "lightbulb"
+---
+
+在不触发完整网络搜索的情况下，请求一条简短且出人意料的事实。适合日常好奇心。
+
+## 快速开始
+
+```bash
+arka do tell something interesting
+arka "tell me something interesting"
+arka "give me a fun fact"
+arka "something cool about space"
+arka "random fact about biology"
+```
+
+## 指定主题
+
+```bash
+arka interesting_fact something interesting about quantum computing
+arka "something cool about the ocean"
+```
+
+Arka 会返回 2–4 句话 — 一个观点，用简明语言表述。
+
+## 路由
+
+这些短语会**先于**通用对话或 `web_answer` 路由到 `interesting_fact`，因此不会消耗任何搜索 token。
+
+```bash
+arka route "tell me something interesting"
+# → interesting_fact ...
+```
+
+## 相关
+
+- [测验练习](/cn/guides/quiz-practice) — 带评分的互动学习
+- [Arka Council](/cn/guides/council) — 多角度审议

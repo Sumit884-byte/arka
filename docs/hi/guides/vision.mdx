@@ -1,0 +1,82 @@
+---
+title: "Image description, OCR, और screen capture"
+description: "Gemini, Ollama llava, या vLLM backends के साथ photos describe करने, OCR के माध्यम से text extract करने, blueprints analyze करने, और अपनी screen capture करने के लिए Arka के vision skills का उपयोग करें।"
+keywords: ["vision", "describe_image", "drawing_ask", "ocr", "screen"]
+icon: "image"
+---
+
+Arka vision tasks को support करता है: photo description, blueprint analysis, और screen capture।
+
+## Images describe करें
+
+Two-layer analysis: OCR exact text extract करता है; vision layout और colors describe करता है।
+
+```bash
+arka describe photo.jpg
+arka describe ~/Downloads/chart.png
+```
+
+Backends (auto-selected): Gemini, Ollama (llava), vLLM।
+
+```env
+DESCRIBE_IMAGE_BACKEND=auto   # auto | gemini | ollama | vllm
+GEMINI_API_KEY=...
+# DESCRIBE_IMAGE_TWO_LAYER=1
+# DESCRIBE_IMAGE_OCR=1
+```
+
+```bash
+pip install "arka-agent[vision]"
+brew install tesseract    # OCR layer
+```
+
+## Drawings और blueprints
+
+Gemini vision के साथ floor plans, elevations, MEP schematics, और scanned contracts analyze करें:
+
+```bash
+arka analyze plan.pdf "extract door schedule and room dimensions"
+arka analyze --pages 1-3 specs.pdf "summarize payment terms"
+```
+
+```bash
+pip install "arka-agent[drawings]"
+```
+
+```env
+# DRAWING_MODEL=gemini-2.5-flash
+# DRAWING_MAX_PAGES=8
+```
+
+## Screen capture
+
+10-second countdown, full-display capture, vision describe:
+
+```bash
+arka describe screen
+arka describe my screen
+arka describe screen "what app is in focus"
+```
+
+## Videos describe करें
+
+`describe_video` ffmpeg के साथ frames sample करता है और उन frames को
+configured vision backend के माध्यम से भेजता है। इसका उपयोग gameplay recordings, UI animation checks,
+demos, और people-location questions के लिए करें।
+
+```bash
+arka describe_video demo.mp4
+arka describe_video demo.mp4 "find visual glitches and confusing UI states"
+arka "describe video gameplay.mp4"
+arka "who is in meeting.mp4 and where are they"
+```
+
+People-focused prompts के लिए, Arka vision model से visible people की पहचान करने और उनकी approximate screen positions को
+पहचानने के लिए कहता है। सामान्य describe/analyze
+prompts के लिए, यह subjects, actions, setting, text, framing, और visual
+issues का वर्णन करता है।
+
+```bash
+brew install ffmpeg
+pip install "arka-agent[vision]"
+```

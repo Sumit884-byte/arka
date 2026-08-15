@@ -1,0 +1,106 @@
+---
+title: "每日阅读"
+description: "在任何主题上进行结构化的每日阅读 —— 概念不重叠、长度可配置，并内置健康主题。"
+keywords: ["reading", "learning", "health", "wellness", "curriculum", "daily habit"]
+icon: "book-open-reader"
+---
+
+**每日阅读** 在你选择的主题上每天提供一节新课程。概念在会话之间从不重复，长度可配置（默认约 40–60 分钟），并内置涵盖饮食、运动和健康的 **health** 主题，无需任何设置。
+
+## 快速开始
+
+```bash
+# 内置的健康主题
+arka health_reading today
+arka health_reading today --minutes 60
+
+# 任意主题 —— 创建一次主题，然后每天阅读
+arka daily_reading init "machine learning fundamentals"
+arka daily_reading today
+arka daily_reading today --track machine-learning-fundamentals --minutes 45
+
+# 管理主题
+arka daily_reading list-tracks
+arka daily_reading use rust
+arka daily_reading status
+arka daily_reading upcoming
+arka daily_reading set-default 50
+```
+
+## 自然语言
+
+```bash
+arka "daily reading today"
+arka "40 minute reading on stoic philosophy"
+arka "health reading status"
+arka "1 hour wellness reading"
+```
+
+包含 health 或 wellness 措辞时会使用 **health** 主题。当尚不存在主题时，通用主题会自动 **init** 一个新主题。
+
+## 工作原理
+
+1. **课程大纲** —— 每个主题都有支柱（pillars）和概念 ID。内置的 health 主题自带约 45 个涵盖营养、运动和常规健康的概念。对于其他主题，`init` 会请 LLM 生成一份 JSON 课程大纲。
+2. **会话选择** —— 每天根据阅读长度选取 3–5 个概念，并在支柱之间轮换以保持覆盖平衡。
+3. **课程生成** —— LLM 只为今天的概念撰写 markdown，并以 `CONCEPTS: id1, id2, ...` 结尾以便记录进度。
+4. **同一天幂等** —— 同一日历日再次运行 `today` 会返回已保存的课程，除非你传入 `--force`。
+
+## 命令
+
+| 命令 | 描述 |
+| --- | --- |
+| `daily_reading init <topic>` | 创建一个新的阅读主题（由 LLM 生成课程大纲） |
+| `daily_reading today` | 生成或显示今日课程 |
+| `daily_reading list-tracks` | 列出内置和自定义主题 |
+| `daily_reading use <slug>` | 设置活跃主题 |
+| `daily_reading status` | 当前主题的进度 |
+| `daily_reading upcoming` | 预览接下来的概念 |
+| `daily_reading reset` | 清除某个主题的进度和已保存课程 |
+| `daily_reading schedule` | 打印用于每日自动化的 `arka routines` 命令 |
+| `daily_reading set-default <minutes>` | 默认阅读时长 |
+| `health_reading …` | 等同于 `daily_reading --track health …` |
+
+### Init 选项
+
+```bash
+arka daily_reading init "Rust programming" --track rust --pillars basics,ownership,async
+arka daily_reading init "nutrition science" --force   # 替换已存在的主题文件
+```
+
+## 存储
+
+| 路径 | 用途 |
+| --- | --- |
+| `~/.config/arka/daily-reading/settings.json` | 活跃主题、默认分钟数 |
+| `~/.config/arka/daily-reading/tracks/<slug>/curriculum.json` | 概念图 |
+| `~/.config/arka/daily-reading/tracks/<slug>/state.json` | 已覆盖概念和会话日志 |
+| `~/.config/arka/daily-reading/tracks/<slug>/lessons/<date>.md` | 已保存的每日课程 |
+
+**health** 内置课程大纲位于 package 中；仅当你自定义时，`tracks/health/` 下的文件才会覆盖它。
+
+## 安排每日习惯
+
+```bash
+arka daily_reading schedule --when 08:00 --minutes 40
+# 打印：arka routines add daily '08:00' 'daily_reading today --track … --minutes 40' --install
+```
+
+## 路由
+
+```bash
+arka route "40 minute reading on world history"
+# → daily_reading init 'world history'   （若主题缺失）
+
+arka route "health reading today"
+# → health_reading --track health today
+```
+
+## 健康免责声明
+
+内置的 health 主题在每节课程中都包含免责声明：**不构成医疗建议**。请就个人健康决策咨询临床医生。
+
+## 相关
+
+- [测验练习](/cn/guides/quiz-practice) —— 具备每主题记忆的交互式问答
+- [每日和科技简报](/cn/guides/daily-brief) —— 早间头条，而非长篇阅读
+- [CLI 参考](/cn/guides/cli) —— 所有子命令和别名

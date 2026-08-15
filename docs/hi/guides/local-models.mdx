@@ -1,0 +1,30 @@
+---
+title: "Local model optimization और setup"
+description: "अपने hardware के लिए एक runnable local model चुनें और configure करें।"
+icon: "server"
+---
+
+एक hardware-aware recommendation और setup command का preview करें:
+
+```bash
+arka model-optimizer recommend
+arka model-optimizer setup --backend ollama
+```
+
+Provider configuration को `--apply` के साथ स्पष्ट रूप से apply करें:
+
+```bash
+arka model-optimizer setup --backend ollama --apply
+```
+
+एक configured GPU server के लिए `vllm` या इसके OpenAI-compatible desktop server
+के लिए `lmstudio` का उपयोग करें। Arka implicitly weights download नहीं करता या
+services शुरू नहीं करता। यह अगला command print करता है ताकि setup स्पष्ट
+(explicit) और reversible बना रहे।
+
+Deployment previews के लिए, Arka Vercel, Netlify, Railway, Render, Hugging Face
+Spaces, Cloudflare Workers, और GitHub Pages का समर्थन करता है:
+
+```bash
+arka deploy --platform huggingface --json
+```

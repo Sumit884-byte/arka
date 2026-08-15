@@ -1,0 +1,16 @@
+---
+title: "OCR + vLLM evidence"
+description: "इमेज उत्तरों को OCR और मॉडल व्याख्या दोनों में ग्राउंड करें।"
+icon: "eye"
+---
+
+इमेज उत्तरों को OCR और मॉडल व्याख्या दोनों में ग्राउंड करें:
+
+```bash
+pip install pytesseract pillow
+arka vision-evidence screen.png "What price is shown?" \\
+  --model-view "The visual model sees a price label reading $10"
+arka vision-evidence screen.png "What price is shown?" --json
+```
+
+Arka रिपोर्ट करता है कि OCR क्या कहता है, visual/vLLM मॉडल क्या कहता है, और एक संयुक्त उत्तर जो agreement, conflicts, और uncertainty की पहचान करता है। यह चुपचाप किसी मॉडल guess को text evidence के रूप में नहीं मानता। प्राकृतिक भाषा अनुरोध समर्थित हैं।

@@ -1,0 +1,60 @@
+---
+title: "自我改进循环"
+description: "Arka 分析自身代码库、提出修复建议，并可选择通过安全网关自动应用。"
+keywords: ["self-improve", "goal", "automation", "codebase"]
+icon: "arrows-rotate"
+---
+
+**Self-improve** 让 Arka 检查自身仓库 — 测试、路由、文档 — 并生成改进计划。使用 `--apply` 通过目标智能体运行并实施修复。
+
+## 快速开始
+
+```bash
+arka self improve              # plan only (dry-run)
+arka self improve routing      # focused plan
+arka self improve --apply      # implement via goal agent
+arka self memory               # past improvement attempts
+arka self status               # repo + memory path
+```
+
+自然语言：
+
+```bash
+arka improve arka
+arka self improve routing
+arka improve arka llm fallback
+```
+
+`self improve routing` 也作为专用技能进行路由，因此 Arka 可以将路由修复视作一等自改进任务。
+
+## 输出（普通模式）
+
+```
+━━━ Arka Self-Improve ━━━
+Focus: routing
+Checking: tests, routing, docs
+
+✗ Tests: 1 failure (memory_detect)
+✓ Routing: symbolic.py (40 route_* handlers)
+○ Plan: fix import in tests/test_memory_detect.py
+
+Next: arka self improve routing --apply
+```
+
+<Note>
+  完整诊断（pytest 跟踪、llm.txt 上下文）只在 [debug 模式](/cn/guides/operation-modes) 中显示。
+</Note>
+
+## 安全性
+
+| 规则 | 行为 |
+| --- | --- |
+| 默认仅计划 | 未使用 `--apply` 前不写文件 |
+| `--apply` 需要 agent 模式 | 在 `ask` 或 `plan` 模式中被阻止 |
+| 屏蔽机密 | 从不修改 `.env`、凭证、`node_modules` |
+| 内存 | `~/.config/arka/self-improve-memory.json` 跟踪过往尝试 |
+
+## 相关
+
+- [Goal agent](/cn/guides/goal-agent) — 多步骤自主任务
+- [测试](/cn/guides/testing) — pytest 与 CI

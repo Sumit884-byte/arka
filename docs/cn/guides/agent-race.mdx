@@ -1,0 +1,22 @@
+---
+title: "Agent 竞赛"
+description: "让多个模型竞逐同一任务，并由裁判选出最强答案。"
+icon: "flag-checkered"
+---
+
+并发运行多个已配置的模型：
+
+```bash
+arka race "design a test plan for this API" \
+  --models openrouter/model-a,ollama/qwen3:8b,groq/llama-3.3-70b-versatile \
+  --judge openrouter/model-a --json
+```
+
+每位参赛者都会绑定到其声明的提供商/模型上。裁判只会收到任务
+和参赛者的输出，并从正确性、完整性、可测试性与安全性四方面
+打分。失败的参赛者仍会保留在报告中；裁判失败会被明确指出，
+而不是悄悄选出一个答案。
+
+自然语言可用："race several agents on a coding task."。请把
+结果当作建议 —— Arka 不会根据竞赛胜者自动编写、部署、注册或
+提交任何内容。

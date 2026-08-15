@@ -1,0 +1,77 @@
+---
+title: "Arka troubleshooting: LLM, routing, voice, और RAG fixes"
+description: "API key errors, LLM failover, skill routing, PDF RAG, voice wake-word, और third-party service integrations से जुड़ी आम Arka समस्याओं की पहचान और समाधान।"
+keywords: ["troubleshooting", "errors", "fixes", "debug"]
+icon: "life-ring"
+---
+
+## LLM और API keys
+
+| समस्या | समाधान |
+| --- | --- |
+| `Could not generate an answer` / `401` | API keys जाँचें; `arka ai-models`; `AI_PREFERRED_PROVIDER=groq` सेट करें; `arka ai reset-exhaustion` |
+| Gemini 429 / धीमी responses | Orchestrator `LLM_AUTO_FALLBACK=1` के साथ auto-fails over; `AI_PREFERRED_PROVIDER=groq` से Groq को प्राथमिकता दें |
+| ग़लत model चुना गया | `arka ai-skill-model web_answer groq/llama-3.3-70b-versatile` |
+
+## Routing
+
+| समस्या | समाधान |
+| --- | --- |
+| Random text पर `uv pip install am` | NL के लिए `arka` उपयोग करें, raw shell नहीं |
+| सादा text कमांड कुछ नहीं करता | उसे `arka` से prefix करें या `agent_route` उपयोग करें ताकि Arka उसे intercept कर सके |
+| Plugin route नहीं हो रहा | `arka skills refresh`; `skill.json` triggers जाँचें; `arka route "your trigger phrase"` |
+| Config changes नहीं उठाए जा रहे | `arka reload` या नया shell; wake listener के लिए `arka reload --listen` |
+
+## PDF RAG
+
+| समस्या | समाधान |
+| --- | --- |
+| PDF ask fail | `arka pdf status`; सुनिश्चित करें कि Qdrant Docker चल रहा है |
+
+## Web search
+
+| समस्या | समाधान |
+| --- | --- |
+| Deep search खाली | `pip install ddgs trafilatura beautifulsoup4` |
+| Map download timeout | बाद में `map_download <city>` फिर से करें (Overpass API) |
+
+## Voice
+
+| समस्या | समाधान |
+| --- | --- |
+| Wake word छूटा / ग़लत STT | `ASSEMBLYAI_API_KEY` सेट करें; या `SARVAM_API_KEY` \+ `SARVAM_STT_MODE=translit` |
+| Devanagari routing तोड़ रहा है | `arka_stt_map.py` से fix; `LISTEN_STT_LANG=en-IN` आज़माएँ |
+| Listener crashes | `arka wake --check` फिर `arka doctor` |
+| ग़लत microphone | Linux: `pactl list sources short` → `.env` में `MIC_DEVICE` सेट करें |
+
+## Charts
+
+| समस्या | समाधान |
+| --- | --- |
+| Chart defaults लागू नहीं | `~/.config/arka/charts.yaml` edit करें; custom path के लिए `CHARTS_CONFIG` सेट करें |
+| Fetch-style chart NL route नहीं हो रही | Inline label:value pairs उपयोग करें; external fetch wiring अभी प्रगति पर है |
+
+## Observability
+
+| समस्या | समाधान |
+| --- | --- |
+| SigNoz traces नहीं दिख रहे | `arka signoz setup -y` चलाएँ; export default में `:4318` पर चालू है — `arka signoz status` जाँचें |
+
+## Memory
+
+| समस्या | समाधान |
+| --- | --- |
+| Supermemory उपयोग नहीं हो रहा | `arka supermemory status`; `SUPERMEMORY_API_KEY` सेट करें; `MEMORY=auto` |
+
+## Logs
+
+```text
+~/.cache/arka/*.log
+~/.cache/fish-agent/*.log    # legacy fish installs
+```
+
+## संबंधित
+
+<CardGroup cols={2}>
+    
+</CardGroup>

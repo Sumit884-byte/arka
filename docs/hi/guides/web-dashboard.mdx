@@ -1,0 +1,138 @@
+---
+title: "वेब डैशबोर्ड"
+description: "chat, skills, और status के लिए React वेब UI चलाएँ — session history Arka में संग्रहीत होती है।"
+keywords: ["web", "dashboard", "frontend", "bridge", "chat", "vite"]
+icon: "window-maximize"
+---
+
+<Warning>
+  **प्रयोगात्मक / केवल स्थानीय।** `web/` frontend PyPI पर प्रकाशित नहीं है और
+  जानबूझकर **git में track नहीं किया गया** है (buggy WIP)। हैकाथॉन डेमो और रोज़मर्रा
+  उपयोग के लिए CLI और MCP का उपयोग करें। यह पेज केवल उन योगदानकर्ताओं के लिए है जो
+  लोकल checkout से UI चला रहे हैं।
+</Warning>
+
+वेब डैशबोर्ड रिपो के `web/` में एक React ऐप है। यह एक छोटे Python **bridge** के
+ज़रिये आपके लोकल Arka इंस्टेंस से बात करता है, जो CORS, route preview,
+capabilities, doctor checks, और **session history** endpoints जोड़ता है।
+
+## पूर्वापेक्षाएँ
+
+1. **Arka remote server** — chat commands निष्पादित करता है:
+
+```bash
+arka serve
+```
+
+डिफ़ॉल्ट URL: `http://127.0.0.1:8765`। `.env` में `REMOTE_TOKEN` सेट करें और वही
+token डैशबोर्ड sidebar में paste करें (या dev के लिए `VITE_ARKA_TOKEN` सेट करें)।
+
+2. **Bridge server** — अतिरिक्त endpoints वाला लोकल HTTP proxy:
+
+```bash
+cd web
+python3 bridge.py
+```
+
+डिफ़ॉल्ट URL: `http://127.0.0.1:8766`
+
+## डेवलपमेंट
+
+Terminal 1 — `arka serve` चालू रखें, फिर bridge शुरू करें:
+
+```bash
+cd web
+python3 bridge.py
+```
+
+Terminal 2 — Vite dev server (`/v1/*` को bridge पर proxy करता है):
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+[http://localhost:5173](http://localhost:5173) खोलें।
+
+## स्क्रीन
+
+| स्क्रीन | Endpoint | नोट्स |
+| ------ | -------- | ----- |
+| **Chat** | `POST /v1/agent` | `arka serve` पर proxy; लोकल `/v1/route` से route preview |
+| **Skills** | `GET /v1/capabilities` | `src/arka/agent/` से dispatch मॉड्यूल सूचीबद्ध करता है |
+| **Status** | `GET /v1/health` + `GET /v1/doctor` | remote से health; doctor in-process चलता है |
+
+## Session history
+
+Chat turns Arka के [message sessions](/hi/guides/sessions) में channel `web` और
+प्रति-ब्राउज़र `chat_id` के तहत संग्रहित होते हैं (`localStorage` में
+`arka.chatId` के रूप में सहेजा जाता है)।
+
+```bash
+arka session list
+arka session resume web <chat-id>
+arka session reset web <chat-id>
+```
+
+arka "Bridge endpoints:"
+
+  | arka "Method" | arka "Path" | arka "Purpose" |
+  | ------ | ---- | ------- |
+  | `GET` | `/v1/sessions/resume?channel=web&chat_id=…` | arka "Load conversation for the dashboard" |
+  | `POST` | `/v1/sessions/reset` | arka "Clear a web session" |
+  | `POST` | `/v1/agent` | arka "Run command and auto-push user/assistant turns" |
+
+फाइलें `~/.config/arka/message-sessions/` (या `MESSAGE_SESSIONS_DIR`) में रहती हैं।
+
+## Production preview
+
+```bash
+cd web
+npm run build
+python3 bridge.py
+```
+
+Bridge port **8766** पर `dist/` से बनी ऐप serve करता है।
+
+## एनवायरनमेंट
+
+| Variable | डिफ़ॉल्ट | उद्देश्य |
+| -------- | ------- | ------- |
+| `ARKA_BACKEND_URL` | `http://127.0.0.1:8765` | agent/health के लिए remote server |
+| `ARKA_BRIDGE_PORT` | `8766` | Bridge listen port |
+| `REMOTE_TOKEN` / `ARKA_BACKEND_TOKEN` | — | `/v1/agent` के लिए Auth |
+| `VITE_ARKA_TOKEN` | — | frontend में वैकल्पिक dev token |
+| `ARKA_WALKTHROUGH_URL` | `http://127.0.0.1:5173` | dashboard walkthrough capture के लिए URL |
+
+## Output viewer (हल्का)
+
+React डैशबोर्ड के बिना ही मनमाने JSON, CSV, markdown, या text को render करने के
+लिए [Output viewer](/hi/guides/output-viewer) का उपयोग करें:
+
+```bash
+arka output show data.json
+arka output serve --open
+```
+
+लोकल स्तर पर agent output, exports, और tabular data को preview करने का यह
+अनुशंसित तरीका है।
+
+## CLI helpers
+
+```bash
+arka backend status
+arka backend ask "what can you do?"
+arka capture video --walkthrough
+```
+
+Walkthrough recordings के लिए [Browser video capture](/hi/guides/video-capture) देखें।
+
+## समस्या निवारण
+
+  | arka "Symptom" | arka "Fix" |
+  | ------- | --- |
+  | arka "Chat returns 401" | `.env` से `REMOTE_TOKEN` को Settings में paste करें |
+  | arka "History empty after refresh" | Bridge रिस्टार्ट करें (`python3 bridge.py`) — पुराने bridge में session routes नहीं थे |
+  | arka "Bridge port in use" | `lsof -i :8766` फिर पुरानी process को रोकें |
+  | `backend status` connection refused | पहले `arka serve` चलाएँ |

@@ -1,0 +1,23 @@
+---
+title: "AI 社会模拟"
+description: "让专业化的智能体协作、辩论并投票。"
+icon: "building-columns"
+---
+
+运行一个可检视的多智能体决策模拟：
+
+```bash
+arka society "should we split this service?"
+arka society "choose a caching strategy" --json
+```
+
+默认的社会包含架构、实现、风险与用户倡导等角色。每个角色独立提出方案，怀疑者和架构师就权衡进行辩论，加权投票产生一个可回退的决策。该模拟仅供参考，不会修改你的代码仓库。
+
+在明确同意之下，可以根据投票产生的决策生成代码：
+
+```bash
+arka society "add a health endpoint" --generate
+arka society "add a health endpoint" --generate --output src/health.py
+```
+
+默认情况下代码会打印到终端。`--output` 会新建文件，且拒绝覆盖已存在的文件；使用前请先审阅并测试。

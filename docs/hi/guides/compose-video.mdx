@@ -1,0 +1,103 @@
+---
+title: "Video बनाएं"
+description: "Arka, stock media, charts, TTS, और custom script APIs के साथ explainer videos बनाएं।"
+icon: "clapperboard"
+---
+
+Arka का video composer किसी topic, JSON script, LLM, या custom script API से
+narrated explainers बनाता है। **Hybrid mode default है:** voiceover चलता है, कोई on-screen
+text burned in नहीं होता, और प्रत्येक scene narration के अनुसार stock **video** या **photo** B-roll
+का उपयोग करता है।
+
+```bash
+arka compose_video compose --topic "AI infrastructure" --llm
+arka compose_video compose --topic "AI infrastructure" --text   # legacy captions
+arka compose_video compose --topic "AI infrastructure" --mode photos
+arka compose_video --script scenes.json
+```
+
+## Hybrid mode (default)
+
+| Setting | Default | अर्थ |
+|---------|---------|---------|
+| `VIDEO_MODE` | `hybrid` | प्रति scene stock video + photos mix करें |
+| On-screen text | off | केवल TTS/voiceover जब तक `--text` न हो |
+| प्रति-scene media | AI/heuristic | scene JSON में `media_type: video` या `image` |
+
+Title/caption overlays वापस लाने के लिए `--text` या `VIDEO_BURN_TEXT=1` का उपयोग करें। केवल-image slideshows (legacy) के लिए
+`--mode photos` उपयोग करें। सभी stock video B-roll के लिए `--mode video` का उपयोग करें।
+
+```bash
+VIDEO_MODE=hybrid arka compose_video compose --topic "cinematic mountains"
+VIDEO_BURN_TEXT=1 arka compose_video compose --topic "AI trends" --llm
+```
+
+## अपनी API लाएं
+
+जब आप चाहते हैं कि आपका अपना model, workflow, brand system, या
+script generator video scenes produce करे, तो custom HTTP API का उपयोग करें:
+
+```bash
+arka compose_video \
+  --topic "AI infrastructure" \
+  --script-provider custom \
+  --api-url https://example.com/arka/video-script
+```
+
+आप इसे `.env` में एक बार configure कर सकते हैं:
+
+```bash
+VIDEO_SCRIPT_PROVIDER=custom
+VIDEO_SCRIPT_API_URL=https://example.com/arka/video-script
+VIDEO_SCRIPT_API_KEY=...
+```
+
+यदि आपकी key किसी अन्य env var के अंतर्गत रहती है:
+
+```bash
+VIDEO_SCRIPT_API_KEY_ENV=MY_COMPANY_VIDEO_API_KEY
+```
+
+Arka इसके साथ एक JSON POST body भेजता है:
+
+```json
+{
+  "topic": "AI infrastructure",
+  "topic_raw": "ai infrastructure",
+  "scenes": 6,
+  "target_duration_sec": 300,
+  "schema": {
+    "type": "array"
+  }
+}
+```
+
+आपकी API को या तो एक scene array या `scenes` array वाला object return करना चाहिए:
+
+```json
+{
+  "scenes": [
+    {
+      "title": "Why AI infrastructure matters",
+      "narration": "AI infrastructure is the stack behind modern models.",
+      "body": "The stack behind AI",
+      "captions": ["Models need compute", "Data and serving matter"],
+      "image_keywords": ["gpu server", "data center"],
+      "duration": 8
+    }
+  ]
+}
+```
+
+Arka अभी भी scene JSON को locally validate और enrich करता है, फिर सामान्य
+renderer, stock-media lookup, chart rendering, TTS, और ffmpeg pipeline का उपयोग करता है। यदि
+custom API विफल होती है, तो Arka built-in template पर fallback करता है ताकि video command
+केवल इसलिए विफल न हो कि script provider अनुपलब्ध है।
+
+उपयोगी flags:
+
+```bash
+arka compose_video --topic "AI infra" --script-provider custom --api-header "X-Team: demo"
+arka compose_video --topic "AI infra" --script-provider custom --api-key-env MY_VIDEO_KEY
+arka compose_video check
+```

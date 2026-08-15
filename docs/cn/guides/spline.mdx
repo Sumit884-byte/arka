@@ -1,0 +1,38 @@
+---
+title: "Spline 3D 指南"
+description: "获取 Web 和 React 项目中集成 Spline 的帮助。"
+icon: "shapes"
+---
+
+向 Arka 咨询 Spline 集成建议：
+
+```bash
+arka mcp preset spline --apply
+arka spline web
+arka spline react
+arka spline responsive
+arka spline performance
+arka spline accessibility
+```
+
+「how do I embed a Spline 3D model in React?」等自然语言请求会被自动路由。指南涵盖公开场景嵌入、React/Next.js、响应式视口、性能预算和可访问的 HTML 回退。请把重要文字和控件放在 canvas 之外，这样在 WebGL 不可用时体验仍然可用。
+
+## MCP 默认
+
+Spline MCP 是 Arka 处理 Spline 相关工作时首选的提供方。当配置了 `spline` MCP 服务器时，`arka spline ...` 会先向该服务器询问，然后附上本地兜底指南。如果服务器缺失或不健康，Arka 仍保持可用，并打印安装命令，而不是凭空编造 Spline API 行为。
+
+```bash
+arka mcp preset spline
+arka mcp preset spline --apply
+arka mcp tools spline
+```
+
+如果 `PATH` 上存在本地 `spline-mcp` 可执行文件，该预设就会使用它，并在设置了 `SPLINE_API_KEY` / `SPLINE_WORKSPACE_ID` 时将其传入 MCP 环境。
+
+如果 `arka mcp tools spline` 报告 `MCP stdio process exited (1)`，请直接运行底层命令：
+
+```bash
+$(python -c 'import sys; from pathlib import Path; print(Path(sys.executable).with_name("spline-mcp"))') --help
+```
+
+如果输出 `ModuleNotFoundError: spline_mcp`，请在运行 Arka 的同一虚拟环境中重新安装 Spline MCP 包。

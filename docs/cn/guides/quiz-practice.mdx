@@ -1,0 +1,52 @@
+---
+title: "测验练习"
+description: "在任何主题上进行无限的测验练习并具备记忆能力 —— Arka 从不重复你已经见过的问题。"
+keywords: ["quiz", "practice", "learning", "trivia", "memory"]
+icon: "graduation-cap"
+---
+
+**测验练习** 在某个主题上生成独特的问题，为你的答案打分，并持续下去直到你停止。已经问过的问题会被记住，因此你总能得到新的问题。
+
+## 快速开始
+
+```bash
+arka quiz python
+arka quiz practice rust loops
+arka quiz me on world history
+arka practice quiz biology mitosis
+```
+
+## 交互流程
+
+1. Arka 提出问题
+2. 你输入答案
+3. Arka 打分并解释
+4. 下一道独特的问题
+
+按 **Ctrl+C** 或输入空答案即可停止。
+
+## 命令
+
+| 命令 | 描述 |
+| --- | --- |
+| `arka quiz <topic>` | 开始或继续某个主题的测验 |
+| `arka quiz_practice <topic> --count 1` | 问一题然后打分 |
+| `arka quiz_practice <topic> --reset` | 清除该主题的记忆 |
+| `arka quiz_practice list` | 显示活跃主题和问题数量 |
+
+## 记忆
+
+每个主题的历史记录存储在：
+
+```
+~/.config/arka/quiz-memory/<topic-slug>.json
+```
+
+每个文件跟踪 `asked` 已问的问题和 `scores` 分数，让 LLM 避免重复。
+
+## 路由
+
+```bash
+arka route "quiz me on python decorators"
+# → quiz_practice 'python decorators'
+```

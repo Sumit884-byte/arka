@@ -1,0 +1,111 @@
+---
+title: "Symbolic और LLM routing pipeline"
+description: "Arka की layered pipeline कैसे natural language को symbolic offline matching का उपयोग करते हुए 120+ skill patterns पर route करती है, LLM पर fallback करने से पहले।"
+keywords: ["routing", "symbolic", "offline", "skills"]
+icon: "route"
+---
+
+Arka हर request को एक layered pipeline के माध्यम से route करता है। अधिकांश requests कभी LLM को छूती ही नहीं — `config.fish` में symbolic नियम 120\+ skill patterns को offline match करते हैं।
+
+महत्वपूर्ण: यदि आप plain shell command टाइप करते हैं, तो shell उसे सामान्य रूप से चलाता है। Arka को request को route करने का मौका केवल तभी मिलता है जब आप इसे `arka` या `agent_route` जैसे alias के माध्यम से invoke करते हैं।
+
+## Routing pipeline
+
+<Steps>
+  <Step title="Direct skill name">
+    यदि पहला token किसी registered skill से match करता है, तो Arka इसे तुरंत चलाता है। Zero tokens.
+
+    ```bash
+    arka weather
+    arka calc 2+2
+    arka demo_echo hello    # third-party plugin by name
+    ```
+  </Step>
+  <Step title="Plugin triggers">
+    Arka आगे `~/.config/arka/skills/` में third-party skills की जाँच करता है। प्रत्येक plugin `skill.json` में `triggers` घोषित करता है।
+  </Step>
+  <Step title="Offline symbolic rules">
+    Default path. `config.fish` में `_agent_guess_route` और `_agent_offline_route_cmd` 120\+ skills के लिए regex patterns match करते हैं। कोई LLM call नहीं। जब यह trigger होता है तो आपको `💡 [Offline routing]` और `→ Interpreted: …` दिखाई देगा।
+  </Step>
+  <Step title="LLM route">
+    जब offline नियम match नहीं होते, तो Arka `task=route` के साथ LLM को एक compact skill catalog भेजता है। Model सबसे अच्छा skill चुनता है।
+  </Step>
+  <Step title="Correction layer">
+    एक deterministic correction layer दूसरे LLM call के बिना कमज़ोर LLM picks को ठीक करता है (जैसे factual प्रश्नों के लिए `search_web` → `web_answer`)।
+  </Step>
+  <Step title="Dispatch">
+    `dispatch.py` चुने गए skill script को execute करता है।
+  </Step>
+</Steps>
+
+## Layer के अनुसार Token उपयोग
+
+| Layer | LLM tokens |
+| --- | --- |
+| Direct skill name | **0** |
+| Symbolic routing | **0** |
+| Plugin triggers | **0** |
+| LLM route (fallback) | **small** (compact catalog only) |
+
+Default mode `ROUTE_MODE=symbolic` है — पहले offline rules, केवल आवश्यकता होने पर ही AI।
+
+## Ambiguous routing
+
+जब दो या अधिक offline patterns लागू हो सकते हैं (play/media के साथ आम), तो Arka collision का पता लगाता है और LLM से चुनने के लिए कहता है:
+
+```text
+💡 [AI routing — ambiguous play/media request]
+→ Interpreted: play_movie bohemian rhapsody
+```
+
+स्पष्ट one-sided requests अभी भी zero tokens के साथ offline routing का उपयोग करती हैं।
+
+## Route modes
+
+| Mode | Behavior |
+| --- | --- |
+| `symbolic` | पहले Offline rules, केवल आवश्यकता होने पर LLM (default) |
+| `ai` | LLM routing को प्राथमिकता |
+| `symbolic_only` | Routing के लिए कभी LLM call न करें; Python symbolic extras fish से पहले चलते हैं, और fish LLM previews को नज़रअंदाज़ किया जाता है |
+| `ai_only` | Routing के लिए हमेशा LLM का उपयोग करें |
+
+```env
+ROUTE_MODE=symbolic
+```
+
+## Routing का निरीक्षण करें
+
+बिना चलाए preview करें कि Arka कौन सा skill चुनेगा:
+
+```bash
+arka route "summarize my unread emails"
+arka route "play bohemian rhapsody on spotify"
+arka route # last routing decision
+arka route # explain skill choice
+arka help            # full skill list
+arka tell your skills   # voice-friendly summary + active model
+```
+
+## Python fallback (fish के बिना)
+
+जब fish स्थापित नहीं होता, तो Arka उसी offline-first व्यवहार के लिए `src/arka/routing/symbolic.py` का उपयोग करता है। portable CLI अभी भी chat, web answers, passwords, calc, weather, sports, और plugins को support करता है।
+
+पूर्ण 70\+ skill router को अनलॉक करने के लिए [fish shell](https://fishshell.com) install करें।
+
+Self-improve workflow भी एक समर्पित skill के रूप में route किया जाता है, इसलिए `self improve routing` जैसे phrases local और deterministic रह सकते हैं जबकि अभी भी repo analysis path खोलते हैं।
+
+Developer tooling अब उसी offline-first path का पालन करता है: `arka ci`, `arka review staged`, `route audit`, और `skill new my_tool --template dev` किसी भी LLM fallback से पहले symbolic routing द्वारा संभाले जाते हैं।
+
+UI कार्य के लिए, `build this project from screenshot.png` और समान phrases screenshot-to-design brief skill पर route होते हैं, जो पहले image का विश्लेषण करता है और फिर एक implementation-oriented build plan बनाता है।
+
+यदि आप चाहते हैं कि Arka अपने ही frontend output को देखे और iterate करे, तो `review this frontend`, `retry 3 loops`, या `check the UI screenshot and rebuild` जैसे phrases frontend visual loop skill पर route होते हैं। यह rendered परिणाम को capture करता है, इसकी आलोचना करता है, और अगले pass से पहले एक और build command चला सकता है।
+
+## Skill router बनाम orchestrator
+
+**Skill router** तय करता है कि _कौन सा skill चलेगा_। **LLM orchestrator** (देखें [LLM orchestration](/hi/concepts/llm)) skills के _अंदर_ completions को power करता है — summarize, chat, research, PDF, predictions — provider failover के साथ। वे अलग systems हैं।
+
+## संबंधित
+
+<CardGroup cols={2}>
+     
+</CardGroup>

@@ -1,0 +1,16 @@
+---
+title: "先设计，批准后再构建"
+description: "在改动代码之前，先起草、评审、返工并批准 Arka 的实现方案。"
+icon: "palette"
+---
+
+```bash
+arka design plan "build a dashboard for local model benchmarks"
+arka design show
+arka design redo "include offline support and a CSV export"
+arka design accept
+arka design build --yes
+```
+
+`design plan` 和 `design redo` 不会修改项目。`design build` 在草案被
+接受之前会被阻止，从而让规划与执行分离开来。

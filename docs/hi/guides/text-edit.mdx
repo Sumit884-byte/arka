@@ -1,0 +1,15 @@
+---
+title: "टेक्स्ट का निरीक्षण और हटाना"
+description: "फ़ाइल को edit करने से पहले exact text matches का निरीक्षण करें।"
+icon: "pen-to-square"
+---
+
+फ़ाइल को edit करने से पहले exact text matches का निरीक्षण करने के लिए Arka का उपयोग करें:
+
+```bash
+arka text inspect README.md "old phrase"
+arka text remove README.md "old phrase" --yes
+arka text remove README.md "old phrase" --all --yes
+```
+
+Removal डिफ़ॉल्ट रूप से एक `.bak` backup बनाता है। `--yes` के बिना, Arka केवल match count का preview दिखाता है और कोई बदलाव नहीं करता। "inspect the text `old phrase` in README.md" जैसे प्राकृतिक भाषा अनुरोध तब route होते हैं जब फ़ाइल और text स्पष्ट रूप से quote किए गए हों।

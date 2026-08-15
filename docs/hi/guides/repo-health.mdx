@@ -1,0 +1,166 @@
+---
+title: "Repo health"
+description: "वर्तमान git project के लिए त्वरित lint और test checks detect और चलाएँ।"
+keywords: ["repo", "health", "tests", "lint", "ci"]
+icon: "heart-pulse"
+---
+
+वर्तमान repo को आम test और lint tools के लिए scan करें, फिर एक तेज़ health check चलाएँ।
+
+Arka repo के लिए, नया `arka ci` command GitHub Actions gate को अधिक बारीकी से mirror करता है। Local diff review के लिए `arka review` उपयोग करें, और जब आप fish/Python/test parity जाँचना चाहें `arka route audit` उपयोग करें।
+
+## प्राकृतिक भाषा
+
+```bash
+arka check repo health
+arka run project tests
+arka scan what checks are available
+```
+
+## CLI commands
+
+| Command | विवरण |
+| ------- | ----------- |
+| `repo_health scan [path]` | उपलब्ध checks detect करें (execution नहीं) |
+| `repo_health run [path]` | सभी detected checks चलाएँ |
+| `repo_health run --test` | केवल test checks चलाएँ |
+| `repo_health run --lint` | केवल lint checks चलाएँ |
+
+## संबंधित Arka developer tools
+
+| Command | विवरण |
+| --- | --- |
+| `arka ci` | Repo-specific CI mirror चलाएँ (`ruff` + targeted `pytest`) |
+| `arka ci --full` | Fast CI mirror के बाद पूरा pytest suite जोड़ें |
+| `arka ci --fix` | पहला failed gate goal agent को दें |
+| `arka ci --json` | Scripts और dashboards के लिए machine-readable gate results emit करें |
+| `arka ci --changed` | बदली गई Python files और focused tests के लिए fast gate |
+| `arka review --staged` | Project rules के विरुद्ध staged changes review करें |
+| `arka review --staged --fail-on-hints` | Review warnings को CI/pre-commit gate के रूप में उपयोग करें |
+| `arka review --json` | Structured report और warning fields emit करें |
+| `arka route audit` | Symbolic / fish / test parity gaps report करें |
+| `arka lint this repo` | Project में किसी भी language के लिए detected lint tools चलाएँ |
+| `arka skill new <name> --template dev` | एक नया plugin skill scaffold करें |
+| `arka security` | Likely secrets और unsafe patterns के लिए tracked files scan करें |
+| `arka hooks install` | Incremental CI/review pre-commit checks install करें |
+| `arka hooks status` | Arka के pre-commit hook का inspect करें |
+| `arka hooks restore` | Pre-Arka hook backup restore करें |
+| `arka dev-doctor` | Repository, workflow, और developer-tool setup की preflight |
+| `arka dev-tools list` | Supported API testing, browser debugging, और DevOps tools दिखाएँ |
+| `arka dev-tools list --json` | Scripts के लिए external developer-tool catalog emit करें |
+
+Arka Ruff और Pytest को active Python interpreter से चलाता है, तो local
+gate वही virtual environment उपयोग करता है जो `arka` installation का है।
+release या merge से पहले पूरे test suite चलाने के लिए `--full` उपयोग करें।
+
+## External developer-tool catalog
+
+Arka उन आम tools को recognize करता है जो engineers पहले से terminal के आसपास उपयोग करते हैं:
+
+| Area | Tools | Arka उन्हें क्यों track करता है |
+| --- | --- | --- |
+| API testing | Postman, Insomnia | API request collections, environments, GraphQL/REST checks, और manual reproduction notes |
+| Debugging / browser tools | Chrome DevTools, Firefox Developer Edition | Console/network/performance evidence और cross-browser debugging guidance |
+| DevOps overlap | Docker, Kubernetes, GitHub Actions, Terraform, Prometheus, Jenkins | Local services, CI/CD, infrastructure, observability, और deployment checks |
+
+उपयोग करें:
+
+```bash
+arka dev-tools list
+arka dev-tools list --json
+arka dev-doctor
+```
+
+प्राकृतिक भाषा उदाहरण:
+
+```bash
+arka show API testing tools like Postman and Insomnia
+arka check Docker Kubernetes Terraform tools
+arka what browser debugging tools can Arka use
+```
+
+ये checks जानबूझकर read-only हैं। Missing वैकल्पिक tools setup hints के रूप में report होते हैं,
+hard failures नहीं, तो `arka dev-doctor` अभी भी वर्तमान project के लिए मायने रखने वाले
+repository gates पर केंद्रित रहता है।
+
+## Detected tools
+
+Arka खोजता है:
+
+- **Python:** `pytest`, `unittest`, `ruff`, `flake8`
+- **Node:** `package.json` scripts से `npm test`, `npm run lint`
+- **Rust:** `cargo test`, `cargo clippy`
+- **Go:** `go test ./...`
+- **Make:** `make test` जब `Makefile` एक `test` target परिभाषित करे
+
+Repository के अंदर होने पर वर्तमान git root से चलता है, अन्यथा वर्तमान directory से।
+
+Manual setup लेने वाले integrations के लिए, unified wizard उपयोग करें:
+
+```bash
+arka integration status
+arka integration list
+arka integration status --provider sentry
+arka integration doctor --provider github
+arka integration status --json
+arka integration remove sentry --yes
+arka integration setup context7 --key YOUR_KEY
+arka integration setup signoz --key YOUR_KEY
+arka integration setup openrouter --key YOUR_KEY
+arka integration setup railway --key YOUR_TOKEN
+arka integration doctor
+```
+
+यह model providers (OpenRouter, OpenAI, Anthropic), deployment
+providers (Railway, Vercel), और media/memory tools का भी समर्थन करता है। `doctor` credential values प्रिंट किए बिना missing
+वैकल्पिक integrations report करता है।
+
+Productivity tools भी supported हैं:
+
+```bash
+arka integration setup notion
+arka integration setup jira
+arka integration setup teams
+arka integration setup supabase
+arka integration setup firebase
+arka integration setup stripe
+arka integration setup netlify
+arka integration setup render
+arka integration setup fly
+```
+यह उन integrations के selected होने पर missing वैकल्पिक CLIs (`gh`, `railway`, और `vercel`)
+भी report करता है।
+
+Repository और collaboration credentials उसी flow का उपयोग करती हैं:
+
+```bash
+arka integration setup github
+arka integration setup slack
+arka integration setup google
+arka connect gh --key YOUR_TOKEN
+printf '%s' "$LINEAR_API_KEY" | arka integration setup linear --key-stdin
+```
+
+आप कह सकते हैं `fix GitHub issues in my code`। Arka इसे repo-scoped
+coding agent पर route करता है, जो authenticated होने पर `gh` के माध्यम से issues inspect करता है, समस्या
+reproduce करता है, locally edit करता है, और focused tests चलाता है। पहले `gh auth login` से
+authenticate करें; बिना access या verification के Arka issue fixed होने का दावा नहीं करेगा।
+
+Manual setup लेने वाले integrations के लिए, search provider
+wizard उपयोग करें। यह keys को Arka के user `.env` में store करता है और Serper, Tavily, और
+Brave Search का समर्थन करता है:
+
+```bash
+arka search setup serper --key YOUR_KEY
+arka search status
+```
+
+Interactive hidden prompt के लिए `--key` छोड़ें; CI और scripts के लिए `--key` रखें:
+
+```bash
+arka integration setup serper
+arka integration setup all
+```
+
+ये commands प्राकृतिक भाषा भी स्वीकार करती हैं, उदाहरण के लिए: `set up Serper`,
+`show available integrations`, या `check my Sentry integration`।

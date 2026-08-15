@@ -1,0 +1,37 @@
+---
+title: "Bounded data collection"
+description: "समय सीमा के साथ web research data collect, clean, deduplicate और export करें।"
+icon: "file-import"
+---
+
+Arka किसी topic के लिए web data collect कर सकता है, text को clean कर सकता है, डुप्लिकेट URLs हटा सकता है,
+और एक machine-readable dataset लिख सकता है। Collection समय और record count दोनों से bounded है
+ताकि यह पूर्वानुमानित रूप से finish हो।
+
+```bash
+arka data collect "renewable energy incentives" --for 5m --limit 50 --output data.jsonl
+arka data collect "AI infrastructure" --for 30s --format csv --output data.csv --json
+```
+
+प्रत्येक record में topic, title, source URL, cleaned text और source type शामिल हैं।
+अंतिम report में row count, elapsed time, output path और यह शामिल है कि क्या समय या record
+bound तक पहुँच गया था। मजबूत search coverage के लिए `arka integration setup` के माध्यम से
+Serper, Tavily या Brave configure करें; collector में अभी भी DuckDuckGo fallback है।
+
+Natural language भी काम करती है: “auto collect data about battery recycling for
+10 minutes.”
+
+## Category catalogs
+
+“collect all Indian aeroplanes” जैसे requests के लिए, catalog mode का उपयोग करें:
+
+```bash
+arka data catalog "Indian aeroplanes" --for 10m --limit 500 --format json --output aircraft.json
+```
+
+Arka पहले bounded catalog/count searches जारी करता है, फिर तब तक paginate करता है जब तक
+समय या row limit तक नहीं पहुँच जाता और source URLs को deduplicate करता है। JSON report में
+`pages`, `rows`, `truncated` और `reported_total` शामिल हैं। एक total तब तक `null` रहता है
+जब तक कोई authoritative source स्पष्ट रूप से एक report नहीं करता; Arka कभी अनुमान नहीं लगाता
+कि उसने हर item collect किया। `coverage: partial` को एक लंबे `--for` window या अधिक
+authoritative source के साथ जारी रखने के prompt के रूप में मानें।

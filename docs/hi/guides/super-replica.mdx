@@ -1,0 +1,15 @@
+---
+title: "Arka Super Replica"
+description: "startup और growth stages के लिए repository-pattern सलाह प्राप्त करें।"
+icon: "clone"
+---
+
+repository-pattern सलाह के लिए Super Replica का उपयोग करें:
+
+```bash
+arka super-replica .
+arka super-replica . --stage startup
+arka super-replica . --stage growth --json
+```
+
+Arka कोड में बदलाव किए बिना repository structure और common frontend/backend फ़ाइल patterns पढ़ता है। यदि stack या app आकार निर्दिष्ट नहीं है, तो यह किसी technology choice को गढ़ने के बजाय targeted प्रश्न पूछता है। सलाह stage aware होती है: startup प्रोजेक्ट user value और iteration को प्राथमिकता देते हैं, जबकि growth और scale stages evidence के आधार पर observability, performance, और scaling कार्य जोड़ते हैं।

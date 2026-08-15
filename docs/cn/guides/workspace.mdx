@@ -1,0 +1,17 @@
+---
+title: "工作区发现"
+description: "从一个工作区映射服务、微前端和运行时。"
+icon: "laptop"
+---
+
+使用 `arka workspace` 可以在 monorepo 或包含多个项目的目录中构建只读清单：
+
+```bash
+arka workspace .
+arka workspace . --json
+arka workspace . --depth 5
+```
+
+Arka 会检测常见的清单文件（`package.json`、`pyproject.toml`、Go、Rust、
+Docker），并标注可能的前端边界。该清单刻意不作任何修改；把结果路径配合
+`arka ci`、`arka review` 或 `arka telemetry-connect` 用于特定服务的工作。

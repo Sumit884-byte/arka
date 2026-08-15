@@ -1,0 +1,14 @@
+---
+title: "Supermemory code RAG"
+description: "Supermemory के साथ retrieval-augmented सलाह के लिए code index करें।"
+icon: "bookmark"
+---
+
+सामान्य memories opt-in और अपरिवर्तित रहती हैं। Retrieval-augmented सलाह के लिए code को स्पष्ट रूप से index करने के लिए, उपयोग करें:
+
+```bash
+arka supermemory remember-code src/arka/router.py
+arka supermemory remember-code src/arka/router.py --chunk-lines 160
+```
+
+Arka file path, language, line ranges, `code` tags, और project trust metadata के साथ bounded chunks store करता है। यह पूरे repository को चुपचाप upload किए बिना targeted retrieval में सुधार करता है। Cloud mode का उपयोग करने से पहले अपनी privacy और API settings की समीक्षा करें; `MEMORY=local` chunks को local रखता है।

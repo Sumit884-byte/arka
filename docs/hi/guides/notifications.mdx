@@ -1,0 +1,18 @@
+---
+title: "Developer-tool notifications"
+description: "जब developer tools finish या fail हों तो notify हों।"
+icon: "bell"
+---
+
+Arka आपको developer tools finish या fail होने पर notify कर सकता है:
+
+```bash
+arka ci
+arka review --staged
+arka route audit
+arka security
+```
+
+Notifications CI, reviews, route audits, security scans और skill
+scaffolding को cover करती हैं। ये best-effort हैं और command exit codes नहीं बदलती। इन्हें
+`ARKA_NOTIFICATIONS=0` के साथ disable करें।

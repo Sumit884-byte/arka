@@ -1,0 +1,138 @@
+---
+title: "Meme templates"
+description: "Local Pillow composition के साथ reusable meme layouts — कोई AI tokens आवश्यक नहीं।"
+icon: "image"
+---
+
+Common meme formats को Pillow के साथ locally compose करें। Templates **आपकी अपनी
+images** या **text-only panels** (wrapped labels के साथ solid backgrounds) के साथ काम करते हैं। Output
+default रूप से `~/Pictures/arka-generated/` में जाता है (`IMAGE_OUTPUT_DIR` के साथ override करें)।
+
+## Templates
+
+| Template | CLI subcommand | विवरण |
+| -------- | -------------- | ----------- |
+| Comparison | `comparison` | Titles के साथ side-by-side panels |
+| Drake | `drake` | Reject (top) vs accept (bottom) |
+| Caption | `caption` | Classic top/bottom text meme |
+| Expanding brain | `expanding-brain` | चार escalating panels |
+| Two button | `two-button` | दो red buttons के साथ dilemma |
+| Vibe coding preset | `vibe-coding` | Built-in architecture comparison |
+
+## Stock photos (real images)
+
+Default रूप से, जब आप `--left` / `--right` / `--image` paths pass नहीं करते हैं,
+तो meme panels **relevant stock photos** (Unsplash, Pexels, Pixabay, Openverse, web) fetch करने का प्रयास करते हैं। Labels photo के ऊपर overlaid होते हैं। यदि lookup विफल होता है, तो Arka
+text-only panels पर fallback करता है।
+
+```bash
+# Automatically stock photos का उपयोग करता है (आपके पास UNSPLASH_ACCESS_KEY या openverse/web है)
+arka meme vibe-coding
+
+# Force text-only panels (पिछला behavior)
+arka meme vibe-coding --no-stock-images
+
+# Comparison panels के लिए custom stock search queries
+arka meme comparison \
+  --left-title "MONOLITH" --right-title "MICROSERVICES" \
+  --left-label "One deploy\nOne repo" \
+  --right-label "Many services\nMany repos" \
+  --left-query "legacy server room" \
+  --right-query "cloud architecture diagram office"
+```
+
+Stock lookup को globally disable करने के लिए `.env` में `MEME_USE_STOCK_PHOTOS=0` set करें।
+
+## Visual styles
+
+Meme और video generation `arka/media/media_styles.py` में style presets share करते हैं।
+
+```bash
+# Meme styles list करें
+arka meme styles
+
+# Stock photos के साथ Neon vibe-coding meme
+arka meme vibe-coding --style neon
+
+# NL
+arka make a retro drake meme reject "skip tests" accept "write tests"
+
+# Video styles list करें
+arka compose_video styles
+
+# Cinematic explainer video
+arka compose_video compose --topic "quantum computing" --llm --style cinematic
+
+# AI video (Veo / Pollinations)
+arka ai_video "drone over mountains" --style cinematic -d 6
+```
+
+| Meme styles | Video styles |
+|-------------|--------------|
+| classic, dark, neon, retro, corporate, comic, cinematic, minimal, vaporwave, newspaper | documentary, cinematic, tech, minimal, neon, retro, news, social, corporate, nature |
+
+Defaults: `MEME_STYLE=classic`, `VIDEO_STYLE=documentary`।
+
+## उदाहरण
+
+Text-only comparison (कोई image assets आवश्यक नहीं):
+
+```bash
+arka meme comparison \
+  --left-title "VIBE CODING" --right-title "SOFTWARE ENGINEERING" \
+  --left-label "Ship fast\nSkip tests" \
+  --right-label "Design first\nTests & review" \
+  --output ~/Pictures/arka-generated/vibe-vs-engineering.png
+```
+
+Vibe-coding vs software-engineering meme के लिए built-in preset:
+
+```bash
+arka meme vibe-coding
+```
+
+Drake hotline bling layout:
+
+```bash
+arka meme drake \
+  --reject "Deploy on Friday" \
+  --accept "Merge with tests green"
+```
+
+मौजूदा image पर Caption meme:
+
+```bash
+arka meme caption \
+  --image photo.jpg \
+  --top "WHEN THE BUILD PASSES" \
+  --bottom "ON THE FIRST TRY"
+```
+
+Expanding brain (चार `--label` flags):
+
+```bash
+arka meme expanding-brain \
+  --label "console.log()" \
+  --label "debugger" \
+  --label "unit tests" \
+  --label "distributed tracing"
+```
+
+Two-button choice:
+
+```bash
+arka meme two-button \
+  --dilemma "Production is on fire" \
+  --left "Rollback" --right "Hotfix in prod" \
+  --highlight left
+```
+
+## Natural language
+
+**make a drake meme**, **comparison meme**, **expanding brain meme**,
+और **vibe coding vs software engineering meme** जैसे phrases automatically `arka meme …` पर route होते हैं।
+
+## संबंधित
+
+Side-by-side layouts जिनके लिए हमेशा image files आवश्यक हैं, उनके लिए देखें
+[Symbolic image composition](/guides/symbolic-images)।

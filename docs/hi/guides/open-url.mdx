@@ -1,0 +1,60 @@
+---
+title: "Browser में URL खोलें"
+description: "Terminal से अपने default browser में websites खोलें — YouTube, GitHub, Google, और पूर्ण URLs।"
+keywords: ["open", "browser", "url", "website"]
+icon: "arrow-up-right-from-square"
+---
+
+Terminal छोड़े बिना अपने default system browser में sites खोलें।
+
+## Quick start
+
+```bash
+arka open youtube
+arka open github.com
+arka open https://news.ycombinator.com
+arka browse google
+open google in browser
+```
+
+## Site aliases
+
+सामान्य नाम स्वचालित रूप से URLs पर map होते हैं:
+
+| Name | खोलता है |
+| --- | --- |
+| `youtube` | https://youtube.com |
+| `google` | https://google.com |
+| `github` | https://github.com |
+| `reddit` | https://reddit.com |
+| `wikipedia` | https://wikipedia.org |
+| `hackernews` / `hn` | https://news.ycombinator.com |
+
+पूर्ण `https://` URLs और `domain.tld` patterns जैसे हैं वैसे काम करते हैं।
+
+Arka आपके द्वारा दिए गए path और query को रखता है। तो `open https://example.com/docs?a=1`
+नया आविष्कार करने के बजाय ठीक उसी URL को खोलता है।
+
+Natural language उदाहरण:
+
+```bash
+arka open this exact url https://example.com/docs?a=1
+arka repair broken links in this file
+```
+
+## बनाम play_youtube
+
+| Phrase | Skill |
+| --- | --- |
+| `arka open youtube` | Browser में youtube.com खोलता है |
+| `arka play lofi on youtube` | YouTube playback skill |
+
+Arka **open** (browser) को **play** / **watch** (media) से अलग करता है।
+
+## Commands
+
+| Command | विवरण |
+| --- | --- |
+| `arka open <site-or-url>` | Default browser में खोलें |
+| `arka browse <site-or-url>` | Alias |
+| `open_url <target>` | Direct skill (fish) |

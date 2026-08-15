@@ -1,0 +1,35 @@
+---
+title: "Responsive website screenshots"
+description: "Desktop, tablet, और mobile sizes पर एक website capture करें।"
+icon: "desktop"
+---
+
+Desktop, tablet, और mobile sizes पर एक website capture करें:
+
+```bash
+arka web-screenshot https://example.com
+arka web-screenshot https://example.com --viewport pc
+arka web-screenshot https://example.com --viewport tablet
+arka web-screenshot https://example.com --viewport mobile --output qa-shots
+```
+
+Default `all` mode `website-pc.png`, `website-tablet.png`, और
+`website-mobile.png` बनाता है। Screenshots Playwright Chromium का उपयोग करते हैं और default रूप से पूरा
+page capture करते हैं; केवल visible viewport के लिए `--viewport-only` जोड़ें। एक बार browser runtime install करें
+`pip install playwright && playwright install chromium` के साथ।
+WebGL और Canvas apps `networkidle` के बजाय page load plus एक settle delay का उपयोग करते हैं,
+जो render loop active रहते हुए कभी settle नहीं हो सकता। इसे
+`--settle 4` या `ARKA_BROWSER_SETTLE_SECONDS=4` के साथ configure करें।
+
+मौजूदा capture set से design-change prompts generate करें:
+
+```bash
+arka web-screenshot --review --output screenshots
+```
+
+Advisory review responsive layout, hierarchy, spacing, typography,
+accessibility, duplicate labels, overflow, और visual polish को cover करती है। Changes केवल suggested prompts की review के बाद apply करें। Review viewport-scoped है: यदि
+tablet गलत दिखता है लेकिन PC और mobile अच्छे दिखते हैं, तो केवल tablet layout बदलें।
+किसी mode को जो पहले से अच्छा काम कर रहा है, उसे एक अलग mode को ठीक करने के लिए न बदलें।
+Design suggestions केवल layout हैं: मौजूदा button order और
+interaction order को exactly संरक्षित रखें।

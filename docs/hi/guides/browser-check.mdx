@@ -1,0 +1,59 @@
+---
+title: "Browser validation"
+description: "एक bounded Playwright smoke check के साथ rendered web changes का inspect करें।"
+icon: "globe"
+---
+
+```bash
+arka browser_check http://127.0.0.1:3000 --json
+arka "check the frontend in a browser"
+```
+
+Arka page को `wait_until="load"` के साथ headlessly load करता है, फिर एक
+configurable settle delay के लिए wait करता है (WebGL/Canvas apps के लिए
+सुरक्षित), एक full-page screenshot capture करता है, page errors record करता है,
+और HTTP status और title report करता है। Optional browser runtime install करें:
+
+```bash
+pip install playwright
+arka "playwright install chromium"
+```
+
+एक Vite/WebGL app के लिए, जब आवश्यक हो एक लंबा settle delay उपयोग करें:
+
+```bash
+arka browser_check http://localhost:5174 --settle 4 --json
+# या: ARKA_BROWSER_SETTLE_SECONDS=4 arka browser_check http://localhost:5174 --json
+```
+
+यदि Playwright missing है, Arka ऊपर के सटीक install commands print करता है।
+Browser check read-only है; console/WebGL errors report किए जाते हैं ताकि उन्हें
+app में fix किया जा सके।
+
+## Declarative cross-platform app tests
+
+Arka macOS, Linux, और Windows पर एक ही browser workflow चला सकता है:
+
+```bash
+arka automate http://localhost:3000 --steps '[{"action":"click","selector":"button"},{"action":"assert_text","selector":"body","text":"Done"}]' --json
+```
+
+Supported actions `goto`, `click`, `fill`, `press`, `wait`, `assert_text`, और
+`screenshot` हैं। Screenshots temporary होते हैं जब तक `--output` supplied न
+हो। एक workflow develop करते समय `--headed` का उपयोग करें; production
+applications के विरुद्ध चलाने से पहले generated steps की समीक्षा करें।
+
+Native desktop apps के लिए, optional PyAutoGUI backend का उपयोग करें:
+
+```bash
+arka automate unused --backend desktop --steps '[{"action":"click","x":400,"y":300},{"action":"type","text":"hello"},{"action":"screenshot"}]'
+```
+
+Desktop steps `click`, `type`, `hotkey`, `press`, `wait`, और `screenshot` का
+समर्थन करते हैं। वे कभी भी implicitly किसी app को launch नहीं करते या shell
+commands perform नहीं करते; target app को अलग से launch करें और coordinates को
+test environment के लिए specific रखें।
+```
+
+यह केवल validation है; यह कोड edit नहीं करता या स्वचालित रूप से builds retry
+नहीं करता।

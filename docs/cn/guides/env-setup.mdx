@@ -1,0 +1,15 @@
+---
+title: ".env 设置"
+description: "使用 Arka 生成安全的项目环境模板。"
+icon: "screwdriver-wrench"
+---
+
+```bash
+arka env_setup
+arka "create a .env for this project"
+```
+
+Arka 会扫描本地源码文件中引用的环境变量名称，并将缺失的条目
+以空值或 `your-secret-here` 占位符的方式创建。它绝不会捏造、
+拉取或覆盖凭证值。已有的 `.env` 值会被保留；仅当替换空文件时
+才使用 `--force`。

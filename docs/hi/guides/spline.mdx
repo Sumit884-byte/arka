@@ -1,0 +1,46 @@
+---
+title: "Spline 3D guidance"
+description: "Web और React projects के लिए Spline integration help प्राप्त करें।"
+icon: "shapes"
+---
+
+Spline integration help के लिए Arka से पूछें:
+
+```bash
+arka mcp preset spline --apply
+arka spline web
+arka spline react
+arka spline responsive
+arka spline performance
+arka spline accessibility
+```
+
+"how do I embed a Spline 3D model in React?" जैसे natural-language requests
+automatically route होते हैं। Guidance public scene embeds, React/Next.js,
+responsive viewports, performance budgets, और accessible HTML fallbacks को cover करती है। Important text और controls को canvas के बाहर रखें ताकि जब WebGL अनुपलब्ध हो तब भी experience usable रहे।
+
+## MCP default
+
+Spline MCP Spline-specific work के लिए Arka का preferred provider है। जब एक
+`spline` MCP server configured हो, तो `arka spline ...` पहले उस server से पूछता है और
+फिर local fallback guidance शामिल करता है। यदि server missing या unhealthy है, तो
+Arka useful रहता है और Spline API behavior invent करने के बजाय setup command print करता है।
+
+```bash
+arka mcp preset spline
+arka mcp preset spline --apply
+arka mcp tools spline
+```
+
+Preset एक local `spline-mcp` executable का उपयोग करता है यदि यह `PATH` पर है और उन values के
+set होने पर MCP environment के माध्यम से `SPLINE_API_KEY` / `SPLINE_WORKSPACE_ID` pass करता है।
+
+यदि `arka mcp tools spline` `MCP stdio process exited (1)` report करता है, तो
+underlying command सीधे चलाएं:
+
+```bash
+$(python -c 'import sys; from pathlib import Path; print(Path(sys.executable).with_name("spline-mcp"))') --help
+```
+
+यदि यह `ModuleNotFoundError: spline_mcp` print करता है, तो Spline MCP
+package को उसी virtual environment के अंदर reinstall करें जो Arka चलाता है।

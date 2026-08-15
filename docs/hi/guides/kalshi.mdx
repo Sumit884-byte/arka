@@ -1,0 +1,65 @@
+---
+title: "Kalshi prediction markets"
+description: "Kalshi prediction market odds fetch करें, open markets search करें, और terminal से trending contracts देखें — public data के लिए API key की आवश्यकता नहीं।"
+keywords: ["kalshi", "prediction markets", "odds", "finance"]
+icon: "coins"
+---
+
+Arka में read-only Kalshi prediction market data के लिए एक **kalshi** skill शामिल है: open markets search करें, एक ticker का निरीक्षण करें, 24h volume से trending contracts देखें, और exchange status जाँचें।
+
+कोई trading नहीं — केवल quotes और discovery।
+
+## Quick examples
+
+```bash
+arka kalshi search bitcoin
+arka kalshi market KXBTC-25JUL-T100K
+arka kalshi trending
+arka kalshi status
+```
+
+प्राकृतिक भाषा भी काम करती है:
+
+```bash
+arka "kalshi predictions on bitcoin"
+arka "what are kalshi odds for inflation"
+arka "kalshi trending"
+```
+
+## Commands
+
+| Command | विवरण |
+| --- | --- |
+| `arka kalshi search <keywords>` | title/ticker keyword से open markets search करें |
+| `arka kalshi market <TICKER>` | एक market के लिए पूर्ण quote (YES/NO, volume, close time) |
+| `arka kalshi trending` | 24h volume से top open markets |
+| `arka kalshi status` | Kalshi exchange/trading status |
+
+## API approach
+
+Skill Kalshi के public **Trade API v2** का उपयोग करता है (read-only market data के लिए API key की आवश्यकता नहीं):
+
+- Base URL: `https://external-api.kalshi.com/trade-api/v2`
+- Endpoints: `GET /markets`, `GET /markets/{ticker}`, `GET /exchange/status`
+
+Kalshi के पास dedicated keyword search endpoint नहीं है, इसलिए `kalshi search` open markets fetch करता है और client-side पर keyword से filter करता है।
+
+## वैकल्पिक configuration
+
+`~/.config/arka/.env` में केवल तभी जोड़ें जब आपको custom base URL या future authenticated endpoints चाहिए:
+
+```bash
+# Optional — public read endpoints work without a key
+KALSHI_API_KEY=
+KALSHI_API_BASE=https://external-api.kalshi.com/trade-api/v2
+```
+
+## संबंधित skills
+
+| Skill | उदाहरण |
+| --- | --- |
+| `stock` | `arka stock news` |
+| `currency_convert` | `arka convert 100 USD to INR` |
+| `arka predictions` | `predictions --domain stocks --deep "banking sector"` |
+
+यह भी देखें: [Stock intelligence](/hi/guides/stocks)

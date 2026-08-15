@@ -1,0 +1,60 @@
+---
+title: "GitHub 数据集仓库"
+description: "从公开的 GitHub 仓库导入常见的 CSV、JSON、JSONL、TSV、YAML、XML 和 Parquet 文件。"
+keywords: ["github dataset", "data import", "csv", "json", "open data"]
+icon: "database"
+---
+
+Arka 可以从公开的 GitHub 仓库导入数据文件，无需为每个仓库单独编写
+技能。它会下载仓库归档、提取常见的数据格式、在本地缓存，并写入
+一份带有文件预览的清单（manifest）。
+
+```bash
+arka github-dataset import hasaneyldrm/exercises-dataset --timeout 600
+arka github-dataset status hasaneyldrm/exercises-dataset
+arka github-dataset search hasaneyldrm/exercises-dataset chest
+```
+
+自然语言也会路由到同一个导入器：
+
+```bash
+arka quickly add data from this repo https://github.com/owner/dataset-repo
+arka import csv files from github.com/owner/data-repo
+arka search github dataset owner/repo for ratings
+```
+
+## Arka 提取的内容
+
+通用导入器会在仓库归档中扫描：
+
+- `.csv`
+- `.json`
+- `.jsonl` / `.ndjson`
+- `.tsv`
+- `.yaml` / `.yml`
+- `.xml`
+- `.parquet`
+
+它会跳过明显的构建与依赖目录，例如 `node_modules`、`.git`、
+`venv`、`dist` 和 `build`。
+
+## 缓存位置
+
+导入的文件保存在：
+
+```text
+~/.cache/fish-agent/datasets/github/<owner>__<repo>/files/
+~/.cache/fish-agent/datasets/github/<owner>__<repo>/manifest.json
+```
+
+清单中包含源 URL、分支、缓存文件路径、文件大小，以及尽力生成的
+预览信息，例如 CSV 列名或 JSON 键。
+
+## 许可
+
+Arka 不会推断仓库的许可证或再分发权限。在把导入的数据用于产品、
+数据集、演示或公开导出之前，请检查上游仓库的许可证与 README。
+
+对于经过深度整理的来源，Arka 还可能提供带命名的预设，例如
+`arka exercises`；这些预设可以在通用 GitHub 数据集导入器之上
+增加领域特定的归一化处理。

@@ -1,0 +1,87 @@
+---
+title: "Data Q&A"
+description: "CSV, JSON, TSV, YAML, XML, Parquet, Excel और SQL dump files के बारे में natural-language प्रश्न पूछें — एकल फ़ाइल या पूरे फ़ोल्डर।"
+keywords: ["data", "csv", "json", "analyze", "query", "ask", "tsv", "folder"]
+icon: "table"
+---
+
+Local data files के बारे में प्रश्न पूछें — row counts, totals, top values, summaries, और अधिक। एक फ़ाइल, पूरे फ़ोल्डर, या केवल विशिष्ट formats को query करें।
+
+## Natural language
+
+```bash
+arka ask data users.csv "how many rows?"
+arka ask data ./data/ "what is total revenue?"
+arka data_ask reports/ "summarize all files"
+arka data_ask folder ./exports --question "how many records total?"
+arka analyze csv files in data/ "top 10 products"
+arka query_data sales.json "what is total revenue by category?"
+```
+
+## CLI commands
+
+| Command | विवरण |
+| --- | --- |
+| `arka data_ask users.csv "how many rows?"` | किसी फ़ाइल के बारे में प्रश्न पूछें |
+| `arka data_ask ./data/ --format csv "average salary?"` | फ़ोल्डर में केवल CSV files query करें |
+| `arka data_ask ./reports/ --formats csv,json "list all columns"` | कई formats द्वारा filter करें |
+| `arka data_ask folder ./exports --question "how many records total?"` | स्पष्ट folder mode |
+| `ask_data sales.json "total by category"` | `data_ask` का alias |
+| `arka query_data report.tsv` | जब कोई प्रश्न नहीं दिया गया हो तो summarize करें |
+| `arka analyze_data data.jsonl "top 5 products"` | `data_ask` का alias |
+
+## CSV को एक colored table के रूप में देखें
+
+**Display** के लिए (Q&A नहीं), `view_data` का उपयोग करें — `csvlook` / pretty printers जैसे tools से प्रेरित:
+
+```bash
+arka view_data papers.csv
+arka view_csv papers.csv --plain
+arka show csv papers.csv as json
+cat data.tsv | view_data --formats csv,yaml
+```
+
+Colored columns terminal में print होते हैं; optional `--formats` `~/arka-generated/` के तहत exports लिखता है (`DATA_OUTPUT_DIR` से override करें)। Analytic प्रश्न अभी भी `data_ask` पर route होते हैं।
+
+## समर्थित formats
+
+`csv`, `json`, `jsonl`, `tsv`, `yaml`, `yml`, `xml`, `parquet`, `xlsx`, `xls`, `sql`
+
+समृद्ध parsing के लिए optional dependencies:
+
+| Format | Package |
+| --- | --- |
+| Parquet | `pyarrow` या `pandas` |
+| Excel (xlsx) | `openpyxl` या `pandas` |
+| YAML | `pyyaml` |
+
+Pandas के बिना, tabular files फिर भी Python standard library (`csv`, `json`) के माध्यम से load होती हैं।
+
+## Folders और format filters
+
+जब path एक directory होती है, Arka data files को extension द्वारा खोजता है (non-recursive, केवल top level)। किन types को load करना है, यह सीमित करने के लिए `--format` या `--formats` का उपयोग करें।
+
+बड़े folders को context size के लिए capped किया जाता है:
+
+- प्रति query **5 files** तक
+- Loaded files में कुल **500 rows** तक
+- जब files बड़ी हों तो per-file samples और column statistics
+
+## यह कैसे काम करता है
+
+1. Extension(s) से file format(s) का पता लगाता है, वैकल्पिक रूप से `--format` द्वारा filtered
+2. एक या अधिक files से rows load करता है (truncated होने पर sample \+ stats)
+3. आपके प्रश्न के साथ LLM को structured context भेजता है
+4. Terminal में उत्तर print करता है
+
+यह skill **मौजूदा files को query करने** के लिए है। नकली sample datasets बनाने के लिए, [Generate data](/hi/guides/generate-data) का उपयोग करें।
+
+## उदाहरण
+
+```bash
+arka data_ask ~/Downloads/orders.csv "what are the top 3 products by quantity?"
+arka data_ask ./data/ --format csv "average salary?"
+arka query_data metrics.jsonl "average latency by region"
+arka analyze_data inventory.parquet
+arka data_ask reports/ "summarize all files"
+```

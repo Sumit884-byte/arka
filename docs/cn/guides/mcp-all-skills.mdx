@@ -1,0 +1,73 @@
+---
+title: "通过 MCP 使用每一项 Arka 技能"
+description: "从 MCP 客户端发现并调用由 dispatch 支持的 Arka 能力。"
+icon: "table-cells"
+---
+
+<Note>
+  **AI 智能体：** 请先阅读专用的 [AI 智能体指南](/cn/guides/ai-agents) — 路由表、执行规则与会话流程。本页涵盖 dispatch 支持的技能以及可选启用的个人工具。
+</Note>
+
+Arka 暴露三个通用 MCP 入口：
+
+- `arka_capabilities` 列出当前的 MCP 工具及 dispatch 支持的技能。
+- `arka_skill` 用技能名与参数调用任意 dispatch 命令。
+- `arka_route` 接受自然语言，并通过 Arka 完整的符号/回退路由器进行路由。
+
+当客户端不确定应使用哪个具体 Arka 工具时，`arka_route` 是**统一入口**。请将完整的用户请求作为 `prompt` 发送；不要把它折叠成猜测的技能名，例如 `design_from_screenshot` 或 `web_answer`。
+
+这意味着新增技能 — 包括数据采集、媒体变换、智能体竞赛、可复用模块、极速开发、OCR、RAG 以及未来技能 — 无需单独的 MCP 封装。执行仍然通过 Arka 的常规模式、安全性和写操作网关。
+
+## 本地文件 MCP 工具
+
+`arka_ocr` 与 `arka_rag` 是用于 OCR 和文档 RAG 的专用 MCP 工具。它们只在智能体能读取本机路径时（例如 Cursor 工作区文件）有效。没有挂载文件的云端智能体无法使用。
+
+调用 `arka_capabilities` 查看 `local_file_tools` 部分，其中列出这些工具以及智能体应遵循的共享提示。
+
+### 渐进式验证（所有智能体）
+
+**不要**等到整个长日志或批处理作业结束后才检查结果。
+
+1. 先运行最小可用示例（一个文件、一页或一个样本）。
+2. 检查结果 — 足以确认成功或失败。
+3. 若首个示例成功，再运行第二个增量。
+4. 只有这时才将工作流报告为**已验证**。
+
+`arka_capabilities` 在 `agent_execution_rules.incremental_verify` 中暴露此规则。
+
+| 工具 | 是否需要本地路径 | 典型用途 |
+|------|---------------------|-------------|
+| `arka_ocr` | 始终需要（`path`） | 从图像提取文本；OCR 扫描 PDF |
+| `arka_rag` | 用于 `ingest`、`codebase_ingest`、`batch_ingest` | 摄入 PDF/文档并在其上提问 |
+
+MCP 调用示例：
+
+```json
+{ "path": "/Users/me/workspace/scan.png", "action": "extract" }
+```
+
+```json
+{ "action": "ingest", "path": "/Users/me/Documents/report.pdf" }
+```
+
+```json
+{ "action": "ask", "document": "report.pdf", "question": "Summarize key findings" }
+```
+
+**默认设置（2026）：** `PDF_RAG_PGPT=auto` 在 TurboQuant 已索引文件时跳过 PrivateGPT 自动启动。扫描 PDF 在索引前会本地 OCR。RAG `ask` 在云端 LLM 路由失败时会回退到 Ollama，然后回退到抽取式上下文。
+
+MCP 也对个人桌面/设备技能应用安全的默认过滤。除非以 `ARKA_MCP_ENABLE_PERSONAL_SKILLS=1` 或范围较小的 `ARKA_MCP_ENABLED_TOOLS` / `ARKA_MCP_ENABLED_SKILLS` 覆盖启动 MCP 服务器，否则 Spotify 播放/搜索、Brave/浏览器打开辅助、媒体播放以及 `daily_brief` 会被隐藏或阻止。
+
+## 路由速查表
+
+| 情境 | 工具 |
+| --- | --- |
+| 不确定哪个 Arka 工具合适 | 用完整用户 `prompt` 调用 `arka_route` |
+| 已知技能名 | `arka_skill`，传入 `skill` + 可选 `args` |
+| 需要实时工具列表 + 规则 | `arka_capabilities` |
+| 仓库布局 / 符号 | `arka_repo_map` |
+| 模糊查找项目文件夹 | `arka_tech_stack`（`action: search`） |
+| OCR 或文档 RAG | `arka_ocr`、`arka_rag`（本地路径） |
+| 打补丁 | `arka_edit_guard` → `arka_apply_patch` |
+
+完整决策表及示例：[AI 智能体指南](/cn/guides/ai-agents#routing-decision-table)。

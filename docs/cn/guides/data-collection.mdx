@@ -1,0 +1,37 @@
+---
+title: "有界数据采集"
+description: "在时间限制内采集、清洗、去重并导出网络研究数据。"
+icon: "file-import"
+---
+
+Arka 可以就某个主题采集网络数据、清洗文本、去除重复的 URL，并
+写出一份机器可读的数据集。采集过程同时受时间与记录数的约束，
+以确保可预测地完成。
+
+```bash
+arka data collect "renewable energy incentives" --for 5m --limit 50 --output data.jsonl
+arka data collect "AI infrastructure" --for 30s --format csv --output data.csv --json
+```
+
+每条记录包含主题、标题、来源 URL、清洗后的文本以及来源类型。
+最终报告包含行数、耗时、输出路径以及是否达到时间或记录上限。
+通过 `arka integration setup` 配置 Serper、Tavily 或 Brave 可获得
+更强的搜索覆盖；采集器仍保留 DuckDuckGo 作为兜底。
+
+自然语言同样可用："auto collect data about battery recycling for
+10 minutes."
+
+## 类目目录
+
+对于诸如 "collect all Indian aeroplanes" 这类请求，请使用目录模式：
+
+```bash
+arka data catalog "Indian aeroplanes" --for 10m --limit 500 --format json --output aircraft.json
+```
+
+Arka 会先发起有界的目录/计数搜索，然后翻页直到达到时间或行数上限，
+并按来源 URL 去重。JSON 报告包含 `pages`、`rows`、`truncated` 与
+`reported_total`。除非有权威来源明确给出总数，否则 `reported_total`
+保持为 `null`；Arka 绝不会猜测已经采集了所有条目。请把
+`coverage: partial` 视为需要延长 `--for` 时间窗或改用更权威来源的
+提示。

@@ -1,0 +1,86 @@
+---
+title: "Data generate करें"
+description: "fake या sample datasets बनाएँ, या World Bank, PubMed, URLs, और web search से rows fetch करें।"
+keywords: ["generate", "data", "csv", "json", "fake", "sample", "mock", "world bank", "pubmed", "real"]
+icon: "database"
+---
+
+Terminal से sample datasets जनरेट करें — या APIs और public sources से **real-world** rows fetch करें। Tests, demos, prototypes, और त्वरित data pulls के लिए उपयोगी।
+
+## प्राकृतिक भाषा
+
+### Synthetic (डिफ़ॉल्ट)
+
+```bash
+arka generate 100 users as csv
+arka generate sample sales data json --rows 50
+arka generate fake emails tsv
+arka create sample json data
+arka data_gen --schema "name,email,age" --format json --count 20
+```
+
+### Real-world sources
+
+```bash
+arka generate real world bank gdp india 2010-2024 as csv
+arka generate 20 pubmed papers on "mRNA vaccines" as csv
+arka generate data from https://pokeapi.co/api/v2/pokemon?limit=10 as jsonl
+```
+
+**real**, **actual**, **live**, **world bank**, **pubmed papers**, या **URL** के साथ phrases real fetchers पर route होते हैं। **Fake** / **sample** / **mock** synthetic generation रखते हैं।
+
+## CLI commands
+
+| Command | विवरण |
+| --- | --- |
+| `generate_data users --count 100 --format csv` | User records preset (synthetic) |
+| `generate_data --source worldbank --indicator gdp --country IN -f json` | India के लिए World Bank GDP |
+| `generate_data --source pubmed --query "mRNA vaccines" -n 20 -f csv` | PubMed paper metadata |
+| `generate_data --source url --url "https://pokeapi.co/api/v2/pokemon?limit=10" -f jsonl` | URL से JSON या CSV |
+| `generate_data --real --indicator population --country US` | Shorthand: World Bank infer करें |
+| `generate_data --fields "id,name,price,category" -n 20` | Custom synthetic columns |
+
+## Real-world sources
+
+| `--source` | विवरण | प्रमुख flags |
+| --- | --- | --- |
+| `worldbank` | GDP, population, life expectancy, CO₂, unemployment, internet | `--indicator`, `--country`, `--year-from`, `--year-to` |
+| `pubmed` | Biomedical paper metadata (title, journal, year, URL) | `--query`, `--count` |
+| `url` | किसी भी URL से JSON array/object या CSV fetch करें | `--url`, `--count` |
+| `web` | DuckDuckGo search results rows के रूप में | `--query`, `--count` |
+
+Real sources **500 rows** पर cap होते हैं। जब `--source` set होता है, Arka कभी synthetic या LLM data पर fall back नहीं करता — fetch errors स्पष्ट रूप से रिपोर्ट होते हैं।
+
+### World Bank indicators
+
+`gdp`, `gdp_per_capita`, `population`, `life_expectancy`, `co2`, `unemployment`, `internet`
+
+Country codes ISO-3166 alpha-2 का उपयोग करते हैं (जैसे `IN`, `US`)। Natural language country names (India, United States) automatically parse होते हैं।
+
+## समर्थित formats
+
+`csv`, `json`, `jsonl`, `tsv`, `yaml`, `xml`, `sql`, `markdown`, `xlsx`
+
+XLSX output के लिए `openpyxl` चाहिए (`pip install openpyxl`)। रिच fake values के लिए, optional Faker extra install करें:
+
+```bash
+pip install faker
+```
+
+## Presets
+
+Built-in presets automatically columns infer करते हैं (केवल synthetic mode):
+
+| Preset | Columns |
+| --- | --- |
+| `users` | id, name, email, age, phone |
+| `products` | id, name, price, category |
+| `sales` | date, product, quantity, revenue, region |
+| `emails` | email |
+| `customers` | id, name, email, address, phone |
+
+Field names generators (names, emails, phones, addresses, dates, numbers, UUIDs, booleans) से match होते हैं। जब LLM API key configured हो तो complex custom schemas के लिए `--llm` का उपयोग करें।
+
+## Output
+
+डिफ़ॉल्ट रूप से stdout पर print करें, या `-o output.csv` के साथ save करें या पहले argument के रूप में filename pass करें।

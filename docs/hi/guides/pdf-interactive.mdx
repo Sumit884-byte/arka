@@ -1,0 +1,20 @@
+---
+title: "PDF से interactive website"
+description: "एक PDF को browser-based interactive viewer में बदलें।"
+icon: "book-open-reader"
+---
+
+एक PDF को browser-based interactive viewer में बदलें:
+
+```bash
+arka pdf-to-interactive guide.pdf
+arka pdf-to-interactive guide.pdf --output public/guide.html
+arka pdf-to-interactive guide.pdf --output public/experience.html --ultra
+```
+
+Generated page PDF.js का उपयोग करता है और page navigation, zoom controls,
+scrollable rendered pages, और text search को शामिल करता है। "turn
+guide.pdf into an interactive website" जैसी natural language supported है। Viewer PDF.js
+को एक CDN से load करता है और source PDF को filename से reference करता है, इसलिए दोनों files को
+एक ही deployed directory में रखें। `--ultra` animated transitions, theme/share
+controls, और `<model-viewer>` द्वारा powered एक वैकल्पिक 3D model panel (`model.glb`) जोड़ता है।

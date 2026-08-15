@@ -1,0 +1,94 @@
+---
+title: "Arka को Cloud और Web Platforms पर Deploy करें"
+description: "एक step में Arka को single या multiple cloud hosting providers पर deploy करें।"
+icon: "cloud-arrow-up"
+---
+
+## एक Command Multi-Platform Deployment
+
+एक ही command के साथ सभी configured platforms (Cloud VM, Railway, Vercel, Netlify, Render, Cloudflare) पर एक साथ Arka deploy करें:
+
+```bash
+# Option 1: अपने project config से मेल खाते सभी detected platforms पर deploy करें
+arka deploy --all --yes
+
+# Option 2: एक command में specific multiple platforms पर deploy करें
+arka deploy --platforms vercel,railway,cloud --yes
+
+# Option 3: Shell helper script
+./scripts/deploy_multi.sh --all --yes
+```
+
+JSON या human-readable table में multi-platform deployment plans preview करें:
+
+```bash
+arka deploy --all
+arka deploy --platforms vercel,railway,cloud --json
+```
+
+---
+
+## One-Step Cloud Deployment
+
+Arka को किसी भी cloud-hosted machine (Linux VM, VPS, AWS EC2, GCP, DigitalOcean, Docker host) पर deploy करें:
+
+```bash
+# Option 1: single-step cloud deployment script चलाएँ
+./scripts/deploy_cloud.sh
+
+# Option 2: Docker Compose के माध्यम से चलाएँ
+docker compose up -d
+
+# Option 3: Docker one-liner
+docker run -d --name arka -p 8765:8765 -e ARKA_HOSTED_MODE=1 -e REMOTE_TOKEN=your_token arka:latest
+```
+
+या Arka CLI के माध्यम से preview और run करें:
+
+```bash
+arka deploy --platform cloud --yes
+```
+
+---
+
+## Cloud पर Hosted Skill Behavior
+
+जब Arka एक cloud machine पर चलता है (`ARKA_HOSTED_MODE=1` या एक headless Linux/Docker container के अंदर), तो व्यक्तिगत desktop, GUI, और audio skills सुरक्षा और compatibility के लिए स्वचालित रूप से restricted हो जाते हैं।
+
+### Skill Compatibility Matrix
+
+| Skill Category | Cloud पर Status | Examples |
+| --- | --- | --- |
+| **Repo और Code Analysis** | ✅ **Enabled** | `repo_health`, `repo_map`, `repo_graph`, `structure`, `workspace` |
+| **CI/CD और PR Workflows** | ✅ **Enabled** | `ci`, `pr_check`, `github_actions`, `review`, `route_audit` |
+| **Code Editing और Security** | ✅ **Enabled** | `code`, `lint_project`, `security`, `dev_doctor`, `dev_tools` |
+| **MCP Server और REST API** | ✅ **Enabled** | `/v1/health`, `/v1/agent`, MCP tool handlers |
+| **Desktop Applications** | ❌ **Disabled** | `open`, `app_automation`, `desktop_automation` |
+| **Desktop Browser Control** | ❌ **Disabled** | `browser_check`, `agent_browser`, `browse` |
+| **Music और Media Playback** | ❌ **Disabled** | `spotify`, `spotify_control`, `play_youtube`, `stop_music` |
+| **Local Audio और Voice** | ❌ **Disabled** | `voice`, `wake` (local mic/speakers) |
+| **Screen Control** | ❌ **Disabled** | `screen` (desktop screen capture) |
+
+---
+
+## Managed Hosting Providers
+
+एक single platform deployment का preview करें:
+
+```bash
+arka deploy --platform vercel
+arka deploy --platform netlify --json
+arka deploy --platform railway --json
+arka deploy --platform render --json
+```
+
+Platform CLI को authenticate करने के बाद deploy करें:
+
+```bash
+arka deploy --platform vercel --production --yes
+arka deploy --platform netlify --production --yes
+arka deploy --platform railway --production --yes
+arka deploy --platform render --production --yes
+```
+
+Arka `vercel.json`, `netlify.toml`, `railway.toml`, `render.yaml`, `Dockerfile`, `docker-compose.yml`, और `package.json` को detect करके एक sensible platform चुनता है।

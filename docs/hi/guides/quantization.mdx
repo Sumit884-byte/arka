@@ -1,0 +1,14 @@
+---
+title: "Local model quantization"
+description: "एक सुरक्षित preview-first workflow के साथ छोटे GGUF मॉडल बनाएँ।"
+icon: "compress"
+---
+
+```bash
+arka quantize model-f16.gguf --output model-q4.gguf --type Q4_K_M
+arka quantize model-f16.gguf --output model-q4.gguf --type Q4_K_M --run
+```
+
+पहला command `llama-quantize` command को preview करता है। इसे निष्पादित करने के
+लिए `--run` आवश्यक है, और output directory स्वतः बनाई जाती है। Conversions
+चलाने से पहले `llama-quantize` को expose करने वाला llama.cpp build install करें।

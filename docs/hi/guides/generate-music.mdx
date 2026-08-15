@@ -1,0 +1,124 @@
+---
+title: "Music generate करें"
+description: "Pollinations के माध्यम से वैकल्पिक lyrics या instrumental output के साथ AI music बनाएं।"
+keywords: ["music", "song", "audio", "lyrics", "instrumental", "pollinations"]
+icon: "music"
+---
+
+Pollinations **elevenmusic** model का उपयोग करके Arka के माध्यम से locally original music generate करें।
+Output default रूप से `~/Music/arka-generated/` में जाता है (`MUSIC_OUTPUT_DIR` के साथ override करें)।
+
+## Setup
+
+```bash
+# .env
+POLLINATIONS_API_KEY=pk_...
+```
+
+[enter.pollinations.ai](https://enter.pollinations.ai/) पर key प्राप्त करें।
+
+## उदाहरण
+
+arka "Instrumental track:"
+
+```bash
+arka generate music upbeat lo-fi hip hop --instrumental
+arka generate music cinematic orchestral -d 45
+```
+
+Lyrics के साथ:
+
+```bash
+arka generate music indie folk --lyrics "Verse one...
+arka "Chorus line...""
+arka generate music pop ballad --lyrics-file lyrics.txt
+```
+
+arka "केवल Prompt (model style description से vocals जोड़ सकता है):"
+
+```bash
+arka generate music summer dance pop about sunrise
+arka generate_music "jazz piano lounge" -o ~/Music/demo.mp3
+```
+
+## Flags
+
+| Flag | विवरण |
+| ---- | ----------- |
+| `--lyrics "…"` | गाने के लिए Lyrics |
+| `--lyrics-file path` | Lyrics को file से read करें |
+| `--instrumental` | कोई vocals नहीं |
+| `-d / --duration` | Seconds में लंबाई (3–300, default 30) |
+| `-o / --output` | Output `.mp3` path |
+| `-m / --model` | Pollinations model (`elevenmusic` default) |
+
+## Natural language
+
+ये phrases automatically route होते हैं:
+
+```bash
+arka "generate music calm piano instrumental"
+arka "compose a song about coding with lyrics: build, test, ship"
+arka route "create a lo-fi beat"
+```
+
+## Environment
+
+  | arka "Variable" | arka "Default" | arka "Purpose" |
+  | -------- | ------- | ------- |
+  | `POLLINATIONS_API_KEY` | — | arka "Required API key" |
+  | `MUSIC_DURATION` | `30` | arka "Default duration" |
+  | `MUSIC_MODEL` | `elevenmusic` | arka "Pollinations audio model" |
+  | `MUSIC_OUTPUT_DIR` | `~/Music/arka-generated` | arka "Save location" |
+  | `OPEN_MUSIC` | `1` | Generation के बाद file खोलें (disable के लिए `0`) |
+
+## संबंधित
+
+- [MCP integration](/hi/guides/mcp) — Cursor या Claude से `arka_music_generate` call करें
+- [Browser video capture](/hi/guides/video-capture) — walkthrough recordings
+- [Meme templates](/hi/guides/meme-templates) — local image memes
+
+## MCP (Cursor / Claude)
+
+Cursor chat से, agent से `arka_music_generate` call करने के लिए कहें:
+
+```json
+{
+  "action": "generate",
+  "prompt": "upbeat lo-fi hip hop",
+  "instrumental": true,
+  "duration": 30
+}
+```
+
+किसी मौजूदा गाने से शुरू करने के लिए, पहले `arka_fetch_lyrics` के साथ lyrics fetch और translate करें, फिर generate करें:
+
+```json
+{
+  "action": "translate",
+  "artist": "Queen",
+  "title": "Bohemian Rhapsody",
+  "target": "hindi",
+  "generate": true,
+  "style": "hindi pop ballad"
+}
+```
+
+पहले natural language parse करें:
+
+```json
+{ "action": "parse", "text": "create an instrumental cinematic track for 45 seconds" }
+```
+
+Backend setup check करें:
+
+```json
+{ "action": "check" }
+```
+
+Terminal equivalent:
+
+```bash
+arka mcp call arka arka_music_generate --args '{"action":"generate","prompt":"jazz piano","instrumental":true}'
+arka mcp call arka arka_music_generate --args '{"action":"parse","text":"compose a song about summer"}'
+```

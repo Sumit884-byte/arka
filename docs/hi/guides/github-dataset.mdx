@@ -1,0 +1,53 @@
+---
+title: "GitHub dataset repos"
+description: "Public GitHub repositories से सामान्य CSV, JSON, JSONL, TSV, YAML, XML, और Parquet फ़ाइलें import करें।"
+keywords: ["github dataset", "data import", "csv", "json", "open data"]
+icon: "database"
+---
+
+Arka हर repo के लिए एक custom skill की आवश्यकता के बिना public GitHub repositories से data files import कर सकता है। यह repository archive download करता है, सामान्य data formats extract करता है, उन्हें locally cache करता है, और file previews के साथ एक manifest लिखता है।
+
+```bash
+arka github-dataset import hasaneyldrm/exercises-dataset --timeout 600
+arka github-dataset status hasaneyldrm/exercises-dataset
+arka github-dataset search hasaneyldrm/exercises-dataset chest
+```
+
+प्राकृतिक भाषा उसी importer पर route होती है:
+
+```bash
+arka quickly add data from this repo https://github.com/owner/dataset-repo
+arka import csv files from github.com/owner/data-repo
+arka search github dataset owner/repo for ratings
+```
+
+## Arka क्या extract करता है
+
+Generic importer इनके लिए repo archive स्कैन करता है:
+
+- `.csv`
+- `.json`
+- `.jsonl` / `.ndjson`
+- `.tsv`
+- `.yaml` / `.yml`
+- `.xml`
+- `.parquet`
+
+यह `node_modules`, `.git`, `venv`, `dist`, और `build` जैसे स्पष्ट build और dependency folders को skip करता है।
+
+## Cache location
+
+Imported files इनके तहत store होती हैं:
+
+```text
+~/.cache/fish-agent/datasets/github/<owner>__<repo>/files/
+~/.cache/fish-agent/datasets/github/<owner>__<repo>/manifest.json
+```
+
+Manifest में source URL, branch, cached file paths, file sizes, और best-effort previews जैसे CSV columns या JSON keys शामिल हैं।
+
+## Licensing
+
+Arka किसी repository के license या redistribution rights को infer नहीं करता। किसी product, dataset, demo, या public export में imported data का उपयोग करने से पहले, upstream repository के license और README का निरीक्षण करें।
+
+Heavily curated sources के लिए, Arka अभी भी `arka exercises` जैसा नामित preset प्रदान कर सकता है; वे presets generic GitHub dataset importer के ऊपर domain-specific normalization जोड़ सकते हैं।

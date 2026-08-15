@@ -1,0 +1,14 @@
+---
+title: "逆向工程仓库"
+description: "将本地 Git 历史与仓库结构转化为可直接用于构建的 prompt。"
+icon: "code-branch"
+---
+
+```bash
+arka repo_reverse
+arka repo_reverse ./project --commits 50 --output rebuild-prompt.md
+arka "reverse engineer this repository"
+```
+
+Arka 会把已跟踪文件与近期 Git 演进整合成一份可审阅的 prompt，
+用于重建或熟悉一个代码库。它完全在本地运行，不会上传仓库。

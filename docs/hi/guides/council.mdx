@@ -1,0 +1,67 @@
+---
+title: "Arka Council"
+description: "Multi-persona deliberation — तीन simulated experts एक ही सवाल का उत्तर देते हैं, फिर Arka consensus, tension, और verdict synthesize करता है।"
+keywords: ["council", "deliberation", "personas", "synthesis"]
+icon: "users"
+---
+
+**Arka Council** एक सवाल को स्वतंत्र रूप से एकाधिक simulated personas के पास चलाता है, फिर एक structured synthesis तैयार करता है — agreement, disagreement, और एक स्पष्ट verdict।
+
+<Warning>
+  Council members brainstorming के लिए **simulated** personas हैं, वास्तविक लोग या authoritative सलाह नहीं।
+</Warning>
+
+## त्वरित शुरुआत
+
+```bash
+arka council "should I learn Rust?"
+arka council should I quit my job to start a startup
+arka deliberate with arka on whether remote work is better
+arka ask the council about switching careers
+```
+
+## Output format
+
+```
+━━━ Arka Council ━━━
+Question: Should I learn Rust?
+
+── Socrates (simulated) ──
+  ...
+
+── Elon (simulated) ──
+  ...
+
+── Feynman (simulated) ──
+  ...
+
+── Synthesis ──
+  Consensus: ...
+  Tension: ...
+  Verdict: ...
+```
+
+Default council members: **Socrates**, **Elon**, **Feynman**। प्रत्येक synthesis से पहले 2–3 sentences में उत्तर देते हैं।
+
+## History
+
+पिछले सवाल store होते हैं ताकि repeats से बचा जा सके:
+
+```bash
+arka council list
+```
+
+Memory file: `~/.config/arka/council-memory.json`
+
+## Routing
+
+प्राकृतिक-भाषा triggers में `council`, `deliberate with arka`, और `ask the council` शामिल हैं। Routing preview करें:
+
+```bash
+arka route "council should I learn Rust"
+```
+
+## संबंधित
+
+- [Persona chat](/guides/personas) — single-character chat
+- [Routing कैसे काम करता है](/concepts/routing) — LLM से पहले offline rules

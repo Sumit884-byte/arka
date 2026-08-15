@@ -1,0 +1,49 @@
+---
+title: "健身动作数据集"
+description: "从 hasaneyldrm/exercises-dataset 导入并查询健身动作元数据，不打包第三方媒体资源。"
+keywords: ["exercise dataset", "fitness", "workout", "data import"]
+icon: "dumbbell"
+---
+
+Arka 可以从
+[hasaneyldrm/exercises-dataset](https://github.com/hasaneyldrm/exercises-dataset)
+快速缓存健身动作元数据，用于健身演示、训练计划、本地搜索以及原型数据流。
+
+```bash
+arka exercises import
+arka exercises import --timeout 120
+arka exercises status
+arka exercises search "barbell chest"
+arka exercises export --format csv --output exercises.csv
+```
+
+自然语言也会路由到同一个导入器：
+
+```bash
+arka quickly add exercise data from hasaneyldrm/exercises-dataset
+arka search exercise dataset for body weight abs
+```
+
+## 缓存了哪些内容
+
+默认导入只下载 `data/exercises.json`，并将归一化后的元数据存放在
+Arka 缓存目录下：
+
+```text
+~/.cache/fish-agent/datasets/exercises-dataset/exercises.json
+~/.cache/fish-agent/datasets/exercises-dataset/metadata.json
+```
+
+记录包含动作名称、部位/分类、器械、目标肌群、次要肌群、
+双语说明、缩略图路径以及 GIF 路径。
+
+上游 JSON 目前超过 10 MB。如果网络较慢，请使用 `--timeout`
+延长导入超时，而不是通过聊天反复重试。
+
+## 许可与媒体说明
+
+上游 README 将该数据集描述为仅限教育/非商业用途。图片与 GIF
+动画归各自版权方所有。因此 Arka 默认只缓存元数据，不会在 Arka
+包内打包该数据集或媒体文件。
+
+在将数据或媒体用于商业产品前，请核对上游条款。

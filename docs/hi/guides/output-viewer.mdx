@@ -1,0 +1,118 @@
+---
+title: "Output viewer"
+description: "JSON, CSV, markdown, और plain text को browser में सुंदर तरीके से render करें।"
+keywords: ["output", "viewer", "json", "csv", "markdown", "ui"]
+icon: "table"
+---
+
+**Arka Output Viewer** एक हल्का लोकल वेब UI है जो आपके data format को स्वतः पहचानता
+है और सर्वोत्तम प्रतिनिधित्व render करता है — CSV/JSON arrays के लिए tables,
+फ़ॉर्मैटेड JSON, rendered markdown, objects के लिए key-value layouts, और paths
+मौजूद होने पर media cards।
+
+कोई React build step नहीं। एक HTML shell और मुख्य पैकेज से एक छोटा Python सर्वर।
+
+## त्वरित शुरुआत
+
+एक फ़ाइल render करें और browser खोलें:
+
+```bash
+arka output show data.json
+arka output show results.csv
+cat report.md | arka output show -
+```
+
+Interactive paste/upload UI शुरू करें:
+
+```bash
+arka output serve --port 8790 --open
+```
+
+Standalone HTML export करें:
+
+```bash
+arka output render data.json -o preview.html
+```
+
+## फ़ॉर्मैट
+
+| Input | पहचाना गया | Rendered as |
+| ----- | ----------- | ----------- |
+| `.json` array of objects | `json_array` | Scrollable table |
+| `.json` object | `json_object` | Key-value table |
+| `.csv` / `.tsv` | `csv` | Table |
+| `.md` / markdown text | `markdown` | Headings, lists, code blocks |
+| `.jsonl` | `jsonl` | Table (जब rows objects हों) |
+| JSON में Media paths | `media` | Image/video/audio cards |
+| कुछ भी और | `text` | Monospace pre block |
+
+`--format` से detection को override करें:
+
+```bash
+arka output show notes.txt --format markdown
+```
+
+## API (लोकल सर्वर)
+
+जब `arka output serve` चल रहा हो (डिफ़ॉल्ट `http://127.0.0.1:8790`):
+
+| Method | Path | Body / query |
+| ------ | ---- | ------------ |
+| `GET` | `/` | Interactive UI |
+| `POST` | `/api/render` | `{"content":"…","filename":"demo.csv"}` |
+| `GET` | `/api/render?path=/abs/path/data.json` | लोकल फ़ाइल लोड करें |
+
+Response JSON में `format`, `title`, `body_html`, और `html` (wrapped view) शामिल होते हैं।
+
+## CLI integration
+
+`arka.core.output_layout` का उपयोग करने वाली skills viewer पर परिणाम push कर सकती हैं:
+
+```bash
+export ARKA_OPEN_UI=1
+arka some-skill-that-prints-a-result-box
+```
+
+या Python से कॉल करें:
+
+```python
+from arka.core.output_layout import push_to_viewer
+
+push_to_viewer('{"status":"ok"}', title="Deploy result")
+```
+
+## MCP
+
+`arka_view_output` agents के लिए content render करता है:
+
+```json
+{"action": "render", "path": "/abs/path/data.csv"}
+{"action": "open", "content": "# Hello\n\nMarkdown body"}
+```
+
+## एनवायरनमेंट
+
+| Variable | डिफ़ॉल्ट | उद्देश्य |
+| -------- | ------- | ------- |
+| `ARKA_OUTPUT_VIEWER_HOST` | `127.0.0.1` | `output serve` के लिए bind host |
+| `ARKA_OUTPUT_VIEWER_PORT` | `8790` | Listen port |
+| `ARKA_OPEN_UI` | — | `result_box` output के बाद viewer खोलें |
+| `ARKA_OUTPUT_VERIFY` | `0` | text answers पर Judge-model गुणवत्ता जाँच |
+| `ARKA_OUTPUT_VERIFY_BLOCK` | `0` | Footer दिखाने से पहले verify का इंतज़ार करें |
+| `ARKA_OUTPUT_SLOW_MS` | `8000` | timing footer में धीमी responses flag करें |
+
+जब `ARKA_OUTPUT_VERIFY=1` या `arka ask --verify` हो, तो एक **judge** task profile
+(डिफ़ॉल्ट `gemini/gemini-2.5-flash`) accuracy, completeness, helpfulness, और
+safety (1–5) को score करता है। परिणाम answer footer में
+`Quality: total 842ms · quality 4.2/5 (pass)` के रूप में दिखते हैं।
+
+Judge model override करें: `arka ai-skill-model judge openrouter/openai/gpt-4o-mini`।
+
+Timing (streaming में TTFA, कुल latency) स्वतः रिकॉर्ड होती है और tracing सक्षम
+होने पर OpenTelemetry में export की जाती है (`arka.output.total_ms`,
+`arka.output.verify.overall`, आदि)।
+
+## संबंधित
+
+- [Web dashboard](/hi/guides/web-dashboard) — पूर्ण React chat UI (केवल लोकल checkout)
+- [Data display (`view_data`)](/hi/guides/data-ask) — terminal CSV preview

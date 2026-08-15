@@ -1,0 +1,13 @@
+---
+title: "背景移除"
+description: "用 Arka 把照片变成透明 PNG。"
+icon: "eraser"
+---
+
+```bash
+arka background_remove photo.jpg
+arka background_remove photo.jpg --output product.png
+arka "remove the background from photo.jpg"
+```
+
+该技能使用本地 `rembg`。用 `pip install "arka-agent[vision]"` 安装。

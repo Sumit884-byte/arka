@@ -1,0 +1,16 @@
+---
+title: "कुछ शानदार बनाएँ"
+description: "विचार से लेकर build और deploy तक एक guarded product workflow चलाएँ।"
+icon: "wand-magic-sparkles"
+---
+
+एक guarded product workflow चलाएँ:
+
+```bash
+arka build-something-cool "a visual notes app"
+arka build-something-cool "a visual notes app" --build
+arka build-something-cool "a visual notes app" --build --deploy --yes
+arka build-something-cool "a cool feature for the dashboard"
+```
+
+यह workflow ideate करता है, एक plan बनाता है, project को build/test करता है, और तब तक deployment को block करता है जब तक आप `--yes` के साथ इसे स्पष्ट रूप से approve नहीं करते। यह failed build या test के बाद deploy नहीं करता। `--build` जोड़ने से पहले plan की समीक्षा करें। यही guarded workflow feature requests और साथ ही पूरे apps को भी संभालता है।

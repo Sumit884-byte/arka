@@ -1,0 +1,83 @@
+---
+title: "Operation modes"
+description: "Arka कैसे व्यवहार करता है इसे नियंत्रित करें — agent, ask, plan, debug, और multitask modes।"
+keywords: ["mode", "debug", "ask", "plan", "agent"]
+icon: "toggle-on"
+---
+
+Arka **operation modes** का समर्थन करता है जो routing verbosity, write permissions, और execution style बदलते हैं। Default **agent** है (debug बंद है)।
+
+## Modes
+
+| Mode | व्यवहार |
+| --- | --- |
+| `agent` | **Default** — पूरा skill execution, साफ़ output |
+| `ask` | Read-only; जोखिम भरे कार्य blocked |
+| `plan` | Structured steps प्रिंट होते हैं, execution नहीं |
+| `debug` | Routing traces, LLM fallback, vLLM status दिखाता है |
+| `multitask` | Parallel work के लिए background sub-agents |
+
+## Modes switch करें
+
+```bash
+arka mode debug
+arka mode agent
+arka mode list
+```
+
+या `~/.config/arka/.env` में सेट करें:
+
+```env
+ARKA_MODE=agent
+```
+
+## Plan mode workflow उदाहरण
+
+Deck export करने से पहले slide design work sketch करने के लिए plan mode उपयोग करें:
+
+```bash
+arka mode plan
+arka "improve pitch slide design for kubernetes networking"
+```
+
+Arka `compose_slides` चलाए बिना एक structured plan (palettes, spacing, footers, metric callouts का audit) प्रिंट करता है। Execute करने के लिए वापस switch करें:
+
+```bash
+arka mode agent
+arka compose_slides compose --topic "kubernetes networking" --style pitch --theme dark -f pptx
+```
+
+या environment override के साथ one-shot:
+
+```bash
+ARKA_MODE=plan arka "compose slides about kubernetes --style pitch"
+```
+
+Style और theme options के लिए [Compose slides](/guides/compose-slides) देखें।
+
+## Debug mode क्या दिखाता है
+
+केवल `debug` mode में:
+
+- `arka_llm: fallback ok → groq/...`
+- `→ Interpreted: ...` / `▶ Running skill: ...`
+- vLLM / Ollama server startup messages
+- Self-improve पूरा pytest output और goal-agent context
+
+सामान्य mode गैर-developers के लिए output साफ़ रखता है।
+
+## Route mode (अलग)
+
+`ROUTE_MODE` नियंत्रित करता है कि **requests कैसे route होंगी**, execution style नहीं:
+
+| Value | व्यवहार |
+| --- | --- |
+| `symbolic` | पहले offline rules, LLM fallback (अनुशंसित) |
+| `ai_only` | पहले LLM routing |
+| `symbolic_only` | routing के लिए LLM कभी call न करें |
+
+```env
+ROUTE_MODE=symbolic
+```
+
+देखें [Routing कैसे काम करता है](/concepts/routing)।

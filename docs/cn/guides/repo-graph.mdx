@@ -1,0 +1,20 @@
+---
+title: "仓库依赖与优先级图"
+description: "理解代码依赖并为功能工作排定优先级。"
+icon: "share-nodes"
+---
+
+生成依赖图与优先级报告：
+
+```bash
+arka repo_graph .
+arka repo_graph . --format json --output repo-graph.json
+arka repo_graph . --format mermaid --output repo-graph.mmd
+```
+
+报告会扫描支持的 Python 导入，统计被依赖文件数，并将该中心度与
+TODO/FIXME 标记结合。中心度高的文件被优先呈现，因为在那些文件上
+的修改会影响仓库的更多部分。这是一种规划信号，并不能替代产品影响、
+安全评审或测试。
+
+自然语言可用："show the repository dependency graph and priorities."

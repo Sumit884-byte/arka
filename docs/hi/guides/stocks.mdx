@@ -1,0 +1,91 @@
+---
+title: "Stock intelligence"
+description: "market news, fundamentals, sentiment analysis, macro events, और terminal से AI-assisted investment research के लिए Arka के stock skill का उपयोग करें।"
+keywords: ["stock", "finance", "investing", "market", "predictions"]
+icon: "arrow-trend-up"
+---
+
+Arka में market intelligence के लिए एक **stock** skill (alias: `stock_analysis`) शामिल है — news, live prices, fundamentals, sentiment, macro events, और investment research।
+
+## Quick examples
+
+```bash
+arka stock news
+arka stock prices RELIANCE.NS TCS.NS
+arka stock analyze AAPL
+arka stock fundamentals RELIANCE.NS TCS.NS
+arka stock invest "where to invest 3000 for 1 month"
+arka stock emotion 20
+arka stock macro 8
+```
+
+प्राकृतिक भाषा भी काम करती है:
+
+```bash
+arka "stock news for banking sector"
+arka "where to invest 5000 for 3 months"
+arka predict opportunities in RELIANCE.NS and banking sector
+```
+
+## Commands
+
+| Command | विवरण |
+| --- | --- |
+| `stock news` | Market news feeds |
+| `stock prices [TICKER…]` | Live prices (कोई नहीं दिए जाने पर डिफ़ॉल्ट watchlist) |
+| `stock policy TICKER` | Policy और regulatory scan |
+| `stock strategy TICKER` | AI backtest \+ ML signal |
+| `stock analyze TICKER` | `strategy` का alias |
+| `stock volatility T1,T2 period interval` | Volatility comparison |
+| `stock dashboard` | Streamlit Stock Intelligence Hub |
+| `stock fundamentals TICKER…` | peers की तुलना में Debt/equity, ROE, P/E, margins |
+| `stock emotion [N]` | Net news sentiment \+ crowd buy/sell forecast |
+| `stock macro [N]` | Disaster/resource/geopolitics → stock impact |
+| `stock funding [N]` | Recent VC/PE/IPO deals \+ listed peer mapping |
+| `stock competition [TICKERS…]` | Peer scoreboard \+ rivalry news |
+| `stock invest <question>` | Deep investment research (`predictions --domain stocks --deep` पर routes) |
+| `stock compare [AMT] [HORIZON]` | news \+ data से ranked top options (no LLM) |
+| `stock predict <topic>` | Arka predictions के माध्यम से Stocks opportunity analysis |
+| `stock context [TICKER…]` | Plain-text debug bundle |
+
+Aliases: `macro` → `stock macro`, `emotion` → `stock emotion`।
+
+## Predictions talent
+
+`predictions` skill domains में व्यापक opportunity analysis को संभालता है:
+
+```bash
+arka predictions --domain stocks RELIANCE.NS and banking sector opportunities
+arka predictions --domain stocks --deep "where to invest 3000 for 1 month"
+arka "predictions history"
+```
+
+Domains: `antiques`, `stocks`, `strategy`, `all`।
+
+## Setup
+
+Stock bridge एक **stock\_analysis** project से connect होता है। डिफ़ॉल्ट रूप से यह देखता है:
+
+```text
+~/Projects/python/products/stock_analysis
+```
+
+`.env` में override करें:
+
+```env
+STOCK_PROJECT=/path/to/stock_analysis
+```
+
+यदि project नहीं मिलता है, `stock news` और `stock prices` अभी भी Arka में bundled bridge scripts के माध्यम से काम करते हैं। Advanced सुविधाओं (`dashboard`, `strategy`) को पूर्ण project की आवश्यकता होती है।
+
+## संबंधित skills
+
+| Skill | उदाहरण |
+| --- | --- |
+| `currency_convert` | `arka convert 100 USD to INR` |
+| `price_check` | `arka price check iPhone 16` |
+| `chart` | `arka chart line AAPL TSLA --range 1y` |
+
+<Note>
+  Stock skills "where to invest", "stock news", और "analyze TICKER" जैसे phrases के लिए symbolic rules के माध्यम से route करते हैं। routing preview करने के लिए `arka route "your query"` का उपयोग करें।
+</Note>

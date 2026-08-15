@@ -1,0 +1,24 @@
+---
+title: "Ultra-fast development"
+description: "Priority-aware, edit-scoped verification के साथ multitask करें।"
+icon: "rocket"
+---
+
+Independent development tasks को concurrently चलाएँ:
+
+```bash
+arka ultra_fast --iterations 3 \
+  --task 'ui|arka "1"|arka "frontend_loop review app.png"|arka "src/components"|pytest tests/test_ui.py' \
+  --task 'docs|arka "0"|arka "update_docs"|arka "docs"|arka "pytest tests/test_docs.py'"
+```
+
+Task format है `name|priority|build-command|edited-paths|test-command`.
+
+- Priority `1`: प्रत्येक iteration के बाद test चलाएँ जिसमें उसके paths में से एक बदला हो।
+- Priority `0`: सभी iterations के बाद केवल एक बार test चलाएँ, और केवल तभी जब उसके paths बदले हों।
+- Unedited tasks का कभी test नहीं होता।
+- Priority mode डिफ़ॉल्ट रूप से enabled है; इसे disable करने के लिए `--no-priority` का उपयोग करें।
+- जब हर task/prompt को priority `1` के रूप में treat किया जाना चाहिए तब `--auto-priority` का उपयोग करें।
+
+Scheduler हर task, exit code और यह report करता है कि क्या इसे edited किया गया था।
+Build commands को independent रखें और deployment से पहले generated changes की समीक्षा करें।

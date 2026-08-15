@@ -1,0 +1,111 @@
+---
+title: "Developer loop"
+description: "एकीकृत arka dev workflow — init, test, review, ship, TUI, और PR checks एक ही surface पर।"
+icon: "repeat"
+---
+
+**Developer loop** Arka का दैनिक coding workflow है: एक scoped project initialize करें, [coding TUI](/hi/guides/coding-tui) में काम करें, tests चलाएँ और locally review करें, फिर commit करने या PR खोलने से पहले आत्मविश्वास से ship करें।
+
+<Note>
+  **`arka dev`** local CI, review, hooks, PR babysitting, और coding TUI को एक entry point के तहत समूहित करता है। Legacy commands (`arka ci`, `arka review`, `arka coding-tui`) अभी भी aliases के रूप में काम करते हैं।
+</Note>
+
+## Mental model
+
+```text
+arka dev init .   → इस repo पर writes को scope करें
+arka dev tui      → TUI में plan, edit, test करें
+arka dev test     → changed-only CI gates चलाएँ
+arka dev review   → staged review + test-gap hints
+arka dev ship     → commit से पहले review + CI
+```
+
+## कमांड
+
+| कमांड | विवरण |
+| --- | --- |
+| `arka dev init [path]` | एक scoped code project initialize करें (alias: `arka code init .`) |
+| `arka dev status [path]` | Code project status + repo dev doctor summary |
+| `arka dev test [path]` | Changed-only CI gates चलाएँ (`--full`, `--fix`, `--json`) |
+| `arka dev review [path]` | Staged changes review करें (`--fail-on-hints`, `--json`) |
+| `arka dev ship [path]` | **Staged changes review करें + changed CI चलाएँ** |
+| `arka dev gaps [path]` | बिना matching tests वाली source files सूचीबद्ध करें |
+| `arka dev doctor [path]` | Repo dev preflight (hooks, ruff, pytest discovery) |
+| `arka dev hooks install` | Pre-commit hooks install करें |
+| `arka dev pr …` | GitHub PR diff, CI, explain, babysit |
+| `arka dev tui [path]` | Coding TUI खोलें |
+
+### Commit से पहले ship करें
+
+`arka dev ship` pre-commit gate है:
+
+1. एक staged review print करता है (security, test-gap, और docs hints)
+2. Changed-only CI gates चलाता है (Ruff + targeted tests)
+3. एक संक्षिप्त pass/fail summary और सुझाया गया अगला step print करता है
+
+```bash
+git add -A
+arka dev ship
+# या review hints blocking स्किप करें:
+arka dev ship --no-review
+# या CI failures को goal agent को सौंपें:
+arka dev ship --fix
+```
+
+सफलता पर, Arka `git commit` और यदि आप PR खोल रहे हैं तो `arka dev pr babysit` सुझाता है।
+
+### Doctor vs dev doctor
+
+| कमांड | Scope |
+| --- | --- |
+| `arka doctor` | **Platform** install check (Python, fish, bundled scripts) |
+| `arka dev doctor` | **Repository** preflight (git hooks, local CI tooling, project rules) |
+
+## Coding TUI integration
+
+`arka dev tui` (या `arka coding-tui .`) के अंदर:
+
+| Slash command | व्यवहार |
+| --- | --- |
+| `/ship` | `arka dev ship` के समान (staged review + changed CI) |
+| `/ship --fix` | CI failure पर goal-agent fix के साथ ship करें |
+| `/ci` | Changed-only CI gates **चलाएँ** |
+| `/ci preview` | Execute किए बिना gate सूची preview करें |
+| `/review` | Test-gap hints के साथ staged review |
+| `/review --fail` | यदि review hints मौजूद हों तो TUI से exit करें |
+| `/test --max-fixes 2` | Test failure पर अधिकतम दो auto-fix passes |
+
+पूर्ण command reference के लिए [Coding TUI](/hi/guides/coding-tui) देखें।
+
+## प्राकृतिक भाषा
+
+Arka इन जैसे phrases को dev loop पर रूट करता है:
+
+```bash
+arka "dev ship"
+arka "prepare to commit"
+arka "run dev checks"
+arka "dev test"
+arka "dev review"
+arka "open dev tui"
+```
+
+## JSON output
+
+Automation के लिए script-friendly output:
+
+```bash
+arka dev test --json
+arka dev review --json
+arka dev ship --json
+arka dev gaps --json
+```
+
+Review JSON में एक `test_gaps` array शामिल है जो बिना matching test file वाली बदली गई source files सूचीबद्ध करता है।
+
+## संबंधित guides
+
+- [Arka के साथ कैसे code करें](/hi/guides/code-with-arka) — व्यापक coding workflow
+- [CLI reference](/hi/guides/cli) — सभी top-level commands
+- [Repo health](/hi/guides/repo-health) — generic lint/test detection
+- [GitHub Actions](/hi/guides/github-actions) — `arka ci` के साथ CI parity

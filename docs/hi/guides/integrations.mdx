@@ -1,0 +1,76 @@
+---
+title: "Integrations"
+description: "Arka के user .env file में optional provider credentials का प्रबंधन करें।"
+icon: "plug"
+---
+
+Arka optional provider credentials को अपने user `.env` file में रखता है। Setup
+कभी भी secret values print नहीं करता और interactive, scripted, और stdin-based
+flows का समर्थन करता है।
+
+```bash
+arka integration list
+arka integration init --config-dir .
+arka integration init --config-dir . --json
+arka integration init --config-dir . --gitignore
+arka integration setup all
+arka integration setup serper
+arka integration setup signoz --url https://signoz.example.com
+printf '%s' "$OPENROUTER_API_KEY" | arka integration setup openrouter --key-stdin
+arka integration setup stripe --key-file /run/secrets/stripe_key
+arka integration setup stripe --config-dir ./config --key-file ./stripe_key
+arka integration doctor --json
+arka integration doctor --fix
+```
+
+CI के लिए `--key` का उपयोग करें, shell history से बचने के लिए `--key-stdin`,
+और स्थानीय configuration entry को revoke करने के लिए `remove <name> --yes`।
+सामान्य aliases में GitHub के लिए `gh`, Hugging Face के लिए `hf`, Google के लिए
+`gemini`/`gcp`, और Context7 के लिए `ctx7` शामिल हैं।
+
+Registry निम्नलिखित categories को कवर करती है:
+
+- **Search, model providers, collaboration, और app services.**
+- **Databases** — `postgres`, `redis`, `mongodb`.
+- **Package registries** — Docker Hub, npm, PyPI.
+- **Observability** — SigNoz, Sentry, Datadog, New Relic.
+- **Infrastructure** — Cloudflare, DigitalOcean, Hetzner.
+- **Hosting** — Railway, Vercel, Netlify, Render, Fly.io.
+- **Email** — Resend, SendGrid.
+- **Authentication** — Clerk, Auth0.
+- **Analytics** — PostHog, Amplitude.
+- **Feature flags** — LaunchDarkly, Statsig.
+
+LLM observability में Langfuse शामिल है।
+AI development integrations में LangSmith और Weights & Biases भी शामिल हैं।
+Remote compute integrations में Modal और E2B शामिल हैं।
+Local model runtimes में Ollama, vLLM, और LM Studio शामिल हैं; custom local
+endpoint के लिए `--url` का उपयोग करें।
+Hosted model integrations में Groq और Replicate शामिल हैं।
+Messaging providers में Telegram और WhatsApp शामिल हैं।
+
+प्राकृतिक भाषा भी काम करती है: `set up Serper`, `show available integrations`,
+या `check my Sentry integration`।
+
+## Local और hosted models एक साथ
+
+`arka hybrid status` का उपयोग reachable local runtimes (Ollama, vLLM, या
+LM Studio) को configured hosted providers के साथ देखने के लिए करें।
+`arka hybrid run "..."` default रूप से local-first routing का उपयोग करता है और
+hosted models पर fallback करता है। `--policy hosted-first`, `local-only`, या
+`hosted-only` चुनें; `--policy parallel` एक local और एक hosted model चलाता है
+और तुलना के लिए दोनों उत्तर लौटाता है। `arka hybrid config local-first`
+(या दूसरी policy) के साथ default persist करें।
+
+Privacy-sensitive कार्य के लिए, एक hard local-only boundary force करें:
+
+```bash
+arka run-only-local-llm "summarize this repository"
+arka hybrid run --local-only "draft a migration plan"
+arka hybrid config local-only
+```
+
+`local-only` inference से पहले candidate chain को filter करता है, इसलिए hosted
+providers को fallbacks के रूप में उपयोग नहीं किया जाता। यदि कोई reachable
+Ollama, vLLM, या LM Studio model configured नहीं है, तो Arka prompt को cloud
+पर भेजने के बजाय error लौटाता है।
