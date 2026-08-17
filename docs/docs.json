@@ -265,6 +265,7 @@
             "tab": "Changelog",
             "icon": "newspaper",
             "pages": [
+              "changelog/2026-08-17",
               "changelog/2026-07-13"
             ]
           }
