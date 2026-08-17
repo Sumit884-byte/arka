@@ -1,0 +1,45 @@
+---
+title: "2026 年 8 月 17 日当周"
+description: "Arka 每周更新日志：编码 TUI 计划与快捷指令、Compose 3D 与确定性 3D 脚手架、媒体与音乐技能、面向 Cursor 与 CodeRabbit 的 MCP、开发者工具与自然语言路由改进，以及幻灯片导出、测验路由与 PyPI 发布方面的多项修复。"
+icon: "newspaper"
+---
+
+## 新功能
+
+- **[编码 TUI 计划与快捷指令](/cn/guides/coding-tui)。** `/plan` 现在以 plan-only 模式调用 LLM，并具备本地回退；用 `y` 批准计划会立即执行，`/ci`、`/review`、`/status` 和 `/diff` 也作为快捷指令可用。
+- **[严格的 `/test` 与灵活的 `/run tests`](/cn/guides/coding-tui)。** `/test` 始终直接运行仓库检测到的测试。`/run tests` 使用只读的目标智能体，通过 `--fix` 允许一次自动修复，或用 `--no-fix` 选择不修复。
+- **[Compose 3D](/cn/guides/compose-3d)。** 通过自然语言生成本地 3D 模型，包含拟人模板、更平滑的程序化形状，以及免费后端（Hugging Face、Meshy、程序化回退）。
+- **[确定性的 3D 脚手架](/cn/guides/scene-3d)。** 全新的 3D 目标会离线写出一个可运行的 React + Three.js 项目，Arka 会为自己的模板自动安装白名单内的 npm 依赖。
+- **[Compose video 与 dub video](/cn/guides/compose-video)。** 新增 `edit_video` 和 `dub_video` 技能，并带有 skill-requirements 预检，在运行前标记缺失的工具。
+- **[信息图与故事](/cn/guides/infographic)。** 提供 `infographic`、`compose_story` 和 `play_website_game`，并扩展了媒体路由。
+- **[Meme 模板与图表表格](/cn/guides/meme-templates)。** Meme 模板、以 PNG 呈现的表格图表、灵活的数据集图表路由，以及在缺失 matplotlib 时更好的安装提示。
+- **[每日阅读轨迹](/cn/guides/daily-reading)。** 由 LLM 生成的基于主题的课程，取代仅限健康的阅读流程。
+- **[生成音乐](/cn/guides/generate-music)。** 新增 `generate_music` 技能，以及图表预测后端。
+- **[GitHub 数据集与练习数据集](/cn/guides/github-dataset)。** 通用的 GitHub 数据集导入器，以及专用的练习数据集技能。
+- **[Graphify、hallmark 与 loop engineering](/guides/graphify)。** 新的智能体，附带 CLI 分发、指南和内置的默认配置。
+- **[周期性自我改进](/cn/guides/self-improve)。** 排程自我改进的运行，让代码库和文档保持节奏更新。
+- **[截图到设计路由](/cn/guides/design-first)。** 发送一张截图，Arka 会将其路由到一个设计项目中。
+- **[对任何项目进行 lint](/cn/guides/coding-tui)。** 与语言无关的 `lint project` 命令会为每个仓库检测合适的 linter。
+- **[在 Cursor 中使用 Arka MCP](/cn/guides/mcp)。** 项目和 hub 的 MCP 配置带有 venv 路径和 `ARKA_CONFIG_DIR`，让 Cursor 可以连接到 `arka mcp serve`。`arka mcp self-tools` 会列出原生 MCP 工具。
+- **[CodeRabbit 集成](/guides/dev-workflows)。** 从 Arka 触发 `@coderabbitai` 评审，将发现的问题拉入 `pr_check` 工作流，并通过自然语言命令路由 PR 反馈。
+- **[面向编码的 Railway 部署](/cn/guides/railway-coding-skills)。** 为基于 React 的远程编码演示提供托管模式的 Dockerfile 和 Railway 配置。
+- **[免费额度指南](/cn/guides/free-credits)。** 引导新用户领取免费提供方额度的入门技能。
+- **[项目文档技能](/cn/guides/project-structure-prompt)。** 根据近期的 git 变更同步第一人称的 README 和博客内容。
+
+## 改进
+
+- **编码 TUI 可靠性。** 简短的 `test`/`ci`/`lint` 目标改由确定性的执行器处理，而不是走 LLM 循环；`/run` 不再因为被跳过的 `cd` 或被阻止的 git 命令而中止；对于无效或被跳过的命令也不再显示 exit 0。
+- **变更文件展示。** 计划、`/run` 完成、`/diff`、`code_agent` 摘要和目标完成现在会渲染成框式的 M/A/D 文件列表，而不是原始的 diff 输出。
+- **幻灯片打磨。** `compose_slides` 新增了风格感知的调色板、标题/章节/内容布局、`--theme` 参数、更紧凑的提示（每张幻灯片最多四个要点），以及 notes 开关。
+- **更快的自然语言路由。** 新的 `to_folder` 路由带 `folder_cache` 和 `answer_cache`，符号化 URL 修复配合精确 URL 路由，以及 `output_verify` 加 `edit_guard` 让文件写入更安全。
+- **LLM 故障切换。** 强化的 OpenRouter 回退、Supermemory 召回，以及时区、货币和 persona 技能在托管和本地环境之间的可移植路由一致性。
+- **文档重构。** 文档现在被组织成五个顶层标签页，具备合理的子分组；之前的孤立页面已接入导航；并提供中文和印地语翻译。
+
+## Bug 修复
+
+- **幻灯片导出。** `compose_slides` 现在以标准的 16:9（13.333×7.5 英寸）导出，因此 Keynote 不再拒绝该 PPTX，图片也会以干净的 RGB PNG 重新编码，并有更严格的 OOXML 校验。
+- **幻灯片分发。** 类似 `"AI infrastructure"` 这样的多词 `--topic` 值会被正确分词，pitch-deck 的自然语言路由现在也会带上 `compose` 子命令，而不是掉到 argparse 的帮助里。
+- **测验路由。** `arka quiz <topic>` 会在 LLM 回退之前在 fish 中匹配，并提供 `quiz` 别名，且 markdown/反引号分发被禁止走 shell exec。
+- **文档命令路由。** `help`、完整 URL 打开、`mode debug/agent/list` 以及 `self memory/status` 现在都能在离线时正确路由。
+- **编码 TUI 范围。** 该 TUI 会自动初始化 Arka 仓库之外的全新项目，在计划批准前校验作用域，并对空的 React 仓库使用面向目标的本地回退计划。
+- **PyPI 发布。** 发布工作流会先重试 trusted publishing，当 PyPI publisher 尚未配置时回退到 `PYPI_API_TOKEN`。以 `arka-agent` 0.1.3 发布。
