@@ -523,6 +523,7 @@
             "tab": "更新日志",
             "icon": "newspaper",
             "pages": [
+              "cn/changelog/2026-08-17",
               "cn/changelog/2026-07-13"
             ]
           }
@@ -780,6 +781,7 @@
             "tab": "चेंजलॉग",
             "icon": "newspaper",
             "pages": [
+              "hi/changelog/2026-08-17",
               "hi/changelog/2026-07-13"
             ]
           }
