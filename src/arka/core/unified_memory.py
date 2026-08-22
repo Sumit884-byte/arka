@@ -227,14 +227,20 @@ def _recall_notes(goal: str, *, limit_chars: int) -> str:
         return ""
 
 
-def _recall_channel(channel: str, chat_id: str, *, limit_chars: int) -> str:
+def _recall_channel(
+    channel: str,
+    chat_id: str,
+    *,
+    limit_chars: int,
+    query: str = "",
+) -> str:
     try:
         from arka.integrations.message_sessions import _enabled, context_for
 
         if not _enabled():
             return ""
         ch, cid = _resolve_channel(channel, chat_id)
-        ctx = context_for(ch, cid, limit_chars=limit_chars)
+        ctx = context_for(ch, cid, limit_chars=limit_chars, query=query)
         if ctx:
             return f"Channel session ({ch}:{cid}):\n{ctx}"
     except ImportError:
@@ -250,6 +256,7 @@ def recall(
     chat_id: str = "",
     include_channel: bool = True,
     scope: RecallScope | None = None,
+    fast: bool = False,
 ) -> str:
     """Aggregate context from all enabled memory layers."""
     goal = (goal or "").strip()
@@ -266,21 +273,28 @@ def recall(
     if facts:
         sections.append(facts)
 
-    try:
-        from arka.memory.graph_memory import graph_recall
+    if not fast:
+        try:
+            from arka.memory.graph_memory import graph_recall
 
-        graph_ctx, _ = graph_recall(goal, limit_chars=per_layer)
-        if graph_ctx:
-            sections.append(graph_ctx)
-    except ImportError:
-        pass
+            graph_ctx, _ = graph_recall(goal, limit_chars=per_layer)
+            if graph_ctx:
+                sections.append(graph_ctx)
+        except ImportError:
+            pass
 
-    notes = _recall_notes(goal, limit_chars=per_layer)
-    if notes:
-        sections.append(notes)
+    if not fast:
+        notes = _recall_notes(goal, limit_chars=per_layer)
+        if notes:
+            sections.append(notes)
 
     if include_channel:
-        channel_ctx = _recall_channel(channel, chat_id, limit_chars=per_layer)
+        channel_ctx = _recall_channel(
+            channel,
+            chat_id,
+            limit_chars=per_layer,
+            query=goal,
+        )
         if channel_ctx:
             sections.append(channel_ctx)
 
@@ -295,6 +309,41 @@ def recall(
     if len(out) > limit_chars:
         out = out[-limit_chars:]
     return out
+
+
+def recall_preferences(goal: str, *, limit_chars: int = 1200, fast: bool = False) -> str:
+    """Long-term user facts and preferences — shared across all chat sessions."""
+    goal = (goal or "").strip()
+    if not goal or not _enabled():
+        return ""
+    sections: list[str] = []
+    facts = _recall_facts(goal, limit_chars=limit_chars)
+    if facts:
+        sections.append(facts)
+    if not fast:
+        try:
+            from arka.memory.graph_memory import graph_recall
+
+            graph_ctx, _ = graph_recall(goal, limit_chars=max(400, limit_chars // 2))
+            if graph_ctx:
+                sections.append(graph_ctx)
+        except ImportError:
+            pass
+    out = "\n\n".join(sections).strip()
+    if len(out) > limit_chars:
+        out = out[-limit_chars:]
+    return out
+
+
+def maybe_remember_preference(text: str) -> bool:
+    """Store explicit user preferences into long-term fact memory."""
+    cleaned, err = _sanitize_text(text)
+    if err or not cleaned or not _enabled():
+        return False
+    if not (FACT_PREFERENCE_RE.search(cleaned) or FACT_PREFIX_RE.match(cleaned)):
+        return False
+    code, _ = remember(cleaned, layer="fact")
+    return code == 0
 
 
 def _facts_status() -> dict[str, object]:

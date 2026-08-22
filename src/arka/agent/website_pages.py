@@ -73,6 +73,20 @@ def plan_pages(
     context_path: str | None = None,
     site_type: str | None = None,
 ) -> dict[str, object]:
+    if not context_path:
+        try:
+            from arka.core.website_archetypes import cached_plan
+
+            hit = cached_plan(prompt, site_type=site_type)
+            if hit:
+                return {
+                    "lines": len(hit.splitlines()),
+                    "bytes": len(hit.encode("utf-8")),
+                    "plan": hit,
+                    "source": "archetype_cache",
+                }
+        except ImportError:
+            pass
     user_parts = [f"Request: {prompt}"]
     if site_type:
         user_parts.append(f"Site type hint: {site_type}")

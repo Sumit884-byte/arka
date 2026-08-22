@@ -18,7 +18,7 @@ try:
         git_root,
         gh_available,
     )
-    from arka.agent.repo_health import Check, _project_root, _run, detect_checks
+    from arka.agent.repo_health import _project_root, _run, detect_checks
     from arka.paths import load_env_file
 
     load_env_file()

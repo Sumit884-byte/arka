@@ -80,7 +80,6 @@ DEFAULT_OPENROUTER_FREE_MODELS = [
 ]
 
 DEFAULT_LLM_MAX_TOKENS = 4096
-SIMPLE_QUERY_MAX_TOKENS = 512
 OPENROUTER_DEFAULT_MAX_TOKENS = 4096
 
 TASK_MAX_TOKENS: dict[str, int] = {
@@ -242,6 +241,63 @@ def _is_gemini_rate_limit_error(low: str) -> bool:
     )
 
 
+def _apply_model_policy_order(
+    ordered: list[tuple[str, str]],
+    *,
+    preserve: int = 0,
+) -> list[tuple[str, str]]:
+    """Reorder fallback tail per ARKA_MODEL_POLICY (default: local-first)."""
+    if not ordered:
+        return ordered
+    try:
+        from arka.llm.hybrid import LOCAL, _policy
+    except ImportError:
+        return ordered
+
+    policy = _policy()
+    head = ordered[:preserve] if preserve else []
+    tail = ordered[preserve:] if preserve else list(ordered)
+    if not tail:
+        return ordered
+
+    local = [x for x in tail if x[0].lower() in LOCAL and provider_available(x[0])]
+    hosted = [x for x in tail if x[0].lower() not in LOCAL and provider_available(x[0])]
+    unavailable = [x for x in tail if not provider_available(x[0])]
+
+    if policy == "local-first":
+        reordered = local + hosted + unavailable
+    elif policy == "hosted-first":
+        reordered = hosted + local + unavailable
+    elif policy == "local-only":
+        reordered = local + unavailable
+    elif policy == "hosted-only":
+        reordered = hosted + unavailable
+    else:
+        reordered = tail
+
+    return head + reordered
+
+
+def _handle_gemini_rate_limit(
+    store: ExhaustionStore,
+    provider: str,
+    model_id: str,
+    err_text: str,
+    *,
+    verbose: bool,
+) -> bool:
+    """Mark all Gemini models exhausted on quota/rate-limit; skip key rotation."""
+    if provider != "gemini" or not _is_gemini_rate_limit_error((err_text or "").lower()):
+        return False
+    store.mark(provider, model_id, RuntimeError(err_text))
+    if verbose:
+        print(
+            "arka_llm: gemini rate/quota limit — skipping remaining gemini models",
+            file=sys.stderr,
+        )
+    return True
+
+
 @dataclass
 class ExhaustionStore:
     """Session-scoped provider/model exhaustion (shared across skills)."""
@@ -382,6 +438,117 @@ def _notify_total_exhaustion(message: str) -> None:
             print(f"Arka notification: {message}", file=sys.stderr)
     except Exception:
         print(f"Arka notification: {message}", file=sys.stderr)
+
+
+def _record_failure(failures: dict[str, str], label: str, reason: str) -> None:
+    base = label.split(" ", 1)[0]
+    failures[base] = reason[:300]
+    failures[label] = reason[:300]
+
+
+def _tried_label_matches(tried: list[str], provider: str, model_id: str) -> bool:
+    prefix = f"{provider}/{model_id}"
+    return any(entry == prefix or entry.startswith(f"{prefix} ") for entry in tried)
+
+
+def preferred_chain_entries(*, task: str = "default", skill: str | None = None) -> list[tuple[str, str]]:
+    """User-configured preferred models prepended to the auto-built failover chain."""
+    explicit = _explicit_fallback_chain(task)
+    if explicit:
+        return explicit
+
+    pref_provider = (env("AI_PREFERRED_PROVIDER") or env("LLM_PROVIDER")).lower()
+    pref_model = env("AI_PREFERRED_MODEL") or env("LLM_MODEL")
+
+    entries: list[tuple[str, str]] = []
+    entries.extend(_benchmark_chain_entries(task))
+    entries.extend(_skill_model_entries(task, skill=skill))
+    entries.extend(_guidance_entries())
+
+    if pref_provider and pref_model:
+        if pref_provider == "gemini":
+            entries.append((pref_provider, normalize_gemini_model(pref_model)))
+        elif pref_provider == "groq":
+            mid = normalize_groq_model(pref_model)
+            if mid and not mid.startswith("gemini-"):
+                entries.append((pref_provider, mid))
+        elif pref_provider == "ollama":
+            if not pref_model.startswith("gemini-"):
+                entries.append((pref_provider, pref_model))
+        elif pref_provider == "openrouter":
+            entries.append((pref_provider, normalize_openrouter_model(pref_model)))
+        else:
+            entries.append((pref_provider, pref_model))
+
+    return _dedupe_chain(entries)
+
+
+def _preferred_all_failed(
+    preferred: list[tuple[str, str]],
+    *,
+    tried: list[str],
+    store: ExhaustionStore,
+) -> bool:
+    if not preferred:
+        return False
+    for provider, model_id in preferred:
+        if store.exhausted(provider, model_id):
+            continue
+        if not _tried_label_matches(tried, provider, model_id):
+            return False
+    return True
+
+
+def _alert_model_exhaustion(
+    *,
+    tried: list[str],
+    failures: dict[str, str],
+    task: str,
+    skill: str,
+    last_error: str,
+    chain: list[tuple[str, str]],
+    store: ExhaustionStore,
+) -> None:
+    """Notify when preferred or full failover chain is exhausted (best-effort)."""
+    global _EXHAUSTION_NOTIFIED
+    if _EXHAUSTION_NOTIFIED or not tried:
+        return
+
+    preferred = preferred_chain_entries(task=task, skill=skill or None)
+    all_chain_exhausted = bool(
+        chain
+        and all(
+            store.exhausted(p, m) or _tried_label_matches(tried, p, m)
+            for p, m in chain
+        )
+    )
+    preferred_failed = _preferred_all_failed(preferred, tried=tried, store=store)
+    if not all_chain_exhausted and not preferred_failed:
+        return
+
+    try:
+        from arka.integrations.email_alert import maybe_model_exhausted_alert
+
+        row = maybe_model_exhausted_alert(
+            tried=tried,
+            failures=failures,
+            task=task,
+            skill=skill,
+            last_error=last_error,
+            preferred_only=preferred_failed and not all_chain_exhausted,
+            quiet=True,
+        )
+        if row and not row.get("skipped"):
+            _EXHAUSTION_NOTIFIED = True
+            return
+    except ImportError:
+        pass
+
+    if _truthy("LLM_EXHAUSTION_NOTIFY", "1"):
+        summary = last_error or "All configured models/providers are exhausted."
+        _notify_total_exhaustion(
+            f"{summary[:160]}. Check quotas or run `arka llm reset-exhaustion`."
+        )
 
 
 def _log_exhaustion_once(message: str, *, verbose: bool) -> None:
@@ -1190,7 +1357,11 @@ def ollama_model_ids(*, include_live: bool = True) -> list[str]:
     try:
         from arka.llm.retired_models import filter_model_ids
 
-        return filter_model_ids("ollama", merged)
+        filtered = filter_model_ids("ollama", merged)
+        for model in explicit:
+            if model and model not in filtered and not model.startswith("gemini-"):
+                filtered.insert(0, model)
+        return filtered if filtered else list(explicit or DEFAULT_OLLAMA_MODELS)
     except ImportError:
         return merged
 
@@ -1251,16 +1422,6 @@ def _parse_positive_int(raw: str, default: int) -> int:
         return max(1, int(raw))
     except (TypeError, ValueError):
         return default
-
-
-def _is_simple_query(user: str) -> bool:
-    text = re.sub(r"\s+", " ", (user or "").strip())
-    if not text or len(text) > 80:
-        return False
-    if "\n" in text:
-        return False
-    words = text.split()
-    return len(words) <= 8
 
 
 def _openrouter_completion_price(item: dict[str, Any]) -> float:
@@ -1327,9 +1488,6 @@ def resolve_max_tokens(
         meta = openrouter_model_meta(model_id)
         if meta and meta.get("max_completion_tokens"):
             cap = min(cap, int(meta["max_completion_tokens"]))
-
-    if _is_simple_query(user):
-        cap = min(cap, SIMPLE_QUERY_MAX_TOKENS)
 
     return max(64, cap)
 
@@ -1646,7 +1804,10 @@ def build_default_chain(*, task: str = "default", skill: str | None = None) -> l
     ordered: list[tuple[str, str]] = []
 
     def add(provider: str, model_id: str) -> None:
-        key = (provider.lower(), model_id)
+        mid = (model_id or "").strip()
+        if not mid:
+            return
+        key = (provider.lower(), mid)
         if key not in seen:
             seen.add(key)
             ordered.append(key)
@@ -1724,7 +1885,13 @@ def build_default_chain(*, task: str = "default", skill: str | None = None) -> l
     for provider, model_id in DEFAULT_CHAIN:
         add(provider, model_id)
 
-    if pref_provider:
+    try:
+        from arka.llm.hybrid import _policy
+
+        policy = _policy()
+    except ImportError:
+        policy = "hosted-first"
+    if pref_provider and policy in {"hosted-first", "hosted-only"}:
         pref_first = [x for x in ordered if x[0] == pref_provider]
         pref_rest = [x for x in ordered if x[0] != pref_provider]
         ordered = pref_first + pref_rest
@@ -1735,8 +1902,10 @@ def build_default_chain(*, task: str = "default", skill: str | None = None) -> l
     if _benchmark_orchestrate_enabled():
         benchmark = _benchmark_chain_entries(task)
     head = benchmark + skill_models + guidance
+    head_len = 0
     if head:
         ordered = _prepend_chain(head, ordered)
+        head_len = len(head)
 
     try:
         from arka.llm.retired_models import filter_chain
@@ -1745,7 +1914,18 @@ def build_default_chain(*, task: str = "default", skill: str | None = None) -> l
     except ImportError:
         pass
 
-    return ordered
+    explicit_ollama = [m.strip() for m in env("OLLAMA_MODELS").split(",") if m.strip()]
+    if explicit_ollama and not non_text_task:
+        present = set(ordered)
+        for model_id in explicit_ollama:
+            if model_id.startswith("gemini-"):
+                continue
+            key = ("ollama", model_id)
+            if key not in present:
+                ordered.append(key)
+                present.add(key)
+
+    return _apply_model_policy_order(ordered, preserve=head_len)
 
 
 def _ensure_google_key() -> str:
@@ -1828,6 +2008,14 @@ def provider_available(provider: str) -> bool:
     return provider_available_with_servers(provider)
 
 
+def _gemini_thinking_budget(task: str) -> int | None:
+    """Chat replies must not spend the output budget on hidden thinking."""
+    profile = normalize_task(task)
+    if profile in {"chat", "route"}:
+        return 0
+    return None
+
+
 def build_model(
     provider: str,
     model_id: str,
@@ -1835,6 +2023,7 @@ def build_model(
     *,
     max_tokens: int | None = None,
     session: LlmServerSession | None = None,
+    thinking_budget: int | None = None,
 ) -> Any | None:
     provider = provider.lower()
     if provider in LOCAL_PROVIDERS:
@@ -1853,6 +2042,8 @@ def build_model(
         kwargs: dict[str, Any] = {"id": normalize_gemini_model(model_id), "temperature": temperature}
         if max_tokens is not None:
             kwargs["max_output_tokens"] = max_tokens
+        if thinking_budget is not None:
+            kwargs["thinking_budget"] = thinking_budget
         return Gemini(**kwargs)
 
     if provider == "groq":
@@ -2128,6 +2319,7 @@ class LlmFallbackEngine:
         notify = verbose and _truthy("LLM_FALLBACK_NOTIFY", "0")
         attempts = 0
         tried: list[str] = []
+        failures: dict[str, str] = {}
 
         session = LlmServerSession()
         with _quiet_llm_logs():
@@ -2156,6 +2348,7 @@ class LlmFallbackEngine:
                                 temperature,
                                 max_tokens=attempt_max_tokens,
                                 session=session,
+                                thinking_budget=_gemini_thinking_budget(self.task),
                             )
                             if model is None:
                                 break
@@ -2200,12 +2393,14 @@ class LlmFallbackEngine:
                                         )
                                     err_text = (text or "empty response")[:300]
                                     last_error = f"{label}: {err_text}"
+                                    _record_failure(failures, label, err_text)
                                     self.store.mark(provider, model_id, RuntimeError(err_text))
                                     if verbose:
                                         print(f"arka_llm: fail {label}: {err_text}", file=sys.stderr)
                                     continue
                                 except Exception as exc:
                                     last_error = f"{label}: {exc}"
+                                    _record_failure(failures, label, str(exc))
                                     self.store.mark(provider, model_id, exc)
                                     if verbose:
                                         print(f"arka_llm: fail {label}: {exc}", file=sys.stderr)
@@ -2366,6 +2561,7 @@ class LlmFallbackEngine:
                                         )
                                     err_text = (text or "empty response")[:300]
                                     last_error = f"{label}: {err_text}"
+                                    _record_failure(failures, label, err_text)
                                     if trace_span is not None:
                                         if set_http_span_attributes is not None:
                                             code = (
@@ -2407,6 +2603,14 @@ class LlmFallbackEngine:
                                                     f"arka_llm: skip retired model {label}",
                                                     file=sys.stderr,
                                                 )
+                                        break
+                                    if _handle_gemini_rate_limit(
+                                        self.store,
+                                        provider,
+                                        model_id,
+                                        err_text,
+                                        verbose=verbose,
+                                    ):
                                         break
                                     if rotate_provider_key(provider, err_text):
                                         if verbose:
@@ -2458,6 +2662,7 @@ class LlmFallbackEngine:
                                         print(f"arka_llm: fail {label}: {err_text}", file=sys.stderr)
                             except Exception as exc:
                                 last_error = f"{label}: {exc}"
+                                _record_failure(failures, label, str(exc))
                                 err_text = str(exc)
                                 if trace_span is not None:
                                     if set_http_span_attributes is not None:
@@ -2501,6 +2706,14 @@ class LlmFallbackEngine:
                                                 file=sys.stderr,
                                             )
                                     continue
+                                if _handle_gemini_rate_limit(
+                                    self.store,
+                                    provider,
+                                    model_id,
+                                    err_text,
+                                    verbose=verbose,
+                                ):
+                                    break
                                 if rotate_provider_key(provider, exc):
                                     if verbose:
                                         print(
@@ -2555,8 +2768,16 @@ class LlmFallbackEngine:
                 session.close()
 
         _LAST_ERROR = last_error
-        if last_error and chain and all(self.store.exhausted(p, m) for p, m in chain):
-            _notify_total_exhaustion("All configured models/providers are exhausted. Check quotas or reset the fallback chain.")
+        if last_error and tried:
+            _alert_model_exhaustion(
+                tried=tried,
+                failures=failures,
+                task=self.task,
+                skill=self.skill or "",
+                last_error=last_error,
+                chain=chain,
+                store=self.store,
+            )
         if last_error and verbose:
             _log_exhaustion_once(last_error, verbose=verbose)
         failure = format_llm_failure(tried=tried, last_error=last_error, attempts=attempts)
@@ -2598,6 +2819,7 @@ class LlmFallbackEngine:
                             temperature,
                             max_tokens=attempt_max_tokens,
                             session=session,
+                            thinking_budget=_gemini_thinking_budget(self.task),
                         )
                         if model is None:
                             break
@@ -2631,8 +2853,14 @@ class LlmFallbackEngine:
                         try:
                             agent = Agent(model=model, instructions=system, markdown=False)
                             seen = ""
+                            stream_error = ""
                             for event in agent.run(user, stream=True):
                                 event_name = getattr(event, "event", "") or type(event).__name__
+                                if event_name == "RunError":
+                                    err_piece = getattr(event, "content", None) or getattr(event, "error", None)
+                                    if err_piece:
+                                        stream_error = str(err_piece)[:300]
+                                    continue
                                 if event_name not in (
                                     "RunContent",
                                     "IntermediateRunContent",
@@ -2677,7 +2905,7 @@ class LlmFallbackEngine:
                                     key_retry = True
                                     continue
                             else:
-                                last_error = "empty stream response"
+                                last_error = stream_error or "empty stream response"
                                 if rotate_provider_key(provider, last_error):
                                     key_retry = True
                                     continue

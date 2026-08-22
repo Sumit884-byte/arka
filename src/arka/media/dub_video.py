@@ -15,8 +15,8 @@ from pathlib import Path
 
 from arka.agent.survival_lang import google_translate, resolve_lang_code
 from arka.core.compute import ffmpeg_thread_args
-from arka.media.compose_video import _require_ffmpeg, _which
-from arka.media.edit_video import default_output_path, media_info, mux_audio
+from arka.media.compose_video import _require_ffmpeg
+from arka.media.edit_video import default_output_path, mux_audio
 from arka.media.transcript import transcribe_file
 
 MEDIA_EXT = r"(?:mp4|webm|mov|avi|mkv|m4v|mp3|wav|aac|m4a|flac|ogg|opus|wma)"

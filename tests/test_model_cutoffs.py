@@ -62,14 +62,14 @@ class ModelAwareSearchTests(unittest.TestCase):
     def test_should_auto_search_live_keywords_still_trigger(self) -> None:
         from arka.agent.chat import should_auto_search
 
-        info = mc.ModelCutoff("gemini", "gemini-2.5-flash", date(2025, 1, 1))
+        mc.ModelCutoff("gemini", "gemini-2.5-flash", date(2025, 1, 1))
         with mock.patch("arka.agent.chat.should_search_for_model", return_value=False):
             self.assertTrue(should_auto_search("latest Rust release notes"))
 
     def test_should_auto_search_model_cutoff_year(self) -> None:
         from arka.agent.chat import should_auto_search
 
-        info = mc.ModelCutoff("groq", "llama-3.1-8b-instant", date(2023, 12, 1))
+        mc.ModelCutoff("groq", "llama-3.1-8b-instant", date(2023, 12, 1))
         with mock.patch("arka.agent.chat.should_search_for_model", return_value=True):
             self.assertTrue(should_auto_search("who won IPL 2026"))
 

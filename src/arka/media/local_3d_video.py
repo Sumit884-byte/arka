@@ -94,3 +94,15 @@ def main(argv: list[str] | None = None) -> int:
         print(msg, file=sys.stderr)
         return 1
     out = generate_3d_video_locally(
+        args.prompt,
+        Path(args.output),
+        work_dir=Path(args.work_dir),
+        frames=args.frames,
+        fps=args.fps,
+    )
+    print(out)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

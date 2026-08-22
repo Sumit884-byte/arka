@@ -168,7 +168,7 @@ def rank_available_candidates(*, limit: int = 12) -> list[CostCandidate]:
                 source="openrouter-live",
             )
 
-    from arka.llm.providers import get_provider, provider_specs
+    from arka.llm.providers import provider_specs
 
     for spec in provider_specs():
         if spec.slug in {"ollama", "openrouter"}:

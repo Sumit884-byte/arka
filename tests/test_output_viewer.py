@@ -5,7 +5,6 @@ from __future__ import annotations
 import io
 import json
 
-import pytest
 
 from arka.web.output_viewer.cli import main, show_content
 from arka.web.output_viewer.detect import detect_format

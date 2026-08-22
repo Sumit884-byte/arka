@@ -202,7 +202,7 @@ def mcp_docker_in_linux_container(
     script = (
         "import json; "
         "from arka.integrations.mcp_server import _handle_arka_docker; "
-        f"print(_handle_arka_docker({json.dumps(payload)!r}))"
+        f"print(_handle_arka_docker({payload!r}))"
     )
     result = run_linux_container(
         ["python", "-c", script],
@@ -226,7 +226,7 @@ def mcp_docker_in_windows_container(
     script = (
         "import json; "
         "from arka.integrations.mcp_server import _handle_arka_docker; "
-        f"print(_handle_arka_docker({json.dumps(payload)!r}))"
+        f"print(_handle_arka_docker({payload!r}))"
     )
     result = run_windows_container(
         ["python", "-c", script],

@@ -99,16 +99,25 @@ def collect_mcp_stats() -> dict[str, Any]:
 def collect_data() -> dict[str, Any]:
     from arka.core.skill_usage import report
 
-    return {
+    try:
+        from arka.core.llm_usage import report as llm_usage_report
+    except ImportError:
+        llm_usage_report = None
+
+    data = {
         "skills": report(),
         "mcp": collect_mcp_stats(),
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
+    if llm_usage_report is not None:
+        data["tokens"] = llm_usage_report(period="all")
+    return data
 
 
 def render_html(data: dict[str, Any]) -> str:
     skills = data["skills"]
     mcp = data["mcp"]
+    tokens = data.get("tokens") or {}
     skill_rows = "".join(
         f"<tr><td>{html.escape(str(name))}</td><td>{count}</td></tr>"
         for name, count in skills["skills"]
@@ -134,6 +143,13 @@ def render_html(data: dict[str, Any]) -> str:
     if mcp.get("first_ts"):
         mcp_range = f"{mcp.get('first_ts')} .. {mcp.get('last_ts')}"
 
+    token_cards = ""
+    if tokens:
+        token_cards = f"""
+  <div class='card'><b>LLM tokens</b><h2>{int(tokens.get('total_tokens') or 0):,}</h2></div>
+  <div class='card'><b>Spent (est.)</b><h2>${float(tokens.get('actual_cost_usd') or 0):.4f}</h2></div>
+  <div class='card'><b>Saved (est.)</b><h2>${float(tokens.get('total_savings_usd') or 0):.4f}</h2></div>"""
+
     return f"""<!doctype html>
 <meta charset='utf-8'>
 <meta name='viewport' content='width=device-width'>
@@ -157,8 +173,21 @@ h2{{margin-top:0}}
   <div class='card'><b>Tracking</b><h2>{'on' if skills['enabled'] else 'off'}</h2></div>
   <div class='card'><b>Skills used</b><h2>{len(skills['skills'])}</h2></div>
   <div class='card'><b>MCP tool calls</b><h2>{mcp.get('total_calls', 0) if mcp.get('available') else '—'}</h2></div>
-  <div class='card'><b>MCP errors</b><h2>{mcp.get('error_count', 0) if mcp.get('available') else '—'}</h2></div>
+  <div class='card'><b>MCP errors</b><h2>{mcp.get('error_count', 0) if mcp.get('available') else '—'}</h2></div>{token_cards}
 </div>
+<section>
+  <h2>Token usage</h2>
+  <p class='muted'>Local ledger only — compared to {html.escape(str(tokens.get('baseline_label') or 'GPT-4o-class'))} baseline.</p>
+  <table>
+    <tr><th>Metric</th><th>Value</th></tr>
+    <tr><td>LLM calls</td><td>{int(tokens.get('requests') or 0)}</td></tr>
+    <tr><td>Offline routes</td><td>{int(tokens.get('offline_routes') or 0)}</td></tr>
+    <tr><td>Input tokens</td><td>{int(tokens.get('input_tokens') or 0):,}</td></tr>
+    <tr><td>Output tokens</td><td>{int(tokens.get('output_tokens') or 0):,}</td></tr>
+    <tr><td>Baseline cost</td><td>${float(tokens.get('baseline_cost_usd') or 0):.4f}</td></tr>
+    <tr><td>Estimated savings</td><td>${float(tokens.get('total_savings_usd') or 0):.4f}</td></tr>
+  </table>
+</section>
 <section>
   <h2>Skill usage</h2>
   <p class='muted'>Source: {html.escape(str(skills.get('path') or ''))}</p>

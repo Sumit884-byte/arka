@@ -50,8 +50,8 @@ def test_n8n_cli_status(monkeypatch, capsys):
     from arka import cli
 
     monkeypatch.setenv("ARKA_AUTO_REFETCH", "0")
-    monkeypatch.setenv("REMOTE_TOKEN", "secret")
-    monkeypatch.setenv("ARKA_BACKEND_URL", "http://example.test:8765")
+    monkeypatch.setenv("API_URL", "http://example.test:8765")
+    monkeypatch.setenv("API_TOKEN", "secret")
     monkeypatch.setenv("WEBHOOK_ENABLED", "1")
 
     assert cli.main(["n8n", "status"]) == 0

@@ -22,6 +22,10 @@ class RouteDailyBriefSymbolicTests(unittest.TestCase):
             "news brief",
             "today's brief",
             "personalized tech brief",
+            "give todays news",
+            "give today's news",
+            "latest news",
+            "news today",
         ):
             with self.subTest(query=query):
                 self.assertEqual(route_daily_brief(query), "daily_brief")

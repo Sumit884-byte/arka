@@ -61,6 +61,27 @@ class UnifiedMemoryRecallTests(unittest.TestCase):
             ctx = recall("xxxx", limit_chars=500)
         self.assertLessEqual(len(ctx), 500)
 
+    def test_recall_preferences_is_global_not_per_chat(self) -> None:
+        from arka.core.unified_memory import recall_preferences
+        from arka.integrations.message_sessions import push
+
+        push("open-webui", "chat-a", "user", "Only in chat A")
+        with (
+            mock.patch("arka.core.unified_memory.cache_dir", return_value=Path(self.tmp.name)),
+            mock.patch("arka.integrations.supermemory.context_for", return_value=""),
+        ):
+            prefs = recall_preferences("dark terminal theme")
+        self.assertIn("dark", prefs.lower())
+        self.assertNotIn("Only in chat A", prefs)
+
+    def test_maybe_remember_preference_stores_fact(self) -> None:
+        from arka.core.unified_memory import maybe_remember_preference
+
+        with mock.patch("arka.agent.core.memory_remember") as mem:
+            ok = maybe_remember_preference("I prefer concise bullet answers")
+        self.assertTrue(ok)
+        mem.assert_called_once()
+
 
 class UnifiedMemoryRememberTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -141,9 +162,15 @@ class UnifiedMemoryToggleTests(unittest.TestCase):
             "arka.core.unified_memory.recall",
             return_value="Unified facts and notes",
         ) as recall:
-            ctx = memory_context_for("anything")
-        recall.assert_called_once()
-        self.assertEqual(ctx, "Unified facts and notes")
+            ctx = memory_context_for("anything", channel="open-webui", chat_id="t1")
+        recall.assert_called_once_with(
+            "anything",
+            limit_chars=3500,
+            channel="open-webui",
+            chat_id="t1",
+            include_channel=True,
+        )
+        self.assertIn("Unified facts and notes", ctx)
 
 
 class UnifiedMemoryNoDuplicateTests(unittest.TestCase):

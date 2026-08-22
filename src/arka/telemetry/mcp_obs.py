@@ -229,7 +229,6 @@ def trace_mcp_server_tool_call(
 ) -> Iterator[Any]:
     """Wrap an MCP tool handler with a live server-side span, metrics, and logs."""
     start = time.perf_counter()
-    current: Any = None
     try:
         from arka.telemetry.tracing import duration_ms, mark_error, mark_ok, set_span_attributes, span
     except ImportError:
@@ -246,7 +245,6 @@ def trace_mcp_server_tool_call(
     attrs["arka.mcp.role"] = "server"
     attrs["arka.mcp.method"] = "tools/call"
     with span("arka.mcp.server.tool", attributes=attrs) as span_obj:
-        current = span_obj
         try:
             yield span_obj
         except BaseException as exc:

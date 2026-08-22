@@ -1536,6 +1536,11 @@ def main(argv: list[str] | None = None) -> int:
     p_setup = sub.add_parser("setup", help="Show Google Cloud OAuth setup steps")
     p_setup.add_argument("--no-browser", action="store_true", help="Do not open Google Cloud Console")
 
+    p_oauth = sub.add_parser("oauth", help="Google OAuth setup (alias for arka oauth google)")
+    oauth_sub = p_oauth.add_subparsers(dest="oauth_cmd")
+    for name in ("setup", "status", "login", "scopes", "refresh", "revoke"):
+        oauth_sub.add_parser(name, help=f"OAuth {name}")
+
     p_login = sub.add_parser("login", help="Sign in with Google (opens browser URL)")
     p_login.add_argument("--no-browser", action="store_true", help="Print URL only; do not open browser")
     p_login.add_argument("--timeout", type=int, default=180, help="Seconds to wait for callback")
@@ -1699,6 +1704,11 @@ def main(argv: list[str] | None = None) -> int:
 
         return cmd_parse_email_summary(args)
 
+    if args.cmd == "oauth":
+        from arka.integrations.arka_oauth import main as arka_oauth_main
+
+        oauth_cmd = getattr(args, "oauth_cmd", None) or "status"
+        return arka_oauth_main(["google", oauth_cmd])
     if args.cmd == "setup":
         _setup_instructions(open_console=not getattr(args, "no_browser", False))
         return 0

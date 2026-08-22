@@ -515,9 +515,9 @@ def _is_ai_video_request(text: str) -> bool:
     t = text.strip()
     if not t or _is_compose_video_request(t) or _is_local_video_request(t):
         return False
-    if re.search(rf"(?i)\b(?:full\s+)?ai\s+(?:video|clip|animation|movie)\b", t):
+    if re.search(r"(?i)\b(?:full\s+)?ai\s+(?:video|clip|animation|movie)\b", t):
         return True
-    if re.search(rf"(?i)\b(?:text[\s-]?to[\s-]?video|ai\s+video\s+generation)\b", t):
+    if re.search(r"(?i)\b(?:text[\s-]?to[\s-]?video|ai\s+video\s+generation)\b", t):
         return True
     if re.search(rf"(?i)^{_VIDEO_VERBS}\s+(?:an?\s+)?(?:full\s+)?ai\s+(?:video|clip|animation|movie)\b", t):
         return True
@@ -539,7 +539,7 @@ def _extract_video_prompt(text: str) -> str:
     )
     if t == text.strip():
         t = re.sub(rf"(?i)^{_VIDEO_VERBS}\s+(?:an?\s+)?", "", text.strip())
-        t = re.sub(rf"(?i)\s+\b(?:video|clip|animation|movie)\s*$", "", t)
+        t = re.sub(r"(?i)\s+\b(?:video|clip|animation|movie)\s*$", "", t)
     t = re.sub(r"(?i)\b(?:for|-d|--duration)\s+\d+\s*(?:seconds?|secs?|s)?\b", "", t)
     t = re.sub(r"(?i)^(?:of|about|for|showing|depicting)\s+", "", t.strip())
     return re.sub(r"\s+", " ", t).strip()

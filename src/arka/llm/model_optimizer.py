@@ -2,9 +2,9 @@
 from __future__ import annotations
 import argparse
 import os
-from arka.llm.model_advisor import probe_hardware
+from arka.llm.model_advisor import build_local_guide, format_local_guide, probe_hardware
 
-def recommend() -> dict[str, str]:
+def recommend(*, show_guide: bool = False) -> dict[str, str]:
     hw = probe_hardware()
     mode = os.environ.get("ARKA_MODEL_MODE", "auto").lower()
     configured_model = ""
@@ -16,15 +16,20 @@ def recommend() -> dict[str, str]:
         pass
     quant = os.environ.get("ARKA_QUANT", "4bit")
     context = os.environ.get("ARKA_MAX_CONTEXT", "auto")
+    guide = build_local_guide(hw)
+    top_pick = guide.picks[0].model if guide.picks else "qwen2.5:7b"
     if mode == "offline" or mode == "cheap":
-        model = os.environ.get("ARKA_PREFERRED_SMALL_MODEL", "llama3.2:3b")
+        model = os.environ.get("ARKA_PREFERRED_SMALL_MODEL", top_pick if "3b" in top_pick else "llama3.2:3b")
     elif os.environ.get("ARKA_PREFERRED_CODING_MODEL") and mode == "performance":
         model = os.environ["ARKA_PREFERRED_CODING_MODEL"]
     elif hw.ram_total_gb >= 24 or (hw.gpu_vram_gb or 0) >= 16:
-        model = os.environ.get("ARKA_PREFERRED_CODING_MODEL", configured_model or "qwen2.5-coder:14b")
+        model = os.environ.get("ARKA_PREFERRED_CODING_MODEL", configured_model or guide.picks[1].model if len(guide.picks) > 1 else top_pick)
     else:
-        model = os.environ.get("ARKA_PREFERRED_SMALL_MODEL", configured_model or "llama3.2:3b")
-    return {"model": model, "mode": mode, "quant": quant, "context": context, "hardware": hw.gpu_kind}
+        model = os.environ.get("ARKA_PREFERRED_SMALL_MODEL", configured_model or top_pick)
+    result = {"model": model, "mode": mode, "quant": quant, "context": context, "hardware": hw.gpu_kind}
+    if show_guide:
+        result["guide"] = format_local_guide(guide)
+    return result
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="arka model-optimizer")
@@ -36,7 +41,7 @@ def main(argv: list[str] | None = None) -> int:
     switch = sub.add_parser("switch")
     switch.add_argument("model", nargs="?")
     a = p.parse_args(argv)
-    result = recommend()
+    result = recommend(show_guide=a.cmd == "recommend")
     if a.cmd == "setup":
         result["backend"] = a.backend
         result["next"] = f"{a.backend} pull {result['model']}" if a.backend == "ollama" else f"start {a.backend} with {result['model']}"
@@ -55,7 +60,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"preview\tset AI_PREFERRED_MODEL={result['model']} (apply via provider setup)")
     else:
         for key, value in result.items():
-            print(f"{key}\t{value}")
+            if key == "guide":
+                print(value)
+            else:
+                print(f"{key}\t{value}")
     return 0
 
 

@@ -9,7 +9,6 @@ import json
 import os
 import re
 import secrets
-import shlex
 import signal
 import subprocess
 import sys
@@ -665,30 +664,916 @@ def ensure_remote_github_workspace(text: str) -> tuple[Path | None, str, int]:
     return repo.path, msg, 0
 
 
-def run_agent_remote(text: str) -> tuple[str, str, int]:
-    """Run fish agent_hear without local TTS; return (full_output, speak_text, exit_code)."""
-    text = text.strip()
-    if not text:
-        return "", "", 1
-
-    env = os.environ.copy()
-    env["AGENT_SPEAK"] = "0"
-
-    cmd = f"agent_hear {shlex.quote(text)}"
+def run_agent_remote(text: str, *, channel: str = "", chat_id: str = "") -> tuple[str, str, int]:
+    """Run the agent without local TTS; return (full_output, speak_text, exit_code)."""
+    chunks: list[str] = []
+    code = 1
     try:
-        proc = subprocess.run(
-            ["fish", "-ic", cmd],
-            capture_output=True,
-            text=True,
-            env=env,
-            timeout=int(os.environ.get("REMOTE_TIMEOUT", "600")),
-        )
+        for piece, exit_code in iter_agent_remote(text, channel=channel, chat_id=chat_id):
+            if piece:
+                chunks.append(piece)
+            if exit_code is not None:
+                code = exit_code
     except subprocess.TimeoutExpired:
         return "", "Sorry, that took too long.", 124
-
-    output = (proc.stdout or "") + (proc.stderr or "")
+    output = "".join(chunks)
     speak_text = extract_speak_text(output)
-    return output.strip(), speak_text, proc.returncode
+    return output.strip(), speak_text, code
+
+
+_CHAT_SKILL_HEADS = frozenset({"", "ask", "chat", "web_answer", "agent_ask", "answer"})
+_WEB_CHANNELS = frozenset({"open-webui", "web", "ollama-ui", "frontend"})
+
+
+def _first_token(text: str) -> str:
+    return (text or "").strip().split(None, 1)[0].lower()
+
+
+def _looks_like_skill_command(text: str) -> bool:
+    """True only for explicit `skill_name ...` lines — never call the NL router here."""
+    head = _first_token(text)
+    if not head or head in _CHAT_SKILL_HEADS:
+        return False
+    return "_" in head and head.replace("_", "").isalnum()
+
+
+def use_fast_chat(text: str, channel: str = "") -> bool:
+    """WebUI chat streams from Python. Do not import the router — it can stall a minute."""
+    from arka.core.chat_context_gate import is_webui_meta_prompt
+
+    if is_webui_meta_prompt(text):
+        return True
+    if channel not in _WEB_CHANNELS:
+        return False
+    return not _looks_like_skill_command(text)
+
+
+def _web_chat_fast() -> bool:
+    raw = os.environ.get("WEB_CHAT_FAST", "1").strip().lower()
+    return raw not in {"0", "false", "no", "off"}
+
+
+def _web_chat_fast_chain() -> list[tuple[str, str]] | None:
+    """Prefer small/fast models for interactive web chat."""
+    if not _web_chat_fast():
+        return None
+    raw = os.environ.get("WEB_CHAT_MODEL_CHAIN", "").strip()
+    if raw:
+        out: list[tuple[str, str]] = []
+        for part in raw.split(","):
+            piece = part.strip()
+            if not piece:
+                continue
+            if "/" in piece:
+                provider, model_id = piece.split("/", 1)
+                out.append((provider.strip(), model_id.strip()))
+            else:
+                out.append(("groq", piece))
+        return out or None
+    chain: list[tuple[str, str]] = []
+    if (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or "").strip():
+        chain.append(("gemini", "gemini-2.5-flash"))
+    if (os.environ.get("GROQ_API_KEY") or "").strip():
+        chain.extend(
+            [
+                ("groq", "llama-3.3-70b-versatile"),
+                ("groq", "llama-3.1-8b-instant"),
+            ]
+        )
+    if (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or "").strip():
+        chain.append(("gemini", "gemini-2.0-flash-lite"))
+    # Local/fast fallback when cloud providers rate-limit or fail to stream.
+    try:
+        from arka.llm.fallback import build_default_chain, provider_available
+
+        if provider_available("ollama"):
+            local = os.environ.get("WEB_CHAT_OLLAMA_MODEL", "").strip()
+            if not local:
+                for prov, mid in build_default_chain(task="chat"):
+                    if prov == "ollama":
+                        local = mid
+                        break
+            chain.append(("ollama", local or "qwen3:8b"))
+    except ImportError:
+        pass
+    return chain or None
+
+
+def _web_recall_lt_memory(user_text: str) -> str:
+    """Long-term prefs — skipped on fast path unless the message looks preference-related."""
+    try:
+        from arka.core.unified_memory import (
+            FACT_PREFERENCE_RE,
+            FACT_PREFIX_RE,
+            recall_preferences,
+        )
+    except ImportError:
+        return ""
+    if _web_chat_fast():
+        if not (FACT_PREFERENCE_RE.search(user_text) or FACT_PREFIX_RE.match(user_text)):
+            return ""
+        return recall_preferences(user_text, limit_chars=600, fast=True)
+    return recall_preferences(user_text, limit_chars=800, fast=True)
+
+
+def _web_topic_addon(
+    channel: str,
+    chat_id: str,
+    user_text: str,
+    *,
+    prebuilt: bool,
+) -> tuple[str, dict | None]:
+    """Topic memory — skip session disk read when Open WebUI already sent transcript."""
+    from arka.core.web_topic_memory import prepare_turn
+    from arka.core.web_session_memory import session_context
+
+    session_ctx = ""
+    if not prebuilt:
+        session_ctx = session_context(channel, chat_id or "default", query=user_text)
+    addon, topic_state = prepare_turn(
+        channel,
+        chat_id or "default",
+        user_text,
+        session_ctx=session_ctx,
+    )
+    return addon, topic_state
+
+
+_WEBUI_CHAT_SYSTEM = (
+    "You are Arka, a local assistant. Answer the latest user message only. "
+    "If the prompt has no prior transcript, do not continue a previous topic. "
+    "Only use past chat when it is included and the latest message refers to it. "
+    "Give a complete, coherent answer — use as much detail as the question needs. "
+    "Do not artificially shorten or stop after one bullet or section unless the user "
+    "explicitly asked for a brief answer or a single step. "
+    "When the user explicitly says tell more, continue, next, or go on, continue the same "
+    "subject with a new subtopic — never ask what to elaborate on. "
+    "When the user asks to build, implement, scaffold, or says 'build it' / 'go ahead' "
+    "after a plan, respond with copy-pasteable code and file paths — not another roadmap. "
+    "Only grade A/B/C/D/yes/no when that is the entire latest message. "
+    "When the prompt includes a prior transcript and Latest answer, treat that answer "
+    "as the user's choice — continue the prior task; never reset with a generic greeting. "
+    "When the user asks to learn or practice a language, teach ONLY that named language — "
+    "never switch to a different language from earlier chat. "
+    "Never reply 'that is incorrect' to a new question. "
+    "Do not claim you were trained by Google. "
+    "Always finish every sentence and close markdown (never leave ** unclosed). "
+    "Reply in plain helpful prose. Never output JSON, follow_ups lists, or follow-up question chips. "
+    "Never ask the user to pick a numbered item — expand the item they reference directly."
+)
+
+
+_CUTOFF_TAIL = re.compile(
+    r"(?i)\b(on|the|a|an|to|of|for|and|or|with|in|at|by|as|if|when|that|this|your|my)$"
+)
+
+
+def looks_cut_off(text: str) -> bool:
+    """True when a reply stopped mid-sentence or with unclosed markdown."""
+    t = (text or "").rstrip()
+    if len(t) < 24:
+        return False
+    if t.endswith((".", "!", "?", '"', "'", ")", "]", "…")):
+        return False
+    if t.count("**") % 2 == 1:
+        return True
+    if t.count("(") > t.count(")"):
+        return True
+    if t.count("[") > t.count("]"):
+        return True
+    lines = [ln.strip() for ln in t.splitlines() if ln.strip()]
+    if lines:
+        last = lines[-1]
+        if re.match(r"^(?:\d+\.|[-*•])\s+\S", last):
+            if len(lines) <= 2 and len(t) < 400:
+                return True
+            if len(last.split()) <= 12 and not re.search(r"[.!?]$", last):
+                return True
+    return bool(_CUTOFF_TAIL.search(t))
+
+
+def _continuation_user_message(reply: str, user_text: str) -> str:
+    """Prompt the model to finish a truncated web chat reply."""
+    if re.search(r"(?im)^(?:\d+\.|#{1,3}\s|[-*•]\s)", reply):
+        return (
+            "The previous assistant reply was cut off before the answer was complete. "
+            "Continue from exactly where it stopped. Output ONLY the remaining text — "
+            "do not repeat anything already written. Finish all remaining sections until "
+            "the answer is complete and coherent.\n\n"
+            f"User request:\n{user_text or '(see cut-off reply)'}\n\n"
+            f"Cut-off reply:\n{reply}"
+        )
+    return (
+        "The previous assistant reply was cut off. Output ONLY the missing ending "
+        "so the last sentence finishes. Do not repeat text already written.\n\n"
+        f"Cut-off reply:\n{reply}"
+    )
+
+
+def _strip_mcp_provenance(text: str) -> str:
+    return re.sub(r"^\[[^\]]+\]\s*", "", (text or "").strip(), count=1)
+
+
+def iter_webui_meta_mcp(text: str):
+    """Open WebUI title/tags/follow-up tasks via in-process arka_ask MCP."""
+    import time
+
+    started = time.perf_counter()
+    try:
+        from arka.integrations.mcp_logs import log_mcp_event
+        from arka.integrations.mcp_server import call_mcp_tool
+    except ImportError as exc:
+        yield f"MCP unavailable: {exc}", 1
+        return
+    try:
+        raw = call_mcp_tool("arka_ask", {"prompt": text})
+        answer = _strip_mcp_provenance(raw)
+        log_mcp_event(
+            "server.tools_call",
+            tool="arka_ask",
+            status="ok",
+            duration_ms=int((time.perf_counter() - started) * 1000),
+            channel="open-webui-meta",
+        )
+        if answer:
+            yield answer, None
+        yield "", 0 if answer else 1
+    except Exception as exc:
+        log_mcp_event(
+            "server.tools_call",
+            tool="arka_ask",
+            status="error",
+            duration_ms=int((time.perf_counter() - started) * 1000),
+            channel="open-webui-meta",
+            error=str(exc),
+        )
+        yield f"MCP error: {exc}", 1
+
+
+def _latest_user_from_agent_text(text: str) -> str:
+    """Extract the raw user line when the bridge pre-built context via build_web_agent_text."""
+    for pattern in (
+        r"(?im)^Latest user message:\s*(.+)$",
+        r"(?im)^Latest answer:\s*(.+)$",
+        r"(?im)^Latest question:\s*(.+)$",
+    ):
+        m = re.search(pattern, text or "")
+        if m:
+            return m.group(1).strip()
+    return (text or "").strip()
+
+
+def _agent_text_has_transcript(text: str) -> bool:
+    t = text or ""
+    return bool(re.search(r"(?m)^(User|Assistant):\s", t))
+
+
+def iter_python_chat(text: str, *, channel: str = "", chat_id: str = ""):
+    """Stream an LLM reply without starting fish or the voice session."""
+    try:
+        from arka.core.chat_context_gate import is_webui_meta_prompt
+        from arka.llm.fallback import llm_stream_complete
+    except ImportError as exc:
+        yield f"Chat unavailable: {exc}", 1
+        return
+    system = (
+        "Follow the instructions exactly. Reply with only the requested output."
+        if is_webui_meta_prompt(text)
+        else _WEBUI_CHAT_SYSTEM
+    )
+    topic_state: dict | None = None
+    prompt = text
+    user_text = _latest_user_from_agent_text(text)
+    prebuilt = _agent_text_has_transcript(text)
+
+    if (
+        not is_webui_meta_prompt(text)
+        and channel in _WEB_CHANNELS
+        and user_text
+    ):
+        try:
+            from arka.agent.daily_brief import should_use_live_news_web
+
+            if should_use_live_news_web(user_text):
+                yield from iter_news_web(user_text)
+                return
+        except ImportError:
+            pass
+
+    if (
+        not is_webui_meta_prompt(text)
+        and user_text
+        and not prebuilt
+    ):
+        try:
+            from arka.core.dev_faq_cache import lookup_dev_faq, should_use_dev_cache
+
+            if should_use_dev_cache(user_text, prebuilt=prebuilt):
+                cached = lookup_dev_faq(user_text)
+                if cached:
+                    yield cached, None
+                    yield "", 0
+                    return
+        except ImportError:
+            pass
+
+    if (
+        not is_webui_meta_prompt(text)
+        and channel in _WEB_CHANNELS
+        and (channel or chat_id)
+    ):
+        try:
+            from arka.core.web_session_memory import augment_prompt_with_session_memory
+
+            addon, topic_state = _web_topic_addon(
+                channel,
+                chat_id or "default",
+                user_text,
+                prebuilt=prebuilt,
+            )
+            if addon:
+                system = f"{system}\n\n{addon}"
+            try:
+                from arka.core.script_length import script_length_addon
+
+                script_hint = script_length_addon(user_text)
+                if script_hint:
+                    system = f"{system}\n\n{script_hint}"
+            except ImportError:
+                pass
+            lt_ctx = _web_recall_lt_memory(user_text)
+            if lt_ctx:
+                system = (
+                    f"{system}\n\nLong-term user preferences"
+                    " (apply in every chat; do not contradict):\n"
+                    f"{lt_ctx}"
+                )
+            if prebuilt:
+                prompt = text
+            else:
+                prompt = augment_prompt_with_session_memory(
+                    text,
+                    channel=channel,
+                    chat_id=chat_id or "default",
+                    user_text=user_text,
+                )
+        except ImportError:
+            topic_state = None
+    fast_chain = _web_chat_fast_chain()
+    stream_kwargs: dict = {"temperature": 0.3, "task": "chat", "skill": "web_answer"}
+    if fast_chain:
+        stream_kwargs["chain"] = fast_chain
+    got = False
+    parts: list[str] = []
+    try:
+        buf: list[str] = []
+        checking_json = False
+        for delta in llm_stream_complete(system, prompt, **stream_kwargs):
+            if not delta:
+                continue
+            if checking_json:
+                buf.append(delta)
+                blob = "".join(buf).lstrip()
+                if len(blob) > 4096 or blob.rstrip().endswith("}"):
+                    from arka.core.chat_context_gate import is_followups_only_json
+
+                    if blob.rstrip().endswith("}") and is_followups_only_json(blob):
+                        buf = []
+                        break
+                    for piece in buf:
+                        got = True
+                        parts.append(piece)
+                        yield piece, None
+                    buf = []
+                    checking_json = False
+                continue
+            if not parts and not buf and delta.lstrip().startswith("{"):
+                checking_json = True
+                buf = [delta]
+                continue
+            got = True
+            parts.append(delta)
+            yield delta, None
+
+        reply = "".join(parts)
+        from arka.core.chat_context_gate import is_followups_only_json, is_followups_only_response
+
+        if not _web_chat_fast() and (
+            (checking_json and buf and is_followups_only_json("".join(buf)))
+            or (reply.strip() and is_followups_only_response(reply))
+        ):
+            parts = []
+            got = False
+            retry_system = (
+                f"{_WEBUI_CHAT_SYSTEM}\n\n"
+                "The user asked a direct question. Answer it in plain prose now."
+            )
+            for delta in llm_stream_complete(
+                retry_system,
+                user_text or text,
+                **stream_kwargs,
+            ):
+                if delta:
+                    got = True
+                    parts.append(delta)
+                    yield delta, None
+            reply = "".join(parts)
+        from arka.core.chat_context_gate import is_webui_meta_prompt
+
+        if got and not is_webui_meta_prompt(text) and looks_cut_off(reply):
+            max_continuations = max(1, int(os.environ.get("WEB_CHAT_MAX_CONTINUATIONS", "4")))
+            for _ in range(max_continuations):
+                if not looks_cut_off(reply):
+                    break
+                cont = _continuation_user_message(reply, user_text or text)
+                for delta in llm_stream_complete(
+                    system,
+                    cont,
+                    temperature=0.2,
+                    **stream_kwargs,
+                ):
+                    if delta:
+                        parts.append(delta)
+                        yield delta, None
+                reply = "".join(parts)
+        if topic_state is not None and reply.strip():
+            try:
+                from arka.core.web_topic_memory import record_turn
+
+                record_turn(topic_state, reply)
+            except ImportError:
+                pass
+        if (
+            got
+            and user_text
+            and not prebuilt
+            and not is_webui_meta_prompt(text)
+            and reply.strip()
+        ):
+            try:
+                from arka.core.dev_faq_cache import set_dev_faq, should_use_dev_cache
+
+                if should_use_dev_cache(user_text, prebuilt=prebuilt) and not looks_cut_off(reply):
+                    set_dev_faq(user_text, reply)
+            except ImportError:
+                pass
+    except Exception as exc:
+        yield f"\nLLM error: {exc}", 1
+        return
+    yield "", 0 if got else 1
+
+
+def _skill_head(text: str) -> str:
+    return (text or "").strip().split(None, 1)[0].lower().replace("-", "_")
+
+
+def _daily_brief_query(text: str) -> str:
+    """User text after a ``daily_brief`` skill prefix, if any."""
+    parts = (text or "").strip().split(None, 1)
+    if len(parts) > 1 and _skill_head(text) == "daily_brief":
+        return parts[1].strip()
+    return _latest_user_from_agent_text(text) or (text or "").strip()
+
+
+def iter_news_web(question: str):
+    """Stream verified live headlines (RSS/search/video) — not LLM prose."""
+    import queue
+    import threading
+
+    question = (question or "").strip()
+    if not question:
+        yield "What news would you like — BBC, tech, India, world?", None
+        yield "", 0
+        return
+
+    yield "Searching for the latest news…\n", None
+    out_q: queue.SimpleQueue[tuple[str, object]] = queue.SimpleQueue()
+
+    def _worker() -> None:
+        try:
+            from arka.agent.daily_brief import summarize_news_web
+
+            reply = summarize_news_web(question)
+            if not (reply or "").strip():
+                out_q.put(
+                    (
+                        "error",
+                        "Could not fetch news right now. Check Bright Data / network and try again.\n",
+                    )
+                )
+                return
+            out_q.put(("delta", reply))
+        except Exception as exc:
+            out_q.put(("error", f"News unavailable: {exc}\n"))
+        finally:
+            out_q.put(("done", None))
+
+    thread = threading.Thread(target=_worker, daemon=True)
+    thread.start()
+    code = 0
+    while True:
+        try:
+            kind, val = out_q.get(timeout=0.25)
+        except queue.Empty:
+            if not thread.is_alive():
+                while True:
+                    try:
+                        kind, val = out_q.get_nowait()
+                    except queue.Empty:
+                        break
+                    if kind == "delta":
+                        yield str(val).replace("\r", ""), None
+                    elif kind == "error":
+                        yield str(val).replace("\r", ""), None
+                        code = 1
+                break
+            yield "", None
+            continue
+        if kind == "done":
+            break
+        if kind == "delta":
+            yield str(val).replace("\r", ""), None
+        elif kind == "error":
+            yield str(val).replace("\r", ""), None
+            code = 1
+    yield "", code
+
+
+def iter_daily_brief_web(text: str):
+    """Stream weather and headline progress for Open WebUI (no subprocess buffer).
+
+    Yields ``("", None)`` heartbeats while headlines load so SSE proxies / Open WebUI
+    do not treat the stream as idle and wipe earlier deltas (weather).
+    """
+    import queue
+    import re
+    import sys
+    import threading
+
+    from arka.agent.chat import fetch_weather
+    from arka.agent.daily_brief import (
+        build_headlines_prompt,
+        should_use_live_news_web,
+        tech_focus_from_prompt,
+        wants_weather_with_brief,
+    )
+
+    parts = text.split(None, 1)
+    rest = parts[1] if len(parts) > 1 else ""
+    query = rest.strip()
+    if should_use_live_news_web(query):
+        yield from iter_news_web(query)
+        return
+
+    tech = tech_focus_from_prompt(query) or bool(re.search(r"(?i)\btech\b", query))
+
+    weather = ""
+    if not tech and wants_weather_with_brief(query):
+        try:
+            wx = fetch_weather(query or "today")
+            if wx:
+                weather = wx.replace("\r", "") + "\n\n"
+                yield weather, None
+        except Exception as exc:
+            weather = f"Weather unavailable: {exc}\n\n"
+            yield weather, None
+
+    yield "Fetching headlines…\n", None
+
+    prompt = build_headlines_prompt(tech_focus=tech)
+    out_q: queue.SimpleQueue[tuple[str, object]] = queue.SimpleQueue()
+    stderr_lock = threading.Lock()
+    real_stderr = sys.stderr
+
+    class _ProgressStderr:
+        def write(self, s: str) -> int:
+            if s and ("Reading " in s or "Searching " in s):
+                clean = s.replace("\r", "")
+                out_q.put(("progress", clean if clean.endswith("\n") else clean + "\n"))
+            with stderr_lock:
+                return real_stderr.write(s)
+
+        def flush(self) -> None:
+            with stderr_lock:
+                real_stderr.flush()
+
+    def _headlines_error_message(exc: str) -> str:
+        low = (exc or "").lower()
+        if "timed out" in low or "errno 60" in low or "timeout" in low:
+            return (
+                "Headlines unavailable — web search timed out. "
+                "Weather above is still current; try again in a moment.\n"
+            )
+        return f"Headlines unavailable: {exc}\n"
+
+    def _worker() -> None:
+        # Web UI: use search snippets only — full page scrapes stall the stream minutes.
+        os.environ["BRIEF_URL_LIMIT_ENABLED"] = "0"
+        prev = sys.stderr
+        sys.stderr = _ProgressStderr()
+        try:
+            from arka.agent.daily_brief import (
+                enrich_headlines_web_context,
+                gather_headlines_context,
+                headlines_from_web_context,
+            )
+
+            out_q.put(("progress", "Searching web…\n"))
+            web_context = gather_headlines_context(prompt)
+            web_context = enrich_headlines_web_context(prompt, web_context)
+            answer = headlines_from_web_context(web_context)
+            if not (answer or "").strip():
+                answer = "Could not fetch headlines right now. Try again in a moment."
+            out_q.put(("answer", answer))
+        except Exception as exc:
+            out_q.put(("error", _headlines_error_message(str(exc))))
+        finally:
+            sys.stderr = prev
+            out_q.put(("done", None))
+
+    thread = threading.Thread(target=_worker, daemon=True)
+    thread.start()
+    answer = ""
+    code = 0
+    while True:
+        try:
+            kind, val = out_q.get(timeout=0.25)
+        except queue.Empty:
+            if not thread.is_alive():
+                while True:
+                    try:
+                        kind, val = out_q.get_nowait()
+                    except queue.Empty:
+                        break
+                    if kind == "progress":
+                        yield str(val).replace("\r", ""), None
+                    elif kind == "answer":
+                        answer = str(val)
+                    elif kind == "error":
+                        yield str(val).replace("\r", ""), None
+                        code = 1
+                break
+            # Heartbeat: empty piece keeps the HTTP/SSE stream alive without
+            # appending visible text (remote _stream_agent sends ": keepalive").
+            yield "", None
+            continue
+        if kind == "done":
+            break
+        if kind == "progress":
+            yield str(val).replace("\r", ""), None
+        elif kind == "answer":
+            answer = str(val)
+        elif kind == "error":
+            yield str(val).replace("\r", ""), None
+            code = 1
+
+    if answer:
+        # Headlines only as a delta (weather/progress already streamed). Strip CRs
+        # so terminal-style carriage returns cannot wipe the Open WebUI bubble.
+        yield answer.replace("\r", ""), None
+    elif not code:
+        code = 1
+    yield "", code
+
+
+def iter_python_skill(text: str):
+    """Run a routed skill in-process so WebUI does not wait on fish startup."""
+    import io
+    from contextlib import redirect_stderr, redirect_stdout
+
+    from arka.dispatch import run_skill
+
+    if _skill_head(text) == "daily_brief":
+        yield from iter_daily_brief_web(text)
+        return
+
+    from arka.router import route
+
+    decision = route(text)
+    line = decision.skill if decision and decision.skill else text
+    if _skill_head(line) == "daily_brief":
+        yield from iter_daily_brief_web(line)
+        return
+
+    buf = io.StringIO()
+    os.environ["ARKA_CAPTURE_STDIO"] = "1"
+    try:
+        with redirect_stdout(buf), redirect_stderr(buf):
+            code = run_skill(line)
+    except Exception as exc:
+        yield f"Skill failed: {exc}", 1
+        return
+    finally:
+        os.environ.pop("ARKA_CAPTURE_STDIO", None)
+    out = buf.getvalue()
+    if out:
+        yield out, None
+    yield "", int(code or 0)
+
+
+def iter_joke_web(text: str):
+    """Fetch a joke from public APIs — no LLM."""
+    user_q = _latest_user_from_agent_text(text) or (text or "").strip()
+    try:
+        from arka.agent.joke import answer_joke
+        from arka.routing.joke import is_joke_request
+    except ImportError as exc:
+        yield f"Joke fetch unavailable: {exc}", 1
+        return
+    if not is_joke_request(user_q):
+        yield "", 1
+        return
+    joke = answer_joke(user_q)
+    if not joke:
+        yield "Could not fetch a joke right now — try again in a moment.", 1
+        return
+    yield joke, None
+    yield "", 0
+
+
+def iter_website_archetype_web(text: str):
+    """Return a cached website blueprint for common app/site types — no LLM."""
+    user_q = _latest_user_from_agent_text(text) or (text or "").strip()
+    try:
+        from arka.core.website_archetypes import cached_plan, wants_cached_archetype
+    except ImportError as exc:
+        yield f"Website archetype cache unavailable: {exc}", 1
+        return
+    if not wants_cached_archetype(user_q):
+        yield "", 1
+        return
+    plan = cached_plan(user_q)
+    if not plan:
+        yield "", 1
+        return
+    yield plan, None
+    yield "", 0
+
+
+def iter_podcast_inspiration_web(text: str):
+    """Return cached podcast prep timeline — no LLM."""
+    user_q = _latest_user_from_agent_text(text) or (text or "").strip()
+    try:
+        from arka.core.podcast_inspiration import cached_inspiration, wants_cached_podcast_inspiration
+    except ImportError as exc:
+        yield f"Podcast inspiration cache unavailable: {exc}", 1
+        return
+    if not wants_cached_podcast_inspiration(user_q):
+        yield "", 1
+        return
+    plan = cached_inspiration(user_q)
+    if not plan:
+        yield "", 1
+        return
+    yield plan, None
+    yield "", 0
+
+
+def iter_survival_lang_web(text: str):
+    """Return translated survival phrases — no LLM."""
+    user_q = _latest_user_from_agent_text(text) or (text or "").strip()
+    try:
+        from arka.core.chat_context_gate import is_survival_language_request, survival_language_target
+        from arka.agent.survival_lang import lang_label, native_lang_code, resolve_lang_code, run_survival
+    except ImportError as exc:
+        yield f"Survival language unavailable: {exc}", 1
+        return
+    if not is_survival_language_request(user_q):
+        yield "", 1
+        return
+    target = survival_language_target(user_q)
+    if not target:
+        yield "", 1
+        return
+    lang_code = resolve_lang_code(target)
+    if not lang_code:
+        yield f"Unknown language: {target}", 1
+        return
+    label = lang_label(lang_code)
+    import contextlib
+    import io
+
+    native = native_lang_code()
+    native_arg = "english" if native == lang_code else None
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = run_survival(target, native=native_arg)
+    output = buf.getvalue().strip()
+    if rc != 0 or not output:
+        yield f"Could not build survival phrases for {label} right now.", 1
+        return
+    intro = (
+        f"## {label} survival phrases\n\n"
+        f"Quick reference for travel — **English** on the left, **{label}** on the right.\n\n"
+    )
+    yield intro + output, None
+    yield "", 0
+
+
+def iter_agent_remote(text: str, *, channel: str = "", chat_id: str = ""):
+    """Yield stdout chunks. WebUI chat uses Python; fish is only for voice/remote."""
+    from arka.core.chat_context_gate import is_webui_meta_prompt
+
+    text = text.strip()
+    if not text:
+        yield "", 1
+        return
+
+    if is_webui_meta_prompt(text):
+        yield from iter_webui_meta_mcp(text)
+        return
+
+    user_q = _daily_brief_query(text)
+    if channel in _WEB_CHANNELS and user_q:
+        try:
+            from arka.agent.daily_brief import should_use_live_news_web
+
+            if should_use_live_news_web(user_q):
+                yield from iter_news_web(user_q)
+                return
+        except ImportError:
+            pass
+
+    if channel in _WEB_CHANNELS:
+        try:
+            from arka.core.chat_context_gate import is_survival_language_request
+
+            user_q = _latest_user_from_agent_text(text) or text
+            if is_survival_language_request(user_q):
+                yield from iter_survival_lang_web(text)
+                return
+        except ImportError:
+            pass
+
+    if channel in _WEB_CHANNELS:
+        try:
+            from arka.routing.joke import is_joke_request
+
+            user_q = _latest_user_from_agent_text(text) or text
+            if is_joke_request(user_q):
+                yield from iter_joke_web(text)
+                return
+        except ImportError:
+            pass
+
+    if channel in _WEB_CHANNELS:
+        try:
+            from arka.core.website_archetypes import wants_cached_archetype
+
+            user_q = _latest_user_from_agent_text(text) or text
+            if wants_cached_archetype(user_q):
+                yield from iter_website_archetype_web(text)
+                return
+        except ImportError:
+            pass
+
+    if channel in _WEB_CHANNELS:
+        try:
+            from arka.core.podcast_inspiration import wants_cached_podcast_inspiration
+
+            user_q = _latest_user_from_agent_text(text) or text
+            if wants_cached_podcast_inspiration(user_q):
+                yield from iter_podcast_inspiration_web(text)
+                return
+        except ImportError:
+            pass
+
+    if use_fast_chat(text, channel):
+        yield from iter_python_chat(text, channel=channel, chat_id=chat_id)
+        return
+    if channel in _WEB_CHANNELS:
+        yield from iter_python_skill(text)
+        return
+
+    from arka.core.shell_argv import fish_hear_argv, fish_hear_env
+
+    env = fish_hear_env(text, os.environ)
+    env["AGENT_SPEAK"] = "0"
+    env["ARKA_STREAM"] = "1"
+    timeout = int(os.environ.get("REMOTE_TIMEOUT", "600"))
+    proc = subprocess.Popen(
+        fish_hear_argv(),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        env=env,
+        bufsize=1,
+    )
+    try:
+        assert proc.stdout is not None
+        while True:
+            chunk = proc.stdout.read(64)
+            if not chunk:
+                break
+            yield chunk, None
+        code = proc.wait(timeout=timeout)
+        yield "", code
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        raise
+    finally:
+        if proc.poll() is None:
+            proc.kill()
 
 
 def _remote_profile() -> str:
@@ -821,16 +1706,87 @@ class ArkaRemoteHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt: str, *args) -> None:
         print(f"[arka-remote] {self.address_string()} - {fmt % args}", flush=True)
 
-    def _check_auth(self) -> bool:
-        from arka.env import env_get
-
-        token = env_get("REMOTE_TOKEN")
-        if not token:
-            return False
+    def _bearer_token(self) -> str:
         auth = self.headers.get("Authorization", "")
         if auth.startswith("Bearer "):
-            return auth[7:].strip() == token
-        return self.headers.get("X-Arka-Token", "").strip() == token
+            return auth[7:].strip()
+        return self.headers.get("X-Arka-Token", "").strip()
+
+    def _check_auth(self) -> bool:
+        bearer = self._bearer_token()
+        if bearer:
+            try:
+                from arka.core.web_auth import is_valid_access_token
+
+                if is_valid_access_token(bearer):
+                    return True
+            except ImportError:
+                pass
+        try:
+            from arka.core.unified_api import api_token
+
+            token = api_token()
+        except ImportError:
+            from arka.env import env_get
+
+            token = env_get("REMOTE_TOKEN")
+        if not token:
+            return False
+        return bearer == token
+
+    def _handle_auth_get(self, path: str) -> bool:
+        if path == "/v1/auth/config":
+            from arka.core.web_auth import public_config
+
+            self._json(200, public_config())
+            return True
+        if path == "/v1/auth/me":
+            from arka.core.web_auth import me_payload
+
+            bearer = self._bearer_token()
+            if not bearer:
+                self._json(401, {"ok": False, "error": "missing token"})
+                return True
+            payload = me_payload(bearer)
+            self._json(200 if payload.get("ok") else 401, payload)
+            return True
+        return False
+
+    def _handle_auth_post(self, path: str, data: dict) -> bool:
+        from arka.core.web_auth import demo_session, request_otp, verify_otp
+
+        if path == "/v1/auth/otp/request":
+            payload = request_otp(str(data.get("email") or ""))
+            self._json(200 if payload.get("ok") else 400, payload)
+            return True
+        if path == "/v1/auth/otp/verify":
+            payload = verify_otp(str(data.get("email") or ""), str(data.get("code") or ""))
+            self._json(200 if payload.get("ok") else 400, payload)
+            return True
+        if path == "/v1/auth/demo":
+            payload = demo_session()
+            self._json(200 if payload.get("ok") else 400, payload)
+            return True
+        return False
+
+    def _send_cors(self) -> None:
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Arka-Token")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+
+    def _stream_openai_chat(self, text: str, *, model: str, channel: str, chat_id: str = "default") -> None:
+        from arka.integrations.openai_chat import iter_openai_sse_chunks
+
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "close")
+        self._send_cors()
+        self.end_headers()
+        self.close_connection = True
+        for block in iter_openai_sse_chunks(text, model=model, channel=channel, chat_id=chat_id):
+            self.wfile.write(block.encode("utf-8"))
+            self.wfile.flush()
 
     def _json(self, code: int, payload: dict) -> None:
         body = json.dumps(payload).encode("utf-8")
@@ -840,9 +1796,60 @@ class ArkaRemoteHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _stream_agent(self, text: str, *, channel: str = "", chat_id: str = "") -> None:
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "close")
+        self.end_headers()
+        self.close_connection = True
+        parts: list[str] = []
+        code = 1
+        try:
+            # Keep the HTTP stream alive while the first LLM token is generated.
+            self.wfile.write(b": keepalive\n\n")
+            self.wfile.flush()
+            for piece, exit_code in iter_agent_remote(text, channel=channel, chat_id=chat_id):
+                if piece:
+                    # Never let CR/ANSI clear sequences wipe Open WebUI content.
+                    piece = strip_ansi(piece).replace("\r", "")
+                    if not piece:
+                        if exit_code is not None:
+                            code = exit_code
+                        continue
+                    parts.append(piece)
+                    self.wfile.write(f"data: {json.dumps({'delta': piece})}\n\n".encode("utf-8"))
+                    self.wfile.flush()
+                elif exit_code is None:
+                    # Empty piece = heartbeat from long-running skills (daily_brief).
+                    self.wfile.write(b": keepalive\n\n")
+                    self.wfile.flush()
+                if exit_code is not None:
+                    code = exit_code
+        except subprocess.TimeoutExpired:
+            self.wfile.write(
+                f"data: {json.dumps({'delta': 'Sorry, that took too long.', 'ok': False, 'exit_code': 124})}\n\n".encode(
+                    "utf-8"
+                )
+            )
+            self.wfile.write(b"data: [DONE]\n\n")
+            self.wfile.flush()
+            return
+        # Include full output for non-UI clients; Open WebUI bridge must NOT re-emit
+        # this as a content delta (that would look like a full-document replace).
+        done = {"ok": code == 0, "exit_code": code, "done": True, "output": "".join(parts)}
+        self.wfile.write(f"data: {json.dumps(done)}\n\n".encode("utf-8"))
+        self.wfile.write(b"data: [DONE]\n\n")
+        self.wfile.flush()
+
     def _read_body(self) -> bytes:
         length = int(self.headers.get("Content-Length", "0"))
         return self.rfile.read(length) if length else b""
+
+    def do_OPTIONS(self) -> None:
+        self.send_response(204)
+        self._send_cors()
+        self.end_headers()
 
     def do_GET(self) -> None:
         path = urlparse(self.path).path
@@ -854,15 +1861,33 @@ class ArkaRemoteHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
+        if self._handle_auth_get(path):
+            return
         if path == "/v1/health":
+            try:
+                from arka.core.unified_api import api_url
+
+                base = api_url()
+            except ImportError:
+                base = f"http://127.0.0.1:{os.environ.get('REMOTE_PORT', '8765')}"
             self._json(
                 200,
                 {
                     "ok": True,
                     "agent": os.environ.get("AGENT_NAME", "arka"),
                     "speak_lang": os.environ.get("SPEAK_LANG", "en-IN"),
+                    "openai_base": f"{base.rstrip('/')}/v1",
+                    "chat_completions": f"{base.rstrip('/')}/v1/chat/completions",
                 },
             )
+            return
+        if path == "/v1/models":
+            if not self._check_auth():
+                self._json(401, {"ok": False, "error": "unauthorized — check API_TOKEN in .env"})
+                return
+            from arka.integrations.openai_chat import models_payload
+
+            self._json(200, models_payload())
             return
         if path in ("/v1/handoff", "/v1/notifications"):
             if not self._check_auth():
@@ -886,11 +1911,22 @@ class ArkaRemoteHandler(BaseHTTPRequestHandler):
         self._json(404, {"ok": False, "error": "not found"})
 
     def do_POST(self) -> None:
+        path = urlparse(self.path).path
+
+        if path.startswith("/v1/auth/"):
+            try:
+                data = json.loads(self._read_body().decode("utf-8") or "{}")
+            except json.JSONDecodeError:
+                self._json(400, {"ok": False, "error": "invalid JSON"})
+                return
+            if self._handle_auth_post(path, data if isinstance(data, dict) else {}):
+                return
+            self._json(404, {"ok": False, "error": "not found"})
+            return
+
         if not self._check_auth():
             self._json(401, {"ok": False, "error": "unauthorized — check REMOTE_TOKEN in .env"})
             return
-
-        path = urlparse(self.path).path
 
         if path == "/v1/agent":
             started = time.perf_counter()
@@ -901,21 +1937,42 @@ class ArkaRemoteHandler(BaseHTTPRequestHandler):
                 return
 
             text = (data.get("text") or "").strip()
-            if not text:
+            media = data.get("media") if isinstance(data.get("media"), list) else []
+            if not text and not media:
                 self._json(400, {"ok": False, "error": "missing text"})
                 return
 
             try:
+                from arka.core.chat_media import enrich_agent_text_with_media
+
+                prompt = text or "Review the attached file(s) and answer the user's question."
+                text = enrich_agent_text_with_media(prompt, media)
+            except ImportError:
+                pass
+
+            try:
                 from arka.core.just_ai import is_just_ai
             except ImportError:
-                is_just_ai = lambda: False  # type: ignore[assignment,misc]
+                def is_just_ai():
+                    return False  # type: ignore[assignment,misc]
 
             if is_just_ai():
                 output, speak_text, code = run_just_ai_remote(text)
             elif _remote_profile() == "coding":
                 output, speak_text, code = run_coding_remote(text)
+            elif data.get("stream"):
+                self._stream_agent(
+                    text,
+                    channel=str(data.get("channel") or ""),
+                    chat_id=str(data.get("chat_id") or "default"),
+                )
+                return
             else:
-                output, speak_text, code = run_agent_remote(text)
+                output, speak_text, code = run_agent_remote(
+                    text,
+                    channel=str(data.get("channel") or ""),
+                    chat_id=str(data.get("chat_id") or "default"),
+                )
             remote_speak = data.get("remote_speak", True)
             self._json(
                 200,
@@ -936,6 +1993,51 @@ class ArkaRemoteHandler(BaseHTTPRequestHandler):
                     attributes={
                         "arka.http.path": path,
                         "arka.http.profile": _remote_profile() or "default",
+                        "arka.exit_code": code,
+                    },
+                )
+            except ImportError:
+                pass
+            return
+
+        if path == "/v1/chat/completions":
+            started = time.perf_counter()
+            try:
+                data = json.loads(self._read_body().decode("utf-8"))
+            except json.JSONDecodeError:
+                self._json(400, {"ok": False, "error": "invalid JSON"})
+                return
+
+            from arka.integrations.openai_chat import (
+                OPENAI_CHANNEL,
+                agent_text_from_chat_payload,
+                chat_completion_payload,
+            )
+
+            text, model, chat_id = agent_text_from_chat_payload(data)
+            if not text:
+                self._json(400, {"ok": False, "error": "missing messages"})
+                return
+
+            channel = str(data.get("channel") or OPENAI_CHANNEL)
+            if bool(data.get("stream")):
+                self._stream_openai_chat(text, model=model, channel=channel, chat_id=chat_id)
+                return
+
+            output, _speak_text, code = run_agent_remote(text, channel=channel, chat_id=chat_id)
+            if code != 0 and not output:
+                self._json(502, {"ok": False, "error": "agent request failed"})
+                return
+            self._json(200, chat_completion_payload(output, model))
+            try:
+                from arka.telemetry.tracing import log_response_duration
+
+                log_response_duration(
+                    f"http remote {path}",
+                    start=started,
+                    attributes={
+                        "arka.http.path": path,
+                        "arka.http.model": model,
                         "arka.exit_code": code,
                     },
                 )
@@ -1042,24 +2144,55 @@ def ensure_token() -> str:
     from arka.env import env_get
     from arka.paths import env_file
 
-    token = env_get("REMOTE_TOKEN")
-    if token:
-        os.environ["REMOTE_TOKEN"] = token
-        return token
+    try:
+        from arka.core.unified_api import api_token, api_url, apply_unified_api_env
+
+        token = api_token()
+        if token:
+            os.environ["REMOTE_TOKEN"] = token
+            os.environ.setdefault("API_TOKEN", token)
+            apply_unified_api_env()
+            return token
+    except ImportError:
+        token = env_get("REMOTE_TOKEN")
+        if token:
+            os.environ["REMOTE_TOKEN"] = token
+            return token
 
     token = secrets.token_urlsafe(24)
-    line = f"REMOTE_TOKEN={token}\n"
+    try:
+        from arka.core.unified_api import api_url
+
+        base = api_url()
+    except ImportError:
+        port = env_get("REMOTE_PORT") or "8765"
+        base = f"http://127.0.0.1:{port}"
+    lines = [
+        f"API_URL={base}\n",
+        f"API_TOKEN={token}\n",
+        f"REMOTE_TOKEN={token}\n",
+    ]
     target = env_file()
     target.parent.mkdir(parents=True, exist_ok=True)
     if target.exists():
         content = target.read_text(encoding="utf-8", errors="replace")
-        if "REMOTE_TOKEN=" not in content:
-            with target.open("a", encoding="utf-8") as fh:
-                fh.write(line)
+        with target.open("a", encoding="utf-8") as fh:
+            if "API_TOKEN=" not in content and "REMOTE_TOKEN=" not in content:
+                fh.writelines(lines)
+            elif "API_URL=" not in content:
+                fh.write(lines[0])
     else:
-        target.write_text(line, encoding="utf-8")
+        target.write_text("".join(lines), encoding="utf-8")
+    os.environ["API_URL"] = base
+    os.environ["API_TOKEN"] = token
     os.environ["REMOTE_TOKEN"] = token
-    print(f"[arka-remote] Generated REMOTE_TOKEN and saved to {target}", flush=True)
+    try:
+        from arka.core.unified_api import apply_unified_api_env
+
+        apply_unified_api_env()
+    except ImportError:
+        pass
+    print(f"[arka-remote] Generated API_TOKEN and saved to {target}", flush=True)
     return token
 
 
@@ -1111,9 +2244,17 @@ def serve() -> int:
 
     httpd = ThreadingHTTPServer((host, port), ArkaRemoteHandler)
     ip = local_ip() if host not in {"127.0.0.1", "localhost", "::1"} else "127.0.0.1"
+    try:
+        from arka.core.unified_api import api_url
+
+        base = api_url()
+    except ImportError:
+        base = f"http://{ip}:{port}"
     print(f"[arka-remote] Listening on http://{ip}:{port}/ (bind {host})", flush=True)
+    print(f"[arka-remote] OpenAI base URL: {base.rstrip('/')}/v1", flush=True)
+    print(f"[arka-remote] ChatGPT-style chat: {base.rstrip('/')}/v1/chat/completions", flush=True)
     print(f"[arka-remote] Mobile UI: http://{ip}:{port}/", flush=True)
-    print("[arka-remote] Auth: Bearer REMOTE_TOKEN (see .env — not printed)", flush=True)
+    print("[arka-remote] Auth: Bearer API_TOKEN (see .env — not printed)", flush=True)
     print("[arka-remote] Phone does STT/TTS · PC runs agent", flush=True)
 
     try:

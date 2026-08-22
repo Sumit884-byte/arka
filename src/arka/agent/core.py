@@ -47,7 +47,27 @@ def save_json(path: Path, data: object) -> None:
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
+def _want_llm_stream() -> bool:
+    return os.environ.get("ARKA_STREAM", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _llm(system: str, user: str, temperature: float = 0.2, *, task: str = "agent") -> str:
+    if _want_llm_stream():
+        try:
+            from arka.llm.fallback import llm_stream_complete
+
+            chunks: list[str] = []
+            for delta in llm_stream_complete(system, user, temperature, task=task):
+                if not delta:
+                    continue
+                chunks.append(delta)
+                print(delta, end="", flush=True)
+            print(flush=True)
+            out = "".join(chunks).strip()
+            if out:
+                return re.sub(r"^```[a-zA-Z0-9]*\n*|\n*```$", "", out)
+        except Exception:
+            pass
     try:
         from arka.llm.cli import llm_complete
 
@@ -244,7 +264,14 @@ def memory_forget(ref: str) -> None:
     print(f"Removed {len(items) - len(kept)} memory entries.")
 
 
-def memory_context_for(goal: str, *, limit: int = 3) -> str:
+def memory_context_for(
+    goal: str,
+    *,
+    limit: int = 3,
+    channel: str = "",
+    chat_id: str = "",
+    include_channel: bool = True,
+) -> str:
     try:
         from arka.integrations.supermemory import should_skip_memory_recall
 
@@ -252,7 +279,13 @@ def memory_context_for(goal: str, *, limit: int = 3) -> str:
             return ""
     except ImportError:
         pass
-    body = _memory_context_body(goal, limit=limit)
+    body = _memory_context_body(
+        goal,
+        limit=limit,
+        channel=channel,
+        chat_id=chat_id,
+        include_channel=include_channel,
+    )
     rules = ""
     try:
         from arka.core.project_rules import context_for as project_rules_context
@@ -303,7 +336,14 @@ def memory_context_for(goal: str, *, limit: int = 3) -> str:
     return "\n\n".join(parts)
 
 
-def _memory_context_body(goal: str, *, limit: int = 3) -> str:
+def _memory_context_body(
+    goal: str,
+    *,
+    limit: int = 3,
+    channel: str = "",
+    chat_id: str = "",
+    include_channel: bool = True,
+) -> str:
     hub_ctx = ""
     try:
         from arka.integrations.cli_connector import shared_context_block
@@ -322,7 +362,13 @@ def _memory_context_body(goal: str, *, limit: int = 3) -> str:
         from arka.core.unified_memory import recall as unified_recall
 
         if unified_enabled():
-            ctx = unified_recall(goal, limit_chars=3500, include_channel=True)
+            ctx = unified_recall(
+                goal,
+                limit_chars=3500,
+                channel=channel,
+                chat_id=chat_id,
+                include_channel=include_channel,
+            )
             if ctx:
                 return _finish(ctx)
     except ImportError:
@@ -990,13 +1036,19 @@ def research(
     if contexts:
         user_q = "Sources:\n\n" + "\n\n---\n\n".join(contexts) + f"\n\nQuestion: {user_q}"
     task = "research" if mode == "research" else "agent"
+    title = "Research answer" if mode == "research" else f"{mode.title()} answer"
+    if _want_llm_stream():
+        print(f"━━━ {title} ━━━\n", flush=True)
+        answer = _llm(system, user_q, task=task)
+        if not answer:
+            print("Research failed — check LLM / embeddings.")
+        return
     answer = _llm(system, user_q, task=task)
     if not answer:
         print("Research failed — check LLM / embeddings.")
         return
     from arka.output import print_block
 
-    title = "Research answer" if mode == "research" else f"{mode.title()} answer"
     print_block(title, answer)
 
 

@@ -252,8 +252,31 @@ def lang_label(code: str) -> str:
     return code
 
 
+def _md_cell(text: str) -> str:
+    return (text or "").replace("|", "\\|").replace("\n", " ").strip()
+
+
 def format_phrase_block(english: str, translated: str) -> str:
-    return f"• {english}\n  {translated}"
+    return f"**{english}** — {translated}"
+
+
+def format_section_table(
+    section_title: str,
+    rows: list[tuple[str, str]],
+    *,
+    left_header: str,
+    right_header: str,
+) -> str:
+    lines = [
+        f"### {section_title}",
+        "",
+        f"| {left_header} | {right_header} |",
+        "| --- | --- |",
+    ]
+    for left, translated in rows:
+        lines.append(f"| {_md_cell(left)} | {_md_cell(translated)} |")
+    lines.append("")
+    return "\n".join(lines)
 
 
 def translate_one_phrase(en_text: str, *, source: str, target: str) -> tuple[str, str]:
@@ -303,8 +326,7 @@ def run_survival(
     single = phrase.strip() if phrase and phrase.strip() else ""
 
     lines = [
-        f"Survival phrases: {src_label} → {tgt_label}",
-        "(Your language on the left — use the translation when speaking abroad.)",
+        f"Essential **{src_label} → {tgt_label}** travel phrases.",
         "",
     ]
 
@@ -316,27 +338,40 @@ def run_survival(
         except (urllib.error.URLError, OSError, TimeoutError, json.JSONDecodeError) as exc:
             print(f"Translation failed: {exc}", file=sys.stderr)
             return 1
-        lines.append(format_phrase_block(left, translated))
+        lines.append(
+            format_section_table(
+                "Phrase",
+                [(left, translated)],
+                left_header=src_label,
+                right_header=tgt_label,
+            )
+        )
         if quiet:
             print(translated)
         else:
-            print("\n".join(lines))
+            print("\n".join(lines).rstrip())
         return 0
 
     total = sum(len(items) for _t, items in SURVIVAL_SECTIONS)
     print(f"Translating {total} phrases to {tgt_label}…", file=sys.stderr)
 
     for section_title, items in SURVIVAL_SECTIONS:
-        lines.append(f"— {section_title} —")
-        lines.append("")
+        rows: list[tuple[str, str]] = []
         for item in items:
             try:
                 left, translated = translate_one_phrase(item, source=source, target=target)
             except (urllib.error.URLError, OSError, TimeoutError, json.JSONDecodeError) as exc:
                 print(f"Translation failed: {exc}", file=sys.stderr)
                 return 1
-            lines.append(format_phrase_block(left, translated))
-        lines.append("")
+            rows.append((left, translated))
+        lines.append(
+            format_section_table(
+                section_title,
+                rows,
+                left_header=src_label,
+                right_header=tgt_label,
+            )
+        )
 
     print("\n".join(lines).rstrip())
     return 0

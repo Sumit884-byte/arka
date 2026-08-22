@@ -11,15 +11,28 @@ import sys
 
 
 def _backend_url() -> str:
-    return (
-        os.environ.get("ARKA_BACKEND_URL")
-        or os.environ.get("ARKA_REMOTE_URL")
-        or os.environ.get("REMOTE_URL")
-        or "http://127.0.0.1:8765"
-    ).rstrip("/")
+    try:
+        from arka.core.unified_api import api_url
+
+        return api_url()
+    except ImportError:
+        return (
+            os.environ.get("ARKA_BACKEND_URL")
+            or os.environ.get("ARKA_REMOTE_URL")
+            or os.environ.get("REMOTE_URL")
+            or "http://127.0.0.1:8765"
+        ).rstrip("/")
 
 
 def _backend_token() -> str:
+    try:
+        from arka.core.unified_api import api_token
+
+        token = api_token()
+        if token:
+            return token
+    except ImportError:
+        pass
     return (
         os.environ.get("ARKA_BACKEND_TOKEN")
         or os.environ.get("ARKA_REMOTE_TOKEN")

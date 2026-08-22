@@ -10,7 +10,7 @@ def remove_background(source: str, output: str | None = None) -> Path:
     try:
         from rembg import remove
     except ImportError as exc:
-        raise RuntimeError("Install background removal with: pip install 'arka-agent[vision]'") from exc
+        raise RuntimeError("Install background removal with: pip install 'rembg[cpu]' or pip install 'arka-agent[vision]'") from exc
     dest = Path(output).expanduser() if output else src.with_name(f"{src.stem}-no-bg.png")
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_bytes(remove(src.read_bytes()))

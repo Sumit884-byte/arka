@@ -7,7 +7,6 @@ import subprocess
 import sys
 
 from arka import __version__
-from arka.dispatch import run_script, run_skill
 from arka.env import load_env
 from arka.paths import (
     arka_home,
@@ -21,6 +20,42 @@ from arka.paths import (
     fish_config,
 )
 from arka.platform_info import fish_install_hint, has_full_fish_agent, skill_mode, system
+
+
+class LazyGroup:
+    """Defer command-module imports until a subcommand is invoked.
+
+    Keeps ``arka --help`` off heavy import paths (openai, faster-whisper).
+    A Click LazyGroup can replace this if the CLI migrates later.
+    """
+
+    def __init__(self, mapping: dict[str, str] | None = None) -> None:
+        self._mapping = mapping or {}
+        self._loaded: dict[str, object] = {}
+
+    def load(self, name: str) -> object:
+        if name in self._loaded:
+            return self._loaded[name]
+        path = self._mapping[name]
+        mod_path, _, attr = path.partition(":")
+        import importlib
+
+        mod = importlib.import_module(mod_path)
+        obj = getattr(mod, attr or "main")
+        self._loaded[name] = obj
+        return obj
+
+
+def run_script(script: str, args: list[str] | None = None) -> int:
+    from arka.dispatch import run_script as _run_script
+
+    return _run_script(script, args)
+
+
+def run_skill(skill_line: str) -> int:
+    from arka.dispatch import run_skill as _run_skill
+
+    return _run_skill(skill_line)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -92,6 +127,10 @@ def main(argv: list[str] | None = None) -> int:
     if meme_code is not None:
         return meme_code
 
+    web_template_code = _try_web_template_subcommand(args)
+    if web_template_code is not None:
+        return web_template_code
+
     if args[0] == "shell-init":
         return _cmd_shell_init(args[1:])
 
@@ -134,6 +173,12 @@ def main(argv: list[str] | None = None) -> int:
 
         return credits_usage_main(args[2:])
 
+    if args[0] == "tokens" or (args[0] == "usage" and len(args) >= 2 and args[1] == "tokens"):
+        from arka.llm.tokens_usage import main as tokens_usage_main
+
+        rest = args[2:] if args[0] == "usage" else args[1:]
+        return tokens_usage_main(rest or ["usage"])
+
     if len(args) >= 3 and args[0] == "ai" and args[1] in ("credits", "credit") and args[2] == "usage":
         from arka.llm.credits_usage import main as credits_usage_main
 
@@ -142,6 +187,9 @@ def main(argv: list[str] | None = None) -> int:
     credits_nl = _try_credits_usage_nl(args)
     if credits_nl is not None:
         return credits_nl
+    tokens_nl = _try_tokens_usage_nl(args)
+    if tokens_nl is not None:
+        return tokens_nl
 
     if args[0] == "skill" and len(args) >= 2 and args[1] == "usage":
         from arka.core.skill_usage import report
@@ -304,9 +352,19 @@ def main(argv: list[str] | None = None) -> int:
         return greeting_main(args[1:] or [args[0]])
 
     if args[0] == "self":
+        rest = args[1:]
+        if rest and rest[0] == "repair":
+            from arka.agent.self_repair import main as self_repair_main
+
+            return self_repair_main(rest[1:] or ["analyze"])
         from arka.agent.self_improve import main as self_main
 
-        return self_main(args[1:])
+        return self_main(rest)
+
+    if args[0] in ("self_repair", "self-repair"):
+        from arka.agent.self_repair import main as self_repair_main
+
+        return self_repair_main(args[1:] or ["analyze"])
 
     if args[0] in ("self_build", "self-build", "improve_self", "improve-self"):
         from arka.agent.self_build import main as self_build_main
@@ -485,7 +543,16 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     if args[0] == "google":
+        if len(args) > 1 and args[1] == "oauth":
+            from arka.integrations.arka_oauth import main as arka_oauth_main
+
+            return arka_oauth_main(args[2:])
         return run_script("arka_google.py", args[1:])
+
+    if args[0] == "oauth":
+        from arka.integrations.arka_oauth import main as arka_oauth_main
+
+        return arka_oauth_main(args[1:])
 
     if args[0] == "gemini":
         return run_script("arka_gemini.py", args[1:])
@@ -502,9 +569,22 @@ def main(argv: list[str] | None = None) -> int:
         return webhook_main(args[1:])
 
     if args[0] == "dashboard":
+        if len(args) > 1 and args[1] == "build":
+            from arka.agent.data_dashboard import main as data_dashboard_main
+
+            return data_dashboard_main(args[1:])
+        if len(args) > 1 and args[1] in ("bi", "bi-dashboard"):
+            from arka.agent.bi_dashboard import main as bi_dashboard_main
+
+            return bi_dashboard_main(args[2:])
         from arka.agent.usage_dashboard import main as usage_dashboard_main
 
         return usage_dashboard_main(args[1:], default_action="serve")
+
+    if args[0] == "viz" and len(args) > 1 and args[1] == "dashboard":
+        from arka.agent.data_dashboard import main as data_dashboard_main
+
+        return data_dashboard_main(args[1:])
 
     if args[0] == "api":
         from arka.integrations.arka_api import main as arka_api_main
@@ -516,8 +596,16 @@ def main(argv: list[str] | None = None) -> int:
 
         return n8n_main(args[1:])
 
+    if args[0] in ("trueforge", "true-forge", "true_forge"):
+        from arka.integrations.trueforge import main as trueforge_main
+
+        return trueforge_main(args[1:])
+
     if args[0] == "benchmark":
         return run_script("arka_benchmark.py", args[1:])
+
+    if args[0] == "harness":
+        return run_script("arka_harness.py", args[1:])
 
     if args[0] == "orchestrate":
         return _cmd_orchestrate(args[1:])
@@ -733,6 +821,16 @@ def main(argv: list[str] | None = None) -> int:
 
         return github_resume_main(args[2:] or ["generate"])
 
+    if args[0] == "social" and len(args) >= 2 and args[1] == "code":
+        from arka.agent.social_code_lookup import main as social_code_main
+
+        return social_code_main(args[2:])
+
+    if args[0] == "code" and len(args) >= 2 and args[1] == "lookup":
+        from arka.agent.social_code_lookup import main as social_code_main
+
+        return social_code_main(args[2:])
+
     if args[0] in ("github_resume", "github-resume", "github_cv", "github-cv"):
         from arka.agent.github_resume import main as github_resume_main
 
@@ -758,17 +856,28 @@ def main(argv: list[str] | None = None) -> int:
         "autostart",
         "phone-env",
     }
-    if args[0] in fish_subs and has_full_fish_agent():
-        from arka.fish_bridge import delegate_subcommand
+    if args[0] in fish_subs:
+        from arka.core.capability_router import default_router
+        from arka.core.python_skills import is_fish_only
 
-        code = delegate_subcommand(args[0], args[1:])
-        return code if code is not None else 1
+        code = default_router().run(args[0], args[1:])
+        if code is not None:
+            return code
+        if is_fish_only(args[0]):
+            print(
+                f"{args[0]} requires the fish agent — {fish_install_hint()}",
+                file=sys.stderr,
+            )
+            return 1
 
     # Natural language: full agent via bundled config.fish when fish is installed
     text = " ".join(args).strip()
     credits_nl = _try_credits_usage_nl(args)
     if credits_nl is not None:
         return credits_nl
+    tokens_nl = _try_tokens_usage_nl(args)
+    if tokens_nl is not None:
+        return tokens_nl
     mode_hit = _try_mode_nl(text)
     if mode_hit is not None:
         return mode_hit
@@ -798,6 +907,9 @@ def main(argv: list[str] | None = None) -> int:
     meme_code = _try_meme_subcommand(args)
     if meme_code is not None:
         return meme_code
+    web_template_code = _try_web_template_subcommand(args)
+    if web_template_code is not None:
+        return web_template_code
     if has_full_fish_agent():
         from arka.router import route_preview
 
@@ -834,6 +946,16 @@ def _try_meme_subcommand(args: list[str]) -> int | None:
     return run_meme_cli(args)
 
 
+def _try_web_template_subcommand(args: list[str]) -> int | None:
+    try:
+        from arka.agent.web_templates import is_web_template_cli_argv, run_web_template_cli
+    except ImportError:
+        return None
+    if not is_web_template_cli_argv(args):
+        return None
+    return run_web_template_cli(args)
+
+
 def _run_convert(rest: list[str]) -> int:
     """Route ambiguous `convert` to timezone or currency based on NL."""
     from arka.routing.symbolic import is_timezone_convert_request
@@ -842,6 +964,17 @@ def _run_convert(rest: list[str]) -> int:
     if text and is_timezone_convert_request(text):
         return run_script("arka_timezone_convert.py", ["convert", *rest])
     return run_script("arka_currency.py", ["convert", *rest])
+
+
+def _try_tokens_usage_nl(args: list[str]) -> int | None:
+    from arka.llm.tokens_usage import is_tokens_usage_request, main as tokens_usage_main
+
+    text = " ".join(args).strip()
+    if not text or not is_tokens_usage_request(text):
+        return None
+    if args and args[0] in ("tokens", "usage"):
+        return None
+    return tokens_usage_main([])
 
 
 def _try_credits_usage_nl(args: list[str]) -> int | None:
@@ -1003,6 +1136,13 @@ def _execute_request(text: str, routed=None) -> int:
         return 0
 
     if r:
+        if r.source == "offline":
+            try:
+                from arka.core.llm_usage import record_offline_route
+
+                record_offline_route(skill=r.skill)
+            except ImportError:
+                pass
         if r.skill.split(maxsplit=1)[0] == "mode":
             return _try_mode_nl(r.skill) or 0
         if r.skill.split(maxsplit=1)[0] == "code":
@@ -1011,6 +1151,10 @@ def _execute_request(text: str, routed=None) -> int:
             return _cmd_help()
         if r.skill == "capabilities":
             return _cmd_capabilities()
+        if r.skill == "tokens usage":
+            from arka.llm.tokens_usage import main as tokens_usage_main
+
+            return tokens_usage_main([])
         if r.skill == "model_info":
             return _cmd_model_info()
         skill_line = r.skill
@@ -1540,8 +1684,15 @@ def _cmd_route_preview(text: str) -> int:
         print(f"source: {r.source}")
         return 0
     print("skill: (none — would fall back to LLM chat)")
-    if skill_mode() == "portable":
-        print(f"hint: install fish for 70+ skills — {fish_install_hint()}", file=sys.stderr)
+    if not has_full_fish_agent():
+        from arka.core.capability_router import default_router
+
+        n = default_router().python_skill_count()
+        print(
+            f"hint: {n} Python-native skills available without fish; "
+            f"optional extras (listen/speak): {fish_install_hint()}",
+            file=sys.stderr,
+        )
     return 0
 
 
@@ -1614,8 +1765,12 @@ def _cmd_setup(extra: list[str] | None = None) -> int:
 
     if not env_file().is_file():
         print("  Edit .env and add GEMINI_API_KEY, GROQ_API_KEY, or OPENROUTER_API_KEY")
-    if skill_mode() == "portable":
-        print(f"\n  For all 70+ skills, install fish: {fish_install_hint()}")
+    if not has_full_fish_agent():
+        from arka.core.capability_router import default_router
+
+        n = default_router().python_skill_count()
+        print(f"\n  {n} Python-native skills work without fish (bash/zsh/PowerShell).")
+        print(f"  Optional fish extras (listen/speak): {fish_install_hint()}")
     print("\n✓ Setup complete — try: arka brief   or   arka ask \"what is Python?\"")
     print("  Next: arka personalize wizard — get skill recommendations for your interests")
     return 0
@@ -1643,8 +1798,8 @@ def _doctor_next_steps(
         hints.append("arka setup                         # venv + chat deps + Context7 MCP")
     if not llm_configured:
         hints.append("cp .env.example ~/.config/arka/.env  # add GEMINI_API_KEY or GROQ_API_KEY")
-    if skill_mode_name != "full":
-        hints.append("Install fish for 70+ skills — see: arka help")
+    if skill_mode_name != "full" and not has_full_fish_agent():
+        hints.append("Optional: install fish for listen/speak — see: arka help")
     hints.append('arka ask "what is Rust?"             # first command')
     hints.append("Docs: https://arka-agent.mintlify.site/quickstart")
     return hints
@@ -1699,12 +1854,15 @@ def _cmd_doctor() -> int:
                 print("  Playwright:    missing — run: python -m pip install playwright && python -m playwright install chromium")
         except (OSError, subprocess.SubprocessError):
             print("  Playwright:    unavailable — run: python -m pip install playwright && python -m playwright install chromium")
+    from arka.core.capability_router import default_router
+
+    router = default_router()
     mode = skill_mode()
-    if mode == "full":
-        print(f"  Skills:         full (70+) via {fish_config()}")
+    print(f"  Skills:         {router.python_skill_count()} Python-native (no fish required)")
+    if router.has_shell():
+        print(f"  Fish extras:    ok via {fish_config()}")
     else:
-        print("  Skills:         portable Python subset (chat, passwords, weather, calc, …)")
-        print(f"  Install fish:   {fish_install_hint()}")
+        print(f"  Fish extras:    optional — {fish_install_hint()} (listen/speak/wifi)")
     for line in llm_doctor_lines():
         print(line)
     for line in format_doctor_lines():

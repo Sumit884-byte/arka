@@ -851,6 +851,12 @@ def _route_offline(cmd: str) -> Route | None:
             pass
         return Route(f"council {cmd}", source="offline")
 
+    if _is_joke_request(clean):
+        return Route(f"joke {cmd}", source="offline")
+
+    if _is_podcast_inspiration_request(clean):
+        return Route(f"podcast_inspiration {cmd}", source="offline")
+
     if _is_interesting_fact_request(clean):
         return Route(f"interesting_fact {cmd}", source="offline")
 
@@ -950,6 +956,24 @@ def _is_council_request(clean: str) -> bool:
         from arka.routing.council import is_council_request
 
         return is_council_request(clean)
+    except ImportError:
+        return False
+
+
+def _is_joke_request(clean: str) -> bool:
+    try:
+        from arka.routing.joke import is_joke_request
+
+        return is_joke_request(clean)
+    except ImportError:
+        return False
+
+
+def _is_podcast_inspiration_request(clean: str) -> bool:
+    try:
+        from arka.core.podcast_inspiration import is_podcast_inspiration_request
+
+        return is_podcast_inspiration_request(clean)
     except ImportError:
         return False
 

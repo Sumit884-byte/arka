@@ -72,7 +72,11 @@ def youtube_search(query: str, limit: int = 10) -> list[tuple[str, str, str]]:
         return []
     ytdlp = _ytdlp_path()
     if not ytdlp:
-        raise SystemExit("yt-dlp not found — install yt-dlp or run: arka yt-bulk setup")
+        print(
+            "yt-dlp not found — install yt-dlp or run: arka yt-bulk setup",
+            file=sys.stderr,
+        )
+        return []
     limit = max(1, min(limit, 50))
     cmd = [
         ytdlp,

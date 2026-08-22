@@ -78,7 +78,7 @@ def test_memory_context_includes_project_rules(tmp_path, monkeypatch):
     monkeypatch.setenv("PROJECT_RULES_ROOT", str(tmp_path))
     (tmp_path / "AGENTS.md").write_text("Always run focused tests.\n", encoding="utf-8")
     monkeypatch.setattr(
-        agent_core, "_memory_context_body", lambda goal, limit=3: "local memory"
+        agent_core, "_memory_context_body", lambda goal, limit=3, **kwargs: "local memory"
     )
 
     ctx = agent_core.memory_context_for("run tests")

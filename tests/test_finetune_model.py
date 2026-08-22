@@ -39,6 +39,12 @@ def test_nl_to_argv_explicit():
     ]
 
 
+def test_nl_to_argv_does_not_steal_other_skills():
+    assert nl_to_argv("check repo health") == []
+    assert nl_to_argv("check docker daemon") == []
+    assert nl_to_argv("generate image locally of a moonlit forest") == []
+
+
 def test_route_finetune_model():
     routed = route_finetune_model("fine tune llama model on ./data/support.jsonl")
     assert routed is not None

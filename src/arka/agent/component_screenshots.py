@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from arka.core.screenshot_paths import resolve_screenshot_output, screenshot_path
+from arka.core.screenshot_paths import screenshot_path
 
 DEFAULT_SELECTORS = (
     "[data-testid]",

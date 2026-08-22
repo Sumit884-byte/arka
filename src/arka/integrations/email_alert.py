@@ -159,7 +159,19 @@ _AUTO_SKIP_HYPOTHETICAL_RE = re.compile(r"\b(?:if i|what if|suppose i|would i)\b
 _AUTO_DEDUPE_SEC = 3600
 
 _KNOWN_CMDS = frozenset(
-    {"send", "schedule", "list", "config", "test", "status", "parse", "route", "enable", "disable"}
+    {
+        "send",
+        "schedule",
+        "list",
+        "config",
+        "test",
+        "status",
+        "parse",
+        "route",
+        "enable",
+        "disable",
+        "model-exhausted",
+    }
 )
 
 
@@ -189,6 +201,7 @@ def default_config() -> dict[str, Any]:
     return {
         "to": env_get("ALERT_EMAIL_TO") or env_get("EMAIL_ALERT_TO"),
         "auto": True,
+        "model_exhausted": False,
         "categories": {name: True for name in CATEGORIES},
         "channels": ["email", "os"],
     }
@@ -210,6 +223,8 @@ def load_config() -> dict[str, Any]:
             cfg["channels"] = [str(c).strip().lower() for c in channels if str(c).strip()]
         if "auto" in stored:
             cfg["auto"] = bool(stored["auto"])
+        if "model_exhausted" in stored:
+            cfg["model_exhausted"] = bool(stored["model_exhausted"])
     return cfg
 
 
@@ -241,6 +256,117 @@ def set_auto_alert(enabled: bool) -> None:
     cfg = load_config()
     cfg["auto"] = bool(enabled)
     save_config(cfg)
+
+
+def model_exhausted_alert_enabled(cfg: dict[str, Any] | None = None) -> bool:
+    """Return True when LLM model-exhaustion alerts are enabled."""
+    raw = env_get("ARKA_ALERT_MODEL_EXHAUSTED", "").strip().lower()
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    cfg = cfg or load_config()
+    return bool(cfg.get("model_exhausted", False))
+
+
+def set_model_exhausted_alert(enabled: bool) -> None:
+    cfg = load_config()
+    cfg["model_exhausted"] = bool(enabled)
+    save_config(cfg)
+
+
+def format_model_exhausted_body(
+    *,
+    tried: list[str] | None = None,
+    failures: dict[str, str] | None = None,
+    task: str = "default",
+    skill: str = "",
+    last_error: str = "",
+    preferred_only: bool = False,
+) -> str:
+    """Build alert body listing failed models and reasons."""
+    lines: list[str] = []
+    if preferred_only:
+        lines.append("All preferred models in your failover chain failed.")
+    else:
+        lines.append("All configured models in your LLM failover chain failed.")
+    ctx = f"task={task}"
+    if skill:
+        ctx += f", skill={skill}"
+    lines.append(f"Context: {ctx}")
+    if tried:
+        lines.append(f"Attempts: {len(tried)}")
+        for label in tried:
+            reason = (failures or {}).get(label) or (failures or {}).get(label.split(" ", 1)[0])
+            if reason:
+                lines.append(f"  • {label}: {reason[:200]}")
+            else:
+                lines.append(f"  • {label}")
+    if last_error and not failures:
+        lines.append(f"Last error: {last_error[:240]}")
+    lines.append("Run `arka doctor` or `arka llm reset-exhaustion` to recover.")
+    return "\n".join(lines)
+
+
+def _model_exhausted_dedupe_recent(task: str, skill: str) -> bool:
+    """Skip duplicate model-exhaustion alerts within the cooldown window."""
+    try:
+        from arka.paths import cache_dir
+
+        stamp = cache_dir() / "llm-model-exhausted-alert"
+        cooldown = max(60, int(env_get("LLM_EXHAUSTION_COOLDOWN", "3600") or "3600"))
+        key = f"{task}|{skill}".strip("|")
+        if stamp.is_file():
+            try:
+                data = json.loads(stamp.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                data = {}
+            if isinstance(data, dict):
+                prev_key = str(data.get("key") or "")
+                prev_ts = float(data.get("ts") or 0)
+                if prev_key == key and time.time() - prev_ts < cooldown:
+                    return True
+        stamp.parent.mkdir(parents=True, exist_ok=True)
+        stamp.write_text(
+            json.dumps({"key": key, "ts": int(time.time())}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except (OSError, TypeError, ValueError):
+        pass
+    return False
+
+
+def maybe_model_exhausted_alert(
+    *,
+    tried: list[str] | None = None,
+    failures: dict[str, str] | None = None,
+    task: str = "default",
+    skill: str = "",
+    last_error: str = "",
+    preferred_only: bool = False,
+    quiet: bool = True,
+) -> dict[str, Any] | None:
+    """Send alert when preferred or full LLM failover chain is exhausted."""
+    if not model_exhausted_alert_enabled():
+        return None
+    if not tried and not last_error:
+        return None
+    if _model_exhausted_dedupe_recent(task, skill):
+        return None
+    title = "Preferred LLM models exhausted" if preferred_only else "LLM models exhausted"
+    body = format_model_exhausted_body(
+        tried=tried,
+        failures=failures,
+        task=task,
+        skill=skill,
+        last_error=last_error,
+        preferred_only=preferred_only,
+    )
+    row = send_alert(title, body, category="general", source="llm-failover")
+    if not quiet and not row.get("skipped"):
+        channels = ", ".join(row.get("channels") or ["none"])
+        print(f"✓ Model-exhausted alert ({channels})", flush=True)
+    return row
 
 
 def _auto_alert_skip_reason(text: str) -> str | None:
@@ -512,6 +638,7 @@ def status_payload() -> dict[str, Any]:
         "categories": cats,
         "active_categories": active_categories,
         "channels": cfg.get("channels"),
+        "model_exhausted": model_exhausted_alert_enabled(cfg),
     }
 
 
@@ -656,12 +783,33 @@ def _cmd_test(_args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_model_exhausted(args: argparse.Namespace) -> int:
+    state = (args.state or "status").strip().lower()
+    if state in {"on", "1", "true", "yes", "enable"}:
+        set_model_exhausted_alert(True)
+        print("✓ Model-exhausted alerts ON")
+        return 0
+    if state in {"off", "0", "false", "no", "disable"}:
+        set_model_exhausted_alert(False)
+        print("✓ Model-exhausted alerts OFF")
+        return 0
+    enabled = model_exhausted_alert_enabled()
+    env_raw = env_get("ARKA_ALERT_MODEL_EXHAUSTED", "")
+    print(f"Model-exhausted alerts: {'ON' if enabled else 'OFF'}")
+    if env_raw:
+        print(f"  ARKA_ALERT_MODEL_EXHAUSTED={env_raw}")
+    print("  Enable: arka alert model-exhausted on  or  ARKA_ALERT_MODEL_EXHAUSTED=1")
+    return 0
+
+
 def _cmd_status(_args: argparse.Namespace) -> int:
     payload = status_payload()
     print(json.dumps(payload, indent=2))
     auto_state = "ON" if payload.get("auto") else "OFF"
+    model_state = "ON" if payload.get("model_exhausted") else "OFF"
     active = payload.get("active_categories") or []
     print(f"\nAuto-alerts: {auto_state}")
+    print(f"Model-exhausted alerts: {model_state}")
     if active:
         print(f"Active categories: {', '.join(active)}")
     if not payload.get("enabled"):
@@ -725,6 +873,18 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("test", help="Send a test alert").set_defaults(func=_cmd_test)
     sub.add_parser("status", help="Show alert configuration status").set_defaults(func=_cmd_status)
+
+    p_model = sub.add_parser(
+        "model-exhausted",
+        help="Enable/disable alerts when preferred LLM models are exhausted",
+    )
+    p_model.add_argument(
+        "state",
+        nargs="?",
+        default="status",
+        help="on, off, or status (default)",
+    )
+    p_model.set_defaults(func=_cmd_model_exhausted)
 
     p_parse = sub.add_parser("parse", help="Parse natural language → alert args")
     p_parse.add_argument("text", nargs="+")

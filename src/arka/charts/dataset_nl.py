@@ -123,7 +123,7 @@ def parse_dataset_axes(text: str) -> DatasetAxes | None:
     if not raw:
         return None
 
-    path = extract_data_file_path(raw)
+    extract_data_file_path(raw)
     work = _nl_work_text(raw)
 
     chart_type = _infer_chart_type(raw, by=None, value=None)

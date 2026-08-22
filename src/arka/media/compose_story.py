@@ -11,7 +11,6 @@ import sys
 
 from arka.media.compose_video import (
     build_parser,
-    cmd_check,
     cmd_compose,
     nl_to_story_argv,
 )

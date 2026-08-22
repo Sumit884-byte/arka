@@ -194,7 +194,6 @@ def nl_to_table_argv(text: str) -> list[str] | None:
     t = (text or "").strip()
     if not t:
         return None
-    work = t
     from arka.charts.dataset_nl import _nl_work_text
 
     work_stripped = _nl_work_text(t)

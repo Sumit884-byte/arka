@@ -4,9 +4,12 @@
 from __future__ import annotations
 
 import argparse
+import platform
 import re
 import shlex
+import subprocess
 import sys
+import shutil
 import webbrowser
 from urllib.parse import urlparse
 
@@ -34,6 +37,38 @@ SITE_ALIASES: dict[str, str] = {
     "outlook": "outlook.com",
     "notion": "notion.so",
     "chatgpt": "chatgpt.com",
+}
+
+# Browser/desktop app names — `open brave` launches the app, not brave.com.
+BROWSER_APPS: dict[str, str] = {
+    "brave": "Brave Browser",
+    "chrome": "Google Chrome",
+    "googlechrome": "Google Chrome",
+    "chromium": "Chromium",
+    "firefox": "Firefox",
+    "safari": "Safari",
+    "edge": "Microsoft Edge",
+    "microsoftedge": "Microsoft Edge",
+    "arc": "Arc",
+    "vivaldi": "Vivaldi",
+    "opera": "Opera",
+}
+
+LINUX_BROWSER_COMMANDS: dict[str, tuple[str, ...]] = {
+    "brave": ("brave-browser", "brave"),
+    "chrome": ("google-chrome", "google-chrome-stable", "chromium-browser", "chromium"),
+    "chromium": ("chromium-browser", "chromium", "google-chrome"),
+    "firefox": ("firefox",),
+    "edge": ("microsoft-edge", "microsoft-edge-stable"),
+    "vivaldi": ("vivaldi", "vivaldi-stable"),
+    "opera": ("opera",),
+}
+
+WINDOWS_BROWSER_COMMANDS: dict[str, tuple[str, ...]] = {
+    "brave": ("brave", "brave.exe"),
+    "chrome": ("chrome", "chrome.exe"),
+    "firefox": ("firefox", "firefox.exe"),
+    "edge": ("msedge", "msedge.exe"),
 }
 
 _OPEN_PREFIX = re.compile(
@@ -76,6 +111,7 @@ _NON_URL_OPEN = re.compile(
 _PLAY_WEBSITE_GAME_PREFIX = re.compile(
     r"(?i)^(?:arka\s+)?(?:play[_-]?website[_-]?game|website[_-]?game|browser[_-]?game)\b"
 )
+_PATH_LIKE_OPEN = re.compile(r"^(?:\.{1,2}|~|/|\./|\.\./)")
 
 
 def _strip_wrapping_quotes(text: str) -> str:
@@ -89,6 +125,51 @@ def _normalize_token(token: str) -> str:
     return re.sub(r"[^a-z0-9.-]", "", (token or "").strip().lower())
 
 
+def is_browser_app_name(raw: str) -> bool:
+    """True when the token names a browser app (e.g. brave), not a website."""
+    if _looks_like_urlish_target(raw):
+        return False
+    token = _normalize_token(raw)
+    if not token:
+        return False
+    return token in BROWSER_APPS or token in LINUX_BROWSER_COMMANDS or token in WINDOWS_BROWSER_COMMANDS
+
+
+def _browser_app_label(token: str) -> str:
+    key = _normalize_token(token)
+    return BROWSER_APPS.get(key, key.title())
+
+
+def launch_application(name: str) -> bool:
+    """Launch a desktop browser app by friendly name (cross-platform)."""
+    token = _normalize_token(name)
+    if not token:
+        return False
+
+    system = platform.system()
+    if system == "Darwin":
+        app = BROWSER_APPS.get(token)
+        if not app:
+            return False
+        proc = subprocess.run(["open", "-a", app], check=False, capture_output=True, text=True)
+        return proc.returncode == 0
+
+    if system == "Windows":
+        for cmd in WINDOWS_BROWSER_COMMANDS.get(token, (token,)):
+            proc = subprocess.run(["cmd", "/c", "start", "", cmd], check=False, capture_output=True, text=True)
+            if proc.returncode == 0:
+                return True
+        return False
+
+    for cmd in LINUX_BROWSER_COMMANDS.get(token, (token,)):
+        exe = shutil.which(cmd)
+        if not exe:
+            continue
+        proc = subprocess.Popen([exe], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return proc.poll() is None or proc.returncode in (None, 0)
+    return False
+
+
 def _looks_like_urlish_target(raw: str) -> bool:
     t = (raw or "").strip()
     return bool(
@@ -96,6 +177,43 @@ def _looks_like_urlish_target(raw: str) -> bool:
         or re.match(r"(?i)^www\.[^\s/]+(?:/.*)?$", t)
         or re.match(r"(?i)^[^\s/]+\.[a-z]{2,}(?:/.*)?$", t)
     )
+
+
+def _looks_like_filesystem_path(raw: str) -> bool:
+    t = (raw or "").strip()
+    if not t or _looks_like_urlish_target(t):
+        return False
+    if _PATH_LIKE_OPEN.match(t):
+        return True
+    return "/" in t
+
+
+def _looks_like_macos_open(argv: list[str]) -> bool:
+    """True when argv resembles macOS open(1), not a browser URL request."""
+    parts = [p for p in argv if p and p != "--"]
+    if not parts:
+        return False
+    if any(p.startswith("-") for p in parts):
+        return True
+    return any(_looks_like_filesystem_path(p) for p in parts)
+
+
+def _passthrough_macos_open(argv: list[str]) -> int:
+    proc = subprocess.run(["/usr/bin/open", *argv], check=False)
+    return proc.returncode
+
+
+def _fallback_open_urls(argv: list[str]) -> list[str]:
+    if _looks_like_macos_open(argv):
+        return []
+    urls: list[str] = []
+    for part in argv:
+        if not part.strip() or part.startswith("-") or _looks_like_filesystem_path(part):
+            continue
+        url = build_url(part)
+        if url:
+            urls.append(url)
+    return urls
 
 
 def build_url(target: str) -> str | None:
@@ -114,6 +232,8 @@ def build_url(target: str) -> str | None:
 
     token = _normalize_token(raw)
     if not token or token in _RESERVED_OPEN_TARGETS:
+        return None
+    if is_browser_app_name(raw):
         return None
 
     if token in SITE_ALIASES:
@@ -144,6 +264,25 @@ def _extract_open_target(text: str) -> str | None:
     return t.strip()
 
 
+def parse_open_app(text: str) -> str | None:
+    """Parse NL/argv into a browser app token (e.g. brave), not a URL."""
+    t = _strip_wrapping_quotes(text)
+    if not t:
+        return None
+    if is_browser_app_name(t):
+        return _normalize_token(t)
+
+    m = re.search(
+        r"(?i)(?:^|\b)(?:open|browse|launch|start)\s+(?:the\s+)?(?:app\s+)?(.+?)(?:\s+app)?\s*$",
+        t,
+    )
+    if m:
+        target = _extract_open_target(m.group(0)) or m.group(1).strip()
+        if target and is_browser_app_name(target) and not _NON_URL_OPEN.search(target):
+            return _normalize_token(target)
+    return None
+
+
 def is_play_youtube_intent(text: str) -> bool:
     """True when the user wants playback, not a browser open."""
     clean = (text or "").strip()
@@ -166,6 +305,10 @@ def wants_open_url(text: str) -> bool:
     clean = (text or "").strip()
     if not clean:
         return False
+    if _looks_like_macos_open(shlex.split(clean, posix=True)):
+        return False
+    if parse_open_app(clean):
+        return True
     if _PLAY_WEBSITE_GAME_PREFIX.search(clean):
         return False
     if _GREETING_RE.match(clean):
@@ -182,7 +325,7 @@ def wants_open_url(text: str) -> bool:
         return False
     if _NON_URL_OPEN.search(clean) and not re.search(r"(?i)^(?:open|browse|launch)\s+", clean):
         return False
-    return parse_open(clean) is not None
+    return parse_open(clean) is not None or parse_open_app(clean) is not None
 
 
 def parse_open(text: str) -> str | None:
@@ -218,6 +361,8 @@ def parse_open(text: str) -> str | None:
     if m:
         target = _extract_open_target(m.group(0))
         if target and not _NON_URL_OPEN.search(target):
+            if is_browser_app_name(target):
+                return None
             return build_url(target)
 
     # Bare URL or domain.
@@ -243,6 +388,9 @@ def parse_open(text: str) -> str | None:
 
 
 def nl_to_argv(text: str) -> list[str]:
+    app = parse_open_app(text)
+    if app:
+        return [app]
     url = parse_open(text)
     if not url:
         return []
@@ -269,6 +417,19 @@ def open_in_browser(url: str) -> bool:
     return webbrowser.open(normalized, new=2)
 
 
+def format_app_result(name: str) -> str:
+    label = _browser_app_label(name)
+    return "\n".join(
+        [
+            "━━━ Launch Application ━━━",
+            "",
+            f"  ▶ {label}",
+            "",
+            "  Opened on your system.",
+        ]
+    )
+
+
 def format_result(url: str) -> str:
     return "\n".join(
         [
@@ -282,15 +443,29 @@ def format_result(url: str) -> str:
 
 
 def cmd_open(argv: list[str]) -> int:
+    argv = [part for part in argv if part != "--"]
+    if platform.system() == "Darwin" and _looks_like_macos_open(argv):
+        return _passthrough_macos_open(argv)
     text = " ".join(argv).strip()
     if not text:
         print(
             "Usage: open_url <url-or-site>\n"
             "       open_url open youtube\n"
             "       arka open github.com\n"
+            "       arka open brave\n"
             "       arka 'open google in browser'",
             file=sys.stderr,
         )
+        return 1
+
+    app = parse_open_app(text)
+    if not app and not re.search(r"(?i)\b(?:open|browse|launch|start)\b", text):
+        app = parse_open_app(f"open {text}")
+    if app:
+        if launch_application(app):
+            print(format_app_result(app))
+            return 0
+        print(f"✗ Could not launch {_browser_app_label(app)!r}", file=sys.stderr)
         return 1
 
     url = parse_open(text)
@@ -298,13 +473,13 @@ def cmd_open(argv: list[str]) -> int:
         url = parse_open(f"open {text}")
     if not url:
         # Allow direct multi-arg URLs/domains.
-        urls = [build_url(part) for part in argv if part.strip()]
-        urls = [u for u in urls if u]
+        urls = _fallback_open_urls(argv)
         if not urls:
             print(
-                f"Could not parse URL to open: {text!r}\n"
+                f"Could not parse URL or app to open: {text!r}\n"
                 "Examples:\n"
                 "  open youtube\n"
+                "  open brave\n"
                 "  open https://news.ycombinator.com\n"
                 "  open google in browser",
                 file=sys.stderr,

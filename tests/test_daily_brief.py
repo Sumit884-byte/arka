@@ -549,5 +549,239 @@ class OpenAIChangelogFormatTests(unittest.TestCase):
         self.assertEqual(headline_answer_instructions("what is rust?"), "")
 
 
+class GatherHeadlinesContextTests(unittest.TestCase):
+    def test_gather_headlines_context_builds_snippet_blocks(self) -> None:
+        from unittest import mock
+
+        from arka.agent.daily_brief import gather_headlines_context
+
+        results = [
+            {
+                "link": "https://example.com/a",
+                "title": "Example headline",
+                "snippet": "Summary text.",
+            }
+        ]
+        prompt = build_headlines_prompt(tech_focus=False)
+        with mock.patch("arka.agent.chat.duckduckgo_search", return_value=results):
+            ctx = gather_headlines_context(prompt)
+        self.assertIn("Source: Example headline", ctx)
+        self.assertIn("URL: https://example.com/a", ctx)
+        self.assertIn("Summary text.", ctx)
+
+    def test_gather_headlines_context_returns_empty_on_search_failure(self) -> None:
+        from unittest import mock
+
+        from arka.agent.daily_brief import gather_headlines_context
+
+        prompt = build_headlines_prompt(tech_focus=False)
+        with mock.patch("arka.agent.chat.duckduckgo_search", return_value=[]):
+            self.assertEqual(gather_headlines_context(prompt), "")
+
+
+class DuckduckgoSearchResilienceTests(unittest.TestCase):
+    def test_duckduckgo_search_retries_then_returns_empty(self) -> None:
+        from unittest import mock
+
+        from arka.agent.chat import duckduckgo_search
+
+        with mock.patch("arka.agent.chat._ddgs_retry_count", return_value=2):
+            with mock.patch(
+                "arka.agent.chat._duckduckgo_search_once",
+                side_effect=TimeoutError("search timed out after 20s"),
+            ) as once:
+                self.assertEqual(duckduckgo_search("news today"), [])
+        self.assertEqual(once.call_count, 2)
+
+
+class DailyBriefAnswerTests(unittest.TestCase):
+    def test_headlines_prompt_skips_linked_page_scrape(self) -> None:
+        from unittest import mock
+
+        from arka.agent.chat import answer_question
+
+        prompt = build_headlines_prompt(tech_focus=False)
+        with mock.patch("arka.agent.chat.scrape_linked_pages") as linked:
+            with mock.patch("arka.agent.chat.gather_web_context", return_value="ctx"):
+                with mock.patch("arka.agent.chat.llm_complete", return_value="- News — https://news.test/a"):
+                    answer_question(prompt, deep=True, use_session=False, cleanup=True)
+        linked.assert_not_called()
+
+
+class LiveNewsRoutingTests(unittest.TestCase):
+    def test_live_news_detects_bbc_query(self) -> None:
+        from arka.agent.daily_brief import is_live_news_question
+
+        self.assertTrue(
+            is_live_news_question("The best latest news that is in BBC News")
+        )
+
+    def test_live_news_detects_todays_news(self) -> None:
+        from arka.agent.daily_brief import is_live_news_question
+
+        self.assertTrue(is_live_news_question("give todays news"))
+
+    def test_classic_brief_stays_bullet_mode(self) -> None:
+        from arka.agent.daily_brief import is_classic_brief_bullets, is_live_news_question
+
+        self.assertTrue(is_classic_brief_bullets("give daily brief"))
+        self.assertFalse(is_live_news_question(""))
+
+    def test_news_search_query_targets_bbc(self) -> None:
+        from arka.agent.daily_brief import news_search_query, news_source_host
+
+        q = "The best latest news that is in BBC News"
+        self.assertEqual(news_source_host(q), "bbc.com")
+        self.assertIn("site:bbc.com", news_search_query(q))
+        self.assertIn("site:bbc.com/news", news_search_query(q))
+
+
+class NewsSanitizationTests(unittest.TestCase):
+    def test_sanitize_news_title_dedupes_words(self) -> None:
+        from arka.agent.daily_brief import sanitize_news_title
+
+        self.assertEqual(
+            sanitize_news_title("Americas Americas page - BBC News"),
+            "Americas",
+        )
+
+    def test_is_valid_news_url_rejects_broken_bbc_paths(self) -> None:
+        from arka.agent.daily_brief import is_valid_news_url, normalize_news_url
+
+        self.assertFalse(
+            is_valid_news_url(
+                "https://www.bbc.com/news/hi/english/world?page=3",
+                host="bbc.com",
+            )
+        )
+        self.assertFalse(is_valid_news_url("/news/bbcverify", host="bbc.com"))
+        self.assertEqual(
+            normalize_news_url("/news/articles/c5ypnp1jv6jo", host="bbc.com"),
+            "https://www.bbc.com/news/articles/c5ypnp1jv6jo",
+        )
+        self.assertTrue(
+            is_valid_news_url(
+                "https://www.youtube.com/watch?v=w8yzKJhtmro",
+                host="bbc.com",
+            )
+        )
+        self.assertTrue(
+            is_valid_news_url(
+                "https://www.bbc.co.uk/news/articles/cvgvr336z2po",
+                host="bbc.com",
+            )
+        )
+
+    def test_fetch_news_rss_accepts_bbc_co_uk(self) -> None:
+        from unittest import mock
+
+        from arka.agent.daily_brief import fetch_news_rss_context
+
+        fake_entry = {
+            "title": "Test headline",
+            "link": "https://www.bbc.co.uk/news/articles/cvgvr336z2po",
+            "summary": "Snippet text",
+        }
+        fake_feed = type("F", (), {"entries": [fake_entry]})()
+        with mock.patch("feedparser.parse", return_value=fake_feed):
+            ctx = fetch_news_rss_context("bbc.com", limit=3)
+        self.assertIn("Test headline", ctx)
+        self.assertIn("bbc.co.uk/news/articles", ctx)
+
+    def test_should_use_live_news_web(self) -> None:
+        from arka.agent.daily_brief import should_use_live_news_web
+
+        self.assertTrue(should_use_live_news_web("BBC news for August 20, 2026"))
+        self.assertFalse(should_use_live_news_web("give daily brief"))
+
+    def test_is_news_article_url_rejects_bbc_section(self) -> None:
+        from arka.agent.daily_brief import is_news_article_url
+
+        self.assertFalse(is_news_article_url("https://www.bbc.com/news/world", host="bbc.com"))
+        self.assertFalse(is_news_article_url("https://www.bbc.com/news", host="bbc.com"))
+        self.assertTrue(
+            is_news_article_url(
+                "https://www.bbc.com/news/articles/c5ypnp1jv6jo",
+                host="bbc.com",
+            )
+        )
+
+    def test_news_summary_looks_ungrounded_detects_nav_glue(self) -> None:
+        from arka.agent.daily_brief import news_summary_looks_low_quality
+
+        bad = (
+            "Israeli plans east of Jerusalem are advancing. "
+            "Aeroplanes loop in heart shapes at an airshow. "
+            "Americas Americas page has more."
+        )
+        self.assertTrue(news_summary_looks_low_quality(bad))
+
+    def test_news_summary_rejects_stale_bbc_verify_framing(self) -> None:
+        from arka.agent.daily_brief import news_summary_looks_low_quality
+
+        bad = "BBC Verify is a new initiative launching today to fight misinformation."
+        self.assertTrue(news_summary_looks_low_quality(bad))
+
+    def test_news_snippet_filler_filters_airshow(self) -> None:
+        from arka.agent.daily_brief import news_snippet_looks_like_filler
+
+        self.assertTrue(
+            news_snippet_looks_like_filler(
+                "Red Arrows paint heart-shaped smoke trails",
+                "Display team wows crowds",
+            )
+        )
+
+    def test_named_source_returns_headlines_without_llm(self) -> None:
+        from unittest import mock
+
+        from arka.agent import daily_brief
+
+        ctx = (
+            "Source: Ukraine peace talks stall\n"
+            "URL: https://www.bbc.com/news/articles/c5ypnp1jv6jo\n"
+            "Leaders meet in Geneva."
+        )
+        with mock.patch.object(daily_brief, "gather_news_web_context", return_value=ctx):
+            with mock.patch("arka.llm.fallback.llm_complete") as llm:
+                out = daily_brief.summarize_news_web("BBC news today")
+        self.assertIn("BBC headlines", out)
+        self.assertIn("Ukraine peace talks stall", out)
+        llm.assert_not_called()
+
+    def test_generic_news_falls_back_to_headlines(self) -> None:
+        from unittest import mock
+
+        from arka.agent import daily_brief
+
+        ctx = (
+            "Source: Ukraine peace talks stall\n"
+            "URL: https://news.example.com/world/ukraine-peace-talks-12345678\n"
+            "Leaders meet in Geneva."
+        )
+        with mock.patch.object(daily_brief, "gather_news_web_context", return_value=ctx):
+            with mock.patch(
+                "arka.llm.fallback.llm_complete",
+                return_value="Americas Americas page aeroplanes loop Israeli plans....",
+            ):
+                out = daily_brief.summarize_news_web("give me today's news")
+        self.assertIn("headlines instead", out.lower())
+        self.assertIn("Ukraine peace talks stall", out)
+
+    def test_headlines_skip_nav_titles(self) -> None:
+        from arka.agent.daily_brief import headlines_from_web_context
+
+        ctx = (
+            "Source: Americas Americas page\n"
+            "URL: https://www.bbc.com/news/world/americas\n\n"
+            "Source: Ukraine peace talks stall\n"
+            "URL: https://www.bbc.com/news/articles/c5ypnp1jv6jo\n"
+            "Leaders meet in Geneva."
+        )
+        out = headlines_from_web_context(ctx)
+        self.assertIn("Ukraine peace talks stall", out)
+        self.assertNotIn("Americas Americas", out)
+
+
 if __name__ == "__main__":
     unittest.main()

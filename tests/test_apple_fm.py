@@ -152,7 +152,7 @@ def test_build_model_cli_openai_fallback(monkeypatch: pytest.MonkeyPatch) -> Non
 
     agno_openai = MagicMock()
     with patch.dict("sys.modules", {"agno.models.openai": SimpleNamespace(OpenAIChat=agno_openai)}):
-        model = fallback.build_model("apple-fm", "apple-fm-system", 0.2)
+        fallback.build_model("apple-fm", "apple-fm-system", 0.2)
     agno_openai.assert_called_once()
     kwargs = agno_openai.call_args.kwargs
     assert kwargs["base_url"] == "http://127.0.0.1:8765/v1"

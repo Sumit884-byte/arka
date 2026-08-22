@@ -169,6 +169,33 @@ def _handle_arka_ask(arguments: dict[str, Any]) -> str:
         raise ValueError("prompt is required")
     deep = bool(arguments.get("deep", False))
     try:
+        from arka.core.chat_context_gate import (
+            is_webui_meta_prompt,
+            is_webui_title_generation_prompt,
+            is_webui_followup_generation_prompt,
+            webui_title_generation_response,
+            webui_followup_generation_response,
+        )
+
+        if is_webui_title_generation_prompt(prompt):
+            title_json = webui_title_generation_response(prompt)
+            if title_json:
+                return title_json
+        if is_webui_followup_generation_prompt(prompt):
+            return webui_followup_generation_response(prompt)
+        if is_webui_meta_prompt(prompt):
+            from arka.llm.fallback import llm_complete
+
+            return llm_complete(
+                "Follow the instructions exactly. Reply with only the requested output.",
+                prompt,
+                temperature=0.2,
+                task="chat",
+                skill="webui_meta",
+            ).strip()
+    except ImportError:
+        pass
+    try:
         from arka.agent.chat import answer_question
 
         provenance, answer = answer_question(
@@ -197,6 +224,8 @@ def _handle_arka_remember(arguments: dict[str, Any]) -> str:
                 text,
                 layer=layer,  # type: ignore[arg-type]
                 long_term=bool(arguments.get("long_term", False)),
+                channel=str(arguments.get("channel") or ""),
+                chat_id=str(arguments.get("chat_id") or ""),
             )
         if code != 0:
             raise RuntimeError(err or "remember failed")
@@ -210,13 +239,123 @@ def _handle_arka_recall(arguments: dict[str, Any]) -> str:
     if not goal:
         raise ValueError("goal is required")
     limit_chars = _mcp_int(arguments.get("limit_chars"), 3500)
+    include_channel = arguments.get("include_channel", True)
+    if isinstance(include_channel, str):
+        include_channel = include_channel.strip().lower() not in {"0", "false", "no", "off"}
+    fast = bool(arguments.get("fast", False))
+    if isinstance(arguments.get("fast"), str):
+        fast = str(arguments.get("fast")).strip().lower() in {"1", "true", "yes", "on"}
     try:
         from arka.core.unified_memory import recall
 
-        text = recall(goal, limit_chars=max(200, limit_chars))
+        text = recall(
+            goal,
+            limit_chars=max(200, limit_chars),
+            channel=str(arguments.get("channel") or ""),
+            chat_id=str(arguments.get("chat_id") or ""),
+            include_channel=bool(include_channel),
+            fast=fast,
+        )
         return text or "(no matching memory)"
     except ImportError as exc:
         raise RuntimeError(f"unified_memory unavailable: {exc}") from exc
+
+
+def _handle_arka_context(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "layers").strip().lower()
+    try:
+        from arka.core.context_manager import (
+            format_inspect,
+            gate_check,
+            inspect_turn,
+            layers_status,
+            select_context,
+        )
+    except ImportError as exc:
+        raise RuntimeError(f"context_manager unavailable: {exc}") from exc
+
+    channel = str(arguments.get("channel") or "open-webui").strip()
+    chat_id = str(arguments.get("chat_id") or "default").strip()
+    user_text = str(arguments.get("text") or arguments.get("user_text") or "").strip()
+    query = str(arguments.get("query") or arguments.get("goal") or user_text).strip()
+    messages = arguments.get("messages")
+    if messages is not None and not isinstance(messages, list):
+        raise ValueError("messages must be a list of {role, content} objects")
+
+    if action == "layers":
+        return json.dumps(layers_status(channel=channel, chat_id=chat_id), indent=2)
+    if action == "select":
+        if not query:
+            raise ValueError("query (or text) is required for select")
+        limit_chars = _mcp_int(arguments.get("limit_chars"), 3000)
+        payload = select_context(
+            query,
+            channel=channel,
+            chat_id=chat_id,
+            limit_chars=max(200, limit_chars),
+        )
+        return json.dumps(payload, indent=2)
+    if action == "gate":
+        if not user_text:
+            raise ValueError("text is required for gate")
+        return json.dumps(gate_check(user_text, messages=messages), indent=2)
+    if action == "inspect":
+        if not user_text:
+            raise ValueError("text is required for inspect")
+        report = inspect_turn(
+            user_text,
+            channel=channel,
+            chat_id=chat_id,
+            messages=messages,
+        )
+        if bool(arguments.get("format", True)):
+            return format_inspect(report)
+        return json.dumps(report, indent=2)
+    if action == "topic":
+        from arka.core.web_topic_memory import load_state, reset_state
+
+        if str(arguments.get("subaction") or "").strip().lower() == "reset":
+            reset_state(channel, chat_id)
+            return json.dumps({"ok": True, "channel": channel, "chat_id": chat_id}, indent=2)
+        return json.dumps(load_state(channel, chat_id), indent=2)
+    if action == "webui":
+        payload = arguments.get("payload")
+        if not isinstance(payload, dict):
+            payload = {
+                "messages": messages or [],
+                "metadata": arguments.get("metadata") or {},
+                "user": arguments.get("user") or "",
+            }
+        hdrs = arguments.get("headers")
+        if not isinstance(hdrs, dict):
+            hdrs = {}
+        sub = str(arguments.get("subaction") or "inspect").strip().lower()
+        try:
+            from arka.core.webui_context import inspect_payload, prepare_turn
+        except ImportError as exc:
+            raise RuntimeError(f"webui_context unavailable: {exc}") from exc
+        ch = str(arguments.get("channel") or channel).strip()
+        if sub == "prepare":
+            turn = prepare_turn(payload, headers=hdrs, channel=ch)
+            return json.dumps(
+                {
+                    "channel": turn.channel,
+                    "chat_id": turn.chat_id,
+                    "chat_id_source": turn.chat_id_source,
+                    "last_user": turn.last_user,
+                    "agent_text": turn.agent_text,
+                    "context_hint": turn.context_hint,
+                    "isolated": turn.isolated,
+                    "needs_past_chat": turn.needs_past_chat,
+                    "meta": turn.meta,
+                },
+                indent=2,
+            )
+        out = inspect_payload(payload, headers=hdrs, channel=ch, as_text=bool(arguments.get("format", True)))
+        if isinstance(out, str):
+            return out
+        return json.dumps(out, indent=2)
+    raise ValueError("action must be layers, select, gate, inspect, topic, or webui")
 
 
 def _handle_arka_intelligence(arguments: dict[str, Any]) -> str:
@@ -968,10 +1107,12 @@ def _handle_arka_sessions(arguments: dict[str, Any]) -> str:
             if not channel:
                 raise ValueError("channel is required for context")
             limit_chars = _mcp_int(arguments.get("limit_chars"), 3000)
+            query = str(arguments.get("query") or arguments.get("goal") or "").strip()
             text = context_for(
                 channel,
                 chat_id or "default",
                 limit_chars=max(200, limit_chars),
+                query=query,
             )
             return text or "(no session context)"
         if action == "resume":
@@ -1674,7 +1815,7 @@ def _handle_arka_dub_video(arguments: dict[str, Any]) -> str:
             target = str(arguments.get("target") or arguments.get("target_lang") or arguments.get("language") or "").strip()
             if not path or not target:
                 raise ValueError("path and target are required when action=dub")
-            from arka.core.skill_requirements import exit_if_blocked, preflight_skill
+            from arka.core.skill_requirements import preflight_skill
 
             need_stt = not (
                 str(arguments.get("script") or arguments.get("script_text") or "").strip()
@@ -2243,7 +2384,7 @@ def _handle_arka_compose_story(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "compose").strip().lower()
     try:
         from arka.media.compose_story import cmd_check, nl_to_argv
-        from arka.media.compose_video import cmd_compose, cmd_parse
+        from arka.media.compose_video import cmd_compose
 
         if action == "check":
             import argparse
@@ -2358,7 +2499,7 @@ def _handle_arka_terminal_video(arguments: dict[str, Any]) -> str:
 def _handle_arka_music_generate(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "generate").strip().lower()
     try:
-        from arka.media.music_generate import cmd_check, generate, music_generate_result, nl_to_argv
+        from arka.media.music_generate import cmd_check, music_generate_result, nl_to_argv
 
         if action == "check":
             import argparse
@@ -2858,11 +2999,30 @@ def _handle_arka_website_pages(arguments: dict[str, Any]) -> str:
         if action == "guide":
             return read_guide()
         if action == "status":
-            return json.dumps(status(), indent=2)
+            payload = status()
+            try:
+                from arka.core.website_archetypes import status as archetype_status
+
+                payload = {**payload, "archetypes": archetype_status()}
+            except ImportError:
+                pass
+            return json.dumps(payload, indent=2)
+        if action == "archetypes":
+            from arka.core.website_archetypes import list_archetypes
+
+            return json.dumps(list_archetypes(), indent=2)
         if action == "context":
             goal = str(arguments.get("goal") or arguments.get("query") or "").strip()
             limit_chars = _mcp_int(arguments.get("limit_chars"), 4000)
             text = context_for(goal, limit_chars=max(200, limit_chars))
+            try:
+                from arka.core.website_archetypes import context_for as archetype_context
+
+                hint = archetype_context(goal, limit_chars=max(400, limit_chars // 2))
+                if hint:
+                    text = f"{text}\n\n{hint}".strip() if text else hint
+            except ImportError:
+                pass
             return text or "(website pages bias disabled)"
         if action == "plan":
             prompt = str(arguments.get("prompt") or arguments.get("goal") or "").strip()
@@ -2872,9 +3032,74 @@ def _handle_arka_website_pages(arguments: dict[str, Any]) -> str:
             site_type = str(arguments.get("site_type") or arguments.get("type") or "").strip() or None
             result = plan_pages(prompt, context_path=context_path, site_type=site_type)
             return str(result.get("plan") or "")
-        raise ValueError("action must be guide, status, context, or plan")
+        raise ValueError("action must be guide, status, context, plan, or archetypes")
     except ImportError as exc:
         raise RuntimeError(f"website_pages unavailable: {exc}") from exc
+
+
+def _handle_arka_podcast_inspiration(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "timeline").strip().lower()
+    try:
+        from arka.core.podcast_inspiration import (
+            cached_inspiration,
+            list_archetypes,
+            status,
+        )
+
+        if action == "list":
+            return json.dumps(list_archetypes(), indent=2)
+        if action == "status":
+            return json.dumps(status(), indent=2)
+        if action in {"timeline", "inspiration", "plan"}:
+            prompt = str(
+                arguments.get("prompt") or arguments.get("goal") or arguments.get("query") or ""
+            ).strip()
+            if not prompt:
+                raise ValueError("prompt is required when action=timeline")
+            runtime = arguments.get("runtime_minutes")
+            runtime_minutes = int(runtime) if runtime is not None else None
+            out = cached_inspiration(prompt, runtime_minutes=runtime_minutes)
+            return out or "(no cached podcast timeline matched)"
+        raise ValueError("action must be list, status, or timeline")
+    except ImportError as exc:
+        raise RuntimeError(f"podcast_inspiration unavailable: {exc}") from exc
+
+
+def _handle_arka_web_template(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "list").strip().lower()
+    try:
+        from arka.agent.web_templates import list_templates, nl_to_argv, scaffold_template, show_template
+
+        if action == "list":
+            return json.dumps(list_templates(), indent=2)
+        if action == "parse":
+            text = str(arguments.get("text") or arguments.get("query") or arguments.get("goal") or "").strip()
+            if not text:
+                raise ValueError("text is required when action=parse")
+            argv = nl_to_argv(text)
+            return json.dumps(
+                {"argv": ["web", *argv], "command": "web " + " ".join(argv) if argv else ""},
+                indent=2,
+            )
+        if action == "show":
+            name = str(arguments.get("name") or arguments.get("template") or "").strip()
+            if not name:
+                raise ValueError("name is required when action=show")
+            return json.dumps(show_template(name), indent=2)
+        if action == "scaffold":
+            name = str(arguments.get("name") or arguments.get("template") or "").strip()
+            if not name:
+                raise ValueError("name is required when action=scaffold")
+            output = str(arguments.get("output") or arguments.get("out") or ".").strip() or "."
+            dry_run = bool(arguments.get("dry_run") or arguments.get("dry-run"))
+            force = bool(arguments.get("force"))
+            created = scaffold_template(name, output, dry_run=dry_run, force=force)
+            return json.dumps({"created": created, "dry_run": dry_run}, indent=2)
+        raise ValueError("action must be list, show, scaffold, or parse")
+    except (FileNotFoundError, FileExistsError, ValueError) as exc:
+        raise ValueError(str(exc)) from exc
+    except ImportError as exc:
+        raise RuntimeError(f"web_template unavailable: {exc}") from exc
 
 
 def _handle_arka_project_rules(arguments: dict[str, Any]) -> str:
@@ -2959,6 +3184,51 @@ def _handle_arka_view_data(arguments: dict[str, Any]) -> str:
         raise ValueError(str(exc)) from exc
     except ImportError as exc:
         raise RuntimeError(f"view_data unavailable: {exc}") from exc
+
+
+def _handle_arka_data_dashboard(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "build").strip().lower()
+    try:
+        from arka.agent.data_dashboard import build, detect_mode, detect_schema, load_data
+
+        data = str(arguments.get("data") or arguments.get("path") or arguments.get("file") or "").strip() or None
+        inline = arguments.get("inline")
+        if inline is not None and not isinstance(inline, str):
+            inline = json.dumps(inline)
+        inline = str(inline or "").strip() or None
+        title = str(arguments.get("title") or "").strip() or None
+        theme = str(arguments.get("theme") or "dark").strip().lower() or "dark"
+        mode = str(arguments.get("mode") or "").strip().lower() or None
+        output = str(arguments.get("output") or arguments.get("out") or "").strip() or None
+        max_rows = _mcp_int(arguments.get("max_rows") or arguments.get("limit"), 5000)
+        dry_run = bool(arguments.get("dry_run") or arguments.get("dry-run"))
+
+        if action == "schema":
+            rows, source = load_data(data, inline=inline, max_rows=max_rows)
+            schema = detect_schema(rows)
+            return json.dumps(
+                {"source": source, "mode": detect_mode(rows, schema), "schema": schema},
+                indent=2,
+            )
+        if action == "build":
+            if not data and not inline:
+                raise ValueError("data path or inline payload is required for build")
+            result = build(
+                data,
+                inline=inline,
+                output=output,
+                title=title,
+                theme=theme,
+                mode=mode,
+                max_rows=max_rows,
+                dry_run=dry_run,
+            )
+            return json.dumps(result, indent=2)
+        raise ValueError("action must be build or schema")
+    except (FileNotFoundError, ValueError) as exc:
+        raise ValueError(str(exc)) from exc
+    except ImportError as exc:
+        raise RuntimeError(f"data_dashboard unavailable: {exc}") from exc
 
 
 def _handle_arka_view_output(arguments: dict[str, Any]) -> str:
@@ -3177,6 +3447,18 @@ def _handle_arka_alert(arguments: dict[str, Any]) -> str:
                 enabled = str(arguments.get("auto")).strip().lower() not in {"0", "false", "no", "off"}
                 alerts.set_auto_alert(enabled)
                 return json.dumps({"auto": enabled, **alerts.status_payload()}, indent=2)
+            if "model_exhausted" in arguments:
+                enabled = str(arguments.get("model_exhausted")).strip().lower() not in {
+                    "0",
+                    "false",
+                    "no",
+                    "off",
+                }
+                alerts.set_model_exhausted_alert(enabled)
+                return json.dumps(
+                    {"model_exhausted": enabled, **alerts.status_payload()},
+                    indent=2,
+                )
             return json.dumps(alerts.status_payload(), indent=2)
         raise ValueError("action must be status, list, send, schedule, test, or config")
     except ImportError as exc:
@@ -4204,6 +4486,32 @@ def _handle_arka_code_search(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"code_search unavailable: {exc}") from exc
 
 
+def _handle_arka_social_code_lookup(arguments: dict[str, Any]) -> str:
+    query = str(arguments.get("query") or arguments.get("q") or "").strip()
+    if not query:
+        raise ValueError("query is required")
+    try:
+        from arka.agent.social_code_lookup import lookup_payload
+
+        platforms_raw = arguments.get("platforms") or arguments.get("platform")
+        platforms: list[str] | None = None
+        if isinstance(platforms_raw, str) and platforms_raw.strip():
+            platforms = [p.strip() for p in platforms_raw.split(",") if p.strip()]
+        elif isinstance(platforms_raw, list):
+            platforms = [str(p).strip() for p in platforms_raw if str(p).strip()]
+        payload = lookup_payload(
+            query,
+            platforms=platforms,
+            limit=max(1, min(_mcp_int(arguments.get("limit"), 8), 30)),
+            use_cache=not bool(arguments.get("no_cache", False)),
+        )
+        return json.dumps(payload, indent=2, ensure_ascii=False)
+    except ValueError:
+        raise
+    except ImportError as exc:
+        raise RuntimeError(f"social_code_lookup unavailable: {exc}") from exc
+
+
 def _handle_arka_read_file(arguments: dict[str, Any]) -> str:
     path = str(arguments.get("path") or arguments.get("file") or "").strip()
     if not path:
@@ -4334,6 +4642,28 @@ def _handle_arka_qa(arguments: dict[str, Any]) -> str:
         raise RuntimeError(f"qa_engineering unavailable: {exc}") from exc
 
 
+def _handle_arka_oauth(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "status").strip().lower()
+    try:
+        from arka.integrations import arka_oauth
+
+        payload = arka_oauth.handle_action(arguments)
+        return json.dumps(payload, indent=2)
+    except ValueError:
+        raise
+    except RuntimeError as exc:
+        if action in ("setup", "configure", "config") and bool(arguments.get("dry_run", False)):
+            from arka.integrations import arka_oauth
+
+            return json.dumps(
+                arka_oauth.setup_payload(dry_run=True, open_console=False),
+                indent=2,
+            )
+        raise RuntimeError(f"oauth unavailable: {exc}") from exc
+    except ImportError as exc:
+        raise RuntimeError(f"oauth unavailable: {exc}") from exc
+
+
 def _handle_arka_connector(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "status").strip().lower()
     try:
@@ -4432,6 +4762,30 @@ def call_mcp_tool(name: str, arguments: dict[str, Any] | None = None) -> str:
                 raise RuntimeError(_mcp_disabled_message(tool_name))
             return tool.handler(args)
     raise ValueError(f"Unknown MCP tool: {tool_name}")
+
+
+def _handle_arka_self_repair(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "analyze").strip().lower()
+    try:
+        from arka.agent.self_repair import run_mcp_self_repair
+
+        payload = run_mcp_self_repair(
+            action,
+            apply=bool(arguments.get("apply", False)),
+            yes=bool(arguments.get("yes", False)),
+            min_confidence=str(arguments.get("min_confidence") or "high"),
+            verify=(
+                None
+                if arguments.get("verify") is None
+                else bool(arguments.get("verify"))
+            ),
+            limit=_mcp_int(arguments.get("limit"), 200),
+        )
+        return json.dumps(payload, indent=2)
+    except ValueError:
+        raise
+    except ImportError as exc:
+        raise RuntimeError(f"self_repair unavailable: {exc}") from exc
 
 
 def _handle_arka_self_build(arguments: dict[str, Any]) -> str:
@@ -4540,6 +4894,14 @@ def _build_tools() -> list[ArkaMcpTool]:
                         "description": "Persist note to long-term session memory",
                         "default": False,
                     },
+                    "channel": {
+                        "type": "string",
+                        "description": "Channel for short-term session memory (e.g. open-webui)",
+                    },
+                    "chat_id": {
+                        "type": "string",
+                        "description": "Chat/session id for short-term memory",
+                    },
                 },
                 "required": ["text"],
             },
@@ -4557,10 +4919,108 @@ def _build_tools() -> list[ArkaMcpTool]:
                         "description": "Max characters in response",
                         "default": 3500,
                     },
+                    "channel": {
+                        "type": "string",
+                        "description": "Channel for short-term session recall",
+                    },
+                    "chat_id": {
+                        "type": "string",
+                        "description": "Chat/session id for short-term recall",
+                    },
+                    "include_channel": {
+                        "type": "boolean",
+                        "description": "Include this chat's short-term turns (default true)",
+                        "default": True,
+                    },
+                    "fast": {
+                        "type": "boolean",
+                        "description": "Skip graph/notes layers; facts + n-gram session only",
+                        "default": False,
+                    },
                 },
                 "required": ["goal"],
             },
             handler=_handle_arka_recall,
+        ),
+        ArkaMcpTool(
+            name="arka_context",
+            description=(
+                "Web-style context management — inspect, select, gate, and layer status. "
+                "Use select with query for n-gram/multigram session matching; "
+                "inspect before answering to see what Arka would inject."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["layers", "select", "gate", "inspect", "topic", "webui"],
+                        "default": "layers",
+                        "description": "layers=status, select=n-gram context, gate=needs past chat, inspect=full report, topic=subtopic state, webui=Open WebUI payload",
+                    },
+                    "channel": {
+                        "type": "string",
+                        "description": "Session channel (default open-webui)",
+                        "default": "open-webui",
+                    },
+                    "chat_id": {
+                        "type": "string",
+                        "description": "Per-thread chat id",
+                        "default": "default",
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "User message for gate/inspect",
+                    },
+                    "query": {
+                        "type": "string",
+                        "description": "Recall/select query (defaults to text)",
+                    },
+                    "messages": {
+                        "type": "array",
+                        "description": "OpenAI-style turns for gate/inspect",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "role": {"type": "string"},
+                                "content": {"type": "string"},
+                            },
+                        },
+                    },
+                    "limit_chars": {
+                        "type": "integer",
+                        "description": "Max chars for select action",
+                        "default": 3000,
+                    },
+                    "format": {
+                        "type": "boolean",
+                        "description": "Return human report when action=inspect",
+                        "default": True,
+                    },
+                    "subaction": {
+                        "type": "string",
+                        "description": "topic reset when action=topic; prepare|inspect when action=webui",
+                    },
+                    "payload": {
+                        "type": "object",
+                        "description": "Raw Open WebUI /v1/chat/completions body when action=webui",
+                    },
+                    "headers": {
+                        "type": "object",
+                        "description": "Request headers (X-OpenWebUI-Chat-Id) when action=webui",
+                        "additionalProperties": {"type": "string"},
+                    },
+                    "metadata": {
+                        "type": "object",
+                        "description": "Open WebUI metadata.chat_id when action=webui",
+                    },
+                    "user": {
+                        "type": "string",
+                        "description": "OpenAI user/account field when action=webui",
+                    },
+                },
+            },
+            handler=_handle_arka_context,
         ),
         ArkaMcpTool(
             name="arka_intelligence",
@@ -4703,7 +5163,10 @@ def _build_tools() -> list[ArkaMcpTool]:
         ),
         ArkaMcpTool(
             name="arka_sessions",
-            description="Hermes-style channel sessions — list, context, resume, silence_check, push, or reset.",
+            description=(
+                "Per-channel conversation turns (session memory). "
+                "Pass query on action=context for n-gram/multigram slice selection."
+            ),
             input_schema={
                 "type": "object",
                 "properties": {
@@ -4752,6 +5215,14 @@ def _build_tools() -> list[ArkaMcpTool]:
                         "type": "integer",
                         "description": "Max characters when action=context",
                         "default": 3000,
+                    },
+                    "query": {
+                        "type": "string",
+                        "description": "N-gram context query when action=context (alias: goal)",
+                    },
+                    "goal": {
+                        "type": "string",
+                        "description": "Alias for query when action=context",
                     },
                 },
             },
@@ -4901,7 +5372,10 @@ def _build_tools() -> list[ArkaMcpTool]:
         ),
         ArkaMcpTool(
             name="arka_session_memory",
-            description="OpenClaw-style markdown session memory — append, search, context, status, or clear.",
+            description=(
+                "OpenClaw-style markdown notes (MEMORY.md + daily) — not per-chat turns. "
+                "For thread turns use arka_sessions or arka_context action=select."
+            ),
             input_schema={
                 "type": "object",
                 "properties": {
@@ -5162,7 +5636,7 @@ def _build_tools() -> list[ArkaMcpTool]:
                 "properties": {
                     "action": {
                         "type": "string",
-                        "enum": ["guide", "status", "context", "plan"],
+                        "enum": ["guide", "status", "context", "plan", "archetypes"],
                         "default": "context",
                     },
                     "goal": {"type": "string", "description": "Goal for context or plan prompt"},
@@ -5183,6 +5657,77 @@ def _build_tools() -> list[ArkaMcpTool]:
                 },
             },
             handler=_handle_arka_website_pages,
+        ),
+        ArkaMcpTool(
+            name="arka_podcast_inspiration",
+            description=(
+                "Cached podcast episode timelines — prep checklists, what to ask, and "
+                "recording flow for interview, solo, co-host, narrative, educational, news, "
+                "and founder formats. Expand sections in follow-up prompts."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["list", "status", "timeline"],
+                        "default": "timeline",
+                    },
+                    "prompt": {
+                        "type": "string",
+                        "description": "e.g. how to prepare for an interview podcast",
+                    },
+                    "goal": {"type": "string", "description": "Alias for prompt"},
+                    "runtime_minutes": {
+                        "type": "integer",
+                        "description": "Optional target episode length to scale timeline",
+                    },
+                },
+            },
+            handler=_handle_arka_podcast_inspiration,
+        ),
+        ArkaMcpTool(
+            name="arka_web_template",
+            description=(
+                "Common web UI templates — login, dashboard, settings, landing, data-table, "
+                "form, empty-state, modal. Plain HTML/CSS matching Arka landing tokens. "
+                "Use action=parse for 'scaffold dashboard ui' or 'web template login'."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["list", "show", "scaffold", "parse"],
+                        "default": "list",
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "Template id: login | dashboard | settings | landing | data-table | form | empty-state | modal",
+                    },
+                    "template": {
+                        "type": "string",
+                        "description": "Alias for name when action=show or scaffold",
+                    },
+                    "output": {
+                        "type": "string",
+                        "description": "Output directory when action=scaffold (default: .)",
+                    },
+                    "dry_run": {
+                        "type": "boolean",
+                        "description": "List paths without writing when action=scaffold",
+                    },
+                    "force": {
+                        "type": "boolean",
+                        "description": "Overwrite existing scaffold files",
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "Natural language for action=parse",
+                    },
+                },
+            },
+            handler=_handle_arka_web_template,
         ),
         ArkaMcpTool(
             name="arka_convert_media",
@@ -6498,6 +7043,60 @@ def _build_tools() -> list[ArkaMcpTool]:
             handler=_handle_arka_view_data,
         ),
         ArkaMcpTool(
+            name="arka_data_dashboard",
+            description=(
+                "Build a self-contained HTML dashboard from CSV/JSON/JSONL — "
+                "auto-detects stock OHLCV or data-science charts (Plotly.js, no server)."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["build", "schema"],
+                        "default": "build",
+                        "description": "build: write dashboard HTML; schema: detect columns and mode",
+                    },
+                    "data": {
+                        "type": "string",
+                        "description": "Path to CSV, TSV, JSON, or JSONL file",
+                    },
+                    "inline": {
+                        "type": "string",
+                        "description": "Inline CSV/JSON payload instead of a file path",
+                    },
+                    "title": {
+                        "type": "string",
+                        "description": "Dashboard title",
+                    },
+                    "theme": {
+                        "type": "string",
+                        "enum": ["dark", "light"],
+                        "default": "dark",
+                    },
+                    "mode": {
+                        "type": "string",
+                        "enum": ["stock", "datascience"],
+                        "description": "Optional mode override",
+                    },
+                    "output": {
+                        "type": "string",
+                        "description": "Output HTML path",
+                    },
+                    "max_rows": {
+                        "type": "integer",
+                        "default": 5000,
+                    },
+                    "dry_run": {
+                        "type": "boolean",
+                        "description": "Infer panels without writing HTML",
+                        "default": False,
+                    },
+                },
+            },
+            handler=_handle_arka_data_dashboard,
+        ),
+        ArkaMcpTool(
             name="arka_view_output",
             description=(
                 "Render JSON, CSV, markdown, or text in the Arka Output Viewer — "
@@ -6658,16 +7257,16 @@ def _build_tools() -> list[ArkaMcpTool]:
             name="arka_alert",
             description=(
                 "Email alerts — send or schedule cross-platform notifications for selections, "
-                "credits, hackathons, and study deadlines."
+                "credits, hackathons, study deadlines, and LLM model exhaustion."
             ),
             input_schema={
                 "type": "object",
                 "properties": {
                     "action": {
                         "type": "string",
-                        "enum": ["status", "list", "send", "schedule", "test"],
+                        "enum": ["status", "list", "send", "schedule", "test", "config"],
                         "default": "status",
-                        "description": "status, list, send, schedule, or test",
+                        "description": "status, list, send, schedule, test, or config",
                     },
                     "text": {
                         "type": "string",
@@ -6707,6 +7306,14 @@ def _build_tools() -> list[ArkaMcpTool]:
                         "type": "boolean",
                         "description": "Start remind daemon after schedule (default: false for MCP)",
                         "default": False,
+                    },
+                    "auto": {
+                        "type": "string",
+                        "description": "For action=config: on/off to toggle auto-alerts",
+                    },
+                    "model_exhausted": {
+                        "type": "string",
+                        "description": "For action=config: on/off to toggle LLM model-exhaustion alerts",
                     },
                 },
             },
@@ -7689,6 +8296,35 @@ def _build_tools() -> list[ArkaMcpTool]:
             handler=_handle_arka_code_search,
         ),
         ArkaMcpTool(
+            name="arka_social_code_lookup",
+            description=(
+                "Search code snippets and developer discussions on social platforms "
+                "(X/Twitter, Reddit, GitHub, Dev.to, Hacker News, Stack Overflow)."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Code topic or error to search for"},
+                    "platforms": {
+                        "type": "string",
+                        "description": "Optional comma-separated platforms (twitter,reddit,github,devto,hackernews,stackoverflow)",
+                    },
+                    "platform": {
+                        "type": "string",
+                        "description": "Alias for platforms",
+                    },
+                    "limit": {"type": "integer", "default": 8},
+                    "no_cache": {
+                        "type": "boolean",
+                        "description": "Skip cached results",
+                        "default": False,
+                    },
+                },
+                "required": ["query"],
+            },
+            handler=_handle_arka_social_code_lookup,
+        ),
+        ArkaMcpTool(
             name="arka_read_file",
             description=(
                 "Read full contents of a local workspace file (text/source). "
@@ -7908,6 +8544,83 @@ def _build_tools() -> list[ArkaMcpTool]:
             handler=_handle_arka_rag,
         ),
         ArkaMcpTool(
+            name="arka_oauth",
+            description=(
+                "Google OAuth setup — check sign-in status, list scopes, run browser or "
+                "headless login, refresh tokens, revoke credentials, or show Cloud Console setup steps."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["status", "setup", "login", "scopes", "refresh", "revoke"],
+                        "default": "status",
+                        "description": (
+                            "status: client + token state; setup: Cloud Console instructions; "
+                            "login: OAuth sign-in; scopes: recommended Gmail/Calendar/Drive scopes; "
+                            "refresh: renew access token; revoke: remove stored tokens"
+                        ),
+                    },
+                    "provider": {
+                        "type": "string",
+                        "enum": ["google", "gmail", "calendar"],
+                        "default": "google",
+                        "description": "OAuth provider (currently Google only)",
+                    },
+                    "service": {
+                        "type": "string",
+                        "description": "When action=scopes: gmail, calendar, drive, or profile",
+                    },
+                    "account": {
+                        "type": "string",
+                        "description": "Linked account alias/email key for login, refresh, or revoke",
+                    },
+                    "add": {
+                        "type": "boolean",
+                        "description": "When action=login: link an additional Google account",
+                        "default": False,
+                    },
+                    "all": {
+                        "type": "boolean",
+                        "description": "When action=revoke: remove all linked accounts",
+                        "default": False,
+                    },
+                    "dry_run": {
+                        "type": "boolean",
+                        "description": "When action=setup/login: instructions only (no browser)",
+                        "default": False,
+                    },
+                    "headless": {
+                        "type": "boolean",
+                        "description": "When action=login: prefer device-code flow",
+                        "default": False,
+                    },
+                    "no_browser": {
+                        "type": "boolean",
+                        "description": "When action=login/setup: do not open a browser",
+                        "default": False,
+                    },
+                    "open_console": {
+                        "type": "boolean",
+                        "description": "When action=setup: open Google Cloud Console",
+                        "default": False,
+                    },
+                    "local_only": {
+                        "type": "boolean",
+                        "description": "When action=revoke: skip Google revoke API",
+                        "default": False,
+                    },
+                    "timeout": {
+                        "type": "integer",
+                        "description": "When action=login: seconds to wait for authorization",
+                        "default": 180,
+                    },
+                },
+            },
+            handler=_handle_arka_oauth,
+        ),
+        ArkaMcpTool(
             name="arka_connector",
             description=(
                 "Arka CLI connector — connect terminal sessions to Agent Hub shared context "
@@ -8039,6 +8752,49 @@ def _build_tools() -> list[ArkaMcpTool]:
                 "required": ["team", "task"],
             },
             handler=_handle_arka_team_run,
+        ),
+        ArkaMcpTool(
+            name="arka_self_repair",
+            description=(
+                "Live self-healing for Arka runtime issues. "
+                "Workflow: analyze → propose (approval prompt) → heal (apply=true) → verify. "
+                "Scans MCP/config logs for LLM exhaustion, missing deps, config errors; "
+                "applies safe fixes and judge-model quality verification after heal."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["analyze", "propose", "heal", "fix", "verify", "status"],
+                        "default": "analyze",
+                        "description": (
+                            "analyze: scan logs and return issues + propose_prompt; "
+                            "propose: human-readable fix approval prompt; "
+                            "heal/fix: apply fixes (set apply=true); "
+                            "verify: judge repair outcome quality; "
+                            "status: repair history"
+                        ),
+                    },
+                    "apply": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "Required true for heal/fix to apply changes live",
+                    },
+                    "yes": {"type": "boolean", "default": False},
+                    "verify": {
+                        "type": "boolean",
+                        "description": "Override post-heal verification (default: on for heal)",
+                    },
+                    "min_confidence": {
+                        "type": "string",
+                        "enum": ["high", "medium", "low"],
+                        "default": "high",
+                    },
+                    "limit": {"type": "integer", "default": 200},
+                },
+            },
+            handler=_handle_arka_self_repair,
         ),
         ArkaMcpTool(
             name="arka_self_build",
