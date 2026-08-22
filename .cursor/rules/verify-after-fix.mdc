@@ -1,0 +1,7 @@
+# Verify after every fix
+
+After applying a fix:
+
+1. Run the relevant verification — tests, CLI repro, log check, or another concrete check that proves the fix works.
+2. If verification fails, keep iterating. Do not mark the task done or tell the user it is fixed until verification passes.
+3. When reporting success, state what was verified and how (command, test name, or check performed).

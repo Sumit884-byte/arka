@@ -93,7 +93,7 @@ whatsapp = [
 ]
 dev = [
     "build>=1.2",
-    "ruff",
+    "ruff==0.15.22",
     "pytest",
     "twine>=5.0",
 ]
