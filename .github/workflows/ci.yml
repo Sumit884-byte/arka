@@ -60,6 +60,9 @@ jobs:
       - name: Install package (dev)
         run: pip install -e ".[dev]"
       - name: Docker CLI integration (Linux containers)
+        env:
+          ARKA_CLI_TEST_IMAGE_LINUX: arka-cli-test:linux-ci
+          ARKA_DOCKER_BUILD_NO_CACHE: "1"
         run: pytest -q --tb=short -m "docker_linux" tests/test_docker_cli_integration.py tests/test_docker_status.py
 
   docker-cli-windows:
