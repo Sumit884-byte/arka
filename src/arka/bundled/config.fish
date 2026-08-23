@@ -1942,7 +1942,7 @@ end
 
 function _agent_shlex_split --description "Shell-safe argv split for skill dispatch (internal)"
     set -l py (_arka_python)
-    env ARKA_SHLEX="$argv[1]" $py -c "import os,shlex; print(chr(10).join(shlex.split(os.environ['ARKA_SHLEX'])))"
+    env ARKA_SHLEX="$argv[1]" $py -m arka.core.shell_argv
 end
 
 function _agent_strip_quotes --description "Strip wrapping single/double quotes (internal)"
@@ -2057,6 +2057,18 @@ function _agent_dispatch_one --description "Run one skill by name or shell via _
             return $status
         end
     end
+    if test "$first" = open; or test "$first" = browse
+        if _arka_routing_trace_enabled
+            echo (set_color cyan)"▶ Running skill: $cmd_trim"(set_color normal)
+        end
+        set -lx ARKA_SKILL open_url
+        if test (count $tokens) -gt 0
+            open_url $tokens
+        else
+            open_url
+        end
+        return $status
+    end
     if _arka_is_builtin_skill "$first"
         if _arka_routing_trace_enabled
             if test "$first" = pdf_ask
@@ -2158,7 +2170,7 @@ function _agent_all_skills --description "Canonical registered agent skill names
         rag_setup rag_status voice_agent wake_control \
         greeting agent_ask web_answer deep_web_answer web_essay platform_howto interesting_fact prompt_coach calc chat_reset set_location files_preference_help google \
         select_model model_select best_model model_advisor \
-        free_credits free_models free-models free_models_list \
+        free_credits free_models free-models free_models_list look_for_opensource \
         personalize \
         nearby_places map_download error_helper deep_queue batch app_usage internet_enhance aie \
         youtube_bulk yt_bulk
@@ -5767,17 +5779,18 @@ function open_urls --description "Open one or more URLs in the browser"
     echo (set_color --bold cyan)"🌐 Opened $opened site(s)"(set_color normal)
 end
 
-function open_url --description "Open a site name or URL in the default browser"
+function open_url --description "Open a site name, URL, or browser app in the default browser"
     set -l py (_arka_python)
     if test (count $argv) -eq 0
         echo "Usage: open_url <url-or-site>"
         echo "       open_url youtube"
         echo "       arka open github.com"
+        echo "       arka open brave"
         echo "       arka 'open google in browser'"
         return 1
     end
     set -l text (string join " " -- $argv)
-    set -l out (_arka_capture_output $py (_arka_py_script arka_open_url.py) open -- "$text")
+    set -l out (_arka_capture_output $py (_arka_py_script arka_open_url.py) open $argv)
     set -l st $status
     if test $st -ne 0
         echo $out >&2
@@ -5785,6 +5798,33 @@ function open_url --description "Open a site name or URL in the default browser"
     end
     _arka_pretty_python_output "$out"
     return 0
+end
+
+function open --description "Open a URL/site or launch a browser app (avoids macOS open(1) clash)"
+    if test (uname -s) = Darwin
+        for arg in $argv
+            if string match -qr '^-' -- "$arg"
+                command /usr/bin/open $argv
+                return $status
+            end
+        end
+        for arg in $argv
+            if contains -- "$arg" . ..
+                command /usr/bin/open $argv
+                return $status
+            end
+            if string match -qr '^(~|/|\./|\.\./)' -- "$arg"
+                command /usr/bin/open $argv
+                return $status
+            end
+            if string match -q '*/*' -- "$arg"
+                and not string match -qr '^https?://' -- "$arg"
+                command /usr/bin/open $argv
+                return $status
+            end
+        end
+    end
+    open_url $argv
 end
 
 function browse --description "Alias for open_url (open site in browser)"
@@ -7724,6 +7764,20 @@ function free_credits --description "Guide to maximize free AI provider credits 
     $py $script show $argv
 end
 
+function look_for_opensource --description "Find open-source projects, alternatives, and self-hosted tools"
+    set -l py (_arka_python)
+    set -l script (_arka_py_script arka_look_for_opensource.py)
+    if test (count $argv) -eq 0
+        $py $script show
+        return $status
+    end
+    if test $argv[1] = route -o $argv[1] = is-request
+        $py $script $argv
+        return $status
+    end
+    $py $script search $argv
+end
+
 function free_models --description "List and select free or no-token-cost LLMs"
     set -l py (_arka_python)
     $py -m arka.llm.free_models $argv
@@ -8597,10 +8651,22 @@ function _arka_print_answer --description "Pretty-print web/chat answer for the 
     end
 end
 
+function _arka_unwrap_answer_block --description "Drop print_block wrapper from captured stdout (internal)"
+    set -l text "$argv[1]"
+    test -z "$text"; and return
+    set -l py (_arka_python)
+    printf '%s' "$text" | $py -c '
+import sys
+from arka.output import unwrap_block
+print(unwrap_block(sys.stdin.read()), end="")
+'
+end
+
 function _arka_print_answer_block --description "Standard answer block: header + body + model (internal)"
     set -l answer "$argv[1]"
     set -l title "$argv[2]"
     test -z "$title"; and set title "Answer"
+    set answer (_arka_unwrap_answer_block "$answer")
     set -l kind answer
     switch (string lower "$title")
         case answer
@@ -11767,6 +11833,9 @@ function _agent_is_desktop_organize_request --description "True if user wants to
 end
 
 function _agent_is_advisory_question --description "True if user wants an opinion/answer, not a metrics dump"
+    if _agent_is_model_select_request "$argv[1]"
+        return 1
+    end
     if _agent_is_github_resume_request "$argv[1]"
         return 1
     end
@@ -12052,7 +12121,7 @@ function greeting --description "Reply to short greetings without an LLM call"
 end
 
 function _agent_is_google_login_request --description "True if user wants Google OAuth sign-in (internal)"
-    string match -qr '(?i)(google\s+(?:login|sign[\s-]?in|connect|auth|setup|status|logout)|connect\s+(?:my\s+)?(?:google|gmail|calendar)|sign[\s-]?in\s+(?:to\s+)?(?:google|gmail|calendar)|link\s+(?:my\s+)?google|oauth\s+google)' "$argv[1]"
+    string match -qr '(?i)(google\s+(?:login|sign[\s-]?in|connect|auth|setup|status|logout|oauth)|connect\s+(?:my\s+)?(?:google|gmail|calendar)(?:\s+account)?|sign[\s-]?in\s+(?:to\s+)?(?:google|gmail|calendar)|link\s+(?:my\s+)?google|oauth\s+google|setup\s+google\s+oauth|google\s+oauth\s+(?:setup|login|status|scopes|refresh|revoke))' "$argv[1]"
 end
 
 function _agent_is_post_x_request --description "True if user wants to post/share URL content on X/Twitter (internal)"
@@ -12691,6 +12760,16 @@ end
 
 function _agent_build_model_select_cmd --description "Build select_model args from NL (internal)"
     set -l cmd "$argv[1]"
+    # Fast fish-native match — route local model questions without agent_ask gather loop
+    if string match -qr '(?i)\b(?:which|what)\s+(?:is\s+)?(?:the\s+)?(?:best|strongest|recommended)\s+(?:local\s+)?(?:ai\s+)?(?:llm\s+)?models?\b' "$cmd"
+        echo "select_model --local --guide"
+        return
+    end
+    if string match -qr '(?i)\b(?:best|strongest|recommended)\s+(?:local\s+)?(?:ai\s+)?(?:llm\s+)?models?\b' "$cmd"
+        and string match -qr '(?i)\b(?:pc|mac|hardware|computer|machine|laptop|this\s+pc|my\s+pc|run\s+on)\b' "$cmd"
+        echo "select_model --local --guide"
+        return
+    end
     set -l py (_arka_python)
     set -l rest ($py (_arka_py_script arka_model_advisor.py) parse (string escape --style=script -- $cmd) 2>/dev/null)
     if test (count $rest) -gt 0
@@ -13219,7 +13298,27 @@ function _agent_route_google --description "Map NL to google subcommand (interna
         return 0
     end
     if _agent_is_google_login_request "$cmd"
-        if string match -qr '(?i)\b(setup|configure|config)\b' "$cmd"
+        if string match -qr '(?i)\b(scopes|scope)\b' "$cmd"
+            echo "oauth google scopes"
+        else if string match -qr '(?i)\b(refresh)\b' "$cmd"
+            echo "oauth google refresh"
+        else if string match -qr '(?i)\b(revoke)\b' "$cmd"
+            if string match -qr '(?i)\ball\b' "$cmd"
+                echo "oauth google revoke --all"
+            else
+                echo "oauth google revoke"
+            end
+        else if string match -qr '(?i)\boauth\b' "$cmd"
+            if string match -qr '(?i)\b(setup|configure|config)\b' "$cmd"
+                echo "oauth google setup"
+            else if string match -qr '(?i)\b(status|connected|signed\s+in)\b' "$cmd"
+                echo "oauth google status"
+            else if string match -qr '(?i)\b(logout|sign[\s-]?out|disconnect)\b' "$cmd"
+                echo "oauth google revoke"
+            else
+                echo "oauth google login"
+            end
+        else if string match -qr '(?i)\b(setup|configure|config)\b' "$cmd"
             echo "google setup"
         else if string match -qr '(?i)\b(status|connected|signed\s+in)\b' "$cmd"
             echo "google status"
@@ -13695,7 +13794,7 @@ function _arka_chat_ask --description "Run arka_chat.py ask; prints answer (inte
     set -l question (_agent_with_voice_context (string join " " -- $argv))
     set -a py_args "$question"
     set -l py (_arka_python)
-    $py (_arka_py_script arka_chat.py) $py_args
+    env ARKA_BODY_ONLY=1 $py (_arka_py_script arka_chat.py) $py_args
 end
 
 function deep_web_answer --description "Deep web search + scrape RAG answer"
@@ -13725,7 +13824,7 @@ function calc --description "Symbolic math via SymPy + AI explanation"
     end
     set -l expr (string join " " $argv)
     _arka_ui_header "$expr" math
-    set -l answer (_arka_capture_output python3 (_arka_py_script arka_chat.py) ask $argv)
+    set -l answer (_arka_capture_output env ARKA_BODY_ONLY=1 python3 (_arka_py_script arka_chat.py) ask $argv)
     if test -z "$answer"
         set -l raw (python3 (_arka_py_script arka_chat.py) calc $argv 2>/dev/null)
         test -n "$raw"; and echo "[FROM MEMORY] $raw"; and return 0

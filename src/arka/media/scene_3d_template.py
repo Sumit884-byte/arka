@@ -91,8 +91,8 @@ def render_html(spec: dict[str, Any]) -> str:
     cam_pos = camera.get("position", DEFAULT_CAMERA["position"])
     cam_target = camera.get("target", DEFAULT_CAMERA["target"])
     cam_fov = camera.get("fov", DEFAULT_CAMERA["fov"])
-    fog = env.get("fog") or {}
-    ground = env.get("ground") or {}
+    env.get("fog") or {}
+    env.get("ground") or {}
     bloom = bool(env.get("bloom"))
     stars = bool(env.get("stars"))
 

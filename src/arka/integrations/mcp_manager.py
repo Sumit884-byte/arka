@@ -302,14 +302,17 @@ def remove_server(name: str) -> bool:
     return True
 
 
+def _resolve_env_template(text: str) -> str:
+    def repl(match: re.Match[str]) -> str:
+        return os.environ.get(match.group(1), "")
+
+    return re.sub(r"\$\{env:([^}]+)\}", repl, str(text))
+
+
 def _resolve_env_values(values: dict[str, str]) -> dict[str, str]:
     resolved: dict[str, str] = {}
     for key, raw in values.items():
-        text = str(raw)
-        m = re.fullmatch(r"\$\{env:([^}]+)\}", text.strip())
-        if m:
-            text = os.environ.get(m.group(1), "")
-        resolved[str(key)] = text
+        resolved[str(key)] = _resolve_env_template(raw)
     return resolved
 
 
@@ -506,18 +509,21 @@ class McpStdioClient:
 
 
 def connect_client(name: str) -> McpClient:
+    from arka.paths import load_env_file
+
+    load_env_file()
     config = get_server_config(name)
     if config.transport == "http":
         return McpHttpClient(
             server=config.name,
-            url=config.url,
-            headers=dict(config.headers),
+            url=_resolve_env_template(config.url),
+            headers=_resolve_env_values(config.headers),
             api_key="",
         )
     return McpStdioClient(
         server=config.name,
         command=config.command,
-        args=config.args,
+        args=[_resolve_env_template(arg) for arg in config.args],
         env=config.env,
     )
 

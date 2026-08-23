@@ -102,18 +102,21 @@ def build_linux_cli_image(*, force: bool = False) -> str:
         raise RuntimeError("docker CLI not found")
     if not force:
         inspect = _run([docker, "image", "inspect", LINUX_IMAGE], timeout=30)
-        if inspect.returncode == 0:
+        if inspect.returncode == 0 and not os.environ.get("ARKA_DOCKER_BUILD_NO_CACHE"):
             return LINUX_IMAGE
+    build_cmd = [
+        docker,
+        "build",
+        "-f",
+        str(LINUX_DOCKERFILE),
+        "-t",
+        LINUX_IMAGE,
+        str(REPO_ROOT),
+    ]
+    if os.environ.get("ARKA_DOCKER_BUILD_NO_CACHE"):
+        build_cmd.insert(2, "--no-cache")
     build = _run(
-        [
-            docker,
-            "build",
-            "-f",
-            str(LINUX_DOCKERFILE),
-            "-t",
-            LINUX_IMAGE,
-            str(REPO_ROOT),
-        ],
+        build_cmd,
         timeout=BUILD_TIMEOUT,
     )
     if build.returncode != 0:
@@ -202,7 +205,7 @@ def mcp_docker_in_linux_container(
     script = (
         "import json; "
         "from arka.integrations.mcp_server import _handle_arka_docker; "
-        f"print(_handle_arka_docker({json.dumps(payload)!r}))"
+        f"print(_handle_arka_docker({payload!r}))"
     )
     result = run_linux_container(
         ["python", "-c", script],
@@ -226,7 +229,7 @@ def mcp_docker_in_windows_container(
     script = (
         "import json; "
         "from arka.integrations.mcp_server import _handle_arka_docker; "
-        f"print(_handle_arka_docker({json.dumps(payload)!r}))"
+        f"print(_handle_arka_docker({payload!r}))"
     )
     result = run_windows_container(
         ["python", "-c", script],

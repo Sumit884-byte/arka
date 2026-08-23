@@ -149,10 +149,19 @@ def show_model_info() -> int:
 
 def show_capabilities() -> int:
     """Print a deterministic Arka skills/capabilities summary (no LLM)."""
-    from arka.agent.voice import voice_help
+    from arka.core.capability_router import default_router
 
+    router = default_router()
+    names = router.available_skills()
     print_section("Arka Skills")
-    print(f"  {voice_help()}")
+    print(f"  {len(names)} skills available without fish (bash/zsh/PowerShell).")
+    sample = ", ".join(names[:12])
+    if sample:
+        print(f"  Examples: {sample}")
+    print(
+        "  I'm Arka. Try: weather, search the web, check repo health, "
+        "generate a password, or ask me anything."
+    )
     model = active_model_label()
     if model:
         print()
@@ -194,6 +203,8 @@ def show_help() -> int:
         """  arka provider list              # providers with keys configured
   arka provider set openrouter    # set preferred provider + model
   arka ai-models                  # list LLM providers and models
+  arka credits usage               # provider keys + token savings summary
+  arka tokens usage                # local token ledger + estimated savings
   arka ai-skill-model profiles    # per-skill model choices
   arka route learn "phrase" "skill"  # teach NL → CLI mapping
   arka self improve [target] [--apply]  # analyze + plan codebase fixes"""
@@ -221,8 +232,8 @@ def show_help() -> int:
     print()
     print_section("Platforms")
     print(
-        """  With fish       70+ skills via bundled config.fish (recommended)
-  Without fish    Portable Python subset (chat, web, calc, weather, …)
+        """  Any shell      55+ Python-native skills (bash/zsh/PowerShell — no fish required)
+  Fish extras     optional mic/TTS/service loops (listen, speak, wifi)
   Install fish:   macOS brew install fish | Linux apt install fish | Windows scoop install fish
 
   Docs: https://arka-agent.mintlify.site
@@ -281,5 +292,14 @@ def parse_block(text: str) -> tuple[str, str] | None:
     body = "\n".join(lines[1:]).strip()
     body = re.sub(r"^\s{2}", "", body, flags=re.MULTILINE)
     body = re.sub(r"\n\s*Model:.*$", "", body, flags=re.S).strip()
+    body = re.sub(r"\n\s*Quality:.*$", "", body, flags=re.S).strip()
     body = re.sub(r"\n\s*Docs:.*$", "", body, flags=re.S).strip()
     return m.group(1).strip(), body
+
+
+def unwrap_block(text: str) -> str:
+    """Return answer body when *text* is print_block output; otherwise return text unchanged."""
+    parsed = parse_block((text or "").strip())
+    if parsed:
+        return parsed[1]
+    return (text or "").strip()

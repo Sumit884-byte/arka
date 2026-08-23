@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import io
 import json
 import os
-from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-from arka.agent.local_music_gen import nl_to_argv, route_command, wants_local_music
+from arka.agent.local_music_gen import nl_to_argv, wants_local_music
 from arka.media.music_generate import nl_to_argv as cloud_nl_to_argv
 from arka.router import route
 from arka.routing.symbolic import route_generate_music, route_local_music_gen

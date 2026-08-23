@@ -552,20 +552,56 @@ def scaffold_skill(root: Path, *, name: str, template: str = "dev") -> Path:
     return target
 
 
+def _wants_dev_tool_catalog(low: str) -> bool:
+    """True when the user wants the external developer-tool catalog, not docker status etc."""
+    if re.search(
+        r"(?i)\b(?:"
+        r"arka\s+(?:api|browser\s+debug|devops|observability|github\s+actions)\s+tools?|"
+        r"api\s+testing\s+tools?|browser\s+(?:debug|debugging)\s+tools?|devops\s+tools?|"
+        r"observability\s+tools?|developer\s+tools?|dev\s+tools?(?:\s+list)?|"
+        r"(?:show|list|what)\s+(?:the\s+)?(?:supported\s+)?(?:developer|dev|external)\s+tools?"
+        r")\b",
+        low,
+    ):
+        return True
+    if not re.search(r"(?i)\btools?\b", low):
+        return False
+    return bool(
+        re.search(
+            r"(?i)\b(?:postman|insomnia|chrome\s+devtools|firefox\s+developer|docker|kubernetes|"
+            r"kubectl|terraform|prometheus|jenkins|grafana)\b",
+            low,
+        )
+    )
+
+
 def route_command(text: str) -> str:
+    """Map natural language to dev-tools CLI invocation."""
     raw = re.sub(r"\s+", " ", (text or "").strip())
     if not raw:
         return ""
     low = raw.lower()
-    if re.search(r"(?i)\b(route audit|route_audit)\b", low):
+    if re.search(r"(?i)\b(?:route\s+audit|route_audit|routing\s+audit)\b", low):
         return "route_audit"
+    if re.search(r"(?i)\b(?:audit|check)\s+(?:the\s+)?(?:route|routing)(?:\s+(?:coverage|parity))?\b", low):
+        return "route_audit"
+    if re.search(
+        r"(?i)\b(?:review\s+(?:my\s+)?(?:pr|pull\s+request)s?|(?:pr|pull\s+request)s?\s+review|review\s+(?:this\s+)?(?:pr|pull\s+request))\b",
+        low,
+    ):
+        if re.search(r"(?i)\bstaged\b", low):
+            return "review --staged"
+        return "review"
     if re.search(r"(?i)\barka\s+ci\b", low) or re.search(r"(?i)\brun\s+ci\b", low):
         if re.search(r"(?i)\b(full|all)\b", low):
             return "ci --full"
         if re.search(r"(?i)\bfix\b", low):
             return "ci --fix"
         return "ci"
-    if re.search(r"(?i)\barka\s+review\b", low) or re.search(r"(?i)\breview\s+(?:staged|vs\s+main|diff)\b", low):
+    if re.search(
+        r"(?i)\b(?:arka\s+review|review\s+(?:staged|vs\s+main|diff|my\s+changes|local\s+changes))\b",
+        low,
+    ):
         if re.search(r"(?i)\bstaged\b", low):
             return "review --staged"
         return "review"
@@ -577,9 +613,14 @@ def route_command(text: str) -> str:
             return f"skill new {name} --template {template}"
     if re.search(r"(?i)\b(?:security|secrets?)\s+(?:scan|check|audit)\b", low):
         return "security"
-    if re.search(r"(?i)\b(?:developer|dev|repo|project)\s+(?:doctor|preflight|setup\s+check)\b|\b(?:check|run)\s+(?:the\s+)?(?:developer|dev)\s+setup\b|\bdoctor\s+(?:this\s+)?repo\b", low):
+    if re.search(
+        r"(?i)\b(?:developer|dev|repo|project)\s+(?:doctor|preflight|setup\s+check)\b|"
+        r"\b(?:check|run)\s+(?:the\s+)?(?:developer|dev)\s+setup\b|"
+        r"\bdoctor\s+(?:this\s+)?repo\b",
+        low,
+    ):
         return "dev_doctor"
-    if re.search(r"(?i)\b(?:api\s+testing|postman|insomnia|browser\s+debug|chrome\s+devtools|firefox\s+developer|devops\s+tools?|docker|kubernetes|kubectl|terraform|prometheus|jenkins)\b", low):
+    if _wants_dev_tool_catalog(low):
         return "dev_tools list"
     if re.search(r"(?i)\b(?:install|setup|enable)\b.*\b(?:arka\s+)?(?:pre[- ]commit|git\s+hooks?)\b", low):
         return "hooks install"
@@ -588,6 +629,11 @@ def route_command(text: str) -> str:
     if re.search(r"(?i)\bagent\s+hub\s+setup\b|\bsetup\s+cursor\b", low):
         return "agent_hub sync --unify"
     return ""
+
+
+def wants_dev_tools(text: str) -> bool:
+    """True when NL should route to developer-tools commands."""
+    return bool(route_command(text))
 
 
 def cmd_ci(args: argparse.Namespace) -> int:

@@ -18,7 +18,9 @@ venv-*/
 .env.local
 
 # IDE / local
-.cursor/
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
 .qoder/
 .skills_setup_done
 fish_variables

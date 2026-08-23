@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from pathlib import Path
 
 from arka.core.screenshot_paths import (
     docs_screenshot_context,

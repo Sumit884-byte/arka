@@ -119,6 +119,14 @@ AGENTS: dict[str, dict[str, Any]] = {
         "memory_hint": "Run `arka connector connect` or source hub/launch.env for shared context",
         "memory_paths": [],
     },
+    "trueforge": {
+        "name": "TrueForge",
+        "ollama_launch": "",
+        "aliases": ["true forge", "truefoundry"],
+        "mcp_paths": [],
+        "memory_hint": "Agent harness — `arka trueforge start`, then `arka trueforge connect` to wire Arka MCP",
+        "env_vars": {"TRUEFORGE_BASE_URL": "TRUEFORGE_BASE_URL"},
+    },
 }
 
 ADAPTER_TARGETS: dict[str, Path] = {
@@ -858,6 +866,11 @@ def _save_agents_registry(data: dict[str, Any]) -> Path:
 
 
 def sync_mcp(*, use_symlink: bool = False) -> dict[str, Any]:
+    from arka.integrations.brightdata_mcp import (
+        BRIGHTDATA_MCP_SERVER_KEY,
+        brightdata_mcp_launch_spec,
+        ensure_brightdata_in_config,
+    )
     from arka.integrations.context7_mcp import (
         CONTEXT7_MCP_SERVER_KEY,
         context7_mcp_launch_spec,
@@ -876,6 +889,8 @@ def sync_mcp(*, use_symlink: bool = False) -> dict[str, Any]:
     dst.parent.mkdir(parents=True, exist_ok=True)
     result: dict[str, Any] = {"source": str(src), "destination": str(dst), "ok": False}
 
+    if ensure_brightdata_in_config():
+        result["brightdata_mcp"] = "added_to_source"
     if ensure_context7_in_config():
         result["context7_mcp"] = "added_to_source"
     if ensure_datahub_in_config():
@@ -902,6 +917,10 @@ def sync_mcp(*, use_symlink: bool = False) -> dict[str, Any]:
     hub_data = _load_json_file(dst)
     hub_servers = hub_data.setdefault("mcpServers", {})
     changed = False
+    if BRIGHTDATA_MCP_SERVER_KEY not in hub_servers:
+        hub_servers[BRIGHTDATA_MCP_SERVER_KEY] = brightdata_mcp_launch_spec()
+        changed = True
+        result["brightdata_mcp"] = result.get("brightdata_mcp", "merged_into_hub")
     if CONTEXT7_MCP_SERVER_KEY not in hub_servers:
         hub_servers[CONTEXT7_MCP_SERVER_KEY] = context7_mcp_launch_spec()
         changed = True

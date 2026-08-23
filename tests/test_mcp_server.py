@@ -19,6 +19,7 @@ def test_list_tool_definitions_schema(monkeypatch):
     assert len(tools) == len(names)
     assert "arka_ask" in names
     assert "arka_recall" in names
+    assert "arka_context" in names
     assert "arka_heartbeat" in names
     assert "arka_sessions" in names
     assert "arka_routines" in names
@@ -32,6 +33,7 @@ def test_list_tool_definitions_schema(monkeypatch):
     assert "arka_project_rules" in names
     assert "arka_webhook" in names
     assert "arka_view_data" in names
+    assert "arka_data_dashboard" in names
     assert "arka_clipboard" in names
     assert "arka_share" in names
     assert "arka_remind" in names
@@ -62,6 +64,7 @@ def test_list_tool_definitions_schema(monkeypatch):
     assert "arka_repo_context" in names
     assert "arka_pr_check" in names
     assert "arka_code_search" in names
+    assert "arka_social_code_lookup" in names
     assert "arka_read_file" in names
     assert "arka_apply_patch" in names
     assert "arka_edit_guard" in names
@@ -81,6 +84,7 @@ def test_list_tool_definitions_schema(monkeypatch):
     assert "arka_ocr" in names
     assert "arka_rag" in names
     assert "arka_agent_hub" in names
+    assert "arka_oauth" in names
     assert "arka_team_run" in names
     for tool in tools:
         assert tool["name"]

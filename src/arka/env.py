@@ -169,6 +169,13 @@ def load_env(extra: Path | None = None, *, force: bool = False) -> None:
     except ImportError:
         pass
 
+    try:
+        from arka.core.unified_api import apply_unified_api_env
+
+        apply_unified_api_env()
+    except ImportError:
+        pass
+
     if extra is None:
         with _ENV_LOAD_LOCK:
             _ENV_LOADED = True

@@ -7,7 +7,7 @@ import argparse
 import json
 import sys
 
-from arka.routing.prompt_coach import extract_focus, is_prompt_coach_request
+from arka.routing.prompt_coach import extract_focus
 
 
 def prompt_coach_system_prompt() -> str:

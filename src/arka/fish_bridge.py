@@ -82,6 +82,14 @@ def delegate_to_fish(argv: list[str]) -> int | None:
         pass
 
     try:
+        from arka.agent.web_templates import is_web_template_cli_argv, run_web_template_cli
+
+        if is_web_template_cli_argv(argv):
+            return run_web_template_cli(argv)
+    except ImportError:
+        pass
+
+    try:
         from arka.media.model_video import is_model_video_cli_argv, run_model_video_cli
 
         if is_model_video_cli_argv(argv):

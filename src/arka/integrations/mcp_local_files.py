@@ -47,6 +47,11 @@ MCP_AGENT_EXECUTION_RULES: tuple[dict[str, str], ...] = (
         ),
     },
     {
+        "id": "verify_after_fix",
+        "summary": "After any fix, run verification before marking done.",
+        "rule": VERIFY_AFTER_FIX_NOTICE,
+    },
+    {
         "id": "local_file_tools",
         "summary": "arka_ocr and arka_rag need mounted local paths.",
         "rule": LOCAL_FILE_TOOL_NOTICE,

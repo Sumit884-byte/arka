@@ -454,6 +454,13 @@ def test_dispatch_split_skill_line_multi_word_topic():
             "--topic",
             "kubernetes networking",
         ]),
+        (
+            "study_agent vocabulary: write a sentence for me to fill in the blank, and I'll try to pick the correct option",
+            [
+                "study_agent",
+                "vocabulary: write a sentence for me to fill in the blank, and I'll try to pick the correct option",
+            ],
+        ),
     ]
     for line, expected in cases:
         assert _split_skill_line(line) == expected, line

@@ -8,12 +8,17 @@ from unittest import mock
 
 from arka.integrations.open_url import (
     build_url,
+    is_browser_app_name,
     is_play_youtube_intent,
+    launch_application,
     nl_to_argv,
     open_in_browser,
     parse_open,
+    parse_open_app,
     route_command,
     wants_open_url,
+    _looks_like_macos_open,
+    _fallback_open_urls,
 )
 from arka.router import route
 from arka.routing.symbolic import route_offline_extras, route_open_url
@@ -25,6 +30,12 @@ class OpenUrlBuildTests(unittest.TestCase):
         self.assertEqual(build_url("YouTube"), "https://youtube.com")
         self.assertEqual(build_url("google"), "https://google.com")
         self.assertEqual(build_url("github"), "https://github.com")
+
+    def test_browser_app_names_are_not_urls(self) -> None:
+        self.assertTrue(is_browser_app_name("brave"))
+        self.assertIsNone(build_url("brave"))
+        self.assertFalse(is_browser_app_name("brave.com"))
+        self.assertEqual(build_url("brave.com"), "https://brave.com")
 
     def test_domain_and_full_url(self) -> None:
         self.assertEqual(build_url("github.com"), "https://github.com")
@@ -45,6 +56,12 @@ class OpenUrlParseTests(unittest.TestCase):
             parse_open("open https://news.ycombinator.com"),
             "https://news.ycombinator.com",
         )
+
+    def test_open_browser_app_names(self) -> None:
+        self.assertIsNone(parse_open("open brave"))
+        self.assertEqual(parse_open_app("open brave"), "brave")
+        self.assertEqual(parse_open_app("brave"), "brave")
+        self.assertEqual(nl_to_argv("open brave"), ["brave"])
 
     def test_open_in_browser_phrasing(self) -> None:
         self.assertEqual(parse_open("open google in browser"), "https://google.com")
@@ -93,6 +110,8 @@ class OpenUrlRoutingTests(unittest.TestCase):
         hit = route_command("open youtube")
         self.assertTrue(hit.startswith("open_url "))
         self.assertIn("youtube.com", hit)
+        brave_hit = route_command("open brave")
+        self.assertEqual(brave_hit, "open_url brave")
 
     def test_symbolic_route(self) -> None:
         hit = route_open_url("open YouTube")
@@ -129,6 +148,16 @@ class OpenUrlRoutingTests(unittest.TestCase):
         self.assertEqual(route_command(phrase), "")
         self.assertIsNone(route_open_url(phrase))
 
+    def test_macos_open_is_not_browser_open(self) -> None:
+        self.assertTrue(_looks_like_macos_open(["-a", "Cursor", "."]))
+        self.assertTrue(_looks_like_macos_open(["."]))
+        self.assertTrue(_looks_like_macos_open(["./README.md"]))
+        self.assertFalse(_looks_like_macos_open(["youtube"]))
+        self.assertFalse(_looks_like_macos_open(["github.com"]))
+        self.assertFalse(wants_open_url("open -a Cursor ."))
+        self.assertEqual(route_command("open -a Cursor ."), "")
+        self.assertEqual(_fallback_open_urls(["-a", "Cursor", "."]), [])
+
     def test_router_symbolic_only(self) -> None:
         phrase = "open github.com"
         with mock.patch.dict(os.environ, {"ROUTE_MODE": "symbolic_only"}, clear=False):
@@ -143,6 +172,11 @@ class OpenUrlBrowserTests(unittest.TestCase):
         with mock.patch("arka.integrations.open_url.webbrowser.open", return_value=True) as opener:
             self.assertTrue(open_in_browser("youtube"))
             opener.assert_called_once_with("https://youtube.com", new=2)
+
+    def test_launch_application_mock(self) -> None:
+        with mock.patch("arka.integrations.open_url.subprocess.run", return_value=mock.Mock(returncode=0)) as runner:
+            self.assertTrue(launch_application("brave"))
+            runner.assert_called_once_with(["open", "-a", "Brave Browser"], check=False, capture_output=True, text=True)
 
 
 if __name__ == "__main__":

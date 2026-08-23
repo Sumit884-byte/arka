@@ -1,4 +1,3 @@
-from unittest import mock
 import base64
 
 

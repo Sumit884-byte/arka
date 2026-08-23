@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 import time
@@ -153,7 +154,16 @@ def run_skill(skill_line: str) -> int:
         else nullcontext()
     )
     with skill_ctx as current:
-        if head in ("generate_password", "password", "pass"):
+        try:
+            from arka.core.skill_registry import ensure_builtins, run as run_registered_skill
+
+            ensure_builtins()
+            reg_code = run_registered_skill(head, rest)
+        except ImportError:
+            reg_code = None
+        if reg_code is not None:
+            code = reg_code
+        elif head in ("generate_password", "password", "pass"):
             code = run_password(rest)
         elif head == "config":
             from arka.core.default_config import main as config_main
@@ -179,6 +189,26 @@ def run_skill(skill_line: str) -> int:
             else:
                 print("Could not get a fact (check LLM API keys)", file=sys.stderr)
                 code = 1
+        elif head in ("joke", "jokes", "dad_joke", "dad-joke"):
+            from arka.agent.joke import answer_joke
+
+            answer = answer_joke(" ".join(rest))
+            if answer:
+                print(answer)
+                code = 0
+            else:
+                print("Could not fetch a joke (network or API unavailable)", file=sys.stderr)
+                code = 1
+        elif head in ("podcast_inspiration", "podcast-inspiration", "podcast_plan"):
+            from arka.core.podcast_inspiration import cached_inspiration
+
+            answer = cached_inspiration(" ".join(rest))
+            if answer:
+                print(answer)
+                code = 0
+            else:
+                print("No cached podcast timeline matched.", file=sys.stderr)
+                code = 1
         elif head in ("prompt_coach", "prompt-coach", "prompt_coaching", "prompt-coaching"):
             from arka.agent.prompt_coach import main as prompt_coach_main
 
@@ -195,8 +225,15 @@ def run_skill(skill_line: str) -> int:
             from arka.agent.contextual_answer import main as contextual_main
 
             code = contextual_main(rest)
-        elif head == "web_answer":
-            code = run_chat_ask(" ".join(rest))
+        elif head == "daily_brief":
+            from arka.agent.daily_brief import build_headlines_prompt, tech_focus_from_prompt
+
+            query = " ".join(rest)
+            tech = tech_focus_from_prompt(query) or bool(re.search(r"(?i)\btech\b", query))
+            if not tech:
+                run_chat_weather(query or "today")
+                print()
+            code = run_chat_ask(build_headlines_prompt(tech_focus=tech), deep=True)
         elif head == "deep_web_answer":
             code = run_chat_ask(" ".join(rest), deep=True)
         elif head in ("greeting", "hello", "hi"):
@@ -224,6 +261,11 @@ def run_skill(skill_line: str) -> int:
             from arka.agent.core import price_check
 
             price_check(" ".join(rest))
+            code = 0
+        elif head in ("study_agent", "study-agent"):
+            from arka.agent.core import research
+
+            research("study: " + " ".join(rest), deep=True)
             code = 0
         elif head in ("fact_check", "fact-check", "factcheck", "factchecker"):
             from arka.agent.fact_check import fact_check
@@ -371,6 +413,34 @@ def run_skill(skill_line: str) -> int:
             from arka.agent.website_pages import main as website_pages_main
 
             code = website_pages_main(rest or ["guide"])
+        elif head == "web" and rest and rest[0] in ("template", "templates"):
+            from arka.agent.web_templates import main as web_templates_main
+
+            code = web_templates_main(rest[1:])
+        elif head == "web" and rest and rest[0] in ("ui", "frontend", "dashboard"):
+            from arka.web.frontend.cli import main as frontend_main
+
+            code = frontend_main(rest[1:])
+        elif head == "frontend":
+            from arka.web.frontend.cli import main as frontend_main
+
+            code = frontend_main(rest)
+        elif head in ("ollama-ui", "ollama_ui", "ollamaui"):
+            from arka.web.frontend.cli import main as frontend_main
+
+            ollama_argv = ["ollama"]
+            if rest and rest[0] != "start":
+                ollama_argv.extend(rest)
+            code = frontend_main(ollama_argv)
+        elif head in ("open-webui", "open_webui", "openwebui"):
+            from arka.web.frontend.cli import main as frontend_main
+
+            open_argv = ["open-webui"]
+            if rest and rest[0] == "start":
+                open_argv.extend(rest[1:])
+            elif rest:
+                open_argv.extend(rest)
+            code = frontend_main(open_argv)
         elif head in ("coding_workflow", "coding-workflow", "workflow"):
             from arka.agent.coding_workflows import main as workflow_main
             code = workflow_main(rest)
@@ -397,6 +467,10 @@ def run_skill(skill_line: str) -> int:
             from arka.llm.credits_usage import main as credits_usage_main
 
             code = credits_usage_main(rest[1:])
+        elif head == "tokens" or (head == "usage" and rest and rest[0] == "tokens"):
+            from arka.llm.tokens_usage import main as tokens_usage_main
+
+            code = tokens_usage_main(rest[1:] if head == "usage" else rest)
         elif head == "share":
             from arka.llm.share import main as share_main
 
@@ -424,9 +498,14 @@ def run_skill(skill_line: str) -> int:
         elif head in ("alert", "email_alert", "email-alert"):
             code = run_script("arka_alert.py", rest)
         elif head == "code":
-            from arka.core.code_project import main as code_main
+            if rest and rest[0] == "lookup":
+                from arka.agent.social_code_lookup import main as social_code_main
 
-            code = code_main(["code", *rest])
+                code = social_code_main(rest[1:])
+            else:
+                from arka.core.code_project import main as code_main
+
+                code = code_main(["code", *rest])
         elif head in ("data", "data_collect", "collect_data", "data-collect") and rest and rest[0] in {"collect", "catalog"}:
             from arka.agent.data_collect import main as collect_main
             code = collect_main([*rest[1:], "--catalog"] if rest[0] == "catalog" else rest[1:])
@@ -492,6 +571,10 @@ def run_skill(skill_line: str) -> int:
         elif head in ("ideate", "arka_ideate", "open_source_ideate"):
             from arka.agent.ideate import main as ideate_main
             code = ideate_main(rest)
+        elif head in ("look_for_opensource", "look-for-opensource", "look_for_open_source", "opensource_lookup"):
+            from arka.agent.look_for_opensource import main as look_for_opensource_main
+
+            code = look_for_opensource_main(rest or ["show"])
         elif head in ("build_something_cool", "build-something-cool", "build_cool_feature", "build-cool-feature", "cool_build"):
             from arka.agent.cool_build import main as cool_main
             code = cool_main(rest)
@@ -505,6 +588,9 @@ def run_skill(skill_line: str) -> int:
         elif head in ("play", "game_benchmark", "game-benchmark"):
             from arka.agent.play import main as play_main
             code = play_main(rest)
+        elif head in ("harness", "harness_bench", "harness-bench"):
+            from arka.integrations.harness_cli import main as harness_main
+            code = harness_main(rest)
         elif head in ("hallmark", "hallmark-design"):
             from arka.agent.hallmark import main as hallmark_main
             code = hallmark_main(rest)
@@ -547,8 +633,21 @@ def run_skill(skill_line: str) -> int:
         elif head in ("bi_dashboard", "bi-dashboard"):
             from arka.agent.bi_dashboard import main as bi_dashboard_main
             code = bi_dashboard_main(rest)
+        elif head in ("data_dashboard", "data-dashboard", "viz_dashboard", "viz-dashboard"):
+            from arka.agent.data_dashboard import main as data_dashboard_main
+            code = data_dashboard_main(rest)
+        elif head == "viz":
+            if rest and rest[0] == "dashboard":
+                from arka.agent.data_dashboard import main as data_dashboard_main
+                code = data_dashboard_main(rest[1:])
+            else:
+                print("Usage: arka viz dashboard <data.csv> [--output dashboard.html]", file=sys.stderr)
+                code = 1
         elif head == "dashboard":
-            if rest and rest[0] in ("bi", "bi-dashboard"):
+            if rest and rest[0] == "build":
+                from arka.agent.data_dashboard import main as data_dashboard_main
+                code = data_dashboard_main(rest)
+            elif rest and rest[0] in ("bi", "bi-dashboard"):
                 from arka.agent.bi_dashboard import main as bi_dashboard_main
                 code = bi_dashboard_main(rest[1:])
             else:
@@ -689,13 +788,21 @@ def run_skill(skill_line: str) -> int:
             from arka.agent.jules import main as jules_main
 
             code = jules_main(rest)
+        elif head in ("self_repair", "self-repair"):
+            from arka.agent.self_repair import main as self_repair_main
+
+            code = self_repair_main(rest or ["analyze"])
         elif head in ("self_improve", "self"):
             from arka.agent.self_improve import main as self_main, resolve_improve_args, run_self_improve
 
             argv = list(rest)
-            if head == "self" and argv and argv[0] == "improve":
+            if head == "self" and argv and argv[0] == "repair":
+                from arka.agent.self_repair import main as self_repair_main
+
+                code = self_repair_main(argv[1:] or ["analyze"])
+            elif head == "self" and argv and argv[0] == "improve":
                 argv = argv[1:]
-            if len(argv) == 1 and argv[0] in ("memory", "status"):
+            elif len(argv) == 1 and argv[0] in ("memory", "status"):
                 code = self_main([argv[0]])
             else:
                 use_mcp = False
@@ -744,6 +851,10 @@ def run_skill(skill_line: str) -> int:
             from arka.integrations.n8n import main as n8n_main
 
             code = n8n_main(rest)
+        elif head in ("trueforge", "true-forge", "true_forge"):
+            from arka.integrations.trueforge import main as trueforge_main
+
+            code = trueforge_main(rest)
         elif head in ("ci", "review", "route_audit", "route-audit", "skill", "security", "doctor", "dev_doctor", "dev-doctor", "dev_tools", "dev-tools", "hooks"):
             from arka.agent.dev_tools import main as dev_tools_main
 
@@ -952,10 +1063,10 @@ def run_skill(skill_line: str) -> int:
             from arka.integrations.docker_status import main as docker_status_main
 
             code = docker_status_main(rest or ["ps"])
-        elif head in ("edit_guard", "edit-guard"):
-            from arka.core.edit_guard import main as edit_guard_main
+        elif head in ("social_code_lookup", "social-code-lookup", "social_code"):
+            from arka.agent.social_code_lookup import main as social_code_main
 
-            code = edit_guard_main(rest or ["status"])
+            code = social_code_main(rest)
         elif head.endswith(".py") and script_path(head).is_file():
             code = run_script(head, rest)
         else:
@@ -997,7 +1108,7 @@ def run_fish_skill(skill_line: str) -> int:
     if code is not None:
         return code
     print(f"Unknown skill: {skill_line}", file=sys.stderr)
-    print("Try: arka help  |  arka doctor  |  install fish for full 70+ skills", file=sys.stderr)
+    print("Try: arka help  |  arka doctor  |  arka capabilities", file=sys.stderr)
     return 1
 
 
@@ -1007,12 +1118,6 @@ def run_shell(cmd: str) -> int:
 
 
 def _split_skill_line(line: str) -> list[str]:
-    import shlex
+    from arka.core.shell_argv import split_skill_argv
 
-    line = line.strip()
-    if not line:
-        return []
-    try:
-        return shlex.split(line)
-    except ValueError:
-        return line.split()
+    return split_skill_argv(line)

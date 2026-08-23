@@ -1,3 +1,5 @@
+from unittest import mock
+
 from arka.agent import sandbox
 
 
@@ -29,3 +31,22 @@ def test_invalid_name(tmp_path, monkeypatch):
         pass
     else:
         raise AssertionError("invalid sandbox name accepted")
+
+
+def test_bootstrap_python(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("ARKA_SANDBOX_DIR", str(tmp_path / "sandboxes"))
+    sandbox.create("demo")
+    pip = tmp_path / "sandboxes" / "demo" / ".venv" / "bin" / "pip"
+
+    def _fake_run(name, command, timeout=60):
+        if len(command) >= 3 and command[1:3] == ["-m", "venv"]:
+            pip.parent.mkdir(parents=True, exist_ok=True)
+            pip.write_text("#!/bin/sh\n", encoding="utf-8")
+        return 0
+
+    with mock.patch.object(sandbox, "run", side_effect=_fake_run) as run:
+        out = sandbox.bootstrap_python("demo", ["rembg[cpu]", "Pillow"])
+    assert out["name"] == "demo"
+    assert out["packages"] == ["rembg[cpu]", "Pillow"]
+    assert run.call_count == 2
+

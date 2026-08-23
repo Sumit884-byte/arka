@@ -731,8 +731,8 @@ def nl_to_argv(text: str) -> list[str]:
         ]
 
     slideshow_dir = re.search(
-        rf"(?i)(?:create|make|build|render|generate)\s+(?:a\s+)?(?:slideshow|video)\s+from\s+"
-        rf"(?:images?\s+in\s+)?(?P<dir>[^\s]+/?)\b",
+        r"(?i)(?:create|make|build|render|generate)\s+(?:a\s+)?(?:slideshow|video)\s+from\s+"
+        r"(?:images?\s+in\s+)?(?P<dir>[^\s]+/?)\b",
         t,
     )
     if slideshow_dir:
@@ -760,7 +760,7 @@ def nl_to_argv(text: str) -> list[str]:
             return argv
 
     text_slides = re.search(
-        rf"(?i)(?:create|make|build|render|generate)\s+(?:a\s+)?video\s+from\s+(?:text\s+)?slides?\s+(?P<script>\S+\.(?:json|md))\b",
+        r"(?i)(?:create|make|build|render|generate)\s+(?:a\s+)?video\s+from\s+(?:text\s+)?slides?\s+(?P<script>\S+\.(?:json|md))\b",
         t,
     )
     if text_slides:

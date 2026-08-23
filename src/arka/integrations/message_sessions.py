@@ -11,6 +11,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 try:
     from arka.paths import config_dir, load_env_file
@@ -187,6 +188,13 @@ def push(
         return 1, err
     if not cleaned:
         return 1, "empty"
+    try:
+        from arka.core.chat_context_gate import is_session_turn_skippable
+
+        if is_session_turn_skippable(cleaned, role=role):
+            return 1, "skipped"
+    except ImportError:
+        pass
     role = (role or "user").strip().lower()
     if role not in {"user", "assistant", "system"}:
         role = "user"
@@ -229,7 +237,7 @@ def reset(channel: str, chat_id: str) -> int:
     return 0
 
 
-def context_for(channel: str, chat_id: str, *, limit_chars: int = 3000) -> str:
+def context_for(channel: str, chat_id: str, *, limit_chars: int = 3000, query: str = "") -> str:
     if not _enabled():
         return ""
     key = session_key(channel, chat_id)
@@ -238,6 +246,20 @@ def context_for(channel: str, chat_id: str, *, limit_chars: int = 3000) -> str:
     turns = data.get("turns") or []
     if not isinstance(turns, list) or not turns:
         return ""
+    if query.strip():
+        try:
+            from arka.core.context_ngrams import select_context_from_turns
+
+            picked = select_context_from_turns(query, turns, limit_chars=limit_chars)
+            if picked:
+                title = (data.get("title") or "").strip()
+                prefix = []
+                if title:
+                    prefix.append(f"Session: {title}")
+                prefix.append(f"Channel: {data.get('channel', channel)} / {data.get('chat_id', chat_id)}")
+                return "\n".join(prefix + [picked]).strip()
+        except ImportError:
+            pass
     lines: list[str] = []
     title = (data.get("title") or "").strip()
     if title:
@@ -246,11 +268,48 @@ def context_for(channel: str, chat_id: str, *, limit_chars: int = 3000) -> str:
     for turn in turns[-12:]:
         role = str(turn.get("role", "user")).upper()
         text = str(turn.get("text", "")).strip()
-        if text:
-            lines.append(f"{role}: {text}")
+        if not text:
+            continue
+        try:
+            from arka.core.chat_context_gate import is_session_turn_skippable
+
+            if is_session_turn_skippable(text, role=role):
+                continue
+        except ImportError:
+            pass
+        lines.append(f"{role}: {text}")
     out = "\n".join(lines).strip()
     if len(out) > limit_chars:
         out = out[-limit_chars:]
+    return out
+
+
+def list_turns(channel: str, chat_id: str, *, limit: int = 24) -> list[dict[str, Any]]:
+    """Recent turns for n-gram context selection."""
+    if not _enabled():
+        return []
+    key = session_key(channel, chat_id)
+    data = _load_session(key)
+    maybe_idle_reset(data)
+    turns = data.get("turns") or []
+    if not isinstance(turns, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for turn in turns[-max(1, limit) :]:
+        if not isinstance(turn, dict):
+            continue
+        text = str(turn.get("text") or "").strip()
+        if not text:
+            continue
+        try:
+            from arka.core.chat_context_gate import is_session_turn_skippable
+
+            role = str(turn.get("role") or "user")
+            if is_session_turn_skippable(text, role=role):
+                continue
+        except ImportError:
+            pass
+        out.append(dict(turn))
     return out
 
 

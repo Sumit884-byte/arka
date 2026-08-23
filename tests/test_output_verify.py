@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import time
-from unittest import mock
 
 import pytest
 

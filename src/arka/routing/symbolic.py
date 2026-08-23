@@ -82,6 +82,15 @@ def route_semantic_alert(cmd: str) -> str | None:
     return "semantic_alert " + shlex.quote(event)
 
 
+def route_data_dashboard(cmd: str) -> str | None:
+    try:
+        from arka.agent.data_dashboard import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
+
+
 def route_bi_dashboard(cmd: str) -> str | None:
     try:
         from arka.agent.bi_dashboard import route_command
@@ -158,6 +167,13 @@ def route_symbolic_image(cmd: str) -> str | None:
 
 
 def route_future_predict(cmd: str) -> str | None:
+    try:
+        from arka.agent.dev_tools import wants_dev_tools
+
+        if wants_dev_tools(cmd.strip()):
+            return None
+    except ImportError:
+        pass
     try:
         from arka.charts.prediction import wants_prediction_chart
         from arka.predict.engine import nl_to_future_argv
@@ -303,6 +319,24 @@ def route_templates(cmd: str) -> str | None:
     if re.search(r"(?i)\b(?:list|show|choose|use)\b.*\b(?:prompt|workflow|loop)\s+templates?\b|\b(?:list|show)\s+(?:arka\s+)?templates?\b", cmd):
         return "template list"
     return None
+
+
+def route_web_templates(cmd: str) -> str | None:
+    try:
+        from arka.agent.web_templates import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
+
+
+def route_frontend(cmd: str) -> str | None:
+    try:
+        from arka.web.frontend.cli import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
 
 
 def route_blocks(cmd: str) -> str | None:
@@ -1101,6 +1135,15 @@ def route_gmail_email_summarize(cmd: str) -> str | None:
     return "google " + " ".join(shlex.quote(a) for a in argv)
 
 
+def route_google_oauth(cmd: str) -> str | None:
+    try:
+        from arka.integrations.arka_oauth import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
+
+
 def route_unified_inbox(cmd: str) -> str | None:
     try:
         from arka.integrations.gmail_unified import (
@@ -1126,6 +1169,17 @@ def route_post_x(cmd: str) -> str | None:
     if not argv:
         return None
     return "post_x " + " ".join(shlex.quote(a) for a in argv)
+
+
+def route_social_code_lookup(cmd: str) -> str | None:
+    try:
+        from arka.agent.social_code_lookup import build_social_code_lookup_argv_from_nl
+    except ImportError:
+        return None
+    argv = build_social_code_lookup_argv_from_nl(cmd)
+    if not argv:
+        return None
+    return "social_code_lookup " + " ".join(shlex.quote(a) for a in argv)
 
 
 def route_post_devto(cmd: str) -> str | None:
@@ -1170,7 +1224,10 @@ _BRIEF_RE = re.compile(
     r"today['']?s\s+(?:tech\s+)?brief|"
     r"(?:daily|morning|news|today['']?s)\s+tech\s+brief|"
     r"tech\s+brief(?:\s+(?:personalized(?:\s+for\s+me)?|for\s+me))?|"
-    r"personalized\s+(?:tech\s+)?brief"
+    r"personalized\s+(?:tech\s+)?brief|"
+    r"(?:give\s+(?:me\s+)?)?(?:today['']?s|todays|latest)\s+news|"
+    r"(?:give\s+(?:me\s+)?)?news\s+today|"
+    r"give\s+(?:me\s+)?(?:the\s+)?news"
     r")\b"
 )
 
@@ -1553,6 +1610,14 @@ def route_credits_usage(cmd: str) -> str | None:
     return route_command(cmd)
 
 
+def route_tokens_usage(cmd: str) -> str | None:
+    try:
+        from arka.llm.tokens_usage import route_command
+    except ImportError:
+        return None
+    return route_command(cmd)
+
+
 def route_llm_share(cmd: str) -> str | None:
     try:
         from arka.llm.share import route_command
@@ -1651,6 +1716,13 @@ def route_model_optimizer(cmd: str) -> str | None:
     return f"model-optimizer switch {match.group(1)}" if match else None
 
 def route_finetune_model(cmd: str) -> str | None:
+    try:
+        from arka.agent.dev_tools import wants_dev_tools
+
+        if wants_dev_tools(cmd.strip()):
+            return None
+    except ImportError:
+        pass
     try:
         from arka.llm.finetune_model import nl_to_argv
     except ImportError:
@@ -1810,6 +1882,26 @@ def route_interesting_fact(cmd: str) -> str | None:
     return None
 
 
+def route_joke(cmd: str) -> str | None:
+    try:
+        from arka.routing.joke import is_joke_request
+    except ImportError:
+        return None
+    if is_joke_request(cmd):
+        return f"joke {cmd.strip()}"
+    return None
+
+
+def route_podcast_inspiration(cmd: str) -> str | None:
+    try:
+        from arka.core.podcast_inspiration import is_podcast_inspiration_request
+    except ImportError:
+        return None
+    if is_podcast_inspiration_request(cmd):
+        return f"podcast_inspiration {cmd.strip()}"
+    return None
+
+
 def route_safety_advice(cmd: str) -> str | None:
     try:
         from arka.routing.safety_advice import route_command
@@ -1846,6 +1938,15 @@ def route_fugu(cmd: str) -> str | None:
 def route_n8n(cmd: str) -> str | None:
     try:
         from arka.integrations.n8n import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
+
+
+def route_trueforge(cmd: str) -> str | None:
+    try:
+        from arka.integrations.trueforge import route_command
     except ImportError:
         return None
     route = route_command(cmd)
@@ -1972,6 +2073,14 @@ def route_surgical_edit(cmd: str) -> str | None:
     if not path or len(quoted) < 2:
         return None
     return "surgical_edit edit " + shlex.quote(path.group(1)) + " " + shlex.quote(quoted[0]) + " " + shlex.quote(quoted[1])
+
+
+def route_look_for_opensource(cmd: str) -> str | None:
+    try:
+        from arka.agent.look_for_opensource import route_command
+    except ImportError:
+        return None
+    return route_command(cmd)
 
 
 def route_ideate(cmd: str) -> str | None:
@@ -2364,6 +2473,15 @@ def route_self_improve(cmd: str) -> str | None:
     return line or None
 
 
+def route_self_repair(cmd: str) -> str | None:
+    try:
+        from arka.agent.self_repair import route_command
+    except ImportError:
+        return None
+    line = route_command(cmd.strip())
+    return line or None
+
+
 def route_jules(cmd: str) -> str | None:
     try:
         from arka.agent.jules import route_command
@@ -2526,6 +2644,7 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_surgical_edit,
         route_word_counter,
         route_ideate,
+        route_look_for_opensource,
         route_cool_build,
         route_hackathon,
         route_game_studio,
@@ -2549,7 +2668,9 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_three_js_model,
         route_multi_llm,
         route_agent_race,
-        # Specific intent must precede the broad "build/check this app" route.
+        # Specific UI scaffold intent must precede screenshot/design routes.
+        route_web_templates,
+        route_frontend,
         route_frontend_loop,
         route_design_from_screenshot,
         route_code_project,
@@ -2564,6 +2685,7 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_pdf_interactive,
         route_media_quiz,
         route_self_build,
+        route_self_repair,
         route_self_improve,
         route_jules,
         route_mode,
@@ -2639,6 +2761,7 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_model_select,
         route_stt_install,
         route_credits_usage,
+        route_tokens_usage,
         route_llm_share,
         route_free_credits,
         route_compose_slides,
@@ -2649,11 +2772,14 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_habitat,
         route_life_sciences,
         route_interesting_fact,
+        route_joke,
+        route_podcast_inspiration,
         route_nudge,
         route_contextual_answer,
         route_platform_howto,
         route_fugu,
         route_n8n,
+        route_trueforge,
         route_gemini_cli,
         route_harvard_ark,
         route_persona,
@@ -2665,6 +2791,7 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_unified_inbox,
         route_post_x,
         route_post_devto,
+        route_social_code_lookup,
         route_signoz_publish,
         route_find_files_by_size,
         route_kalshi,
@@ -2674,6 +2801,7 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_config_share,
         route_semantic_alert,
         route_email_alert,
+        route_data_dashboard,
         route_bi_dashboard,
         route_usage_dashboard,
         route_meme,
@@ -2697,6 +2825,7 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_scene_3d,
         route_three_d,
         route_google_flow,
+        route_google_oauth,
         route_ai_video,
         route_future_predict,
         route_chart,

@@ -6,7 +6,6 @@ import argparse
 import json
 import os
 import re
-import shlex
 import sys
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -124,7 +123,7 @@ def _detect_faces_opencv(image) -> list[tuple[int, int, int, int]]:
 
 
 def _detect_subject_mass(image) -> tuple[int, int, int, int]:
-    Image = _require_pillow()
+    _require_pillow()
     gray = image.convert("L")
     w, h = gray.size
     pixels = gray.load()
@@ -330,7 +329,7 @@ def fix_image(
     crop_size = min(w, h)
 
     face_cx = (subject.x + subject.w / 2) * w
-    face_cy = (subject.y + subject.h / 2) * h
+    (subject.y + subject.h / 2) * h
     face_h = max(1.0, subject.h * h)
     head_top = subject.y * h
 

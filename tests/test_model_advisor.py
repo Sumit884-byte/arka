@@ -13,9 +13,13 @@ from arka.llm.model_advisor import (
     HardwareSnapshot,
     ProfileRecommendation,
     apply_recommendations,
+    build_local_guide,
     build_report,
     classify_tier,
+    format_local_guide,
+    is_local_model_query,
     is_model_select_query,
+    main as model_advisor_main,
     nl_to_argv,
     _tier_profile_models,
 )
@@ -97,9 +101,15 @@ class ModelAdvisorRoutingTests(unittest.TestCase):
         self.assertTrue(is_model_select_query("select best model for my pc"))
         self.assertTrue(is_model_select_query("what model should I use"))
         self.assertTrue(is_model_select_query("optimize models for my hardware"))
+        self.assertTrue(is_model_select_query("which is best local ai model i could run on this pc"))
         self.assertFalse(is_model_select_query("what is a language model"))
         self.assertFalse(is_model_select_query("select claude-haiku-4-5"))
         self.assertFalse(is_model_select_query("use gpt-4o"))
+
+    def test_local_model_query_nl_argv(self) -> None:
+        q = "which is best local ai model i could run on this pc"
+        self.assertTrue(is_local_model_query(q))
+        self.assertEqual(nl_to_argv(q), ["--local", "--guide"])
 
     def test_nl_to_argv_apply_and_json(self) -> None:
         self.assertEqual(nl_to_argv("apply best model for my laptop"), ["--apply"])
@@ -115,6 +125,26 @@ class ModelAdvisorRoutingTests(unittest.TestCase):
 
         hit = route_offline_extras("optimize models for my hardware")
         self.assertEqual(hit, "select_model")
+
+    @mock.patch("arka.llm.model_advisor.format_local_guide", return_value="guide")
+    @mock.patch("arka.llm.model_advisor.build_local_guide")
+    @mock.patch("arka.llm.model_advisor.build_report")
+    def test_main_accepts_select_model_flags_without_subcommand(
+        self,
+        build_report: mock.MagicMock,
+        build_local_guide: mock.MagicMock,
+        format_local_guide: mock.MagicMock,
+    ) -> None:
+        hw = _hw(ram_total_gb=24.0, gpu_kind="mps")
+        build_report.return_value = AdvisorReport(
+            tier="local_capable",
+            tier_label="Local-capable",
+            hardware=hw,
+            recommendations=[],
+        )
+        self.assertEqual(model_advisor_main(["--local", "--guide"]), 0)
+        build_local_guide.assert_called()
+        format_local_guide.assert_called_once()
 
 
 class ModelAdvisorApplyTests(unittest.TestCase):
@@ -147,6 +177,29 @@ class ModelAdvisorReportTests(unittest.TestCase):
         report = build_report()
         self.assertEqual(report.tier, "cloud_light")
         self.assertTrue(any("GEMINI" in n or "Groq" in n for n in report.notes))
+
+
+class LocalModelGuideTests(unittest.TestCase):
+    def test_m5_pro_24gb_guide(self) -> None:
+        hw = _hw(
+            cpu_model="Apple M5 Pro",
+            cpu_cores=15,
+            ram_total_gb=24.0,
+            gpu_kind="mps",
+            gpu_name="Apple M5 Pro GPU",
+        )
+        guide = build_local_guide(hw)
+        text = format_local_guide(guide)
+        self.assertIn("Local model advisor", text)
+        self.assertIn("24 GB RAM", text)
+        self.assertIn("qwen2.5:7b", text)
+        self.assertIn("ollama pull qwen2.5:7b", text)
+        self.assertIn("MLX", text)
+        self.assertEqual(guide.tier, "local_capable")
+
+    def test_guide_includes_ram_budget(self) -> None:
+        guide = build_local_guide(_hw(ram_total_gb=24.0, gpu_kind="mps"))
+        self.assertTrue(any("7B" in line or "14B" in line for line in guide.ram_budget_lines))
 
 
 if __name__ == "__main__":

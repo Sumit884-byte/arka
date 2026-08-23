@@ -188,7 +188,7 @@ def test_resolve_max_tokens_openrouter_capped(monkeypatch: pytest.MonkeyPatch) -
         },
     )
 
-    assert fb.resolve_max_tokens("openrouter", "x-ai/grok-4.20-multi-agent", task="chat", user="hi") == 512
+    assert fb.resolve_max_tokens("openrouter", "x-ai/grok-4.20-multi-agent", task="chat", user="hi") == 4096
     assert (
         fb.resolve_max_tokens(
             "openrouter",

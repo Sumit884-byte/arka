@@ -306,7 +306,7 @@ def test_llm_fallback_trace_suppressed_in_normal_mode(
                 raise RuntimeError("gemini unavailable")
             return SimpleNamespace(content="Groq answer")
 
-    def fake_build_model(provider, model_id, temperature, *, max_tokens=None, session=None):
+    def fake_build_model(provider, model_id, temperature, *, max_tokens=None, session=None, **kwargs):
         return object()
 
     engine = fb.LlmFallbackEngine(chain=_fake_llm_engine_chain(), store=fb.ExhaustionStore())
@@ -349,7 +349,7 @@ def test_llm_fallback_trace_visible_in_debug_mode(
                 raise RuntimeError("gemini unavailable")
             return SimpleNamespace(content="Groq answer")
 
-    def fake_build_model(provider, model_id, temperature, *, max_tokens=None, session=None):
+    def fake_build_model(provider, model_id, temperature, *, max_tokens=None, session=None, **kwargs):
         return object()
 
     engine = fb.LlmFallbackEngine(chain=_fake_llm_engine_chain(), store=fb.ExhaustionStore())
@@ -415,7 +415,7 @@ def test_connection_error_does_not_stop_fallback_chain(
                 return SimpleNamespace(content="Connection error.")
             return SimpleNamespace(content="Rust is a systems programming language focused on safety and performance.")
 
-    def fake_build_model(provider, model_id, temperature, *, max_tokens=None, session=None):
+    def fake_build_model(provider, model_id, temperature, *, max_tokens=None, session=None, **kwargs):
         FakeAgent.last_provider = provider
         return object()
 
@@ -554,7 +554,7 @@ def test_gemini_429_skips_remaining_models_in_chain(
                 raise RuntimeError("429 RESOURCE_EXHAUSTED")
             return SimpleNamespace(content="ok from groq")
 
-    def fake_build_model(provider, model_id, temperature, *, max_tokens=None, session=None):
+    def fake_build_model(provider, model_id, temperature, *, max_tokens=None, session=None, **kwargs):
         calls.append((provider, model_id))
         return object()
 
@@ -566,3 +566,154 @@ def test_gemini_429_skips_remaining_models_in_chain(
 
     assert result.provider == "groq"
     assert len([c for c in calls if c[0] == "gemini"]) == 1
+
+
+def test_gemini_rate_limit_skips_key_rotation(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _clear_fallback_env(monkeypatch)
+    monkeypatch.setenv("ARKA_MODE", "debug")
+    monkeypatch.setenv("GEMINI_API_KEY", "key-a")
+    monkeypatch.setenv("GEMINI_API_KEY_2", "key-b")
+
+    from importlib import reload
+    from types import SimpleNamespace
+    from unittest.mock import patch
+
+    import arka.llm.fallback as fb_mod
+
+    reload(fb_mod)
+    store = fb_mod.ExhaustionStore()
+    chain = [
+        ("gemini", "gemini-2.5-flash"),
+        ("groq", "llama-3.3-70b-versatile"),
+    ]
+    calls: list[tuple[str, str]] = []
+    rotate_calls: list[str] = []
+
+    class FakeAgent:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def run(self, _user):
+            provider, model_id = calls[-1]
+            if provider == "gemini":
+                raise RuntimeError("429 RESOURCE_EXHAUSTED free_tier quota exceeded")
+            return SimpleNamespace(content="ok from groq")
+
+    def fake_build_model(provider, model_id, temperature, *, max_tokens=None, session=None, **kwargs):
+        calls.append((provider, model_id))
+        return object()
+
+    def fake_rotate(provider, exc):
+        rotate_calls.append(str(exc))
+        return True
+
+    engine = fb_mod.LlmFallbackEngine(chain=chain, store=store)
+
+    with patch.object(fb_mod, "build_model", side_effect=fake_build_model):
+        with patch.object(fb_mod, "rotate_provider_key", side_effect=fake_rotate):
+            with patch("agno.agent.Agent", FakeAgent):
+                result = engine.complete("You are helpful.", "hello")
+
+    assert result.provider == "groq"
+    assert rotate_calls == []
+    assert len([c for c in calls if c[0] == "gemini"]) == 1
+    assert store.exhausted("gemini", "gemini-2.5-flash")
+
+
+def test_local_first_policy_puts_ollama_before_gemini(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clear_fallback_env(monkeypatch)
+    monkeypatch.setenv("ARKA_MODEL_POLICY", "local-first")
+    monkeypatch.setenv("AI_PREFERRED_PROVIDER", "gemini")
+    monkeypatch.setenv("AI_PREFERRED_MODEL", "gemini-2.5-flash")
+    monkeypatch.setenv("GEMINI_MODELS", "gemini-2.5-flash")
+    monkeypatch.setenv("OLLAMA_MODELS", "qwen3:8b")
+
+    from importlib import reload
+    from unittest.mock import patch
+
+    import arka.llm.fallback as fb_mod
+
+    reload(fb_mod)
+
+    with patch.object(fb_mod, "provider_available", side_effect=lambda slug: slug in {"gemini", "ollama", "groq"}):
+        chain = fb_mod.build_default_chain(task="chat")
+
+    assert chain[0][0] == "ollama"
+    assert ("gemini", "gemini-2.5-flash") in chain
+
+
+def test_alert_model_exhaustion_wires_email_alert(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(fb, "_EXHAUSTION_NOTIFIED", False)
+    monkeypatch.setenv("ARKA_ALERT_MODEL_EXHAUSTED", "1")
+    captured: list[dict] = []
+
+    def capture(**kwargs):
+        captured.append(kwargs)
+        return {"ok": True, "channels": ["os"], "skipped": False}
+
+    monkeypatch.setattr("arka.integrations.email_alert.maybe_model_exhausted_alert", capture)
+
+    chain = [
+        ("gemini", "gemini-2.5-flash"),
+        ("groq", "llama-3.3-70b-versatile"),
+    ]
+    store = fb.ExhaustionStore()
+    store.mark("gemini", "gemini-2.5-flash", RuntimeError("429 RESOURCE_EXHAUSTED"))
+    store.mark("groq", "llama-3.3-70b-versatile", RuntimeError("429 rate limit"))
+
+    fb._alert_model_exhaustion(
+        tried=["gemini/gemini-2.5-flash", "groq/llama-3.3-70b-versatile"],
+        failures={
+            "gemini/gemini-2.5-flash": "429 RESOURCE_EXHAUSTED",
+            "groq/llama-3.3-70b-versatile": "429 rate limit",
+        },
+        task="chat",
+        skill="",
+        last_error="groq/llama-3.3-70b-versatile: 429 rate limit",
+        chain=chain,
+        store=store,
+    )
+
+    assert len(captured) == 1
+    assert captured[0]["tried"]
+    assert "429" in captured[0]["failures"]["gemini/gemini-2.5-flash"]
+
+
+def test_preferred_chain_entries_honors_explicit_chain(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clear_fallback_env(monkeypatch)
+    monkeypatch.setenv("LLM_FALLBACK", "gemini:gemini-2.5-flash,groq:llama-3.3-70b-versatile")
+
+    from importlib import reload
+
+    import arka.llm.fallback as fb_mod
+
+    reload(fb_mod)
+    preferred = fb_mod.preferred_chain_entries(task="chat")
+    assert preferred == [
+        ("gemini", "gemini-2.5-flash"),
+        ("groq", "llama-3.3-70b-versatile"),
+    ]
+
+
+def test_preferred_all_failed_requires_every_preferred_tried() -> None:
+    preferred = [("gemini", "gemini-2.5-flash"), ("groq", "llama-3.3-70b-versatile")]
+    store = fb.ExhaustionStore()
+    tried = ["gemini/gemini-2.5-flash"]
+    assert fb._preferred_all_failed(preferred, tried=tried, store=store) is False
+    tried.append("groq/llama-3.3-70b-versatile")
+    assert fb._preferred_all_failed(preferred, tried=tried, store=store) is True
+
+
+def test_resolve_max_tokens_no_short_query_cap() -> None:
+    assert fb.resolve_max_tokens("groq", "llama-3.1-8b-instant", task="chat", user="hi") == 4096
+    assert (
+        fb.resolve_max_tokens(
+            "groq",
+            "llama-3.1-8b-instant",
+            task="chat",
+            user="design plan for an food website",
+        )
+        == 4096
+    )

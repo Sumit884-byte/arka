@@ -8,7 +8,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from arka.core.screenshot_paths import resolve_screenshot_output, screenshot_path
+from arka.core.screenshot_paths import screenshot_path
 
 PLAY_DEPTHS = {"smoke", "standard", "deep"}
 MAX_WAIT_MS = 10_000

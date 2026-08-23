@@ -180,7 +180,7 @@ def doctor_lines() -> list[str]:
             lines.append(f"           → {item.hint}")
     lines.append("    MCP: stdio-only (no network listener)")
     lines.append(
-        "    Docs: ARKA_API_TOKEN, REMOTE_TOKEN, WEBHOOK_TOKEN, OLLAMA_HOST, REMOTE_HOST in .env"
+        "    Docs: API_URL, API_TOKEN, REMOTE_TOKEN, WEBHOOK_TOKEN, OLLAMA_HOST, REMOTE_HOST in .env"
     )
     return lines
 

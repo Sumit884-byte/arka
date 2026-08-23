@@ -485,7 +485,6 @@ def nl_to_argv(cmd: str) -> list[str] | None:
         "show shared context": ["context"],
         "suggest cli to connect": ["suggest"],
         "how to connect cli": ["suggest"],
-        "connect cli": ["connect"],
     }
     if lower in aliases:
         return aliases[lower]

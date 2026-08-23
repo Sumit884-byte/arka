@@ -42,6 +42,27 @@ _SELECT_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"(?i)\b(?:best|strongest)\s+(?:runnable\s+)?local\s+(?:llm\s+)?model\b"),
     re.compile(r"(?i)\brun\s+the\s+best\s+(?:local|offline)\s+model\b"),
     re.compile(r"(?i)\b(?:list)\s+(?:the\s+)?\d*\s*(?:(?:(?:strongest|best)\s+)?runnable|(?:strongest|best))\s+(?:local\s+)?models?\b"),
+    re.compile(
+        r"(?i)\b(?:which|what)\s+(?:is\s+)?(?:the\s+)?(?:best|strongest|recommended)\s+"
+        r"(?:local\s+)?(?:ai\s+)?(?:llm\s+)?models?\b"
+    ),
+    re.compile(
+        r"(?i)\b(?:best|strongest|recommended)\s+(?:local\s+)?(?:ai\s+)?(?:llm\s+)?models?\b"
+        r".*\b(?:pc|mac|hardware|computer|machine|laptop|this\s+pc|my\s+pc|run\s+on)\b"
+    ),
+    re.compile(
+        r"(?i)\b(?:which|what).*(?:best|strongest|recommended).*(?:local\s+)?(?:ai\s+)?models?\b"
+        r".*\b(?:pc|mac|hardware|computer|machine|laptop|this\s+pc|my\s+pc|run\s+on)\b"
+    ),
+    re.compile(r"(?i)\b(?:local\s+)?(?:ai\s+)?model\s+(?:can\s+i|could\s+i|should\s+i)\s+run\b"),
+    re.compile(r"(?i)\bwhat\s+(?:local\s+)?(?:ai\s+)?models?\s+(?:can|could|should)\s+i\s+run\b"),
+)
+
+_LOCAL_MODEL_RE = re.compile(
+    r"(?i)(?:\b(?:local|offline|on[- ]device|on device|ollama|mlx|llama\.cpp)\b.*\bmodel"
+    r"|\b(?:which|what)\b.*\b(?:best|strongest|recommended)\b.*\b(?:local\s+)?(?:ai\s+)?models?\b"
+    r".*\b(?:pc|mac|hardware|computer|machine|laptop|this\s+pc|my\s+pc|run\s+on)\b"
+    r"|\bbest\s+local\s+(?:ai\s+)?(?:llm\s+)?model)"
 )
 
 _APPLY_RE = re.compile(r"(?i)\b(?:apply|auto[- ]?apply|save|write|configure)\b")
@@ -73,6 +94,27 @@ class ProfileRecommendation:
     profile: str
     model: str
     reason: str
+
+
+@dataclass
+class LocalModelPick:
+    model: str
+    size_b: float
+    reason: str
+    ollama_pull: str
+    mlx_note: str = ""
+
+
+@dataclass
+class LocalModelGuide:
+    hardware: HardwareSnapshot
+    ram_budget_lines: list[str]
+    picks: list[LocalModelPick]
+    runtime_lines: list[str]
+    install_lines: list[str]
+    installed_local: list[str]
+    tier: str
+    tier_label: str
 
 
 @dataclass
@@ -306,11 +348,35 @@ def _live_platform() -> str:
         return sys.platform
 
 
-def probe_hardware(*, include_ollama: bool = True) -> HardwareSnapshot:
+def probe_hardware(*, include_ollama: bool = True, force_refresh: bool = False) -> HardwareSnapshot:
+    if not force_refresh:
+        try:
+            from arka.core.hardware_cache import get_cached_hardware
+
+            cached = get_cached_hardware()
+            if cached is not None:
+                if include_ollama and not cached.ollama_models:
+                    cached = HardwareSnapshot(
+                        **{
+                            **asdict(cached),
+                            "ollama_models": _ollama_models(),
+                        }
+                    )
+                return cached
+        except ImportError:
+            pass
+
+    try:
+        from arka.core.hardware_cache import note_hardware_probe, remember_hardware
+
+        note_hardware_probe()
+    except ImportError:
+        pass
+
     total_bytes, avail_bytes = _ram_bytes()
     disk_free, disk_total = _disk_gb("/" if sys.platform != "win32" else "C:\\")
     gpu_kind, gpu_name, gpu_vram = _gpu_info()
-    return HardwareSnapshot(
+    snap = HardwareSnapshot(
         platform=_live_platform(),
         cpu_cores=_cpu_cores(),
         cpu_model=_cpu_model(),
@@ -324,6 +390,13 @@ def probe_hardware(*, include_ollama: bool = True) -> HardwareSnapshot:
         on_battery=_on_battery(),
         ollama_models=_ollama_models() if include_ollama else [],
     )
+    try:
+        from arka.core.hardware_cache import remember_hardware
+
+        remember_hardware(snap)
+    except ImportError:
+        pass
+    return snap
 
 
 def classify_tier(hw: HardwareSnapshot) -> str:
@@ -357,6 +430,168 @@ def classify_tier(hw: HardwareSnapshot) -> str:
     if hw.disk_free_gb and hw.disk_free_gb < 8 and base in {"local_heavy", "local_capable"}:
         return "balanced"
     return base
+
+
+def is_local_model_query(text: str) -> bool:
+    clean = (text or "").strip()
+    if not clean:
+        return False
+    return bool(_LOCAL_MODEL_RE.search(clean))
+
+
+def _usable_ram_gb(hw: HardwareSnapshot) -> float:
+    if hw.gpu_vram_gb:
+        return hw.gpu_vram_gb
+    reserve = 6.0 if hw.platform == "macos" else 4.0
+    return max(4.0, hw.ram_total_gb - reserve)
+
+
+def _ram_budget_lines(hw: HardwareSnapshot) -> list[str]:
+    usable = _usable_ram_gb(hw)
+    total = hw.ram_total_gb
+    lines = [
+        f"  {total:g} GB RAM total → ~{usable:.0f} GB usable for inference (OS + context headroom)",
+    ]
+    if usable >= 16:
+        lines.append("  Comfortable: 7B–14B Q4_K_M · Possible: 32B Q4 (tight — slower, less context room)")
+    elif usable >= 10:
+        lines.append("  Comfortable: 3B–8B Q4 · Good fit: 7B Q4 · 14B may swap")
+    elif usable >= 8:
+        lines.append("  Comfortable: 3B Q4 · Good fit: 7B Q4 · 14B+ may swap or fail")
+    else:
+        lines.append("  Stick to 1B–3B Q4; cloud APIs recommended for heavier tasks")
+    if hw.on_battery:
+        lines.append("  On battery — prefer smaller models (3B–7B) for speed and thermals")
+    return lines
+
+
+def _catalog_picks(hw: HardwareSnapshot) -> list[LocalModelPick]:
+    usable = _usable_ram_gb(hw)
+    apple = hw.gpu_kind in {"mps", "metal"} or "apple" in hw.cpu_model.lower()
+
+    catalog: list[tuple[str, float, str, str, str]] = [
+        ("qwen2.5:7b", 7.0, "Best balance of speed and quality", "ollama pull qwen2.5:7b", "mlx-community/Qwen2.5-7B-Instruct-4bit"),
+        ("qwen2.5:14b", 14.0, "Stronger reasoning; fits with Q4 on 16+ GB", "ollama pull qwen2.5:14b", "mlx-community/Qwen2.5-14B-Instruct-4bit"),
+        ("llama3.2:3b", 3.0, "Fast light chat and routing", "ollama pull llama3.2:3b", "mlx-community/Llama-3.2-3B-Instruct-4bit"),
+        ("llama3.1:8b", 8.0, "Solid general-purpose chat", "ollama pull llama3.1:8b", "mlx-community/Meta-Llama-3.1-8B-Instruct-4bit"),
+        ("mistral:7b", 7.0, "Good coding and instruction following", "ollama pull mistral:7b", "mlx-community/Mistral-7B-Instruct-v0.3-4bit"),
+        ("phi3:14b", 14.0, "Efficient mid-size model from Microsoft", "ollama pull phi3:14b", "mlx-community/Phi-3-medium-4k-instruct-4bit"),
+        ("qwen2.5-coder:7b", 7.0, "Code-focused 7B variant", "ollama pull qwen2.5-coder:7b", "mlx-community/Qwen2.5-Coder-7B-Instruct-4bit"),
+    ]
+    if usable >= 22:
+        catalog.insert(
+            2,
+            ("qwen2.5:32b", 32.0, "Maximum quality if you accept tight memory (Q4 only)", "ollama pull qwen2.5:32b", "mlx-community/Qwen2.5-32B-Instruct-4bit"),
+        )
+
+    picks: list[LocalModelPick] = []
+    for model, size_b, reason, pull, mlx in catalog:
+        need_gb = size_b * 0.75 + 1.5
+        tight_32b = size_b >= 28 and usable >= 16
+        if need_gb > usable + 0.5 and not tight_32b:
+            continue
+        pick_reason = reason
+        if tight_32b and need_gb > usable:
+            pick_reason = f"{reason} (tight — close other apps, Q4 only)"
+        picks.append(
+            LocalModelPick(
+                model=model,
+                size_b=size_b,
+                reason=pick_reason,
+                ollama_pull=pull,
+                mlx_note=mlx if apple else "",
+            )
+        )
+    return picks[:6]
+
+
+def _runtime_lines(hw: HardwareSnapshot) -> list[str]:
+    apple = hw.gpu_kind in {"mps", "metal"} or "apple" in hw.cpu_model.lower()
+    if apple:
+        return [
+            "  MLX — fastest on Apple Silicon (pip install mlx-lm)",
+            "  Ollama — easiest setup; uses Metal backend on Mac",
+            "  llama.cpp — flexible; good for custom GGUF quantizations",
+        ]
+    if hw.gpu_kind == "cuda":
+        return [
+            "  vLLM — best throughput on NVIDIA GPUs with enough VRAM",
+            "  Ollama — simple local server with CUDA acceleration",
+            "  llama.cpp — CPU/GPU hybrid; good for custom quants",
+        ]
+    return [
+        "  Ollama — simplest cross-platform local server",
+        "  llama.cpp — efficient CPU inference with GGUF models",
+        "  LM Studio — GUI option for Windows/macOS/Linux",
+    ]
+
+
+def build_local_guide(hw: HardwareSnapshot | None = None) -> LocalModelGuide:
+    snap = hw or probe_hardware()
+    tier = classify_tier(snap)
+    installed = strongest_runnable_local_models(snap, limit=5) if snap.ollama_models else []
+    install: list[str] = []
+    if shutil.which("ollama"):
+        install.append("  ollama serve   # if not already running")
+    else:
+        if snap.platform == "macos":
+            install.append("  brew install ollama")
+        else:
+            install.append("  curl -fsSL https://ollama.com/install.sh | sh")
+        install.append("  ollama serve")
+    top = _catalog_picks(snap)
+    for pick in top[:3]:
+        install.append(f"  {pick.ollama_pull}")
+    return LocalModelGuide(
+        hardware=snap,
+        ram_budget_lines=_ram_budget_lines(snap),
+        picks=top,
+        runtime_lines=_runtime_lines(snap),
+        install_lines=install,
+        installed_local=installed,
+        tier=tier,
+        tier_label=TIER_LABELS.get(tier, tier),
+    )
+
+
+def format_local_guide(guide: LocalModelGuide) -> str:
+    hw = guide.hardware
+    lines = [
+        "━━━ Local model advisor ━━━",
+        "",
+        "Hardware (cached for this session):",
+        f"  {hw.cpu_model} · {hw.cpu_cores} CPU cores · {hw.ram_total_gb:g} GB RAM",
+    ]
+    if hw.gpu_name:
+        gpu_bits = f" · {hw.gpu_name} ({hw.gpu_kind})"
+        if hw.gpu_vram_gb:
+            gpu_bits += f" · {hw.gpu_vram_gb:g} GB VRAM"
+        lines[-1] += gpu_bits
+    lines.extend(["", "RAM budget:"])
+    lines.extend(guide.ram_budget_lines)
+    lines.extend(["", "Best picks for your hardware:"])
+    for idx, pick in enumerate(guide.picks, 1):
+        lines.append(f"  {idx}. {pick.model:<18} — {pick.reason}")
+        if pick.mlx_note:
+            lines.append(f"     MLX: mlx_lm.generate --model {pick.mlx_note} --prompt \"Hello\"")
+    if guide.installed_local:
+        lines.extend(["", "Already installed (runnable):"])
+        for model in guide.installed_local:
+            lines.append(f"  • ollama/{model}")
+    lines.extend(["", "Runtime recommendation:"])
+    lines.extend(guide.runtime_lines)
+    lines.extend(["", "Install commands:"])
+    lines.extend(guide.install_lines)
+    lines.extend(
+        [
+            "",
+            f"Arka tier: {guide.tier} — {guide.tier_label}",
+            "",
+            "Apply to skill profiles:  select_model --apply",
+            "Run installed best fit:   select_model --local",
+        ]
+    )
+    return "\n".join(lines)
 
 
 def _provider_available(name: str) -> bool:
@@ -675,8 +910,9 @@ def nl_to_argv(text: str) -> list[str]:
     argv: list[str] = []
     if _APPLY_RE.search(clean):
         argv.append("--apply")
-    if _LOCAL_RE.search(clean):
+    if _LOCAL_RE.search(clean) or is_local_model_query(clean):
         argv.append("--local")
+        argv.append("--guide")
     count = re.search(r"\blist\s+(\d+)\s+(?:strongest|best|runnable)", clean, re.I)
     if count:
         if "--local" not in argv:
@@ -689,11 +925,26 @@ def nl_to_argv(text: str) -> list[str]:
 
 def cmd_recommend(args: argparse.Namespace) -> int:
     report = build_report()
+    show_guide = bool(getattr(args, "guide", False))
     if getattr(args, "local", False):
+        if show_guide:
+            guide = build_local_guide(report.hardware)
+            print(format_local_guide(guide))
+            if getattr(args, "apply", False):
+                best = guide.installed_local[0] if guide.installed_local else (guide.picks[0].model if guide.picks else "")
+                if best:
+                    for profile in known_task_profiles():
+                        from arka.llm.skill_models import set_skill_model
+
+                        set_skill_model(profile, f"ollama/{best}")
+                    print(f"\nApplied ollama/{best} to all skill profiles.")
+            return 0
         models = strongest_runnable_local_models(report.hardware, limit=getattr(args, "top", 1))
         model = models[0] if models else ""
         if not model:
-            print("No runnable local Ollama model found. Start Ollama and pull one first.", file=sys.stderr)
+            guide = build_local_guide(report.hardware)
+            print(format_local_guide(guide))
+            print("\nNo runnable local Ollama model installed yet — use the install commands above.", file=sys.stderr)
             return 1
         if getattr(args, "top", 1) > 1:
             print("Strongest runnable local models:")
@@ -714,6 +965,9 @@ def cmd_recommend(args: argparse.Namespace) -> int:
                 set_skill_model(profile, f"ollama/{model}")
             print("Applied local model to all skill profiles.")
         return 0
+    if show_guide:
+        print(format_local_guide(build_local_guide(report.hardware)))
+        print("")
     print(format_report(report, json_out=bool(getattr(args, "json", False))))
     if getattr(args, "apply", False):
         path = apply_recommendations(report)
@@ -734,7 +988,19 @@ def cmd_parse(args: argparse.Namespace) -> int:
     return 0
 
 
+_SUBCMDS = frozenset({"recommend", "probe", "parse"})
+
+
+def _normalize_argv(argv: list[str] | None) -> list[str]:
+    """Ensure select_model flags route to ``recommend`` (dispatch passes ``--local`` without subcmd)."""
+    args = list(argv or [])
+    if not args or args[0] not in _SUBCMDS:
+        return ["recommend", *args]
+    return args
+
+
 def main(argv: list[str] | None = None) -> int:
+    argv = _normalize_argv(argv)
     parser = argparse.ArgumentParser(description="Recommend LLM models from PC resources")
     sub = parser.add_subparsers(dest="cmd")
 
@@ -742,6 +1008,7 @@ def main(argv: list[str] | None = None) -> int:
     p_rec.add_argument("--apply", action="store_true", help="Write recommendations to llm-skill-models.json")
     p_rec.add_argument("--json", action="store_true", help="JSON output")
     p_rec.add_argument("--local", action="store_true", help="Choose the strongest installed model that fits locally")
+    p_rec.add_argument("--guide", action="store_true", help="Show rule-based local model guide with install commands")
     p_rec.add_argument("--run", metavar="PROMPT", help="Run a prompt with the selected local model")
     p_rec.add_argument("--top", type=int, default=1, help="List this many local models (use with --local)")
     p_rec.set_defaults(func=cmd_recommend)
@@ -753,12 +1020,7 @@ def main(argv: list[str] | None = None) -> int:
     p_parse.add_argument("text")
     p_parse.set_defaults(func=cmd_parse)
 
-    args, extras = parser.parse_known_args(argv)
-    if args.cmd is None:
-        args.cmd = "recommend"
-        args.apply = "--apply" in extras
-        args.json = "--json" in extras
-        args.func = cmd_recommend
+    args = parser.parse_args(argv)
     return int(args.func(args) or 0)
 
 

@@ -1,6 +1,5 @@
 import io
 
-import pytest
 
 from arka.agent.usage_dashboard import (
     UsageDashboardHandler,

@@ -219,7 +219,7 @@ def batch_ingest_payload(
     recursive: bool = True,
 ) -> dict[str, Any]:
     root = require_local_path(str(path), kind="dir", label="path")
-    rag = _rag()
+    _rag()
     exts = frozenset((e if e.startswith(".") else f".{e}").lower() for e in (extensions or [".pdf"]))
     ingested: list[dict[str, str]] = []
     errors: list[dict[str, str]] = []

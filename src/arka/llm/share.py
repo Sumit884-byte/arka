@@ -120,6 +120,20 @@ def capture_llm_completion(
         prompt_preview=preview,
         prompt_hash=_prompt_hash(user_prompt),
     )
+    try:
+        from arka.core.llm_usage import record_completion
+
+        record_completion(
+            provider=(provider or "").strip(),
+            model_id=(model_id or "").strip(),
+            input_tokens=prompt_tokens or 0,
+            output_tokens=completion_tokens or 0,
+            cost_usd=cost_usd,
+            task=(task or "").strip(),
+            skill=(skill or "").strip(),
+        )
+    except ImportError:
+        pass
 
 
 def llm_last_completion() -> LlmShareRecord | None:

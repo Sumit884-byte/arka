@@ -1,7 +1,6 @@
 """Apply unified diffs or search-replace patches inside the code project scope."""
 from __future__ import annotations
 
-import re
 import subprocess
 from pathlib import Path
 from typing import Any

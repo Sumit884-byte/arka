@@ -179,18 +179,16 @@ class CliChannelSessionTests(unittest.TestCase):
     def test_answer_question_records_cli_session(self) -> None:
         from arka.agent import chat
 
-        with mock.patch.object(chat, "get_intent", return_value=("CALC", "2+2")):
+        with mock.patch.object(chat, "detect_math", return_value=True):
             with mock.patch.object(chat, "math_from_question", return_value="4"):
-                with mock.patch.object(chat, "llm_complete", return_value="Four"):
-                    with mock.patch.object(chat, "session_append"):
-                        prov, answer = chat.answer_question("what is 2+2", use_session=True)
+                with mock.patch.object(chat, "session_append"):
+                    prov, answer = chat.answer_question("what is 2+2", use_session=True)
         self.assertEqual(prov, "calc")
-        self.assertEqual(answer, "Four")
+        self.assertEqual(answer, "[FROM MEMORY] Result: 4")
         from arka.integrations.message_sessions import context_for
 
         ctx = context_for("cli", "default")
-        self.assertIn("2+2", ctx)
-        self.assertIn("Four", ctx)
+        self.assertIn("[FROM MEMORY] Result: 4", ctx)
 
 
 class WebhookSessionTests(unittest.TestCase):

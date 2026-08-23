@@ -5,7 +5,7 @@ from __future__ import annotations
 import io
 import os
 import sys
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import redirect_stderr
 from unittest import mock
 
 import pytest

@@ -28,7 +28,12 @@ def _enabled() -> bool:
 
 
 def _token() -> str:
-    return (os.environ.get("ARKA_API_TOKEN") or os.environ.get("REMOTE_TOKEN") or "").strip()
+    try:
+        from arka.core.unified_api import api_token
+
+        return api_token()
+    except ImportError:
+        return (os.environ.get("ARKA_API_TOKEN") or os.environ.get("REMOTE_TOKEN") or "").strip()
 
 
 def _host() -> str:

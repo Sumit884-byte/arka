@@ -37,7 +37,17 @@ _HEALTH_RE = re.compile(r"(?i)\b(?:docker\s+)?health\b")
 
 
 def _docker_bin() -> str | None:
-    return which("docker")
+    found = which("docker")
+    if found:
+        return found
+    import os
+    from pathlib import Path
+
+    for candidate in ("/usr/local/bin/docker", "/usr/bin/docker"):
+        path = Path(candidate)
+        if path.is_file() and os.access(path, os.X_OK):
+            return candidate
+    return None
 
 
 def _run(cmd: list[str], *, timeout: int = 60) -> tuple[int, str, str]:

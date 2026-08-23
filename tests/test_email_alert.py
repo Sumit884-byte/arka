@@ -255,3 +255,84 @@ def test_email_send_requires_provider(monkeypatch):
 
     with pytest.raises(EmailSendError):
         send_email("user@example.com", "Hello", "Body")
+
+
+def test_model_exhausted_alert_enabled_env(tmp_path, monkeypatch):
+    from arka.integrations import email_alert as alerts
+
+    monkeypatch.setattr(alerts, "_config_path", lambda: tmp_path / "config.json")
+    monkeypatch.delenv("ARKA_ALERT_MODEL_EXHAUSTED", raising=False)
+    assert alerts.model_exhausted_alert_enabled() is False
+
+    monkeypatch.setenv("ARKA_ALERT_MODEL_EXHAUSTED", "1")
+    assert alerts.model_exhausted_alert_enabled() is True
+
+    monkeypatch.setenv("ARKA_ALERT_MODEL_EXHAUSTED", "0")
+    assert alerts.model_exhausted_alert_enabled() is False
+
+
+def test_model_exhausted_alert_enabled_config(tmp_path, monkeypatch):
+    from arka.integrations import email_alert as alerts
+
+    cfg_path = tmp_path / "config.json"
+    monkeypatch.setattr(alerts, "_config_path", lambda: cfg_path)
+    monkeypatch.delenv("ARKA_ALERT_MODEL_EXHAUSTED", raising=False)
+    alerts.set_model_exhausted_alert(True)
+    assert alerts.model_exhausted_alert_enabled() is True
+
+
+def test_format_model_exhausted_body_lists_failures():
+    from arka.integrations.email_alert import format_model_exhausted_body
+
+    body = format_model_exhausted_body(
+        tried=["gemini/gemini-2.5-flash", "groq/llama-3.3-70b-versatile"],
+        failures={
+            "gemini/gemini-2.5-flash": "429 RESOURCE_EXHAUSTED",
+            "groq/llama-3.3-70b-versatile": "invalid api key",
+        },
+        task="chat",
+        skill="web_answer",
+        last_error="groq/llama-3.3-70b-versatile: invalid api key",
+    )
+    assert "All configured models" in body
+    assert "task=chat" in body
+    assert "skill=web_answer" in body
+    assert "429 RESOURCE_EXHAUSTED" in body
+    assert "invalid api key" in body
+
+
+def test_maybe_model_exhausted_alert_sends_when_enabled(tmp_path, monkeypatch):
+    from arka.integrations import email_alert as alerts
+
+    monkeypatch.setattr(alerts, "_history_path", lambda: tmp_path / "history.json")
+    monkeypatch.setattr(alerts, "_config_path", lambda: tmp_path / "config.json")
+    monkeypatch.setattr(alerts, "_model_exhausted_dedupe_recent", lambda *_a, **_k: False)
+    monkeypatch.setenv("ARKA_ALERT_MODEL_EXHAUSTED", "1")
+    monkeypatch.setenv("ALERT_EMAIL_TO", "user@example.com")
+
+    with mock.patch("arka.integrations.email_send.send_email", return_value={"ok": True, "provider": "resend"}):
+        with mock.patch("arka.integrations.remind._notify", lambda *_a, **_k: None):
+            row = alerts.maybe_model_exhausted_alert(
+                tried=["gemini/gemini-2.5-flash"],
+                failures={"gemini/gemini-2.5-flash": "429 rate limit"},
+                task="chat",
+                last_error="gemini/gemini-2.5-flash: 429 rate limit",
+            )
+
+    assert row is not None
+    assert row.get("source") == "llm-failover" or "email" in row.get("channels", [])
+    assert "429 rate limit" in row.get("body", "")
+
+
+def test_model_exhausted_cli_on_off(tmp_path, monkeypatch, capsys):
+    from arka.integrations import email_alert as alerts
+
+    monkeypatch.setattr(alerts, "_config_path", lambda: tmp_path / "config.json")
+    monkeypatch.delenv("ARKA_ALERT_MODEL_EXHAUSTED", raising=False)
+
+    assert alerts.main(["model-exhausted", "on"]) == 0
+    assert "ON" in capsys.readouterr().out
+    assert alerts.model_exhausted_alert_enabled() is True
+
+    assert alerts.main(["model-exhausted", "off"]) == 0
+    assert alerts.model_exhausted_alert_enabled() is False

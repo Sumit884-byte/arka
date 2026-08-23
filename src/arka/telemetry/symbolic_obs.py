@@ -39,6 +39,8 @@ _LLM_SKILL_HEADS = frozenset(
         "hackathon",
         "ideate",
         "interesting_fact",
+        "joke",
+        "podcast_inspiration",
         "jules",
         "md_doc",
         "multi_llm",

@@ -74,7 +74,18 @@ def has_full_fish_agent() -> bool:
 
 
 def skill_mode() -> str:
-    """'full' (70+ skills via bundled config.fish) or 'portable' (Python fallbacks only)."""
+    """'full' when Python-native skills are available (all platforms).
+
+    Fish is no longer required. Use ``CapabilityRouter.available_skills()``
+    for the live catalog; this flag stays for older callers.
+    """
+    try:
+        from arka.core.capability_router import default_router
+
+        if default_router().python_skill_count() > 0:
+            return "full"
+    except Exception:
+        pass
     return "full" if has_full_fish_agent() else "portable"
 
 

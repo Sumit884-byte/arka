@@ -12,6 +12,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -99,6 +100,29 @@ def destroy(name: str, confirmed: bool = False) -> None:
         shutil.rmtree(target)
 
 
+def bootstrap_python(name: str, packages: list[str], *, timeout: float = 600) -> dict:
+    """Create a venv in the sandbox and pip-install packages (for rembg, etc.)."""
+    if not packages:
+        raise ValueError("at least one package is required")
+    target = _path(name)
+    if not target.is_dir():
+        raise ValueError(f"sandbox does not exist: {name}")
+    venv = target / ".venv"
+    if not venv.is_dir():
+        code = run(name, [sys.executable, "-m", "venv", str(venv)], timeout=min(timeout, 120))
+        if code != 0:
+            raise RuntimeError(f"venv creation failed (exit {code})")
+    pip = venv / "bin" / "pip"
+    if not pip.is_file():
+        pip = venv / "Scripts" / "pip.exe"
+    if not pip.is_file():
+        raise RuntimeError(f"pip not found in sandbox venv: {venv}")
+    code = run(name, [str(pip), "install", *packages], timeout=timeout)
+    if code != 0:
+        raise RuntimeError(f"pip install failed (exit {code})")
+    return {"name": name, "venv": str(venv), "packages": packages}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="arka sandbox", description="Create and run disposable project sandboxes")
     sub = parser.add_subparsers(dest="action", required=True)
@@ -115,10 +139,16 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("destroy")
     p.add_argument("name")
     p.add_argument("--yes", action="store_true")
+    p = sub.add_parser("bootstrap", help="Create a venv and pip-install packages")
+    p.add_argument("name")
+    p.add_argument("packages", nargs="+")
+    p.add_argument("--timeout", type=float, default=600)
     args = parser.parse_args(argv)
     try:
         if args.action == "create":
             print(json.dumps(create(args.name, args.source), indent=2))
+        elif args.action == "bootstrap":
+            print(json.dumps(bootstrap_python(args.name, args.packages, timeout=args.timeout), indent=2))
         elif args.action == "list":
             print(json.dumps(list_sandboxes(), indent=2))
         elif args.action == "status":
@@ -129,7 +159,11 @@ def main(argv: list[str] | None = None) -> int:
         elif args.action == "destroy":
             destroy(args.name, args.yes)
             print(f"destroyed {args.name}")
-    except (OSError, ValueError) as exc:
-        print(f"sandbox: {exc}", file=__import__("sys").stderr)
+    except (OSError, ValueError, RuntimeError) as exc:
+        print(f"sandbox: {exc}", file=sys.stderr)
         return 2
     return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

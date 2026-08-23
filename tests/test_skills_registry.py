@@ -5,8 +5,6 @@ from __future__ import annotations
 import io
 import json
 from contextlib import redirect_stdout
-from pathlib import Path
-from unittest import mock
 
 import pytest
 

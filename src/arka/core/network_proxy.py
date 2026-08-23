@@ -250,7 +250,7 @@ def rotate_proxy(*, advance: bool = True) -> tuple[str, int]:
         next_index = current
     save_rotation_state(index=next_index, pinned=False)
     proxy = pool[next_index]
-    applied = apply_proxy_env()
+    apply_proxy_env()
     return proxy, next_index
 
 

@@ -212,6 +212,19 @@ def skill_usage_lines() -> list[str]:
     return lines
 
 
+def token_usage_lines(*, period: str = "all") -> list[str]:
+    try:
+        from arka.core.llm_usage import format_report_lines, report
+    except ImportError:
+        return ["  (token usage tracking unavailable)"]
+    payload = report(period=period)  # type: ignore[arg-type]
+    if not payload["requests"] and not payload["offline_routes"]:
+        return ["  (no LLM token usage recorded yet — try: arka ask)"]
+    lines = [f"  {line.strip()}" for line in format_report_lines(payload)]
+    lines.append("  Full report: arka tokens usage")
+    return lines
+
+
 def fetch_openrouter_balance(*, timeout: float = _NETWORK_TIMEOUT) -> dict[str, object] | None:
     def _fetch() -> dict[str, object] | None:
         keys = iter_provider_keys("openrouter")
@@ -380,6 +393,7 @@ def setup_hint_lines(*, llm_configured: bool, live: bool = False) -> list[str]:
     if not llm_configured:
         hints.append("arka free_credits                  # free API key setup guide")
     hints.append("arka doctor                        # full environment check")
+    hints.append("arka tokens usage                  # local token usage + savings")
     if not live:
         hints.append("arka credits usage --live        # live balance + full fallback chain")
         hints.append("arka credits usage --balance     # OpenRouter balance only")
@@ -444,6 +458,10 @@ def run_report(
         print("\nSkill invocations (local counters)", file=out)
         for line in skill_usage_lines():
             print(line, file=out)
+
+    print("\nToken usage & savings (local ledger)", file=out)
+    for line in token_usage_lines():
+        print(line, file=out)
 
     print("\nNext steps", file=out)
     for hint in setup_hint_lines(llm_configured=llm_configured, live=live):

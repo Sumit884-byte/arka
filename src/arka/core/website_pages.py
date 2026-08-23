@@ -136,6 +136,14 @@ def context_for(
             "User wants a page plan: run website_pages plan (or output sitemap table) "
             "before writing components or routes."
         )
+    try:
+        from arka.core.website_archetypes import context_for as archetype_context
+
+        hint = archetype_context(goal, limit_chars=max(400, limit_chars // 3))
+        if hint:
+            parts.append(hint)
+    except ImportError:
+        pass
     text = "\n\n".join(p for p in parts if p).strip()
     if len(text) > limit_chars:
         text = text[:limit_chars].rstrip() + "\n…"

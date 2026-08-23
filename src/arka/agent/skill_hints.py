@@ -28,6 +28,7 @@ _HINTS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("self_improve", ("self improve", "improve arka", "improve routing", "use arka mcp", "improve mcp")),
     ("self_build", ("self build", "improve self", "mcp self improve")),
     ("unified_inbox", ("unified inbox", "all google accounts unread", "multiple google accounts email")),
+    ("oauth", ("google oauth", "setup google oauth", "connect google account", "oauth google")),
     ("gmail_summarize", ("summarize this email", "summarize my latest email", "what does this email say")),
     ("project_docs", ("first person readme", "sync project docs", "update blog from code changes")),
 )

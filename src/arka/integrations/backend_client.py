@@ -6,32 +6,23 @@ from __future__ import annotations
 import argparse
 import base64
 import json
-import os
 import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
 from urllib.parse import urljoin
 
+from arka.core.unified_api import api_timeout, api_token, api_url
+
 DEFAULT_BACKEND_URL = "http://127.0.0.1:8765"
 
 
 def backend_url() -> str:
-    return (
-        os.environ.get("ARKA_BACKEND_URL")
-        or os.environ.get("ARKA_REMOTE_URL")
-        or os.environ.get("REMOTE_URL")
-        or DEFAULT_BACKEND_URL
-    ).rstrip("/")
+    return api_url() or DEFAULT_BACKEND_URL
 
 
 def backend_token() -> str:
-    return (
-        os.environ.get("ARKA_BACKEND_TOKEN")
-        or os.environ.get("ARKA_REMOTE_TOKEN")
-        or os.environ.get("REMOTE_TOKEN")
-        or ""
-    ).strip()
+    return api_token()
 
 
 def _endpoint(base: str, path: str) -> str:
@@ -56,7 +47,7 @@ def request_json(
         headers["Authorization"] = f"Bearer {tok}"
     req = urllib.request.Request(_endpoint(url or backend_url(), path), data=body, method=method, headers=headers)
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with urllib.request.urlopen(req, timeout=timeout or api_timeout()) as resp:
             raw = resp.read().decode("utf-8", errors="replace")
             return resp.status, json.loads(raw or "{}")
     except urllib.error.HTTPError as exc:

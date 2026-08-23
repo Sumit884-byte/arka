@@ -955,7 +955,11 @@ def gather_web_context(question: str, *, snippet: str = "") -> str:
             search_q = ground_search_query(question)
     except ImportError:
         search_q = ground_search_query(question)
-    raw_web = scrape_search_results(search_q, **scrape_kwargs)
+    try:
+        raw_web = scrape_search_results(search_q, **scrape_kwargs)
+    except Exception as exc:
+        print(f"Web gather error: {exc}", file=sys.stderr)
+        raw_web = ""
     try:
         from arka.agent.daily_brief import filter_stale_brief_context, is_headlines_bullet_request
 
@@ -1153,14 +1157,20 @@ def detect_error(text: str) -> bool:
     return any(kw in text for kw in ERROR_KEYWORDS)
 
 
+_SIMPLE_ARITH_RE = re.compile(
+    r"(?i)(?:what\s+is|what's|calculate|compute|eval|solve\s+for)?\s*"
+    r"([-+]?\d+(?:\.\d+)?(?:\s*[\+\-\*/\^]\s*[-+]?\d+(?:\.\d+)?)+)"
+)
+
+
 def detect_math(text: str) -> bool:
-    return bool(
-        re.search(
-            r"(?i)\b(integrate|integral|derivative|differentiate|solve|simplify|equation|"
-            r"sympy|dx\b|dy\b)\b",
-            text,
-        )
-    )
+    if re.search(
+        r"(?i)\b(integrate|integral|derivative|differentiate|solve|simplify|equation|"
+        r"sympy|dx\b|dy\b)\b",
+        text,
+    ):
+        return True
+    return bool(_SIMPLE_ARITH_RE.search(text))
 
 
 from arka.llm.cli import llm_complete
@@ -1225,14 +1235,32 @@ def get_intent(
     return "ANSWER", prompt
 
 
-def duckduckgo_search(query: str, max_results: int = 5) -> list[dict]:
+def _ddgs_timeout_seconds() -> int:
     try:
+        return max(5, int(os.environ.get("DDGS_TIMEOUT", "20")))
+    except ValueError:
+        return 20
+
+
+def _ddgs_retry_count() -> int:
+    try:
+        return max(1, int(os.environ.get("DDGS_RETRIES", "2")))
+    except ValueError:
+        return 2
+
+
+def _duckduckgo_search_once(query: str, *, max_results: int, timeout: int) -> list[dict]:
+    from concurrent.futures import ThreadPoolExecutor
+    from concurrent.futures import TimeoutError as FuturesTimeout
+
+    def _run() -> list[dict]:
         try:
             from ddgs import DDGS  # type: ignore
         except ImportError:
             from duckduckgo_search import DDGS  # type: ignore
-        results = []
-        with DDGS() as client:
+        proxy = (os.environ.get("DDGS_PROXY") or "").strip() or None
+        results: list[dict] = []
+        with DDGS(proxy=proxy, timeout=timeout) as client:
             for i, row in enumerate(client.text(query, max_results=max_results)):
                 results.append({
                     "id": i,
@@ -1241,9 +1269,49 @@ def duckduckgo_search(query: str, max_results: int = 5) -> list[dict]:
                     "snippet": row.get("body", ""),
                 })
         return results
-    except Exception as exc:
-        print(f"Search error: {exc}", file=sys.stderr)
-        return []
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        fut = pool.submit(_run)
+        try:
+            return fut.result(timeout=timeout + 5)
+        except FuturesTimeout as exc:
+            raise TimeoutError(f"search timed out after {timeout}s") from exc
+
+
+def duckduckgo_search(query: str, max_results: int = 5) -> list[dict]:
+    try:
+        from arka.integrations.brightdata_mcp import brightdata_search, prefer_brightdata_search
+        from arka.integrations.brightdata_retrieval import (
+            brightdata_search_parameters,
+            should_trigger_brightdata_search,
+        )
+
+        if prefer_brightdata_search() and should_trigger_brightdata_search(query):
+            params = brightdata_search_parameters(query, optimized_query=query)
+            results = brightdata_search(
+                params["query"],
+                max_results=max_results,
+                engine=params.get("engine", "google"),
+                geo_location=params.get("geo_location", ""),
+            )
+            if results:
+                return results
+    except ImportError:
+        pass
+
+    timeout = _ddgs_timeout_seconds()
+    retries = _ddgs_retry_count()
+    last_exc: Exception | None = None
+    for attempt in range(retries):
+        try:
+            return _duckduckgo_search_once(query, max_results=max_results, timeout=timeout)
+        except Exception as exc:
+            last_exc = exc
+            if attempt + 1 < retries:
+                time.sleep(0.6 * (attempt + 1))
+    if last_exc is not None:
+        print(f"Search error: {last_exc}", file=sys.stderr)
+    return []
 
 
 def _score_search_result(query: str, result: dict) -> int:
@@ -1592,6 +1660,9 @@ def math_from_question(question: str) -> str:
     m = re.search(r"(?i)differentiate\s+(.+?)\s+with respect to x", q)
     if m:
         return evaluate_math(f"diff({m.group(1).strip()}, x)")
+    m = _SIMPLE_ARITH_RE.search(q)
+    if m:
+        return evaluate_math(m.group(1).strip())
     expr = q
     for pat in (
         r"(?i)(?:integral of)\s+(.+)",
@@ -2043,12 +2114,60 @@ def answer_question(
         return _done("memory", model_identity_answer())
 
     try:
+        from arka.routing.joke import is_joke_request
+        from arka.agent.joke import answer_joke
+
+        if is_joke_request(question):
+            joke = answer_joke(question)
+            if joke:
+                if use_session:
+                    session_append("user", question)
+                    session_append("assistant", joke)
+                _end_channel_session(joke, use_session=use_session)
+                return _done("joke", joke)
+    except ImportError:
+        pass
+
+    try:
+        from arka.agent.daily_brief import should_use_live_news_web, summarize_news_web
+
+        if should_use_live_news_web(question):
+            answer = summarize_news_web(question)
+            if answer:
+                if use_session:
+                    session_append("user", question)
+                    session_append("assistant", answer)
+                _end_channel_session(answer, use_session=use_session)
+                return _done("search", answer)
+    except ImportError:
+        pass
+
+    if detect_math(question):
+        result = math_from_question(question)
+        if result and not str(result).startswith("Error:"):
+            answer = f"[FROM MEMORY] Result: {result}"
+            if use_session:
+                session_append("user", question)
+                session_append("assistant", answer)
+            _end_channel_session(answer, use_session=use_session)
+            return _done("calc", answer)
+
+    try:
         from arka.core.answer_cache import (
             get_cached_answer,
             is_encyclopedic_query,
             set_cached_answer,
         )
+        from arka.core.dev_faq_cache import lookup_dev_faq, should_use_dev_cache
 
+        if should_use_dev_cache(question):
+            dev_cached = lookup_dev_faq(question)
+            if dev_cached:
+                if use_session:
+                    session_append("user", question)
+                    session_append("assistant", dev_cached)
+                _end_channel_session(dev_cached, use_session=use_session)
+                return _done("dev_cache", dev_cached)
         if is_encyclopedic_query(question):
             cached = get_cached_answer(question)
             if cached:
@@ -2070,6 +2189,14 @@ def answer_question(
             contextual_hint = answer_instructions(question, force=True)
         elif contextual is not False:
             contextual_hint = answer_instructions(question)
+    except ImportError:
+        pass
+    try:
+        from arka.core.script_length import script_length_addon
+
+        script_hint = script_length_addon(question)
+        if script_hint:
+            contextual_hint = f"{contextual_hint}\n\n{script_hint}".strip()
     except ImportError:
         pass
     channel_ctx = _begin_channel_session(question, use_session=use_session)
@@ -2115,6 +2242,13 @@ def answer_question(
 
     if action == "CALC":
         result = math_from_question(data)
+        if result and not str(result).startswith("Error:"):
+            answer = f"[FROM MEMORY] Result: {result}"
+            if use_session:
+                session_append("user", question)
+                session_append("assistant", answer)
+            _end_channel_session(answer, use_session=use_session)
+            return _done("calc", answer)
         system = ASSISTANT_SYSTEM + "\nExplain the math result clearly. Start with [FROM MEMORY]."
         user = f"Question: {question}\nSymPy result: {result}"
         answer = llm_complete(system, user, task="chat")
@@ -2149,6 +2283,13 @@ def answer_question(
 
     linked_urls = extract_urls(question)
     github_activity_context = False
+    skip_linked_scrape = False
+    try:
+        from arka.agent.daily_brief import is_headlines_bullet_request
+
+        skip_linked_scrape = is_headlines_bullet_request(question)
+    except ImportError:
+        pass
     try:
         from arka.agent.github_repo import fetch_activity_for_question, wants_github_repo_activity
 
@@ -2165,7 +2306,7 @@ def answer_question(
     except ImportError:
         pass
 
-    if linked_urls and not github_activity_context:
+    if linked_urls and not github_activity_context and not skip_linked_scrape:
         scraped_pages = scrape_linked_pages(linked_urls)
         if scraped_pages:
             web_context = scraped_pages
@@ -2377,6 +2518,19 @@ def answer_question(
             and not looks_like_unknown_answer(answer)
         ):
             set_cached_answer(question, answer)
+        try:
+            from arka.core.dev_faq_cache import set_dev_faq, should_use_dev_cache
+
+            if (
+                should_use_dev_cache(question)
+                and action == "ANSWER"
+                and not deep
+                and prov == "memory"
+                and answer
+            ):
+                set_dev_faq(question, answer)
+        except ImportError:
+            pass
     except ImportError:
         pass
 
@@ -2505,6 +2659,10 @@ def main() -> int:
             cleanup=not args.no_cleanup,
             verify=True if args.verify else None,
         )
+        body_only = os.environ.get("ARKA_BODY_ONLY", "").lower() in ("1", "true", "yes", "on")
+        if body_only:
+            print(answer.strip())
+            return 0
         try:
             from arka.output import print_block
 

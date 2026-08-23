@@ -308,7 +308,7 @@ def generate_browser(
 
             video_url = _wait_for_video_url(page, timeout if clicked else min(timeout, 120))
             if video_url and video_url.startswith("http"):
-                print(f"  Downloading video from Flow …", file=sys.stderr)
+                print("  Downloading video from Flow …", file=sys.stderr)
                 return _download_url(video_url, output, timeout=min(timeout, 600))
 
             shot = screenshot_path("awaiting-download", artifacts_dir)

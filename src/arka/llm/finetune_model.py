@@ -98,14 +98,14 @@ def nl_to_argv(text: str) -> list[str]:
     t = text.strip()
     if not t:
         return []
-    match = re.match(
-        r"(?i)(?:(?:arka\s+)?(?:model\s+)?(?:finetune(?:[-_ ]model)?|finetune_model|model_finetune)\s+)?"
+    explicit = re.match(
+        r"(?i)^(?:arka\s+)?(?:model\s+)?(?:finetune(?:[-_ ]model)?|finetune_model|model_finetune)\s+"
         r"(?P<sub>plan|validate|generate|status|parse|check)\b(?P<rest>.*)$",
         t,
     )
-    if match:
-        sub = match.group("sub").lower()
-        rest = match.group("rest").strip()
+    if explicit:
+        sub = explicit.group("sub").lower()
+        rest = explicit.group("rest").strip()
         return [sub, *shlex.split(rest)] if rest else [sub]
     if re.search(r"(?i)\b(?:finetune|fine[- ]?tune|lora|qlora)\b.*\b(?:model|llm|dataset)\b", t):
         return ["plan", t]

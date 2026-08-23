@@ -14,7 +14,7 @@ from arka.agent.dev_tools import (
     ci_text,
     cmd_doctor,
     cmd_hooks,
-    cmd_review,
+    cmd_review as run_dev_review,
     review_text,
     run_ci,
 )
@@ -157,7 +157,7 @@ def cmd_review(args: argparse.Namespace) -> int:
         fail_on_hints=args.fail_on_hints,
         json=args.json,
     )
-    return cmd_review(review_args)
+    return run_dev_review(review_args)
 
 
 def cmd_ship(args: argparse.Namespace) -> int:
