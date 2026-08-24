@@ -1,0 +1,24 @@
+---
+title: "24 अगस्त, 2026 का सप्ताह"
+description: "साप्ताहिक Arka changelog: model-policy control, browser-app launcher, मज़बूत chat और search, तथा Docker CLI detection fixes।"
+icon: "clock-rotate-left"
+---
+
+यह हफ़्ता थोड़ा शांत रहा और reliability पर केंद्रित था। मुख्य बातें नीचे हैं।
+
+## नई सुविधाएँ
+
+- **[Model policy control](/hi/guides/free-models).** `ARKA_MODEL_POLICY` को `local-first`, `hosted-first`, `local-only`, या `hosted-only` पर सेट करके config बदले बिना LLM fallback chain का order बदलें।
+- **[नाम से browser apps लॉन्च करें](/hi/guides/open-url).** `arka open brave`, `open chrome`, `open firefox`, `open safari`, `open edge`, `open arc`, `open vivaldi`, और `open opera` अब उसी नाम की `.com` site के बजाय desktop app खोलते हैं।
+
+## सुधार
+
+- **तेज़ `arka --help`.** CLI अब OpenAI SDK, faster-whisper जैसी भारी dependencies को उसी subcommand के चलने तक defer करता है, इसलिए top-level help तुरंत लौटती है।
+- **Chat में साधारण arithmetic.** `what is 12 * 7 + 3` जैसे सवाल math के रूप में पहचाने जाते हैं और सीधे math path पर route होते हैं।
+- **Configurable web search timeouts.** DuckDuckGo lookups अब `DDGS_TIMEOUT` (default 20s) और `DDGS_RETRIES` (default 2) का पालन करते हैं, ताकि धीमे network chat को stall न करें।
+- **Web failure पर chat नहीं रुकता.** अगर web-context gathering fail होती है, तो chat error print करके आगे बढ़ता है, बजाय turn को abort करने के।
+- **Gemini quota handling.** जब Gemini से rate या quota error आती है, Arka उस run के लिए सभी Gemini models को exhausted mark कर देता है और API key rotate करके retry नहीं करता।
+
+## Bug fixes
+
+- **[Docker status हर जगह CLI ढूँढ लेता है](/hi/guides/docker-status).** `arka docker status` अब `docker` binary को `/usr/local/bin/docker` और `/usr/bin/docker` पर भी locate करता है जब वह `PATH` पर नहीं होता, और container के अंदर CLI उपलब्ध न होने पर host/container parity checks skip करता है।
