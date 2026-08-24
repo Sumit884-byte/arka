@@ -61,7 +61,7 @@ arka map_download Kolkata           # cache city map to ~/.cache/arka/maps/
 
 ## Web search tuning
 
-DuckDuckGo lookups honor two env vars. Chat continues gracefully if web-context gathering fails: on timeout or repeated errors, the search error is logged and the answer falls back to model knowledge instead of stalling the reply.
+DuckDuckGo lookups honor two env vars. If every retry times out or errors, chat logs the failure and answers from model knowledge instead of stalling the reply.
 
 | Var | Default | Notes |
 | --- | --- | --- |
