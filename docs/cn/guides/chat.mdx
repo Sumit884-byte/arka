@@ -59,6 +59,22 @@ arka "nearby_places"
 arka map_download Kolkata           # 将城市地图缓存到 ~/.cache/arka/maps/
 ```
 
+## 网络搜索调优
+
+DuckDuckGo 查询遵循两个环境变量。若网络上下文抓取失败，聊天会优雅降级：超时或多次报错时，会记录搜索错误并改用模型知识回答，而不是让回复卡住。
+
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `DDGS_TIMEOUT` | `20` | 每次调用的超时（秒），最小 `5`。 |
+| `DDGS_RETRIES` | `2` | 回退前的尝试次数，最小 `1`。 |
+
+在网络较慢或不稳定时可调高两项：
+
+```env
+DDGS_TIMEOUT=30
+DDGS_RETRIES=3
+```
+
 ## 安装聊天附加组件
 
 ```bash
