@@ -66,6 +66,7 @@ SECURITY=1
 | Security | All layers on (`SECURITY=1`) | Set any layer to `0` |
 | NL routing | Offline rules first (`ROUTE_MODE=symbolic`) | `ai`, `symbolic_only`, `ai_only` |
 | LLM failover | Auto on 429/401/timeout (`LLM_AUTO_FALLBACK=1`) | `LLM_AUTO_FALLBACK=0` |
+| Model policy | Try local before hosted (`ARKA_MODEL_POLICY=local-first`) | `hosted-first`, `local-only`, `hosted-only` (see [Find free models](/guides/free-models)) |
 | Key rotation | Rotate backup keys first (`API_KEY_ROTATION=1`) | `API_KEY_ROTATION=0` |
 | Voice TTS | Speak replies (`AGENT_SPEAK=1`) | `AGENT_SPEAK=0` |
 | Wake listener | Off until `arka listen` | `AGENT_WAKE_AUTO=1` |

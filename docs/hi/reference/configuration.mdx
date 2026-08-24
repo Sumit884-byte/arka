@@ -66,6 +66,7 @@ SECURITY=1
 | Security | सभी layers चालू (`SECURITY=1`) | किसी भी layer को `0` set करें |
 | NL routing | पहले Offline rules (`ROUTE_MODE=symbolic`) | `ai`, `symbolic_only`, `ai_only` |
 | LLM failover | 429/401/timeout पर Auto (`LLM_AUTO_FALLBACK=1`) | `LLM_AUTO_FALLBACK=0` |
+| Model policy | पहले local फिर hosted (`ARKA_MODEL_POLICY=local-first`) | `hosted-first`, `local-only`, `hosted-only` ([मुफ़्त मॉडल खोजें](/hi/guides/free-models) देखें) |
 | Key rotation | पहले backup keys rotate करें (`API_KEY_ROTATION=1`) | `API_KEY_ROTATION=0` |
 | Voice TTS | Replies speak करें (`AGENT_SPEAK=1`) | `AGENT_SPEAK=0` |
 | Wake listener | `arka listen` तक बंद | `AGENT_WAKE_AUTO=1` |
