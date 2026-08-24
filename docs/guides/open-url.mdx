@@ -34,6 +34,37 @@ Full `https://` URLs and `domain.tld` patterns work as-is.
 
 Arka keeps the path and query you provide. So `open https://example.com/docs?a=1` opens that exact URL instead of inventing a new one.
 
+## Browser app launchers
+
+Bare browser names launch the installed desktop browser app instead of opening the matching `.com` site:
+
+| Name | Launches |
+| --- | --- |
+| `brave` | Brave Browser |
+| `chrome` / `googlechrome` | Google Chrome |
+| `chromium` | Chromium |
+| `firefox` | Firefox |
+| `safari` | Safari (macOS) |
+| `edge` / `microsoftedge` | Microsoft Edge |
+| `arc` | Arc |
+| `vivaldi` | Vivaldi |
+| `opera` | Opera |
+
+```bash
+arka open brave
+arka open firefox
+arka launch chrome
+```
+
+The alias triggers on the bare token only. To open the matching website instead, pass a URL-like target:
+
+```bash
+arka open brave.com
+arka open https://firefox.com
+```
+
+Arka calls `open -a "<App>"` on macOS, `start` on Windows, and the first matching binary on `PATH` on Linux (for example `brave-browser`, `google-chrome`, `microsoft-edge`). If the app is not installed, Arka prints `Could not launch '<App>'` and exits non-zero.
+
 Natural language examples:
 
 ```bash
