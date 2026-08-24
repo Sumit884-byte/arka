@@ -15,3 +15,29 @@ models, and provider free-tier-eligible models. Free-tier availability still
 depends on account, region, quotas, and provider policy; Arka never labels a
 paid model free merely because it has a free quota. Use `arka hybrid status` to
 see which discovered local or hosted options are actually reachable.
+
+## Model policy
+
+`ARKA_MODEL_POLICY` reorders the fallback chain used by `arka hybrid` and by
+the shared LLM fallback engine. It does not add or remove providers; it only
+changes which side of the chain runs first (or restricts it to one side).
+
+| Value | Behavior |
+| --- | --- |
+| `local-first` (default) | Try local runtimes (Ollama, vLLM, LM Studio, Exo) before hosted providers. |
+| `hosted-first` | Try hosted providers before local runtimes. |
+| `local-only` | Skip hosted providers entirely. Useful for offline or private runs. |
+| `hosted-only` | Skip local runtimes entirely. Useful when local models are too slow or unavailable. |
+
+```bash
+export ARKA_MODEL_POLICY=hosted-first
+arka hybrid status
+
+# Or set it for one command only
+ARKA_MODEL_POLICY=local-only arka chat "summarize this"
+```
+
+The policy runs after your existing fallback config: `LLM_AUTO_FALLBACK`,
+`AI_PREFERRED_PROVIDER`, `AI_PREFERRED_MODEL`, and per-skill routing in
+`llm-skill-models.json` still choose the initial candidate list. The policy
+then filters and reorders that list. Unknown values fall back to `local-first`.
