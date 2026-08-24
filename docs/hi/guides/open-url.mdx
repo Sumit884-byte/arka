@@ -1,6 +1,6 @@
 ---
 title: "Browser में URL खोलें"
-description: "Terminal से अपने default browser में websites खोलें — YouTube, GitHub, Google, और पूर्ण URLs।"
+description: "Terminal से अपने default browser में websites खोलें — youtube या github जैसे site aliases, पूर्ण URLs, या Brave, Chrome, Firefox जैसे desktop browser apps launch करें।"
 keywords: ["open", "browser", "url", "website"]
 icon: "arrow-up-right-from-square"
 ---
@@ -34,6 +34,37 @@ open google in browser
 
 Arka आपके द्वारा दिए गए path और query को रखता है। तो `open https://example.com/docs?a=1`
 नया आविष्कार करने के बजाय ठीक उसी URL को खोलता है।
+
+## Browser app launchers
+
+Browser के bare नाम matching `.com` site खोलने के बजाय installed desktop browser app को launch करते हैं:
+
+| Name | Launch करता है |
+| --- | --- |
+| `brave` | Brave Browser |
+| `chrome` / `googlechrome` | Google Chrome |
+| `chromium` | Chromium |
+| `firefox` | Firefox |
+| `safari` | Safari (macOS) |
+| `edge` / `microsoftedge` | Microsoft Edge |
+| `arc` | Arc |
+| `vivaldi` | Vivaldi |
+| `opera` | Opera |
+
+```bash
+arka open brave
+arka open firefox
+arka launch chrome
+```
+
+Alias केवल bare token पर trigger होता है। इसके बजाय matching website खोलने के लिए URL जैसा target दें:
+
+```bash
+arka open brave.com
+arka open https://firefox.com
+```
+
+Arka macOS पर `open -a "<App>"`, Windows पर `start`, और Linux पर `PATH` में पहले matching binary को call करता है (उदाहरण के लिए `brave-browser`, `google-chrome`, `microsoft-edge`)। यदि app installed नहीं है, तो Arka `Could not launch '<App>'` print करता है और non-zero status से exit करता है।
 
 Natural language उदाहरण:
 
