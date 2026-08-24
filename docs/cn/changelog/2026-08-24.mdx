@@ -1,0 +1,24 @@
+---
+title: "2026 年 8 月 24 日当周"
+description: "Arka 每周更新日志：模型策略控制、浏览器应用启动器、更健壮的 chat 与搜索，以及 Docker CLI 检测修复。"
+icon: "clock-rotate-left"
+---
+
+本周相对平稳，重点在于稳定性提升。要点如下。
+
+## 新功能
+
+- **[模型策略控制](/cn/guides/free-models)。** 将 `ARKA_MODEL_POLICY` 设置为 `local-first`、`hosted-first`、`local-only` 或 `hosted-only`，即可在不改配置文件的情况下重排 LLM 回退链。
+- **[按名称启动浏览器应用](/cn/guides/open-url)。** `arka open brave`、`open chrome`、`open firefox`、`open safari`、`open edge`、`open arc`、`open vivaldi` 与 `open opera` 现在会打开桌面应用，而不是同名的 `.com` 网站。
+
+## 改进
+
+- **更快的 `arka --help`。** CLI 会延迟加载重型依赖（OpenAI SDK、faster-whisper 等），直到对应子命令真正运行，因此顶层帮助信息立即返回。
+- **Chat 中的简单算术。** 类似 `what is 12 * 7 + 3` 的问题会被识别为数学问题并直接走数学路径。
+- **可配置的网络搜索超时。** DuckDuckGo 查询会读取 `DDGS_TIMEOUT`（默认 20 秒）和 `DDGS_RETRIES`（默认 2 次），网络较慢时不再阻塞 chat。
+- **网络失败不再中断 chat。** 若网络上下文抓取失败，chat 会打印错误并继续，而不是中止当前对话轮次。
+- **Gemini 配额处理。** 当 Gemini 返回速率或配额错误时，Arka 会将本次运行中的所有 Gemini 模型标记为已耗尽，不再轮换 API key 重试。
+
+## Bug 修复
+
+- **[Docker 状态检测能找到 CLI](/cn/guides/docker-status)。** 当 `docker` 不在 `PATH` 中时，`arka docker status` 现在会在 `/usr/local/bin/docker` 与 `/usr/bin/docker` 定位到 CLI；在容器内没有 CLI 时会跳过宿主机/容器一致性检查。
