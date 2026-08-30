@@ -1,0 +1,52 @@
+Arka — description (with PyPI downloads)
+Updated: 2026-08-30
+Package: arka-agent · https://pypi.org/project/arka-agent/
+Stats:   https://pypistats.org/packages/arka-agent
+
+========================================================================
+TAGLINE
+========================================================================
+Your terminal, upgraded.
+
+========================================================================
+ONE-LINER
+========================================================================
+Arka is a local-first AI agent that turns plain English into 70+ skills —
+and already has 63 downloads in the last 30 days on PyPI (447 tracked
+without mirrors since launch).
+
+========================================================================
+SHORT (PyPI / bio)
+========================================================================
+Cross-platform AI agent — 70+ skills, MCP server, media tools, local-first
+routing. PyPI: 63 downloads last 30 days · 23 last week · 447 tracked
+since Jul 2026 (excluding mirrors).
+
+========================================================================
+MEDIUM
+========================================================================
+Arka is an open-source AI terminal agent (PyPI: arka-agent, v0.1.2). Type
+or speak a request and it routes to local skills — coding, charts, media,
+memory, voice, GitHub, and more. Most requests hit deterministic offline
+rules first; when a model is needed it fails over across 20+ providers.
+Connect it to Cursor over MCP.
+
+Adoption (PyPI, as of 2026-08-30): 63 downloads in the last 30 days,
+23 in the last 7 days, 447 tracked without mirrors since launch
+(2026-07-20), 1,585 including mirrors. Peak day: 198 downloads on launch.
+
+========================================================================
+LONG
+========================================================================
+Arka upgrades your terminal into a skillful AI agent. You write natural
+language; Arka matches it with 120+ symbolic routing rules when possible,
+then dispatches to 70+ local skills that run on your machine. When an LLM
+is required, a failover chain covers Gemini, Groq, Ollama, OpenRouter,
+and more. Security gates are on by default. Use it from the CLI, voice,
+or as an MCP server in Cursor and other IDEs.
+
+PyPI package arka-agent (latest v0.1.2) has drawn 63 downloads in the
+last 30 days and 23 in the last week. Over the tracked window since
+first publish (2026-07-20 → 2026-08-28): 447 downloads excluding mirrors,
+1,585 including mirrors, with a launch-day peak of 198 (523 with mirrors).
+Install: pip install arka-agent

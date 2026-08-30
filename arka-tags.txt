@@ -1,0 +1,66 @@
+Arka — tags
+Package: arka-agent
+Updated: 2026-08-30
+
+========================================================================
+COMMA LIST (paste anywhere)
+========================================================================
+ai, agent, cli, assistant, llm, mcp, local-first, terminal, skill-routing,
+voice, openai, gemini, groq, ollama, openrouter, cursor, automation,
+devtools, python, open-source, media, charts, memory, failover
+
+========================================================================
+PYPI KEYWORDS (pyproject.toml)
+========================================================================
+ai
+agent
+cli
+assistant
+llm
+mcp
+local-first
+terminal
+skills
+voice
+automation
+devtools
+cursor
+failover
+open-source
+
+========================================================================
+GITHUB TOPICS
+========================================================================
+ai
+ai-agent
+cli
+llm
+mcp
+mcp-server
+python
+terminal
+local-first
+automation
+developer-tools
+voice-assistant
+openai
+gemini
+ollama
+cursor
+
+========================================================================
+HASHTAGS (social)
+========================================================================
+#AI #AIAgent #CLI #LLM #MCP #Python #OpenSource #LocalFirst
+#DeveloperTools #CursorIDE #Terminal #Automation
+
+========================================================================
+CATEGORY / DISCOVERY
+========================================================================
+AI agents
+Developer tools
+CLI utilities
+MCP servers
+Productivity
+Local LLM / offline-first tooling
+Media & automation
