@@ -2,13 +2,27 @@
 
 **Your terminal, upgraded.** Route plain English to **70+ local skills** — deterministic offline routing, voice, 24-provider LLM failover, and security gates on by default.
 
-[![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![PyPI](https://img.shields.io/pypi/v/arka-agent.svg)](https://pypi.org/project/arka-agent/)
+[![Downloads](https://static.pepy.tech/badge/arka-agent)](https://pepy.tech/projects/arka-agent)
+[![Downloads/month](https://img.shields.io/pypi/dm/arka-agent.svg)](https://pypistats.org/packages/arka-agent)
 [![GitHub](https://img.shields.io/github/stars/Sumit884-byte/arka?style=social)](https://github.com/Sumit884-byte/arka)
 [![Docs](https://img.shields.io/badge/docs-Mintlify-6366F1)](https://arka-agent.mintlify.site)
+[![GHCR](https://img.shields.io/badge/ghcr-arka-blue)](https://github.com/Sumit884-byte/arka/pkgs/container/arka)
 
-**Documentation:** [arka-agent.mintlify.site](https://arka-agent.mintlify.site) · **Landing page:** [sumit884-byte.github.io/arka](https://sumit884-byte.github.io/arka/) · **Repository:** [github.com/Sumit884-byte/arka](https://github.com/Sumit884-byte/arka) · Local preview: [`landing/`](landing/) (`python3 -m http.server` from that folder)
+**Documentation:** [arka-agent.mintlify.site](https://arka-agent.mintlify.site) · **Repository:** [github.com/Sumit884-byte/arka](https://github.com/Sumit884-byte/arka) · Local landing preview: [`landing/`](landing/) (`python3 -m http.server` from that folder)
+
+### PyPI downloads
+
+| Window | Downloads (no mirrors) |
+|--------|------------------------:|
+| Last 7 days | 23 |
+| Last 30 days | 63 |
+| Tracked since launch (2026-07-20) | 447 |
+| With mirrors (same window) | 1,585 |
+
+Live charts: [pypistats.org/packages/arka-agent](https://pypistats.org/packages/arka-agent) · [pepy.tech/projects/arka-agent](https://pepy.tech/projects/arka-agent) · snapshot 2026-08-30
 
 ## Why Arka?
 
@@ -302,4 +316,4 @@ Look for the **good first issue** label on [GitHub Issues](https://github.com/Su
 
 ## License
 
-Distributed under the **GNU General Public License v2.0**. See [LICENSE](LICENSE) for more information.
+Distributed under the **MIT License**. See [LICENSE](LICENSE) for more information.
