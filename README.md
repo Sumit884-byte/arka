@@ -41,7 +41,7 @@ Or open [github.com/Sumit884-byte/arka](https://github.com/Sumit884-byte/arka) a
 
 ## Architecture
 
-Arka is built as a layered system: requests flow through deterministic symbolic routing first (zero LLM tokens), fall back to a multi-provider LLM chain only when needed, and dispatch to a pluggable skill dispatcher. All layers — MCP server, remote API server, memory, telemetry, and cloud deployment — are independently composable.
+Arka is built as a layered system. Requests flow through deterministic symbolic routing first (zero LLM tokens), fall back to a multi-provider LLM chain only when needed, and dispatch to a pluggable skill dispatcher. All layers — MCP server, remote API server, memory, telemetry, and cloud deployment — are independently composable.
 
 ```mermaid
 flowchart TD
@@ -129,7 +129,7 @@ Arka is designed so **you stay in control of your data**:
 
 - **Secrets stay local** — API keys and `.env` live under your user config directory (`~/.config/arka/` on Linux, `~/Library/Application Support/arka/` on macOS). `arka integration setup` never prints secret values.
 - **Memory stays local by default** — Long-term memory uses a local cache unless you add a Supermemory key (`MEMORY=auto` falls back to local). Set `MEMORY=local` to keep recall entirely on disk.
-- **Web content is sanitized** — Search results and scraped pages are stripped of suspicious injection patterns before they reach the model (`SECURITY_SANITIZE=1` by default).
+- **Web content is sanitized** — Arka strips suspicious injection patterns from search results and scraped pages before they reach the model (`SECURITY_SANITIZE=1` by default).
 - **Risky actions need confirmation** — Installs, deletes, downloads, and automation prompt `[y/N]` unless you explicitly auto-confirm (`SECURITY_ACTIONS=1` by default).
 - **Telemetry defaults to SigNoz** — OpenTelemetry traces, metrics, and logs export to `http://127.0.0.1:4318` by default. Set `OTEL_SDK_DISABLED=true` or `OTEL_TRACES_ENABLED=0` to opt out.
 
@@ -268,7 +268,7 @@ There is no hosted demo instance or shared test account. The fastest path to eva
 
 Full walkthrough: [Quickstart](https://arka-agent.mintlify.site/quickstart) · [Free credits guide](https://arka-agent.mintlify.site/guides/free-credits)
 
-## Quick Start
+## Quick start
 
 Get to a working answer in under a minute:
 
