@@ -74,6 +74,15 @@ SECURITY=1
 | YouTube 研究 | 2 个视频（`YT_RESEARCH_MAX=2`） | `--limit N` 或环境变量 |
 | 提醒 | 默认 1 小时（`REMIND_DEFAULT=1h`） | 传入显式时间 |
 | 模型标签 | 在答案下方显示（`SHOW_MODEL=1`） | `SHOW_MODEL=0` |
+| 网络搜索超时 | 每次 DuckDuckGo 调用 20 秒（`DDGS_TIMEOUT=20`） | 任意 ≥ 5 的整数 |
+| 网络搜索重试 | 放弃前尝试 2 次（`DDGS_RETRIES=2`） | 任意 ≥ 1 的整数 |
+
+网络搜索失败不会阻塞聊天：若 DuckDuckGo 每次重试都超时或报错，聊天会记录错误并改用模型知识回答，而不是让回复卡住。在网络较慢或不稳定时可调高两项：
+
+```env
+DDGS_TIMEOUT=30
+DDGS_RETRIES=3
+```
 
 ## 关键 API 密钥
 

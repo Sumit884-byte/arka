@@ -74,6 +74,15 @@ SECURITY=1
 | YouTube research | 2 videos (`YT_RESEARCH_MAX=2`) | `--limit N` या env |
 | Reminders | 1 hour default (`REMIND_DEFAULT=1h`) | explicit समय pass करें |
 | Model label | answers के नीचे दिखाएँ (`SHOW_MODEL=1`) | `SHOW_MODEL=0` |
+| Web search timeout | प्रति DuckDuckGo call 20 सेकंड (`DDGS_TIMEOUT=20`) | ≥ 5 कोई भी integer |
+| Web search retries | हार मानने से पहले 2 attempts (`DDGS_RETRIES=2`) | ≥ 1 कोई भी integer |
+
+Web search failures chat को नहीं रोकतीं: अगर DuckDuckGo हर retry पर timeout या error करे, तो chat error लॉग करता है और reply रुकने के बजाय model knowledge से उत्तर देता है। धीमे या अस्थिर network पर दोनों knobs बढ़ाएँ:
+
+```env
+DDGS_TIMEOUT=30
+DDGS_RETRIES=3
+```
 
 ## आवश्यक API keys
 

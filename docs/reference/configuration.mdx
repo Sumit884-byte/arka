@@ -74,6 +74,15 @@ SECURITY=1
 | YouTube research | 2 videos (`YT_RESEARCH_MAX=2`) | `--limit N` or env |
 | Reminders | 1 hour default (`REMIND_DEFAULT=1h`) | pass explicit time |
 | Model label | Show under answers (`SHOW_MODEL=1`) | `SHOW_MODEL=0` |
+| Web search timeout | 20 s per DuckDuckGo call (`DDGS_TIMEOUT=20`) | any integer ≥ 5 |
+| Web search retries | 2 attempts before giving up (`DDGS_RETRIES=2`) | any integer ≥ 1 |
+
+Web search failures are non-fatal: if DuckDuckGo times out or errors on every retry, chat logs the error and answers from model knowledge instead of stalling. Tune both knobs when you're on a slow or flaky network:
+
+```env
+DDGS_TIMEOUT=30
+DDGS_RETRIES=3
+```
 
 ## Essential API keys
 

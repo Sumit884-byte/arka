@@ -59,6 +59,22 @@ arka "nearby_places"
 arka map_download Kolkata           # cache city map to ~/.cache/arka/maps/
 ```
 
+## Web search tuning
+
+DuckDuckGo lookups honor two env vars. If every retry times out or errors, chat logs the failure and answers from model knowledge instead of stalling the reply.
+
+| Var | Default | Notes |
+| --- | --- | --- |
+| `DDGS_TIMEOUT` | `20` | Per-call timeout in seconds. Minimum `5`. |
+| `DDGS_RETRIES` | `2` | Attempts before falling back. Minimum `1`. |
+
+Raise both on slow or flaky networks:
+
+```env
+DDGS_TIMEOUT=30
+DDGS_RETRIES=3
+```
+
 ## Install chat extras
 
 ```bash
