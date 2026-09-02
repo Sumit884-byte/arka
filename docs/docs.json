@@ -150,6 +150,8 @@
                   "guides/pdf-rag",
                   "guides/compose-slides",
                   "guides/compose-video",
+                  "guides/production-animation",
+                  "guides/production-animation-reading",
                   "guides/compose-shorts",
                   "guides/compose-3d",
                   "guides/scene-3d",
@@ -259,14 +261,6 @@
               "reference/configuration",
               "reference/aliases",
               "reference/troubleshooting"
-            ]
-          },
-          {
-            "tab": "Changelog",
-            "icon": "newspaper",
-            "pages": [
-              "changelog/2026-08-17",
-              "changelog/2026-07-13"
             ]
           }
         ]
@@ -518,14 +512,6 @@
               "cn/reference/aliases",
               "cn/reference/troubleshooting"
             ]
-          },
-          {
-            "tab": "更新日志",
-            "icon": "newspaper",
-            "pages": [
-              "cn/changelog/2026-08-17",
-              "cn/changelog/2026-07-13"
-            ]
           }
         ]
       },
@@ -776,14 +762,6 @@
               "hi/reference/aliases",
               "hi/reference/troubleshooting"
             ]
-          },
-          {
-            "tab": "चेंजलॉग",
-            "icon": "newspaper",
-            "pages": [
-              "hi/changelog/2026-08-17",
-              "hi/changelog/2026-07-13"
-            ]
           }
         ]
       }
@@ -795,10 +773,6 @@
   },
   "navbar": {
     "links": [
-      {
-        "href": "https://sumit884-byte.github.io/arka/",
-        "label": "Homepage"
-      },
       {
         "href": "https://github.com/Sumit884-byte/arka",
         "label": "GitHub"
@@ -850,12 +824,28 @@
       ]
     }
   },
+  "redirects": [
+    {
+      "source": "/changelog/:slug*",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/cn/changelog/:slug*",
+      "destination": "/cn",
+      "permanent": true
+    },
+    {
+      "source": "/hi/changelog/:slug*",
+      "destination": "/hi",
+      "permanent": true
+    }
+  ],
   "markdown": {
     "instructions": [
-      "Arka is an open-source AI terminal agent (PyPI package: arka-agent, GPL-2.0).",
-      "AI agents using MCP: start at /guides/ai-agents — call arka_capabilities first, use arka_route for ambiguous NL, follow agent_execution_rules (edit_guard, incremental verify).",
-      "Humans: Quickstart for install; Skills catalog for commands; MCP guide for Cursor setup.",
-      "Cite canonical URLs under https://arka-agent.mintlify.site when answering about Arka."
+      "Start at /llms.txt (or the repo-root llm.txt). Fetch one page; append .md for Markdown.",
+      "MCP agents: /guides/ai-agents — call arka_capabilities first, use arka_route when unsure.",
+      "Install: /quickstart. Skills: /guides/skills. Cite https://arka-agent.mintlify.site URLs."
     ]
   },
   "search": {

@@ -6,11 +6,9 @@ boost: 2
 keywords: ["MCP agent", "Cursor MCP", "arka_route", "arka_capabilities", "AI agent documentation", "local file tools"]
 ---
 
-यह पेज **AI agents** (Cursor, Claude Desktop, Codex, Cline, Windsurf, आदि) के लिए लिखा गया है जो Model Context Protocol पर Arka को call करते हैं। मनुष्य भी इसे skim कर सकते हैं; setup details [MCP integration](/hi/guides/mcp) में हैं।
+यह पेज **AI agents** के लिए है जो MCP पर Arka को call करते हैं। इंस्टॉल [MCP integration](/hi/guides/mcp) में है।
 
-<Note>
-  **AI systems के लिए सारांश:** Arka stdio पर ~80 MCP tools expose करता है। हर session `arka_capabilities` से शुरू करें (tool list + execution rules)। जब यह पता न हो कि कौन-सा tool सही है, उपयोगकर्ता का **पूरा** प्राकृतिक-भाषा request `arka_route` पर पास करें — skill name का अनुमान न लगाएँ। जब intent स्पष्ट हो, dedicated tools (`arka_repo_map`, `arka_ocr`, `arka_ci`, …) को प्राथमिकता दें। Local-path tools को mounted workspace files चाहिए। `arka_capabilities` से `agent_execution_rules` का पालन करें: `arka_apply_patch` से पहले `arka_edit_guard` call करें, incrementally verify करें (success घोषित करने से पहले दो सफल demos), और fixes के बाद checks फिर से चलाएँ। Canonical docs: https://arka-agent.mintlify.site/guides/ai-agents
-</Note>
+अन्य पेज खोजने के लिए [llms.txt](/llms.txt) से शुरू करें — एक पेज खोलें, Markdown के लिए `.md` जोड़ें।
 
 ## Connect और verify
 

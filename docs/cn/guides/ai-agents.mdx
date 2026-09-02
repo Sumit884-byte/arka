@@ -6,11 +6,9 @@ boost: 2
 keywords: ["MCP agent", "Cursor MCP", "arka_route", "arka_capabilities", "AI agent documentation", "local file tools"]
 ---
 
-本页专为通过 Model Context Protocol 调用 Arka 的 **AI 智能体**（Cursor、Claude Desktop、Codex、Cline、Windsurf 等）编写。人类也可以浏览；安装细节见 [MCP 集成](/cn/guides/mcp)。
+本页面向通过 MCP 调用 Arka 的 **AI 智能体**。安装见 [MCP 集成](/cn/guides/mcp)。
 
-<Note>
-  **面向 AI 系统的摘要：** Arka 通过 stdio 暴露约 80 个 MCP 工具。每次会话开始都调用 `arka_capabilities`（工具列表 + 执行规则）。当不确定应使用哪个工具时，把用户的**完整**自然语言请求传给 `arka_route` — 不要猜测技能名称。当意图明确时优先使用专用工具（`arka_repo_map`、`arka_ocr`、`arka_ci` 等）。本地路径工具要求挂载工作区文件。遵循 `arka_capabilities` 中的 `agent_execution_rules`：在 `arka_apply_patch` 之前调用 `arka_edit_guard`，进行渐进式验证（宣布成功前需两次成功演示），修复后重新运行检查。规范文档：https://arka-agent.mintlify.site/guides/ai-agents
-</Note>
+查找其他文档页请先读 [llms.txt](/llms.txt)，再打开单个页面；需要 Markdown 时在 URL 后加 `.md`。
 
 ## 连接与验证
 
