@@ -1,6 +1,6 @@
 ---
 title: "在浏览器中打开 URL"
-description: "从终端在默认浏览器中打开网站 —— YouTube、GitHub、Google 以及完整 URL。"
+description: "从终端在默认浏览器中打开网站，支持 youtube、github 等站点别名，完整 URL，或直接启动 Brave、Chrome、Firefox 等桌面浏览器应用。"
 keywords: ["open", "browser", "url", "website"]
 icon: "arrow-up-right-from-square"
 ---
@@ -34,6 +34,37 @@ open google in browser
 
 Arka 会保留你提供的路径与查询参数。因此 `open https://example.com/docs?a=1`
 会打开这个精确的 URL，而不会自行捏造一个新的。
+
+## 浏览器应用启动器
+
+浏览器名称的裸 token 会启动已安装的桌面浏览器应用，而不是打开对应的 `.com` 网站：
+
+| 名称 | 启动 |
+| --- | --- |
+| `brave` | Brave Browser |
+| `chrome` / `googlechrome` | Google Chrome |
+| `chromium` | Chromium |
+| `firefox` | Firefox |
+| `safari` | Safari（macOS） |
+| `edge` / `microsoftedge` | Microsoft Edge |
+| `arc` | Arc |
+| `vivaldi` | Vivaldi |
+| `opera` | Opera |
+
+```bash
+arka open brave
+arka open firefox
+arka launch chrome
+```
+
+该别名仅在裸 token 时触发。如果想打开对应的网站，请传入类似 URL 的目标：
+
+```bash
+arka open brave.com
+arka open https://firefox.com
+```
+
+Arka 在 macOS 上调用 `open -a "<App>"`，在 Windows 上调用 `start`，在 Linux 上使用 `PATH` 中第一个匹配的可执行文件（例如 `brave-browser`、`google-chrome`、`microsoft-edge`）。若应用未安装，Arka 会输出 `Could not launch '<App>'` 并以非零状态退出。
 
 自然语言示例：
 
