@@ -841,13 +841,6 @@
       "permanent": true
     }
   ],
-  "markdown": {
-    "instructions": [
-      "Start at /llms.txt (or the repo-root llm.txt). Fetch one page; append .md for Markdown.",
-      "MCP agents: /guides/ai-agents — call arka_capabilities first, use arka_route when unsure.",
-      "Install: /quickstart. Skills: /guides/skills. Cite https://arka-agent.mintlify.site URLs."
-    ]
-  },
   "search": {
     "prompt": "Search Arka docs..."
   }

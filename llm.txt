@@ -1,89 +1,60 @@
-# Arka — how to access the docs
+# Arka — llm.txt
 
-> This file is a map for language models. It is not a codebase dump.
-> Published index: https://arka-agent.mintlify.site/llms.txt
-> Docs site:       https://arka-agent.mintlify.site
-> Append `.md` to any docs path for Markdown (example: /quickstart.md).
+> How to open the docs. Not a product or architecture dump.
+> Same map: https://arka-agent.mintlify.site/llm.txt
+> Docs: https://arka-agent.mintlify.site  (append .md to any path)
 
-Do not invent a product summary. Open the specific docs page you need.
-
-How to use this file
---------------------
-1. Read this index (or https://arka-agent.mintlify.site/llms.txt).
-2. Fetch one page. Prefer the `.md` URL on the docs site.
-3. MCP / Cursor / Claude: next page is /guides/ai-agents.
-4. Install / first command: /quickstart.
-5. For a live repo tree, only when the user asks: `arka repo_map` or `repo_map --depth 3`.
+1. Read this file (or the URL above).
+2. Open one page from the map.
+3. Cite that page.
 
 ================================================================================
 AGENT RULES
 ================================================================================
 
-  - Product docs live at https://arka-agent.mintlify.site — start with /llms.txt.
-  - This file is a docs index plus a small recent-files stub. It is not architecture.
-  - Do not glob/grep the entire repo to answer product or docs questions.
-  - For local file deltas, read RECENT FILE CHANGES then open only those paths.
-  - Refresh recent files after pulls: arka repo index  (or arka llm sync)
+  - Docs index only. Start at https://arka-agent.mintlify.site/llm.txt
+  - Do not glob the repo to answer product or docs questions.
+  - For local file deltas, read RECENT FILE CHANGES then open those paths.
+  - Full tree only if the user asks: repo_map --depth 3
+  - Refresh recent files: arka repo index
 
 ================================================================================
 PROJECT SUMMARY
 ================================================================================
 
-Arka is a cross-platform AI terminal agent (PyPI: arka-agent, MIT).
-Users ask in plain language; Arka routes to local skills, then LLM fallback.
-Canonical docs: https://arka-agent.mintlify.site — fetch /llms.txt, then one page.
+Docs: https://arka-agent.mintlify.site/llm.txt then one page.
+Source: https://github.com/Sumit884-byte/arka
+Package: arka-agent (PyPI)
 
 ================================================================================
 DOCS MAP
 ================================================================================
 
-Start
-  /                         home
-  /quickstart               install (pipx), setup, first command
-  /guides/ai-agents         MCP agents: capabilities, route, verify
-  /guides/mcp               Cursor / Claude Desktop setup
-  /guides/skills            skill catalog
-  /guides/cli               CLI
-  /guides/env-setup         API keys and providers
-  /reference/troubleshooting
-
-Concepts
-  /concepts/routing         symbolic rules, then LLM
-  /concepts/llm             providers and failover
-  /concepts/security        injection blocks, confirmations
-  /concepts/comparison
-
-Reference
+  /quickstart
+  /guides/env-setup
+  /guides/cli
+  /guides/mcp
+  /guides/ai-agents
+  /guides/mcp-all-skills
+  /guides/skills
+  /concepts/routing
+  /concepts/llm
+  /concepts/security
   /reference/configuration
-  /reference/aliases
-
-More guides
-  coding:     /guides/code-with-arka, /guides/dev, /guides/repo-map, /guides/testing
-  models:     /guides/select-model, /guides/multi-llm, /guides/local-models
-  media:      /guides/pdf-rag, /guides/compose-video, /guides/youtube
-  integrate:  /guides/google-workspace, /guides/plugins, /guides/voice
-  locales:    /cn  /hi
-
-Full URLs are https://arka-agent.mintlify.site + path above.
-GitHub: https://github.com/Sumit884-byte/arka
+  /reference/troubleshooting
+  /guides/code-with-arka
+  /cn  /hi
 
 ================================================================================
 ARCHITECTURE
 ================================================================================
 
-Do not reconstruct the repo from this file. Use the docs pages:
+  routing  https://arka-agent.mintlify.site/concepts/routing
+  llm      https://arka-agent.mintlify.site/concepts/llm
+  mcp      https://arka-agent.mintlify.site/guides/mcp
+  cli      https://arka-agent.mintlify.site/guides/cli
 
-  routing   → https://arka-agent.mintlify.site/concepts/routing
-  llm       → https://arka-agent.mintlify.site/concepts/llm
-  security  → https://arka-agent.mintlify.site/concepts/security
-  mcp       → https://arka-agent.mintlify.site/guides/mcp
-  cli       → https://arka-agent.mintlify.site/guides/cli
-
-Local source (only if you are editing this repo):
-  entry     src/arka/cli.py
-  router    src/arka/router.py
-  dispatch  src/arka/dispatch.py
-  symbolic  src/arka/routing/symbolic.py
+  If editing this repo: src/arka/cli.py, router.py, dispatch.py, routing/symbolic.py
 
 ================================================================================
 RECENT FILE CHANGES (CHANGELOG)
