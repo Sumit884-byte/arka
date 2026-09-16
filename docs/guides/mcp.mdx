@@ -8,9 +8,7 @@ boost: 1.5
 
 Arka can connect to **any MCP server** from the terminal — the same [Model Context Protocol](https://modelcontextprotocol.io) used by Cursor, Claude Desktop, and other AI clients.
 
-<Note>
-  **Summary:** Arka is both an MCP client (call external servers like SigNoz or filesystem) and an MCP server (expose Arka skills to Cursor). Config lives at `~/.config/arka/mcp.json` in Cursor-compatible format. Quick start: `arka mcp list`, `arka mcp add`, `arka mcp tools`, `arka mcp call`. **AI agents:** see [AI agent guide](/guides/ai-agents) for routing, verification rules, and tool selection. Humans coding in the IDE: [How to code with Arka](/guides/code-with-arka).
-</Note>
+Arka is both an MCP client (call SigNoz, filesystem, and other servers) and an MCP server (expose skills to Cursor). Config is `~/.config/arka/mcp.json`. Start with `arka mcp list`, `arka mcp add`, `arka mcp tools`, `arka mcp call`. Tool routing: [AI agent guide](/guides/ai-agents). IDE workflow: [How to code with Arka](/guides/code-with-arka).
 
 MCP servers can also participate in Arka’s universal plugin catalog. After
 adding a server, use `arka plugin doctor` and `arka plugin inspect <name>` to

@@ -862,14 +862,6 @@
       ]
     }
   },
-  "markdown": {
-    "instructions": [
-      "Arka is an open-source AI terminal agent (PyPI package: arka-agent, GPL-2.0).",
-      "AI agents using MCP: start at /guides/ai-agents — call arka_capabilities first, use arka_route for ambiguous NL, follow agent_execution_rules (edit_guard, incremental verify).",
-      "Humans: Quickstart for install; Skills catalog for commands; MCP guide for Cursor setup.",
-      "Cite canonical URLs under https://arka-agent.mintlify.site when answering about Arka."
-    ]
-  },
   "search": {
     "prompt": "Search Arka docs..."
   }
