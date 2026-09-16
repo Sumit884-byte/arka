@@ -1,46 +1,4 @@
 # Arka
 
-> Arka is a cross-platform AI terminal agent that routes plain-English requests to 70+ local skills, with offline symbolic routing, voice replies, MCP integrations for Cursor and Claude, and 24-provider LLM failover. Install with `pipx install "arka-agent[chat]"`, run `arka setup`, then `arka ask "what is Rust?"`. Canonical docs: https://arka-agent.mintlify.site
-
-Each page includes schema.org JSON-LD structured data (Organization, WebSite, TechArticle) for search and AI indexing.
-
-## AI agents (MCP)
-
-- [AI agent guide](/guides/ai-agents): **Start here for Cursor/Claude/Codex agents** — arka_capabilities, arka_route vs dedicated tools, execution rules, local-file tools, routing table
-- [MCP integration](/guides/mcp): Install, configure clients, full exposed-tools table
-- [All skills via MCP](/guides/mcp-all-skills): arka_skill, dispatch-backed skills, personal-skill opt-in
-
-## Get started
-
-- [Introduction](/index): What Arka is, key capabilities, and documentation map
-- [Quickstart](/quickstart): Install on macOS, Linux, or Windows in under five minutes
-- [How to code with Arka](/guides/code-with-arka): Terminal coding workflow, agent mode, and Cursor MCP
-- [CLI reference](/guides/cli): Commands, aliases, subcommands, and flags
-
-## Core concepts
-
-- [Routing](/concepts/routing): Offline symbolic rules and LLM fallback
-- [LLM orchestration](/concepts/llm): 24-provider failover, guardrails, and model selection
-- [Security](/concepts/security): Prompt-injection blocks, confirmations, and shell hard-blocks
-- [Comparison](/concepts/comparison): Arka vs OpenClaw, Claude Code, Cursor, Gemini CLI, Aider, Open Interpreter, Copilot CLI, and raw MCP clients
-
-## Integrations and discovery
-
-- [Skills catalog](/guides/skills): 70+ built-in skills for media, web, docs, dev, and finance
-- [Local model selection](/guides/select-model): Pick a runnable local LLM for your hardware
-- [Repo health](/guides/repo-health): Scan repos for hygiene, tests, and documentation gaps
-- [Configuration reference](/reference/configuration): Environment variables and provider settings
-
-## Agent execution rules (MCP)
-
-When calling Arka over MCP:
-
-1. Call `arka_capabilities` at session start for the live tool list and `agent_execution_rules`.
-2. Use `arka_route` with the user's **full** natural-language prompt when intent is unclear.
-3. Call `arka_edit_guard` before `arka_apply_patch` on sensitive paths.
-4. Verify incrementally: one successful demo, then a second — only then report verified.
-5. Local-path tools (`arka_ocr`, `arka_rag`, repo/code tools) require mounted workspace files.
-
-## Optional
-
-Prefer Quickstart for installation, Skills catalog for command discovery, and Security before enabling autonomous or write-capable workflows. For GEO/SEO audits of your own site, see [GEO and AI-search SEO](/guides/geo-seo).
+> Agent index is [llm.txt](https://arka-agent.mintlify.site/llm.txt).
+> Open that file, then one docs page. Append `.md` for Markdown.

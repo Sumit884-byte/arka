@@ -8,9 +8,7 @@ boost: 1.5
 
 Arka **किसी भी MCP server** से terminal से connect कर सकता है — वही [Model Context Protocol](https://modelcontextprotocol.io) जो Cursor, Claude Desktop, और अन्य AI clients उपयोग करते हैं।
 
-<Note>
-  **सारांश:** Arka MCP client भी है (SigNoz या filesystem जैसे external servers call करना) और MCP server भी (Cursor को Arka skills expose करना)। Config `~/.config/arka/mcp.json` पर Cursor-compatible format में है। त्वरित शुरुआत: `arka mcp list`, `arka mcp add`, `arka mcp tools`, `arka mcp call`. **AI agents:** routing, verification rules, और tool selection के लिए देखें [AI agent guide](/hi/guides/ai-agents)। IDE में coding करने वाले मनुष्य: [Arka के साथ code कैसे लिखें](/hi/guides/code-with-arka)।
-</Note>
+Arka MCP client भी है और MCP server भी। Config: `~/.config/arka/mcp.json`। शुरू करें: `arka mcp list`, `arka mcp add`, `arka mcp tools`, `arka mcp call`। Tool routing: [AI agent guide](/hi/guides/ai-agents)। IDE: [Arka के साथ code कैसे लिखें](/hi/guides/code-with-arka)।
 
 MCP servers Arka के universal plugin catalog में भी भाग ले सकते हैं। एक server
 जोड़ने के बाद, requests इसे route करने से पहले उसके normalized capabilities और permissions

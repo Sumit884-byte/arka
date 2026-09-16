@@ -1,0 +1,39 @@
+# Arka docs — llm.txt
+
+> How to open the docs. Not a product summary.
+> Site: https://arka-agent.mintlify.site
+> Append `.md` to any path for Markdown (example: /quickstart.md).
+
+1. Read this file.
+2. Open one page from the map.
+3. Cite that page. Do not invent a homepage pitch.
+
+## Map
+
+Install
+  /quickstart
+  /guides/env-setup
+  /guides/cli
+
+MCP / Cursor
+  /guides/mcp
+  /guides/ai-agents
+  /guides/mcp-all-skills
+
+Skills and concepts
+  /guides/skills
+  /concepts/routing
+  /concepts/llm
+  /concepts/security
+  /reference/configuration
+  /reference/troubleshooting
+
+More
+  /guides/code-with-arka
+  /guides/voice
+  /guides/google-workspace
+  /cn   /hi
+
+Home: https://arka-agent.mintlify.site
+GitHub: https://github.com/Sumit884-byte/arka
+PyPI: arka-agent
