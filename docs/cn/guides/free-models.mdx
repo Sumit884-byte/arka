@@ -11,3 +11,24 @@ arka free_models --offline
 ```
 
 结果会区分本地零成本运行时、OpenRouter 上实时的零价格模型，以及有免费额度可用的提供商模型。免费额度是否可用仍取决于账户、地区、配额和提供商政策；Arka 绝不会仅因某个付费模型有免费配额就把它标记为免费。使用 `arka hybrid status` 可查看已发现的本地或托管选项中哪些是实际可达的。
+
+## 模型策略
+
+`ARKA_MODEL_POLICY` 会重新排序 `arka hybrid` 及共享 LLM 回退引擎使用的回退链。它不会添加或移除提供商，只改变链中哪一侧先运行（或只保留其中一侧）。
+
+| 取值 | 行为 |
+| --- | --- |
+| `local-first`（默认） | 先尝试本地运行时（Ollama、vLLM、LM Studio、Exo），再尝试托管提供商。 |
+| `hosted-first` | 先尝试托管提供商，再尝试本地运行时。 |
+| `local-only` | 完全跳过托管提供商。适合离线或隐私场景。 |
+| `hosted-only` | 完全跳过本地运行时。适合本地模型过慢或不可用时。 |
+
+```bash
+export ARKA_MODEL_POLICY=hosted-first
+arka hybrid status
+
+# 或仅对单条命令生效
+ARKA_MODEL_POLICY=local-only arka chat "summarize this"
+```
+
+该策略在既有回退配置之后生效：`LLM_AUTO_FALLBACK`、`AI_PREFERRED_PROVIDER`、`AI_PREFERRED_MODEL` 以及 `llm-skill-models.json` 中的按技能路由仍决定初始候选列表；策略随后对该列表进行筛选与排序。未识别的取值会回落为 `local-first`。

@@ -66,6 +66,7 @@ SECURITY=1
 | 安全 | 所有层开启（`SECURITY=1`） | 将任一层设为 `0` |
 | NL 路由 | 优先离线规则（`ROUTE_MODE=symbolic`） | `ai`、`symbolic_only`、`ai_only` |
 | LLM 故障切换 | 遇 429/401/超时自动切换（`LLM_AUTO_FALLBACK=1`） | `LLM_AUTO_FALLBACK=0` |
+| 模型策略 | 优先尝试本地再托管（`ARKA_MODEL_POLICY=local-first`） | `hosted-first`、`local-only`、`hosted-only`（参见[查找免费模型](/cn/guides/free-models)） |
 | 密钥轮换 | 先轮换备份密钥（`API_KEY_ROTATION=1`） | `API_KEY_ROTATION=0` |
 | 语音 TTS | 朗读回复（`AGENT_SPEAK=1`） | `AGENT_SPEAK=0` |
 | 唤醒监听 | 关闭直至 `arka listen` | `AGENT_WAKE_AUTO=1` |
