@@ -6,7 +6,7 @@ icon: "network-wired"
 boost: 1.5
 ---
 
-Arka can connect to **any MCP server** from the terminal — the same [Model Context Protocol](https://modelcontextprotocol.io) used by Cursor, Claude Desktop, and other AI clients.
+Arka can connect to **any MCP server** from the terminal. This is the same [Model Context Protocol](https://modelcontextprotocol.io) used by Cursor, Claude Desktop, and other AI clients.
 
 Arka is both an MCP client (call SigNoz, filesystem, and other servers) and an MCP server (expose skills to Cursor). Config is `~/.config/arka/mcp.json`. Start with `arka mcp list`, `arka mcp add`, `arka mcp tools`, `arka mcp call`. Tool routing: [AI agent guide](/guides/ai-agents). IDE workflow: [How to code with Arka](/guides/code-with-arka).
 
@@ -86,7 +86,7 @@ Stdio servers use `command` \+ `args`. Remote servers use `url` \+ optional `hea
 | **stdio** | `command` \+ `args` | `npx -y @modelcontextprotocol/server-filesystem /tmp` |
 | **HTTP/SSE** | `url` \+ `headers` | SigNoz MCP at `http://localhost:8000/mcp` |
 
-Arka reuses the existing HTTP MCP client for remote servers and a built-in newline-delimited JSON-RPC client for stdio — no extra dependencies required.
+Arka reuses the existing HTTP MCP client for remote servers and a built-in newline-delimited JSON-RPC client for stdio. No extra dependencies are required.
 
 ## Optional Python SDK
 
@@ -98,7 +98,7 @@ Arka works without the SDK. If it is installed, Arka detects it (`arka mcp statu
 
 ## SigNoz MCP
 
-For SigNoz specifically, Arka also ships traced helpers (`arka signoz status`, goal self-heal). Generic `arka mcp` works with any MCP server — not only SigNoz.
+For SigNoz specifically, Arka also ships traced helpers (`arka signoz status`, goal self-heal). Generic `arka mcp` works with any MCP server, not only SigNoz.
 
 ```bash
 arka mcp add signoz --url http://localhost:8000/mcp --header SIGNOZ-API-KEY=$SIGNOZ_API_KEY
@@ -125,7 +125,7 @@ tests or hosted deployments.
 
 ## Three.js model MCP
 
-Arka has a built-in preset for [`baryhuang/mcp-threejs`](https://github.com/baryhuang/mcp-threejs), a Sketchfab-backed MCP server for finding downloadable Three.js-compatible 3D assets. This is useful when a scene asks for real things such as satellites, spacecraft, vehicles, rooms, desks, or humans — Arka should prefer a licensed GLTF/GLB asset over rough geometric placeholders.
+Arka has a built-in preset for [`baryhuang/mcp-threejs`](https://github.com/baryhuang/mcp-threejs), a Sketchfab-backed MCP server for finding downloadable Three.js-compatible 3D assets. This is useful when a scene asks for real things such as satellites, spacecraft, vehicles, rooms, desks, or humans. Arka should prefer a licensed GLTF/GLB asset over rough geometric placeholders.
 
 Preview the config first:
 
@@ -186,7 +186,7 @@ Set the Sketchfab OAuth variables when you want live download-link lookup. Witho
 
 ## Arka as MCP server
 
-Other agents (Cursor, Claude Desktop, OpenClaw, Codex, etc.) can call Arka skills and memory over MCP — the same stdio transport Arka uses as an MCP **client**.
+Other agents (Cursor, Claude Desktop, OpenClaw, Codex, etc.) can call Arka skills and memory over MCP. This uses the same stdio transport Arka uses as an MCP **client**.
 
 ### Cursor setup
 
