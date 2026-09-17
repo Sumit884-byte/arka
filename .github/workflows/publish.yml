@@ -36,9 +36,6 @@ jobs:
   publish:
     needs: build
     runs-on: ubuntu-latest
-    environment:
-      name: pypi
-      url: https://pypi.org/project/arka-agent/
     permissions:
       contents: read
       id-token: write
@@ -52,13 +49,13 @@ jobs:
         continue-on-error: true
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1
       - name: Publish to PyPI (API token fallback)
-        if: steps.trusted.outcome == 'failure' && secrets.PYPI_API_TOKEN != ''
+        if: steps.trusted.outcome == 'failure'
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-        run: pipx run twine upload --non-interactive dist/*
-      - name: Fail if publish did not succeed
-        if: steps.trusted.outcome == 'failure' && secrets.PYPI_API_TOKEN == ''
         run: |
-          echo "PyPI publish failed: configure trusted publishing on PyPI or add PYPI_API_TOKEN secret." >&2
-          exit 1
+          if [ -z "$TWINE_PASSWORD" ]; then
+            echo "Trusted publish failed and PYPI_API_TOKEN is not set." >&2
+            exit 1
+          fi
+          pipx run twine upload --non-interactive dist/*
