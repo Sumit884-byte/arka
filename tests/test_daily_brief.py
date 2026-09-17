@@ -692,10 +692,63 @@ class NewsSanitizationTests(unittest.TestCase):
         from arka.agent.daily_brief import should_use_live_news_web
 
         self.assertTrue(should_use_live_news_web("BBC news for August 20, 2026"))
+        self.assertTrue(should_use_live_news_web("what happened in gtc 2026"))
+        self.assertTrue(should_use_live_news_web("what happened at the apple event"))
+        self.assertTrue(should_use_live_news_web("what apple launched in 2026"))
+        self.assertTrue(should_use_live_news_web("iphone 18 pro foldable"))
         self.assertFalse(should_use_live_news_web("give daily brief"))
+        self.assertFalse(should_use_live_news_web("what is an iphone"))
+        self.assertTrue(should_use_live_news_web("what happened in usa today"))
+
+    def test_usa_today_question_is_country_news_not_newspaper(self) -> None:
+        from arka.agent.daily_brief import (
+            country_news_place,
+            news_search_query,
+            news_source_host,
+            news_summary_looks_like_refusal,
+            news_summary_looks_low_quality,
+            news_summary_prompt,
+        )
+
+        q = "what happened in usa today"
+        self.assertEqual(country_news_place(q), "United States")
+        self.assertEqual(news_source_host(q), "")
+        query = news_search_query(q)
+        self.assertIn("United States", query)
+        self.assertNotIn("what happened", query.lower())
+        self.assertNotIn("headlines", query.lower())
+        self.assertIn("breaking news", query.lower())
+        self.assertIn("site:apnews.com", query)
+        self.assertIn("site:npr.org", query)
+        self.assertEqual(news_source_host("USA Today newspaper headlines"), "usatoday.com")
+        self.assertEqual(country_news_place("what happened in india today"), "India")
+        self.assertEqual(news_source_host("what happened in india today"), "")
+        self.assertEqual(news_source_host("india today headlines"), "indiatoday.in")
+        self.assertEqual(country_news_place("what happened in brazil today"), "Brazil")
+        self.assertEqual(country_news_place("what happened in south korea today"), "South Korea")
+        self.assertEqual(country_news_place("what happened in kenya today"), "Kenya")
+        self.assertEqual(country_news_place("what happened in bhutan today"), "Bhutan")
+        self.assertEqual(country_news_place("what's happening in the netherlands today"), "Netherlands")
+        self.assertEqual(country_news_place("what happened in gtc today"), "")
+        self.assertIn("Brazil", news_search_query("what happened in brazil today"))
+
+        refusal = (
+            "I cannot fulfill this request. The provided search results do not contain "
+            "any text or content snippets to summarize."
+        )
+        self.assertTrue(news_summary_looks_like_refusal(refusal))
+        self.assertTrue(news_summary_looks_low_quality(refusal))
+        _system, user = news_summary_prompt(
+            q,
+            "Source: Senate passes funding bill\nURL: https://example.com/funding\n",
+        )
+        self.assertIn("never refuse", _system.lower())
+        self.assertIn("only a title", user.lower())
+        self.assertIn("united states day recap", user.lower())
+        self.assertIn("pick the 4 most important", user.lower())
 
     def test_is_news_article_url_rejects_bbc_section(self) -> None:
-        from arka.agent.daily_brief import is_news_article_url
+        from arka.agent.daily_brief import is_news_article_url, is_valid_news_url
 
         self.assertFalse(is_news_article_url("https://www.bbc.com/news/world", host="bbc.com"))
         self.assertFalse(is_news_article_url("https://www.bbc.com/news", host="bbc.com"))
@@ -703,6 +756,36 @@ class NewsSanitizationTests(unittest.TestCase):
             is_news_article_url(
                 "https://www.bbc.com/news/articles/c5ypnp1jv6jo",
                 host="bbc.com",
+            )
+        )
+        self.assertFalse(is_news_article_url("https://nypost.com/2026/09/16/"))
+        self.assertFalse(is_news_article_url("https://www.modbee.com/news/nation-world/national/"))
+        self.assertTrue(
+            is_news_article_url(
+                "https://nypost.com/2026/09/16/senate-passes-stopgap-funding-bill/"
+            )
+        )
+        self.assertFalse(is_valid_news_url("https://www.youtube.com/watch?v=GkalPSPLlUY"))
+
+    def test_ai_coverage_filler_is_low_quality(self) -> None:
+        from arka.agent.daily_brief import news_summary_looks_like_ai_filler, news_summary_looks_low_quality
+
+        filler = (
+            "Today in the United States, major national developments and breaking news "
+            "stories are unfolding across the country. Additional broadcast coverage "
+            "is available through the latest video updates."
+        )
+        self.assertTrue(news_summary_looks_like_ai_filler(filler))
+        self.assertTrue(news_summary_looks_low_quality(filler))
+        self.assertFalse(
+            news_summary_looks_like_ai_filler(
+                "The Senate passed a stopgap funding bill, keeping federal agencies open."
+            )
+        )
+        self.assertFalse(
+            news_summary_looks_like_ai_filler(
+                "Today's major national developments feature a Federal Reserve rate decision "
+                "and Senate hearings on Trump's health nominees."
             )
         )
 
@@ -749,6 +832,56 @@ class NewsSanitizationTests(unittest.TestCase):
         self.assertIn("Ukraine peace talks stall", out)
         llm.assert_not_called()
 
+    def test_serp_dump_is_low_quality(self) -> None:
+        from arka.agent.daily_brief import looks_like_serp_dump, news_summary_looks_low_quality
+
+        dump = (
+            "7 days ago — Apple rolled out the foldable iPhone Duo, iPhone 18 Pro and Max, "
+            "Watch Series 12 and many other features and updates in its first launch ... "
+            "Aug 28, 2026 — September 2026 will see the launch of the iPhone 18 Pro, "
+            "iPhone 18 Pro Max, and Apple's first foldable iPhone. AirPods Max - Apple Release ..."
+        )
+        self.assertTrue(looks_like_serp_dump(dump))
+        self.assertTrue(news_summary_looks_low_quality(dump))
+        self.assertFalse(
+            looks_like_serp_dump(
+                "Apple's September 2026 event introduced iPhone 18 Pro, iPhone 18 Pro Max, "
+                "and a foldable iPhone Duo, along with Watch Series 12."
+            )
+        )
+
+    def test_generic_news_retries_serp_dump_then_synthesizes(self) -> None:
+        from unittest import mock
+
+        from arka.agent import daily_brief
+
+        ctx = (
+            "Source: Apple event 2026\n"
+            "URL: https://news.example.com/tech/apple-event-iphone-18-12345678\n"
+            "7 days ago — Apple rolled out the foldable iPhone Duo and iPhone 18 Pro..."
+        )
+        dump = (
+            "7 days ago — Apple rolled out the foldable iPhone Duo, iPhone 18 Pro and Max ... "
+            "Aug 28, 2026 — September 2026 will see the launch of the iPhone 18 Pro."
+        )
+        briefing = (
+            "Apple's 2026 fall launch introduced iPhone 18 Pro, iPhone 18 Pro Max, "
+            "a foldable iPhone Duo, and Watch Series 12."
+        )
+        with mock.patch.object(daily_brief, "gather_news_web_context", return_value=ctx):
+            with mock.patch(
+                "arka.agent.launch_recap.summarize_official_launch",
+                return_value="",
+            ):
+                with mock.patch(
+                    "arka.llm.fallback.llm_complete",
+                    side_effect=[dump, briefing],
+                ) as llm:
+                    out = daily_brief.summarize_news_web("what happened at the apple event")
+        self.assertEqual(out, briefing)
+        self.assertEqual(llm.call_count, 2)
+        self.assertIn("previous draft just pasted", llm.call_args_list[1].args[1])
+
     def test_generic_news_falls_back_to_headlines(self) -> None:
         from unittest import mock
 
@@ -765,8 +898,66 @@ class NewsSanitizationTests(unittest.TestCase):
                 return_value="Americas Americas page aeroplanes loop Israeli plans....",
             ):
                 out = daily_brief.summarize_news_web("give me today's news")
-        self.assertIn("headlines instead", out.lower())
+        self.assertIn("latest headlines", out.lower())
         self.assertIn("Ukraine peace talks stall", out)
+
+    def test_refusal_falls_back_to_headlines_without_retry(self) -> None:
+        from unittest import mock
+
+        from arka.agent import daily_brief
+
+        ctx = (
+            "Source: Senate passes funding bill\n"
+            "URL: https://news.example.com/politics/funding-bill-12345678\n"
+        )
+        refusal = (
+            "I cannot fulfill this request. The provided search results do not contain "
+            "any text or content snippets to summarize."
+        )
+        with mock.patch.object(daily_brief, "gather_news_web_context", return_value=ctx):
+            with mock.patch(
+                "arka.llm.fallback.llm_complete",
+                return_value=refusal,
+            ) as llm:
+                out = daily_brief.summarize_news_web("what happened in usa today")
+        self.assertEqual(llm.call_count, 1)
+        self.assertIn("United States", out)
+        self.assertIn("Senate passes funding bill", out)
+        self.assertNotIn("cannot fulfill", out.lower())
+        self.assertNotIn("Here is what news outlets are reporting", out)
+
+    def test_country_news_trims_engagement_and_ranks_us(self) -> None:
+        from arka.agent.daily_brief import (
+            format_country_news_brief,
+            headline_looks_like_engagement,
+            pick_news_items,
+        )
+
+        ctx = (
+            "Source: How are rising prices affecting you? NPR wants to know\n"
+            "URL: https://www.npr.org/2026/09/16/nx-s1-5969965/cost-of-living\n"
+            "Share your story.\n\n"
+            "Source: Kosovo's ex-President Thaci convicted of war crimes\n"
+            "URL: https://www.npr.org/2026/09/16/g-s1-143560/kosovo-former-president-war-crimes\n"
+            "A tribunal sentenced Hashim Thaci to 25 years.\n\n"
+            "Source: Senators question Trump's picks for top health positions\n"
+            "URL: https://www.npr.org/2026/09/16/nx-s1-5968780/trump-rfk-jr-health-nomination\n"
+            "The Senate pressed nominees including surgeon general.\n\n"
+            "Source: Fed expected to raise interest rates\n"
+            "URL: https://www.npr.org/2026/09/16/g-s1-143569/fed-reserve-interest-rates\n"
+            "The Federal Reserve is poised to lift rates this week."
+        )
+        self.assertTrue(headline_looks_like_engagement("How are rising prices affecting you? NPR wants to know"))
+        picked = pick_news_items(ctx, limit=3, place="United States")
+        titles = [row["title"] for row in picked]
+        self.assertNotIn("How are rising prices affecting you? NPR wants to know", titles)
+        self.assertNotIn("Kosovo's ex-President Thaci convicted of war crimes", titles)
+        self.assertIn("Fed expected to raise interest rates", titles)
+        self.assertIn("Senators question Trump's picks for top health positions", titles)
+        brief = format_country_news_brief("United States", ctx)
+        self.assertIn("United States today", brief)
+        self.assertIn("Fed expected", brief)
+        self.assertNotIn("wants to know", brief.lower())
 
     def test_headlines_skip_nav_titles(self) -> None:
         from arka.agent.daily_brief import headlines_from_web_context
@@ -781,6 +972,20 @@ class NewsSanitizationTests(unittest.TestCase):
         out = headlines_from_web_context(ctx)
         self.assertIn("Ukraine peace talks stall", out)
         self.assertNotIn("Americas Americas", out)
+
+    def test_search_write_instructions_ask_for_synthesis(self) -> None:
+        from arka.agent.chat import _looks_like_raw_scrape, _search_write_instructions
+
+        dump = (
+            "7 days ago — Apple rolled out the foldable iPhone Duo ... "
+            "Aug 28, 2026 — September 2026 will see the launch of the iPhone 18 Pro."
+        )
+        self.assertTrue(_looks_like_raw_scrape(dump))
+        news = _search_write_instructions("what happened at the apple event")
+        self.assertIn("own words", news)
+        self.assertNotIn("incumbent's full name", news)
+        office = _search_write_instructions("who is the current finance minister")
+        self.assertIn("incumbent's full name", office)
 
 
 if __name__ == "__main__":

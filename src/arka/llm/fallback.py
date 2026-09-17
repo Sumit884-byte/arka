@@ -411,7 +411,18 @@ _LAST_EXHAUSTION_LOG = 0.0
 def _notify_total_exhaustion(message: str) -> None:
     """Best-effort cross-platform notification; never disrupts fallback."""
     global _EXHAUSTION_NOTIFIED
-    if _EXHAUSTION_NOTIFIED or not _truthy("LLM_EXHAUSTION_NOTIFY", "1"):
+    if _EXHAUSTION_NOTIFIED:
+        return
+    try:
+        from arka.core.notifications import notifications_enabled
+
+        if not notifications_enabled():
+            _EXHAUSTION_NOTIFIED = True
+            return
+    except ImportError:
+        pass
+    if not _truthy("LLM_EXHAUSTION_NOTIFY", "1"):
+        _EXHAUSTION_NOTIFIED = True
         return
     try:
         from arka.paths import cache_dir
@@ -444,6 +455,30 @@ def _record_failure(failures: dict[str, str], label: str, reason: str) -> None:
     base = label.split(" ", 1)[0]
     failures[base] = reason[:300]
     failures[label] = reason[:300]
+
+
+def _is_provider_connectivity_error(error: object) -> bool:
+    """True when retrying another model at this provider cannot help.
+
+    This deliberately excludes generic response errors and rate limits. Those
+    can be model-specific, whereas DNS/socket failures affect every model at
+    the same remote provider for the current request.
+    """
+    text = str(error or "").lower()
+    return any(
+        marker in text
+        for marker in (
+            "nodename nor servname provided",
+            "name or service not known",
+            "temporary failure in name resolution",
+            "dns error",
+            "failed to resolve",
+            "getaddrinfo",
+            "enotfound",
+            "no connections available",
+            "connection error",
+        )
+    )
 
 
 def _tried_label_matches(tried: list[str], provider: str, model_id: str) -> bool:
@@ -545,6 +580,14 @@ def _alert_model_exhaustion(
         pass
 
     if _truthy("LLM_EXHAUSTION_NOTIFY", "1"):
+        try:
+            from arka.core.notifications import notifications_enabled
+
+            if not notifications_enabled():
+                _EXHAUSTION_NOTIFIED = True
+                return
+        except ImportError:
+            pass
         summary = last_error or "All configured models/providers are exhausted."
         _notify_total_exhaustion(
             f"{summary[:160]}. Check quotas or run `arka llm reset-exhaustion`."
@@ -588,6 +631,12 @@ def is_retryable_error(msg: str) -> bool:
             "connect timeout",
             "timed out",
             "timeout",
+            "human-reaction budget",
+            "no first token",
+            "cancelled",
+            "canceled",
+            "operation cancelled",
+            "operation canceled",
             "503",
             "502",
             "500",
@@ -1776,6 +1825,12 @@ def llm_doctor_lines() -> list[str]:
         count = provider_detected_model_count("openrouter")
         suffix = f" ({count} models detected)" if count else ""
         lines.append(f"  LLM preferred:  openrouter → {default} (auto — only cloud key){free_note}{suffix}")
+    try:
+        from arka.llm.provider_health import doctor_lines as health_doctor_lines
+
+        lines.extend(health_doctor_lines())
+    except ImportError:
+        pass
     return lines
 
 
@@ -2008,6 +2063,19 @@ def provider_available(provider: str) -> bool:
     return provider_available_with_servers(provider)
 
 
+def _local_server_ready_or_requested(provider: str) -> bool:
+    """Skip starting Ollama/vLLM on casual asks unless already up or chosen."""
+    provider = provider.lower()
+    if provider not in LOCAL_PROVIDERS:
+        return True
+    if is_reachable(provider):
+        return True
+    preferred = (env("AI_PREFERRED_PROVIDER") or env("LLM_PROVIDER") or "").strip().lower()
+    if preferred == provider:
+        return True
+    return env("LLM_FORCE_LOCAL_START").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _gemini_thinking_budget(task: str) -> int | None:
     """Chat replies must not spend the output budget on hidden thinking."""
     profile = normalize_task(task)
@@ -2027,6 +2095,8 @@ def build_model(
 ) -> Any | None:
     provider = provider.lower()
     if provider in LOCAL_PROVIDERS:
+        if not _local_server_ready_or_requested(provider):
+            return None
         if session is not None:
             if not session.prepare(provider):
                 return None
@@ -2222,6 +2292,12 @@ def _looks_like_error(text: str) -> bool:
             "can only afford",
             "fewer max_tokens",
             "empty response",
+            "operation cancelled",
+            "operation canceled",
+            "cancelled by user",
+            "canceled by user",
+            "operation timed out",
+            "[errno",
             " was retired ",
             "retired at",
             "status code: 410",
@@ -2315,16 +2391,31 @@ class LlmFallbackEngine:
             chain = self.candidates()
 
         last_error = ""
+        try:
+            from arka.llm.provider_health import emit_config_warnings
+
+            emit_config_warnings()
+        except ImportError:
+            pass
         verbose = llm_trace_enabled()
         notify = verbose and _truthy("LLM_FALLBACK_NOTIFY", "0")
         attempts = 0
         tried: list[str] = []
         failures: dict[str, str] = {}
+        unreachable_providers: set[str] = set()
+        remote_connectivity_failures = 0
+        skip_remaining_remote_providers = False
+        ttft_misses = 0
+        ttft_misses_by_provider: dict[str, int] = {}
 
         session = LlmServerSession()
         with _quiet_llm_logs():
             try:
                 for provider, model_id in chain:
+                    if provider in unreachable_providers:
+                        continue
+                    if skip_remaining_remote_providers and provider not in LOCAL_PROVIDERS:
+                        continue
                     if self.store.exhausted(provider, model_id):
                         continue
                     attempt_max_tokens = resolve_max_tokens(
@@ -2451,7 +2542,52 @@ class LlmFallbackEngine:
                                         )
                                     attempt_start = time.perf_counter()
                                     agent = Agent(model=model, instructions=system, markdown=False)
-                                    run = agent.run(user)
+                                    try:
+                                        from arka.llm.provider_health import (
+                                            first_token_timeout_s,
+                                            record_incident,
+                                            run_with_first_token_budget,
+                                            ttft_failover_backoff_s,
+                                        )
+
+                                        run = run_with_first_token_budget(
+                                            agent,
+                                            user,
+                                            first_token_timeout_s(
+                                                self.task,
+                                                model_id=model_id,
+                                                prompt_chars=len(system or "") + len(user or ""),
+                                            ),
+                                        )
+                                    except TimeoutError as exc:
+                                        err_text = str(exc)
+                                        last_error = f"{label}: {err_text}"
+                                        _record_failure(failures, label, err_text)
+                                        print(
+                                            f"arka_llm: {label} {err_text} — trying next provider",
+                                            file=sys.stderr,
+                                        )
+                                        try:
+                                            record_incident(provider, model_id, "timeout", err_text)
+                                        except Exception:
+                                            pass
+                                        self.store.mark(provider, model_id, exc)
+                                        ttft_misses += 1
+                                        ttft_misses_by_provider[provider] = (
+                                            ttft_misses_by_provider.get(provider, 0) + 1
+                                        )
+                                        time.sleep(ttft_failover_backoff_s(ttft_misses))
+                                        if ttft_misses_by_provider[provider] >= 2:
+                                            unreachable_providers.add(provider)
+                                            if verbose:
+                                                print(
+                                                    f"arka_llm: circuit-open {provider} after "
+                                                    "repeated first-token misses",
+                                                    file=sys.stderr,
+                                                )
+                                        continue
+                                    except ImportError:
+                                        run = agent.run(user)
                                     text = getattr(run, "content", None)
                                     if text is None:
                                         text = str(run)
@@ -2585,6 +2721,12 @@ class LlmFallbackEngine:
                                         pass
                                     if _is_retired_model_error(err_text):
                                         try:
+                                            from arka.llm.provider_health import record_incident
+
+                                            record_incident(provider, model_id, "retired", err_text)
+                                        except ImportError:
+                                            pass
+                                        try:
                                             from arka.llm.retired_models import handle_retired_model_error
 
                                             handle_retired_model_error(
@@ -2656,6 +2798,18 @@ class LlmFallbackEngine:
                                                 continue
                                     if _try_ollama_auto_pull(provider, model_id, err_text, verbose=verbose):
                                         ollama_pull_retry = True
+                                        break
+                                    if _is_provider_connectivity_error(err_text):
+                                        unreachable_providers.add(provider)
+                                        if provider not in LOCAL_PROVIDERS:
+                                            remote_connectivity_failures += 1
+                                            if remote_connectivity_failures >= 2:
+                                                skip_remaining_remote_providers = True
+                                        if verbose:
+                                            print(
+                                                f"arka_llm: provider unreachable; skipping remaining {provider} models",
+                                                file=sys.stderr,
+                                            )
                                         break
                                     self.store.mark(provider, model_id, RuntimeError(err_text))
                                     if verbose:
@@ -2758,6 +2912,18 @@ class LlmFallbackEngine:
                                                 continue
                                 if _try_ollama_auto_pull(provider, model_id, err_text, verbose=verbose):
                                     ollama_pull_retry = True
+                                    break
+                                if _is_provider_connectivity_error(err_text):
+                                    unreachable_providers.add(provider)
+                                    if provider not in LOCAL_PROVIDERS:
+                                        remote_connectivity_failures += 1
+                                        if remote_connectivity_failures >= 2:
+                                            skip_remaining_remote_providers = True
+                                    if verbose:
+                                        print(
+                                            f"arka_llm: provider unreachable; skipping remaining {provider} models",
+                                            file=sys.stderr,
+                                        )
                                     break
                                 self.store.mark(provider, model_id, exc)
                                 if verbose:
@@ -2960,6 +3126,27 @@ def llm_complete(
     if result.text and not result.error:
         global _LAST_LLM_DURATION_MS
         _LAST_LLM_DURATION_MS = (time.perf_counter() - start) * 1000
+        tokens = 0
+        try:
+            from arka.llm.share import llm_last_completion
+
+            row = llm_last_completion()
+            if row is not None and row.completion_tokens:
+                tokens = int(row.completion_tokens)
+        except ImportError:
+            tokens = 0
+        if tokens <= 0:
+            tokens = max(1, len(result.text) // 4)
+        try:
+            from arka.output import remember_llm_footer
+
+            remember_llm_footer(
+                model=f"{result.provider}/{result.model_id}" if result.provider else "",
+                duration_ms=_LAST_LLM_DURATION_MS,
+                output_tokens=tokens,
+            )
+        except ImportError:
+            pass
     if result.text:
         return result.text
     if result.error:

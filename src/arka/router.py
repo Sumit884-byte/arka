@@ -32,7 +32,7 @@ def _route_mode() -> str:
         load_env()
     except ImportError:
         pass
-    mode = os.environ.get("ROUTE_MODE", "symbolic").lower().strip()
+    mode = os.environ.get("ROUTE_MODE", "symbolic_only").lower().strip()
     aliases = {
         "llm": "ai",
         "ai-first": "ai",
@@ -45,9 +45,9 @@ def _route_mode() -> str:
         "ai-only": "ai_only",
         "llm-only": "ai_only",
         "hybrid": "symbolic",
-        "auto": "symbolic",
-        "default": "symbolic",
-        "": "symbolic",
+        "auto": "symbolic_only",
+        "default": "symbolic_only",
+        "": "symbolic_only",
     }
     mode = aliases.get(mode, mode)
     if mode not in ("symbolic", "ai", "symbolic_only", "ai_only"):
@@ -56,7 +56,7 @@ def _route_mode() -> str:
 
 
 def route(text: str) -> Route | None:
-    cmd = text.strip()
+    cmd = _normalize_natural_language_input(text)
     if not cmd:
         return None
 
@@ -267,8 +267,25 @@ def _route_explicit_to_folder(cmd: str) -> Route | None:
     return None
 
 
+def _normalize_natural_language_input(text: str) -> str:
+    """Flatten pasted line-by-line questions without corrupting code payloads."""
+    raw = (text or "").strip()
+    if "\n" not in raw:
+        return raw
+    # Newlines are meaningful in code, JSON, and shell snippets. A short set of
+    # word-only lines is normally speech-to-text or a mobile paste, so it is
+    # safe—and useful—to treat it as one natural-language question.
+    lines = [line.strip() for line in raw.splitlines() if line.strip()]
+    looks_like_words = bool(lines) and all(
+        re.fullmatch(r"[\w'’-]+(?:\s+[\w'’-]+)*[?!.,;:]*", line) for line in lines
+    )
+    if len(lines) <= 12 and looks_like_words:
+        return " ".join(lines)
+    return raw
+
+
 def _route_explicit_tech_stack(cmd: str) -> Route | None:
-    """Resolve `best tech stack for …` before broad NL chat heuristics."""
+    """Resolve `best tech stack for …` / `… tech stack selection` before chat heuristics."""
     try:
         from arka.routing.symbolic import route_tech_stack
 
@@ -720,10 +737,6 @@ def _route_offline(cmd: str) -> Route | None:
     if re.search(r"(^calc\s|integrate|derivative|solve\s|=\s*\d)", clean):
         return Route(f"calc {cmd}")
 
-    third_party = _match_third_party(cmd)
-    if third_party:
-        return Route(third_party, source="plugin")
-
     try:
         from arka.core.code_project import looks_like_repo_edit
 
@@ -794,6 +807,10 @@ def _route_offline(cmd: str) -> Route | None:
 
     if _is_knowledge_question(clean):
         return Route(f"web_answer {cmd}", source="offline")
+
+    third_party = _match_third_party(cmd)
+    if third_party:
+        return Route(third_party, source="plugin")
 
     chat_route = _route_chat_intent(cmd)
     if chat_route:
@@ -871,23 +888,11 @@ def _route_offline(cmd: str) -> Route | None:
 
 def _match_third_party(cmd: str) -> str | None:
     try:
-        import subprocess
-        import sys
+        from arka.agent.skills import match_command
 
-        from arka.paths import script_path
-
-        path = script_path("arka_skills.py")
-        if not path.is_file():
-            return None
-        proc = subprocess.run(
-            [sys.executable, str(path), "match", cmd],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        line = proc.stdout.strip()
+        line = (match_command(cmd) or "").strip()
         return line or None
-    except (OSError, subprocess.TimeoutExpired):
+    except ImportError:
         return None
 
 
@@ -913,6 +918,13 @@ def _route_chat_intent(cmd: str) -> Route | None:
         action, _data = line.split("\t", 1)
         action = action.strip().upper()
         if action == "SEARCH":
+            try:
+                from arka.core.processes import wants_cpu_processes
+
+                if wants_cpu_processes(cmd):
+                    return None
+            except ImportError:
+                pass
             return Route(f"web_answer {cmd}", source="intent")
         if action == "CALC":
             return Route(f"calc {cmd}", source="intent")
@@ -1173,6 +1185,13 @@ def _is_knowledge_question(clean: str) -> bool:
         clean,
     ):
         return True
+    try:
+        from arka.core.processes import wants_cpu_processes
+
+        if wants_cpu_processes(clean):
+            return False
+    except ImportError:
+        pass
     if re.search(
         r"\b(my|this pc|my computer|my mac|my macbook|my machine)\b",
         clean,

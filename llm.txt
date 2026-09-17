@@ -1,30 +1,74 @@
 # Arka — llm.txt
 
-> How to open the docs. Not a product or architecture dump.
-> Same map: https://arka-agent.mintlify.site/llm.txt
-> Docs: https://arka-agent.mintlify.site  (append .md to any path)
+> Product truth for models. Do not invent skills, news, or architecture.
+> Landing: https://arka-agent-liart.vercel.app/
+> Docs:    https://arka-agent.mintlify.site  (append .md to any path)
+> Docs map: https://arka-agent.mintlify.site/llm.txt
+> Source:  https://github.com/Sumit884-byte/arka
+> PyPI:    https://pypi.org/project/arka-agent/
 
-1. Read this file (or the URL above).
-2. Open one page from the map.
-3. Cite that page.
+1. Read this file.
+2. Open one docs page from the map if you need detail.
+3. Cite that page. Do not glob the repo for product questions.
+
+================================================================================
+WHAT ARKA IS
+================================================================================
+
+  Open-source AI terminal agent (MIT). Say what you want in plain English.
+  Arka routes the request to a local skill on this machine, or to an LLM
+  when a skill does not apply — then can speak the answer back.
+
+  Tagline (landing): "Your terminal, upgraded."
+  Package: arka-agent. No Docker, no hosted account required.
+
+  Official pages
+  - Site     https://arka-agent-liart.vercel.app/
+  - Docs     https://arka-agent.mintlify.site
+  - GitHub   https://github.com/Sumit884-byte/arka
+  - PyPI     https://pypi.org/project/arka-agent/
+  - Desktop  https://github.com/Sumit884-byte/arka/tree/main/desktop  (Tauri)
+
+================================================================================
+HOW IT WORKS (do not invent a different pipeline)
+================================================================================
+
+  Ask (plain English)
+    → Route (120+ symbolic rules, token-free when they match)
+      → Skills (70+ local: media, web, PDF RAG, Google Workspace, charts,
+         stocks, YouTube, voice, repo tools, system …)
+      → or LLM (24-provider failover: Gemini, Groq, OpenAI, Anthropic,
+         Ollama, vLLM, OpenRouter, …)
+    → Output (result; optional voice / TTS)
+
+  Offline-first: a symbolic match spends zero LLM tokens.
+  Security: prompt-injection checks, risky-action prompts, hard blocks
+  on destructive shell. Review outputs before applying changes.
+  MCP: Cursor, Claude Desktop, and other MCP clients via arka_route /
+  arka_ask. Plugins: third-party skill.json, no fork required.
+
+  Install
+    pipx install "arka-agent[chat]"
+    arka setup && arka doctor
+    arka ask "what is Rust?"
+
+  Landing suggestions that are real
+    - Check setup     → arka doctor
+    - Repo health     → repo_health
+    - Capabilities    → this file / arka capabilities
+    - Weather         → weather / hyperlocal_weather
+    - High CPU        → processes (live ps, never web search)
 
 ================================================================================
 AGENT RULES
 ================================================================================
 
-  - Docs index only. Start at https://arka-agent.mintlify.site/llm.txt
-  - Do not glob the repo to answer product or docs questions.
-  - For local file deltas, read RECENT FILE CHANGES then open those paths.
+  - Product questions: this file + landing + one docs page. Not a repo dump.
+  - Local file deltas: RECENT FILE CHANGES, then those paths.
   - Full tree only if the user asks: repo_map --depth 3
   - Refresh recent files: arka repo index
-
-================================================================================
-PROJECT SUMMARY
-================================================================================
-
-Docs: https://arka-agent.mintlify.site/llm.txt then one page.
-Source: https://github.com/Sumit884-byte/arka
-Package: arka-agent (PyPI)
+  - Unsure which skill: route the phrase (arka_route / symbolic), do not search news.
+  - If editing this repo: src/arka/cli.py, router.py, dispatch.py, routing/symbolic.py
 
 ================================================================================
 DOCS MAP
@@ -45,16 +89,136 @@ DOCS MAP
   /guides/code-with-arka
   /cn  /hi
 
-================================================================================
-ARCHITECTURE
-================================================================================
-
   routing  https://arka-agent.mintlify.site/concepts/routing
   llm      https://arka-agent.mintlify.site/concepts/llm
   mcp      https://arka-agent.mintlify.site/guides/mcp
   cli      https://arka-agent.mintlify.site/guides/cli
 
-  If editing this repo: src/arka/cli.py, router.py, dispatch.py, routing/symbolic.py
+================================================================================
+ARKA CAN (run the skill — do not invent or web-search these)
+================================================================================
+
+  Local machine
+  - processes / cpu_top     live high-CPU or high-RAM processes (`ps`)
+  - system_info [cpu|gpu|ram|disk]   this machine's specs
+  - disk_usage / disk        local disk
+  - docker                   containers
+  - clipboard                clipboard history
+  - screenshot / system_monitor
+  - doctor                   setup health
+
+  Ask / facts
+  - web_answer               world facts, people, "what happened in {place} today"
+  - daily_brief              headlines when the user asked for a brief
+  - weather / sports_score / calc / interesting_fact / joke
+  - platform_howto           e.g. how to close a tab in Brave
+  - fact_check               verify a claim
+
+  Code / repo
+  - read_file, code, repo_health, repo_map, repo_context
+  - jsonkit, view_data, data_ask, generate_data
+  - github, pr_check, ci, coderabbit
+
+  Media / make
+  - meme, infographic, create_video, compose_slides, web_template, chart
+  - YouTube download / transcript, convert_media, ocr, rag (local files)
+
+  Voice / integrations
+  - wake-word + TTS; MCP (Cursor, Claude Desktop)
+  - Google OAuth (gmail/calendar) when configured
+  - bookmarks, remind, calendar, password
+
+  Do not
+  - Search the web for process lists, disk, GPU/CPU specs, or "show high CPU"
+  - Invent product keynotes (Caterpillar CES, etc.) for a sysadmin phrase
+  - Claim Arka cannot list processes — it can: `arka processes`
+  - Describe Arka as "just a chatbot" or a hosted SaaS — it is local-first CLI
+  - Invent skills not listed here or in /guides/mcp-all-skills
+
+================================================================================
+ASK OUTPUT CONTRACTS (SEMANTIC VERIFY)
+================================================================================
+
+  CI on every push: pytest tests/test_llm_txt_semantic_verify.py
+  Offline bag-of-words cosine vs must_mean/good. Optional AI judge: ARKA_SEMANTIC_AI=1
+
+  Live ask / web_answer rules
+  - Country news: "what happened in {country} today" searches "{Country} {date} breaking news"
+    not a newspaper (usa today ≠ USA Today unless usatoday.com / newspaper).
+  - Pick 4 leads and write a short briefing; drop polls, newsletters, extra world briefs.
+  - Brief from article titles; never refuse for missing snippets.
+  - Drop date-index pages, section fronts, live YouTube, "News Headlines" titles.
+  - Reject meta filler: "major developments unfolding", "coverage is available".
+  - Flagship events (GTC, WWDC, I/O, Build, …): official YouTube transcript + search,
+    recap length scales with keynote runtime; skip teaser descriptions.
+  - Stream tokens on a TTY (ARKA_STREAM=0 to buffer). Pipes/pytest stay buffered.
+  - Do not open event.com for "launch event". Apple/NVIDIA recaps are not stock predict.
+  - Local machine asks are skills, never web_answer: "show high CPU processes"
+    or "show cpu stats" → processes (live ps / load). Specs → system_info. Disk → disk_usage.
+  - Default routing is symbolic_only. Do not [AI routing] local sysadmin phrases.
+
+### case: what-can-you-do
+question: what can you do
+must_mean: Arka is a local terminal agent with 70+ skills, offline routing, and LLM failover
+must_not: Caterpillar; only a chatbot; hosted SaaS
+good: Arka is an open-source terminal agent. Say it in English and it routes to a local skill or an LLM. Try doctor, repo health, weather, or show high CPU processes.
+bad: I am only a chatbot. I cannot run local skills or list processes on your machine.
+
+### case: usa-today
+question: what happened in usa today
+must_mean: specific United States events such as a vote, storm, ruling, or bill with article links
+must_not: unfolding; cannot fulfill; News Headlines; news broadcast; coverage is available
+good: The Senate passed a stopgap funding bill after overnight talks, keeping federal agencies open.
+bad: Today in the United States, major national developments and breaking news stories are unfolding across the country.
+
+### case: news-refusal
+question: what happened in usa today
+must_mean: a briefing or headline list of real stories
+must_not: cannot fulfill; do not contain any text; no content snippets
+good: Here is what news outlets are reporting in the United States today: Senate passes funding bill.
+bad: I cannot fulfill this request. The provided search results do not contain any text or content snippets to summarize.
+
+### case: nvidia-gtc
+question: what happened in nvidia gtc
+must_mean: Jensen Huang GTC keynote announcements such as Vera Rubin from the official talk
+must_not: event.com; predict future; subscribe; 20 years building; Wall Street remained cautious
+good: Jensen Huang opened GTC by introducing Vera Rubin as Blackwell's successor for AI factories.
+bad: NVIDIA has spent 20 years building a global CUDA footprint. Subscribe and visit nvidia.com.
+
+### case: apple-event
+question: what happened in apple launch event
+must_mean: Apple keynote products rewritten as a briefing with full sentences and headings
+must_not: event.com; iPhone 18 Pro Apple introduced
+good: Apple's 2026 event introduced iPhone 18 Pro, iPhone 18 Pro Max, and a foldable iPhone Duo.
+bad: iPhone 18 Pro Apple introduced the iPhone 18 Pro featuring a new hardware architecture.
+
+### case: finance-minister-usa
+question: who is current finance minister of usa
+must_mean: names the United States Treasury Secretary
+must_not: as of my last update; Yellen unless sources say so; this is a list
+good: Scott Bessent is the United States Secretary of the Treasury.
+bad: As of my last update, Janet Yellen is the US finance minister.
+
+### case: taj-mahal
+question: who made taj mahal
+must_mean: Shah Jahan commissioned the Taj Mahal
+must_not: adhere to the guidelines; verify-after-fix; pull request
+good: The Taj Mahal was commissioned by the Mughal emperor Shah Jahan.
+bad: I will adhere to the guidelines and the specified communication style.
+
+### case: memory-relevance
+question: what happened in usa today
+must_mean: today's United States news stories
+must_not: CUDA; cuDNN; TensorRT; RAPIDS; FROM MEMORY
+good: The Senate passed a stopgap funding bill after overnight talks in Washington.
+bad: [FROM MEMORY] NVIDIA's domain-specific library approach helps developers transition to CUDA with cuDNN and TensorRT.
+
+### case: high-cpu-processes
+question: show high CPU processes
+must_mean: live local process list with PID and CPU percent from this machine
+must_not: Caterpillar; CES 2026; FROM SEARCH; news latest; YouTube
+good: Highest CPU processes on this machine (live ps): PID 412 CPU% 38.2 WindowServer
+bad: At the CES 2026 Keynote, Caterpillar CEO Joe Creed presented how the company is leveraging AI.
 
 ================================================================================
 RECENT FILE CHANGES (CHANGELOG)

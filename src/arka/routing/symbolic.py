@@ -166,6 +166,26 @@ def route_symbolic_image(cmd: str) -> str | None:
     return "symbolic_image comparison"
 
 
+def route_launch_recap(cmd: str) -> str | None:
+    """Product keynotes / launch recaps go to web_answer, not predict or open_url."""
+    try:
+        from arka.agent.launch_recap import is_launch_recap_question
+    except ImportError:
+        is_launch_recap_question = None  # type: ignore[assignment]
+    try:
+        from arka.agent.daily_brief import should_use_live_news_web
+    except ImportError:
+        should_use_live_news_web = None  # type: ignore[assignment]
+    text = (cmd or "").strip()
+    if not text:
+        return None
+    if is_launch_recap_question is not None and is_launch_recap_question(text):
+        return f"web_answer {text}"
+    if should_use_live_news_web is not None and should_use_live_news_web(text):
+        return f"web_answer {text}"
+    return None
+
+
 def route_future_predict(cmd: str) -> str | None:
     try:
         from arka.agent.dev_tools import wants_dev_tools
@@ -195,6 +215,13 @@ def route_future_predict(cmd: str) -> str | None:
         pass
     if wants_prediction_chart(cmd):
         return None
+    try:
+        from arka.agent.launch_recap import is_launch_recap_question
+
+        if is_launch_recap_question(cmd.strip()):
+            return None
+    except ImportError:
+        pass
     argv = nl_to_future_argv(cmd.strip())
     if not argv:
         return None
@@ -688,6 +715,17 @@ def route_noise_remove(cmd: str) -> str | None:
     return "noise_remove " + " ".join(shlex.quote(a) for a in argv)
 
 
+def route_audio_eq(cmd: str) -> str | None:
+    try:
+        from arka.media.audio_eq import nl_to_argv
+    except ImportError:
+        return None
+    argv = nl_to_argv(cmd.strip())
+    if not argv:
+        return None
+    return "audio_eq " + " ".join(shlex.quote(a) for a in argv)
+
+
 def route_create_video(cmd: str) -> str | None:
     try:
         from arka.media.create_video import nl_to_argv
@@ -1001,6 +1039,15 @@ def route_generate_image(cmd: str) -> str | None:
     return "generate_image " + " ".join(shlex.quote(a) for a in argv)
 
 
+def route_ponytail(cmd: str) -> str | None:
+    try:
+        from arka.agent.ponytail import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd.strip())
+    return route or None
+
+
 def route_local_image_gen(cmd: str) -> str | None:
     try:
         from arka.agent.local_image_gen import route_command
@@ -1017,6 +1064,15 @@ def route_local_music_gen(cmd: str) -> str | None:
         route = route_command(cmd.strip())
     except ImportError:
         return None
+    return route or None
+
+
+def route_local_video_gen(cmd: str) -> str | None:
+    try:
+        from arka.routing.local_video_gen import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd.strip())
     return route or None
 
 
@@ -1039,6 +1095,13 @@ def route_generate_music(cmd: str) -> str | None:
 
 
 def route_ai_video(cmd: str) -> str | None:
+    try:
+        from arka.agent.local_video_gen import wants_local_video
+
+        if wants_local_video(cmd):
+            return None
+    except ImportError:
+        pass
     try:
         from arka.media.ai_video import nl_to_argv
     except ImportError:
@@ -1461,6 +1524,15 @@ def route_heartbeat(cmd: str) -> str | None:
 def route_background_processes(cmd: str) -> str | None:
     try:
         from arka.agent.background import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
+
+
+def route_cpu_processes(cmd: str) -> str | None:
+    try:
+        from arka.core.processes import route_command
     except ImportError:
         return None
     route = route_command(cmd)
@@ -1956,6 +2028,15 @@ def route_trueforge(cmd: str) -> str | None:
 def route_gemini_cli(cmd: str) -> str | None:
     try:
         from arka.integrations.gemini_cli import route_command
+    except ImportError:
+        return None
+    route = route_command(cmd)
+    return route or None
+
+
+def route_local_cloud_router(cmd: str) -> str | None:
+    try:
+        from arka.routing.local_cloud_router import route_command
     except ImportError:
         return None
     route = route_command(cmd)
@@ -2693,6 +2774,7 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_lint_project,
         route_qa_engineering,
         route_heartbeat,
+        route_cpu_processes,
         route_background_processes,
         route_jsonkit,
         route_markdown_style,
@@ -2729,6 +2811,7 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_github_resume,
         route_data_collect,
         route_view_data,
+        route_open_url,
         route_read_file,
         route_md_doc,
         route_describe_screen,
@@ -2781,6 +2864,7 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_n8n,
         route_trueforge,
         route_gemini_cli,
+        route_local_cloud_router,
         route_harvard_ark,
         route_persona,
         route_elon,
@@ -2827,6 +2911,7 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_google_flow,
         route_google_oauth,
         route_ai_video,
+        route_launch_recap,
         route_future_predict,
         route_chart,
         route_drawing,
@@ -2837,12 +2922,15 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_flow,
         route_backup,
         route_local_image_gen,
+        route_ponytail,
         route_generate_image,
         route_local_music_gen,
+        route_local_video_gen,
         route_generate_music,
         route_download,
         route_convert_media,
         route_noise_remove,
+        route_audio_eq,
         route_create_video,
         route_edit_video,
         route_dub_video,
@@ -2853,7 +2941,6 @@ def route_offline_extras_with_rule(cmd: str) -> tuple[str, str] | None:
         route_terminal_video,
         route_timer,
         route_site_summary,
-        route_open_url,
         route_visual_inspection,
         route_search_web,
         route_price_check,

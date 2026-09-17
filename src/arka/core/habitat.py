@@ -385,7 +385,14 @@ def is_ambiguous_definitional_query(query: str, *, domain: str | None = None) ->
 
 
 def should_skip_memory_recall(query: str) -> bool:
-    return is_ambiguous_definitional_query(query)
+    if is_ambiguous_definitional_query(query):
+        return True
+    q = (query or "").strip()
+    if re.search(r"(?i)\bwhat\s+happened\b", q) and re.search(r"(?i)\btoday\b", q):
+        return True
+    if re.search(r"(?i)\b(?:breaking|latest)\s+news\b", q):
+        return True
+    return False
 
 
 def enhance_definitional_search_query(query: str, *, domain: str | None = None) -> str:

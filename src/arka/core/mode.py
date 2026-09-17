@@ -246,7 +246,7 @@ def print_plan(text: str, route: Route | None) -> None:
 
 
 def print_debug_route(text: str, route: Route | None) -> None:
-    print(f"[debug] mode={get_mode()} route_mode={os.environ.get('ROUTE_MODE', 'symbolic')}")
+    print(f"[debug] mode={get_mode()} route_mode={os.environ.get('ROUTE_MODE', 'symbolic_only')}")
     print(f"[debug] request={text[:200]!r}")
     if route:
         print(f"[debug] skill={route.skill!r} source={route.source} kind={route.kind}")

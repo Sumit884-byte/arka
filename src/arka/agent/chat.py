@@ -76,7 +76,7 @@ ASSISTANT_SYSTEM = f"""You are a direct, concise assistant. Today is {CURRENT_DA
 - For simple questions: 2-4 short sentences; state the direct answer first.
 - For "top N" or numbered-list requests: give all N items, one per line.
 - When reusing items from chat memory, keep their full descriptions — do not shorten to names only.
-- Never copy tables, nav menus, or page chrome from search results.
+- Never copy tables, nav menus, page chrome, or search-result ledes ("7 days ago — …"). Write the answer in your own words.
 - Suitable for spoken text-to-speech: no markdown unless essential.
 - Do not mention knowledge cutoffs."""
 
@@ -865,6 +865,119 @@ def should_ground_location(query: str) -> bool:
     return False
 
 
+_LIST_PAGE_TITLE_RE = re.compile(r"(?i)\b(list|outline|index|timeline) of\b")
+_OFFICE_ANSWER_RE = re.compile(
+    r"(?i)(?:"
+    r"\b(?:current|incumbent)\b.+\b(?:minister|president|prime minister|chancellor|governor|secretary)\b"
+    r"|\bfinance\s+minister\b"
+    r")"
+)
+
+
+def _is_list_page_hit(title: str = "", link: str = "", snippet: str = "") -> bool:
+    blob = f"{title} {link} {snippet}"
+    if _LIST_PAGE_TITLE_RE.search(title or "") or _LIST_PAGE_TITLE_RE.search(link or ""):
+        return True
+    if re.search(r"(?i)/wiki/list_of_", link or ""):
+        return True
+    try:
+        from arka.core.fast_encyclopedia import is_list_stub
+
+        if is_list_stub(snippet or ""):
+            return True
+    except ImportError:
+        pass
+    if re.search(r"(?i)\bthis is a list of current\b", blob):
+        return True
+    return False
+
+
+def looks_like_office_holder_answer(text: str) -> bool:
+    """True when an office question names a person, not a catalogue page."""
+    body = re.sub(r"^\[(FROM SEARCH|FROM MEMORY)\]\s*", "", (text or "").strip(), flags=re.I)
+    try:
+        from arka.core.fast_encyclopedia import is_list_stub
+
+        if is_list_stub(body):
+            return False
+    except ImportError:
+        pass
+    if re.search(r"(?i)\bthis is a list\b|\bunited nations member states\b", body):
+        return False
+    return bool(extract_person_names(body))
+
+
+def extract_person_names(text: str) -> list[str]:
+    """Personal-name spans, excluding office/institution titles."""
+    body = re.sub(r"^\[(FROM SEARCH|FROM MEMORY)\]\s*", "", (text or "").strip(), flags=re.I)
+    skip_first = {"The", "This", "List", "Source"}
+    institution = {
+        "minister",
+        "ministry",
+        "government",
+        "cabinet",
+        "council",
+        "budget",
+        "wikipedia",
+        "committee",
+        "security",
+        "union",
+        "india",
+        "states",
+        "national",
+        "source",
+        "finance",
+        "president",
+        "secretary",
+        "policy",
+        "treasury",
+        "department",
+        "united",
+    }
+    names: list[str] = []
+    for match in re.finditer(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b", body):
+        name = match.group(1)
+        tokens = name.split()
+        if tokens[0] in skip_first:
+            continue
+        if any(tok.casefold() in institution for tok in tokens):
+            continue
+        names.append(name)
+    return names
+
+
+def office_answer_matches_sources(answer: str, web_context: str) -> bool:
+    """False when the named person never appears in the search evidence."""
+    if not (web_context or "").strip():
+        return True
+    names = extract_person_names(answer)
+    if not names:
+        return False
+    ctx = web_context.lower()
+    for name in names:
+        low = name.lower()
+        if low in ctx:
+            return True
+        parts = low.split()
+        if len(parts) >= 2 and parts[0] in ctx and parts[-1] in ctx:
+            return True
+    return False
+
+
+def looks_like_knowledge_hedge(text: str) -> bool:
+    """True when the model falls back to cutoff language instead of search facts."""
+    return bool(
+        re.search(
+            r"(?i)\b("
+            r"as of my last update|as of my knowledge|knowledge cutoff|"
+            r"i don't have (?:real[- ]time|current)|"
+            r"as of 202[0-5]\b"
+            r")",
+            text or "",
+        )
+    )
+
+
 def ground_search_query(query: str) -> str:
     query = normalize_question(query)
     try:
@@ -873,6 +986,15 @@ def ground_search_query(query: str) -> str:
         query = enhance_definitional_search_query(query)
     except ImportError:
         pass
+    if _OFFICE_ANSWER_RE.search(query):
+        try:
+            from arka.core.fast_encyclopedia import _office_search_topic, topic_key
+
+            pinned = _office_search_topic(query, topic_key(query) or query)
+            if pinned and pinned != query:
+                query = pinned
+        except ImportError:
+            pass
     if not should_ground_location(query):
         return query
     ctx = load_context()
@@ -934,6 +1056,20 @@ def looks_like_unknown_answer(text: str) -> bool:
     body = re.sub(r"^\[(FROM SEARCH|FROM MEMORY)\]\s*", "", text, flags=re.I).strip()
     if re.match(r"(?i)^could not ", body):
         return True
+    try:
+        from arka.core.answer_cache import is_poison_answer
+
+        if is_poison_answer(body):
+            return True
+    except ImportError:
+        pass
+    try:
+        from arka.core.fast_encyclopedia import is_list_stub
+
+        if is_list_stub(body):
+            return True
+    except ImportError:
+        pass
     low = body.lower()
     return any(pat.search(low) for pat in _UNKNOWN_ANSWER_PATTERNS)
 
@@ -951,10 +1087,15 @@ def gather_web_context(question: str, *, snippet: str = "") -> str:
         if is_headlines_bullet_request(question):
             search_q = headlines_search_query(question)
             scrape_kwargs = headlines_scrape_kwargs()
+        elif _OFFICE_ANSWER_RE.search(question or ""):
+            search_q = ground_search_query(question)
+            scrape_kwargs = {"per_page_words": 0}
         else:
             search_q = ground_search_query(question)
     except ImportError:
         search_q = ground_search_query(question)
+        if _OFFICE_ANSWER_RE.search(question or ""):
+            scrape_kwargs = {"per_page_words": 0}
     try:
         raw_web = scrape_search_results(search_q, **scrape_kwargs)
     except Exception as exc:
@@ -1176,6 +1317,15 @@ def detect_math(text: str) -> bool:
 from arka.llm.cli import llm_complete
 
 
+def _llm_answer(system: str, user: str, **kwargs: object) -> str:
+    try:
+        from arka.output import llm_user_answer
+
+        return llm_user_answer(system, user, **kwargs) or ""  # type: ignore[arg-type]
+    except ImportError:
+        return llm_complete(system, user, **kwargs) or ""  # type: ignore[arg-type]
+
+
 def get_intent(
     prompt: str,
     *,
@@ -1299,6 +1449,15 @@ def duckduckgo_search(query: str, max_results: int = 5) -> list[dict]:
     except ImportError:
         pass
 
+    try:
+        from arka.integrations.web_search import configured_api_search
+
+        api_hits = configured_api_search(query, max_results=max_results)
+        if api_hits:
+            return api_hits
+    except ImportError:
+        pass
+
     timeout = _ddgs_timeout_seconds()
     retries = _ddgs_retry_count()
     last_exc: Exception | None = None
@@ -1336,6 +1495,8 @@ def _score_search_result(query: str, result: dict) -> int:
             score += 1
         if word in snippet:
             score += 1
+    if _is_list_page_hit(title, link, snippet):
+        score -= 20
     if "points table" in title or "tracker" in title:
         score -= 5
     try:
@@ -1354,6 +1515,13 @@ def _score_search_result(query: str, result: dict) -> int:
 def _looks_like_raw_scrape(text: str) -> bool:
     if not text:
         return True
+    try:
+        from arka.agent.daily_brief import looks_like_serp_dump
+
+        if looks_like_serp_dump(text):
+            return True
+    except ImportError:
+        pass
     if "Points Table" in text or "Top Stories Latest News" in text:
         return True
     if text.count("|") > 12 or "|---|" in text:
@@ -1363,6 +1531,25 @@ def _looks_like_raw_scrape(text: str) -> bool:
         if body.count("|") > 8:
             return True
     return False
+
+
+def _search_write_instructions(question: str, *, extra: str = "") -> str:
+    """Tell the model to synthesize search hits, not paste SERP blurbs."""
+    hint = extra or (
+        "\nWrite a short answer in your own words using the search results as evidence. "
+        "Do not paste SERP snippets, 'N days ago —' ledes, or ellipsis-joined blurbs."
+    )
+    if _OFFICE_ANSWER_RE.search(question or ""):
+        hint += (
+            "\nStart with the incumbent's full name and country in the first sentence. "
+            "If that exact title does not exist, name the equivalent office-holder from the search results. "
+            "Use only the search results — no 'as of my last update' or knowledge-cutoff hedging. "
+            "Do not define the office or describe the ministry — name the person who holds it now. "
+            "Ignore Wikipedia list-of pages, UN member catalogues, and footnotes about other states."
+        )
+    else:
+        hint += "\nDo not copy list-page intros, tables, or navigation text."
+    return hint
 
 
 def scrape_url(url: str, timeout: int = 12) -> str:
@@ -1537,6 +1724,8 @@ def _scrape_search_results_impl(
             continue
         title = res.get("title") or link
         snippet = res.get("snippet") or ""
+        if _OFFICE_ANSWER_RE.search(query) and _is_list_page_hit(title, link, snippet):
+            continue
         if is_brief_query:
             try:
                 from arka.agent.daily_brief import headline_looks_stale, is_changelog_exempt_url
@@ -1877,7 +2066,18 @@ def cleanup_response(raw: str, entity: str = "") -> str:
         f"Keep [FROM SEARCH] or [FROM MEMORY] prefix if present. Topic: {entity or 'general'}."
     )
     cleaned = llm_complete(system, raw, temperature=0.0, task="chat")
-    return cleaned or raw.strip()
+    if not cleaned:
+        return raw.strip()
+    try:
+        from arka.core.fast_encyclopedia import is_list_stub
+
+        if is_list_stub(cleaned) and not is_list_stub(raw):
+            return raw.strip()
+    except ImportError:
+        pass
+    if len(cleaned.split()) < max(12, len(raw.split()) // 4) and len(raw.split()) > 40:
+        return raw.strip()
+    return cleaned
 
 
 def build_session_context(question: str | None = None) -> str:
@@ -1908,12 +2108,6 @@ def build_session_context(question: str | None = None) -> str:
                 "Recent chat:\n"
                 + "\n".join(_format_session_message(m, question) for m in relevant[-8:])
             )
-        else:
-            recent = history[-6:]
-            parts.append(
-                "Recent chat:\n"
-                + "\n".join(_format_session_message(m, question) for m in recent)
-            )
     elif history:
         recent = history[-6:]
         parts.append(
@@ -1936,7 +2130,7 @@ def build_session_context(question: str | None = None) -> str:
             from arka.agent.core import memory_context_for
 
             mem = memory_context_for(question)
-            if mem and mem.strip():
+            if mem and mem.strip() and topic_overlap(question, mem):
                 parts.append(mem.strip())
         except ImportError:
             pass
@@ -2133,12 +2327,22 @@ def answer_question(
 
         if should_use_live_news_web(question):
             answer = summarize_news_web(question)
-            if answer:
-                if use_session:
-                    session_append("user", question)
-                    session_append("assistant", answer)
-                _end_channel_session(answer, use_session=use_session)
-                return _done("search", answer)
+            if not (answer or "").strip():
+                try:
+                    from arka.agent.daily_brief import country_news_place
+
+                    place = country_news_place(question) or "today"
+                except ImportError:
+                    place = "today"
+                answer = (
+                    f"No article-quality headlines found for {place} just now. "
+                    "Try AP, Reuters, or BBC, or ask again in a minute."
+                )
+            if use_session:
+                session_append("user", question)
+                session_append("assistant", answer)
+            _end_channel_session(answer, use_session=use_session)
+            return _done("search", answer)
     except ImportError:
         pass
 
@@ -2176,6 +2380,27 @@ def answer_question(
                     session_append("assistant", cached)
                 _end_channel_session(cached, use_session=use_session)
                 return _done("cache", cached)
+            try:
+                from arka.core.fast_encyclopedia import fast_encyclopedic_answer
+
+                quick = fast_encyclopedic_answer(question)
+            except ImportError:
+                quick = None
+            if quick:
+                try:
+                    from arka.output import remember_llm_footer
+
+                    remember_llm_footer(model="", duration_ms=None, output_tokens=None)
+                except ImportError:
+                    pass
+                if set_cached_answer is not None:
+                    set_cached_answer(question, quick)
+                if use_session:
+                    session_append("user", question)
+                    session_append("assistant", quick)
+                _end_channel_session(quick, use_session=use_session)
+                prov = "memory" if "[FROM MEMORY]" in quick else "search"
+                return _done(prov, quick)
     except ImportError:
         set_cached_answer = None  # type: ignore[assignment,misc]
         is_encyclopedic_query = None  # type: ignore[assignment,misc]
@@ -2233,7 +2458,7 @@ def answer_question(
             "likely cause, and 2-3 concrete fix steps. Start with [FROM MEMORY]."
         )
         user = f"Error report:\n{data}\n\nExplain and suggest fixes."
-        answer = llm_complete(system, user, task="chat")
+        answer = _llm_answer(system, user, task="chat")
         if use_session:
             session_append("user", question)
             session_append("assistant", answer)
@@ -2251,7 +2476,7 @@ def answer_question(
             return _done("calc", answer)
         system = ASSISTANT_SYSTEM + "\nExplain the math result clearly. Start with [FROM MEMORY]."
         user = f"Question: {question}\nSymPy result: {result}"
-        answer = llm_complete(system, user, task="chat")
+        answer = _llm_answer(system, user, task="chat")
         if not answer:
             answer = f"[FROM MEMORY] Result: {result}"
         if use_session:
@@ -2264,7 +2489,7 @@ def answer_question(
         wx = fetch_weather(question)
         system = ASSISTANT_SYSTEM + "\nSummarize weather data conversationally. Start with [FROM MEMORY]."
         user = f"Weather data:\n{wx}\n\nUser asked: {question}"
-        answer = llm_complete(system, user, task="chat")
+        answer = _llm_answer(system, user, task="chat")
         if not answer:
             answer = f"[FROM MEMORY]\n{wx}"
         if use_session:
@@ -2366,9 +2591,10 @@ def answer_question(
             page_label = "PAGE CONTENT"
         else:
             length_hint = (
-                list_extra
-                or headline_extra
-                or "\nGive a direct answer using the search results."
+                _search_write_instructions(
+                    question,
+                    extra=list_extra or headline_extra,
+                )
             ) + memory_hint + contextual_hint
             page_label = "SEARCH RESULTS"
         user = (
@@ -2376,16 +2602,16 @@ def answer_question(
             f"{page_label}:\n---\n{web_context}\n---\n\n"
             f"Question: {question}\n"
             f"{length_hint}\n"
-            "Start with [FROM SEARCH]. Do not copy tables or navigation text."
+            "Start with [FROM SEARCH]."
         )
         if github_activity_context:
             answer = f"[FROM SEARCH]\n\n{web_context.strip()}"
             prov = "search"
         elif linked_urls and _wants_opinion_analysis(question):
-            answer = llm_complete(system, user, temperature=0.0, task="chat")
+            answer = _llm_answer(system, user, temperature=0.0, task="chat")
             prov = "search"
         else:
-            answer = llm_complete(system, user, task="chat")
+            answer = _llm_answer(system, user, task="chat")
             prov = "search"
     else:
         system = ASSISTANT_SYSTEM
@@ -2394,7 +2620,7 @@ def answer_question(
             user += f"Web snippet:\n{snippet}\n\n"
         length_hint = (list_extra or ("\nAnswer in at most %d words." % word_limit if word_limit else "\nAnswer clearly and completely.")) + memory_hint + contextual_hint
         user += f"Question: {question}\n{length_hint}\nStart with [FROM MEMORY] unless snippet was decisive."
-        answer = llm_complete(system, user, task="chat")
+        answer = _llm_answer(system, user, task="chat")
         prov = "memory"
 
         if (
@@ -2427,35 +2653,102 @@ def answer_question(
                 except ImportError:
                     pass
                 length_hint = (
-                    list_extra
-                    or headline_extra
-                    or "\nGive a direct answer using the search results."
+                    _search_write_instructions(
+                        question,
+                        extra=list_extra or headline_extra,
+                    )
                 ) + memory_hint + contextual_hint
                 user = (
                     f"{context_block}\n\n"
                     f"SEARCH RESULTS:\n---\n{fallback_ctx}\n---\n\n"
                     f"Question: {question}\n"
                     f"{length_hint}\n"
-                    "Start with [FROM SEARCH]. Do not copy tables or navigation text."
+                    "Start with [FROM SEARCH]."
                 )
-                answer = llm_complete(system, user, task="chat")
+                answer = _llm_answer(system, user, task="chat")
                 prov = "search"
                 web_context = fallback_ctx
 
     if _looks_like_raw_scrape(answer or ""):
         retry_ctx = snippet or (web_context[:2000] if web_context else "")
         if retry_ctx:
-            retry_hint = (list_extra or "Answer clearly. Start with [FROM SEARCH].") + memory_hint
-            answer = llm_complete(
+            retry_hint = (
+                list_extra
+                or "Write a short synthesized answer in your own words. "
+                "Do not paste search snippets. Start with [FROM SEARCH]."
+            ) + memory_hint
+            answer = _llm_answer(
                 ASSISTANT_SYSTEM,
                 f"{context_block}\n\nQuestion: {question}\n\nSources:\n{retry_ctx}\n\n{retry_hint}",
                 temperature=0.0,
                 task="chat",
             )
 
+    if _OFFICE_ANSWER_RE.search(question or "") and (
+        not looks_like_office_holder_answer(answer or "")
+        or looks_like_knowledge_hedge(answer or "")
+        or not office_answer_matches_sources(answer or "", web_context)
+    ):
+        retry_ctx = (web_context or "")[:2500] or snippet
+        if retry_ctx:
+            print("Office answer missed the incumbent — retrying…", file=sys.stderr)
+            answer = _llm_answer(
+                ASSISTANT_SYSTEM,
+                f"{context_block}\n\nSEARCH RESULTS:\n---\n{retry_ctx}\n---\n\n"
+                f"Question: {question}\n"
+                "Name the current office-holder (full name) and their country in the first sentence. "
+                "If the asked title does not exist, name the equivalent from these search results. "
+                "Do not say 'as of my last update'. Do not define the office. "
+                "Do not discuss list pages, UN catalogues, or other countries.\n"
+                "Start with [FROM SEARCH].",
+                temperature=0.0,
+                task="chat",
+            )
+            prov = "search"
+
+    # Reject meta / Cursor-rule leakage (e.g. answering "who made taj mahal"
+    # with verify-after-fix.mdc boilerplate).
+    try:
+        from arka.core.llm_output_verify import verify_llm_output
+
+        check = verify_llm_output(question, answer)
+        if check.failed and check.code in {"meta_leak", "off_topic", "empty"}:
+            print(f"Output verify retry ({check.code}): {check.reason}", file=sys.stderr)
+            retry_hint = (
+                "Answer the user's question directly with facts. "
+                "Do not mention Cursor rules, project guidelines, coding process, "
+                "or ask for a coding task. Start with [FROM MEMORY] or [FROM SEARCH]."
+            )
+            clean_user = f"Question: {question}\n{retry_hint}"
+            if web_context:
+                clean_user = (
+                    f"SEARCH RESULTS:\n---\n{web_context[:2500]}\n---\n\n"
+                    f"Question: {question}\n{retry_hint}"
+                )
+            elif snippet:
+                clean_user = (
+                    f"Web snippet:\n{snippet}\n\nQuestion: {question}\n{retry_hint}"
+                )
+            answer = _llm_answer(
+                ASSISTANT_SYSTEM,
+                clean_user,
+                temperature=0.0,
+                task="chat",
+            )
+            # If still empty/meta after retry, leave a clear failure rather than
+            # shipping rule-leakage to the user.
+            retry_check = verify_llm_output(question, answer)
+            if retry_check.failed and retry_check.code in {"meta_leak", "off_topic"}:
+                answer = (
+                    "[FROM MEMORY] I could not produce a clean factual answer. "
+                    "Please try again or run `arka doctor`."
+                )
+    except ImportError:
+        pass
+
     if not answer and snippet:
         retry_hint = (list_extra or "Answer clearly. Start with [FROM SEARCH].") + memory_hint
-        answer = llm_complete(
+        answer = _llm_answer(
             ASSISTANT_SYSTEM,
             f"{context_block}\n\nQuestion: {question}\n\nWeb snippet:\n{snippet}\n\n{retry_hint}",
             temperature=0.0,
@@ -2463,7 +2756,7 @@ def answer_question(
         )
     if not answer and web_context:
         retry_hint = (list_extra or "Extract the answer. Start with [FROM SEARCH].") + memory_hint
-        answer = llm_complete(
+        answer = _llm_answer(
             ASSISTANT_SYSTEM,
             f"{context_block}\n\nQuestion: {question}\n\nExtract the answer from:\n{web_context[:2500]}\n\n{retry_hint}",
             temperature=0.0,
@@ -2496,7 +2789,14 @@ def answer_question(
         and not _looks_like_raw_scrape(answer)
         and not list_n
     ):
-        if not (linked_urls and _wants_opinion_analysis(question)):
+        streamed_visible = False
+        try:
+            from arka.output import should_stream_answer
+
+            streamed_visible = should_stream_answer()
+        except ImportError:
+            streamed_visible = False
+        if not streamed_visible and not (linked_urls and _wants_opinion_analysis(question)):
             answer = cleanup_response(answer, question)
 
     limit = detect_word_limit(question)
