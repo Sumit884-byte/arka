@@ -334,8 +334,20 @@ def _answer_to_question_instructions(rows: list[tuple[str, str]], last_user: str
     return _ANSWER_TO_QUESTION_INSTRUCTIONS
 
 
+def is_acknowledgment(text: str) -> bool:
+    try:
+        from arka.integrations.greeting import is_acknowledgment as _ack
+
+        return _ack(text)
+    except ImportError:
+        t = " ".join((text or "").strip().split())
+        return bool(re.match(r"(?i)^(?:thanks|thank you|ok(?:ay)? great thank(?:s| you)?)[!.]*$", t))
+
+
 def is_short_followup(text: str) -> bool:
     t = " ".join((text or "").strip().split())
+    if is_acknowledgment(t):
+        return False
     return bool(t) and bool(_SHORT_FOLLOWUP.match(t))
 
 
@@ -365,6 +377,8 @@ def is_answer_to_assistant_question(text: str, rows: list[tuple[str, str]]) -> b
         return False
     if is_language_learning_request(t):
         return False
+    if is_acknowledgment(t):
+        return False
     if is_short_followup(t):
         return False
     if is_continue_followup(t) or is_list_item_followup(t) or is_build_followup(t):
@@ -385,7 +399,7 @@ def is_answer_to_assistant_question(text: str, rows: list[tuple[str, str]]) -> b
 def is_continue_followup(text: str) -> bool:
     """True when the user wants the next slice of the same topic (tell more, next, etc.)."""
     t = " ".join((text or "").strip().split())
-    if not t:
+    if not t or is_acknowledgment(t):
         return False
     if _CONTINUE_FOLLOWUP.match(t):
         return True
@@ -448,7 +462,7 @@ def is_daily_brief_request(text: str) -> bool:
 def is_build_followup(text: str) -> bool:
     """True when the user is confirming they want code/build output from prior chat."""
     t = " ".join((text or "").strip().split()).lower().rstrip(".")
-    if not t:
+    if not t or is_acknowledgment(t):
         return False
     if t in _BUILD_EXACT:
         return True
@@ -477,6 +491,8 @@ def needs_past_chat_heuristic(text: str, rows: list[tuple[str, str]] | None = No
     if not t:
         return False
     if is_daily_brief_request(t):
+        return False
+    if is_acknowledgment(t):
         return False
     if is_short_followup(t):
         return True
@@ -576,6 +592,8 @@ def needs_past_chat(last_user: str, rows: list[tuple[str, str]] | None = None) -
     if not t:
         return False
     if is_daily_brief_request(t):
+        return False
+    if is_acknowledgment(t):
         return False
     if is_short_followup(t):
         return True
@@ -902,6 +920,8 @@ def build_web_agent_text(
     if not last_user:
         return ""
     if is_webui_meta_prompt(last_user):
+        return last_user
+    if is_acknowledgment(last_user):
         return last_user
     if is_daily_brief_request(last_user):
         return daily_brief_prompt(last_user)

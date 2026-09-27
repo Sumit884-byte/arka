@@ -1,6 +1,17 @@
 from unittest import mock
 
 
+def test_ok_great_thank_is_acknowledgment_not_code():
+    from arka.integrations.greeting import greeting_text, is_acknowledgment, route_greeting
+
+    assert is_acknowledgment("ok great thank")
+    assert is_acknowledgment("ok great thanks")
+    assert not is_acknowledgment("ok")
+    assert not is_acknowledgment("build an shopping app")
+    assert route_greeting("ok great thank") == "greeting ok great thank"
+    assert "welcome" in greeting_text("ok great thank").lower()
+
+
 def test_greeting_route_is_deterministic():
     from arka.integrations.greeting import greeting_text, route_greeting
     from arka.routing.symbolic import route_offline_extras
