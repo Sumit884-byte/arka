@@ -118,6 +118,7 @@
                   "guides/hosted-mode",
                   "guides/configuration",
                   "guides/web-dashboard",
+                  "guides/open-webui",
                   "guides/output-viewer"
                 ]
               },
