@@ -1,0 +1,59 @@
+---
+title: "Open WebUI frontend"
+description: "Open WebUI में Arka के साथ chat करें। Launcher chat को arka model तक सीमित करता है और default रूप से DuckDuckGo web search चालू करता है।"
+keywords: ["open webui", "frontend", "chat", "web search", "duckduckgo"]
+icon: "comments"
+---
+
+`arka frontend open-webui` आपके Arka agent के लिए एक OpenAI-compatible bridge के साथ [Open WebUI](https://github.com/open-webui/open-webui) शुरू करता है। जब आप React [वेब डैशबोर्ड](/hi/guides/web-dashboard) चलाए बिना Arka के लिए browser chat interface चाहते हैं, तब इसका उपयोग करें।
+
+## पूर्वापेक्षाएँ
+
+- `~/.config/arka/.env` में `REMOTE_TOKEN` set हो। Bridge इसका उपयोग `arka serve` के साथ authenticate करने के लिए करता है।
+- Docker चल रहा हो, या Open WebUI `pip install open-webui` (Python 3.11+) से installed हो।
+
+## Launch करें
+
+```bash
+arka frontend open-webui --open
+```
+
+यदि agent backend नहीं चल रहा है, तो Arka उसे शुरू करता है। फिर यह bridge और Open WebUI शुरू करता है। Docker उपलब्ध होने पर Arka Docker का उपयोग करता है। अन्यथा, pip install का उपयोग करने के लिए `--pip` पास करें।
+
+| Flag | Default | उद्देश्य |
+| --- | --- | --- |
+| `--port` | `3000` (Docker), `8080` (pip) | Open WebUI port |
+| `--bridge-port` | `8769` | OpenAI bridge port |
+| `--host` | `127.0.0.1` | Bridge listen host |
+| `--docker` | Docker चलने पर on | Open WebUI को Docker में चलाएँ |
+| `--pip` | off | Open WebUI को pip install से चलाएँ |
+| `--open` | off | शुरू होने के बाद browser खोलें |
+
+## Focused defaults
+
+Launcher Open WebUI को इस तरह configure करता है कि हर conversation Arka पर ही रहे:
+
+- **एकल model।** `arka` एकमात्र model है। Ollama API बंद है।
+- **कोई Arena picker नहीं।** Arena evaluation models बंद हैं।
+- **कोई chat Controls नहीं।** Chat Controls panel छिपा हुआ है।
+- **कोई follow-up suggestions नहीं।** Follow-up generation बंद है।
+- **Web search चालू।** Web search DuckDuckGo के साथ enabled है।
+
+## Web search settings
+
+Launch करने से पहले environment variables से web search defaults override करें:
+
+| Variable | Default | उद्देश्य |
+| --- | --- | --- |
+| `ENABLE_WEB_SEARCH` | `true` | Open WebUI web search को on या off करें |
+| `WEB_SEARCH_ENGINE` | `duckduckgo` | Open WebUI द्वारा उपयोग किया जाने वाला search engine |
+
+```bash
+ENABLE_WEB_SEARCH=false arka frontend open-webui
+```
+
+## Chat व्यवहार
+
+Web chat पहले एक छोटा local Ollama model आज़माता है, फिर Gemini और Groq पर fallback करता है। [Web chat model क्रम](/hi/concepts/llm#web-chat-model-क्रम) देखें।
+
+"thanks", "ok great", या "got it" जैसी छोटी स्वीकृतियों पर एक संक्षिप्त welcome मिलता है। Arka पिछला build जारी नहीं रखता और अधिक code नहीं भेजता।

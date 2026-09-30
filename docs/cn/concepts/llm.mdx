@@ -28,6 +28,27 @@ LLM_AUTO_FALLBACK=1
 API_KEY_ROTATION=1
 ```
 
+## Web 聊天模型顺序
+
+交互式 Web 聊天（例如 [Open WebUI 前端](/cn/guides/open-webui)）使用单独的快速链，这样即使云端免费额度触发速率限制，回复也能持续返回：
+
+1. 当 Ollama 正在运行时，使用一个小型本地 Ollama 模型。Arka 会从 `llama3.2:1b`、`llama3.2:3b`、`qwen3:8b` 和 `llama3.1:8b` 中选择第一个已安装的模型。
+2. 当设置了 `GEMINI_API_KEY` 或 `GOOGLE_API_KEY` 时，使用 Gemini Flash 模型。
+3. 当设置了 `GROQ_API_KEY` 时，使用 Groq `llama-3.3-70b-versatile`。
+
+覆盖该链或本地模型：
+
+```env
+WEB_CHAT_OLLAMA_MODEL=llama3.2:3b
+WEB_CHAT_MODEL_CHAIN=ollama/qwen3:8b,groq/llama-3.3-70b-versatile
+```
+
+设置 `WEB_CHAT_FAST=0` 可改用标准故障切换链。
+
+<Note>
+  对于 "thanks" 或 "got it" 这类简短的确认语，Arka 会回复一句简短的欢迎语，不会继续之前的构建。
+</Note>
+
 ## 按任务的配置文件
 
 | 任务 | 用途 |
