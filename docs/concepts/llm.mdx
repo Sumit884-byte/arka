@@ -31,6 +31,27 @@ API_KEY_ROTATION=1
 
 When you switch providers with `arka provider set groq` (or `ai-pref groq` in fish), Arka tries to **keep the same model** on the new provider before falling back to that provider's default. Disable with `arka provider set groq --no-keep-model` or `AI_KEEP_MODEL_ON_PROVIDER_SWITCH=0`.
 
+## Web chat model order
+
+Interactive web chat, such as the [Open WebUI frontend](/guides/open-webui), uses a separate fast chain so replies keep coming when cloud free tiers hit rate limits:
+
+1. A small local Ollama model, when Ollama is running. Arka picks the first installed model from `llama3.2:1b`, `llama3.2:3b`, `qwen3:8b`, and `llama3.1:8b`.
+2. Gemini Flash models, when `GEMINI_API_KEY` or `GOOGLE_API_KEY` is set.
+3. Groq `llama-3.3-70b-versatile`, when `GROQ_API_KEY` is set.
+
+Override the chain or the local model:
+
+```env
+WEB_CHAT_OLLAMA_MODEL=llama3.2:3b
+WEB_CHAT_MODEL_CHAIN=ollama/qwen3:8b,groq/llama-3.3-70b-versatile
+```
+
+Set `WEB_CHAT_FAST=0` to use the standard failover chain instead.
+
+<Note>
+  Short acknowledgments such as "thanks" or "got it" get a brief welcome. Arka doesn't continue the previous build.
+</Note>
+
 ## Per-task profiles
 
 | Task | Used for |
