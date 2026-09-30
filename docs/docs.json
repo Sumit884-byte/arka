@@ -383,6 +383,7 @@
                   "cn/guides/hosted-mode",
                   "cn/guides/configuration",
                   "cn/guides/web-dashboard",
+                  "cn/guides/open-webui",
                   "cn/guides/output-viewer"
                 ]
               },
@@ -647,6 +648,7 @@
                   "hi/guides/hosted-mode",
                   "hi/guides/configuration",
                   "hi/guides/web-dashboard",
+                  "hi/guides/open-webui",
                   "hi/guides/output-viewer"
                 ]
               },
