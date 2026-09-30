@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 840 420" role="img" aria-labelledby="title desc">
+  <title id="title">Arka architecture</title>
+  <desc id="desc">Requests enter through CLI, MCP, or HTTP, hit the symbolic router first, then a skill dispatcher or LLM failover, and run as local skills.</desc>
+  <style>
+    .panel { fill: #ffffff; stroke: #e5e7eb; }
+    .ink { fill: #111827; }
+    .mute { fill: #6b7280; }
+    .chip { fill: #f3f4f6; stroke: #e5e7eb; }
+    .chip-ink { fill: #374151; }
+    .rail { fill: #6366F1; }
+    .arrow { fill: none; stroke: #9ca3af; stroke-width: 1.5; }
+    .head { fill: #9ca3af; }
+    .gold { fill: #C9A227; }
+    @media (prefers-color-scheme: dark) {
+      .panel { fill: #161b22; stroke: #30363d; }
+      .ink { fill: #e6edf3; }
+      .mute { fill: #8b949e; }
+      .chip { fill: #21262d; stroke: #30363d; }
+      .chip-ink { fill: #c9d1d9; }
+      .arrow { stroke: #484f58; }
+      .head { fill: #484f58; }
+    }
+  </style>
+
+  <text x="28" y="28" class="mute" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" letter-spacing="0.14em">CLIENTS</text>
+  <rect x="24" y="38" width="792" height="72" rx="14" class="panel"/>
+  <rect x="24" y="38" width="6" height="72" rx="3" class="rail"/>
+  <g font-family="ui-sans-serif, system-ui, -apple-system, sans-serif">
+    <rect x="48" y="56" width="88" height="36" rx="8" class="chip"/>
+    <text x="92" y="79" text-anchor="middle" class="chip-ink" font-size="13" font-weight="600">CLI</text>
+    <rect x="148" y="56" width="168" height="36" rx="8" class="chip"/>
+    <text x="232" y="79" text-anchor="middle" class="chip-ink" font-size="13" font-weight="600">MCP / Cursor / Claude</text>
+    <rect x="328" y="56" width="132" height="36" rx="8" class="chip"/>
+    <text x="394" y="79" text-anchor="middle" class="chip-ink" font-size="13" font-weight="600">REST :8765</text>
+    <text x="490" y="78" class="mute" font-size="12">same request path</text>
+  </g>
+
+  <path d="M420 110 v18" class="arrow"/>
+  <polygon points="420,134 415.5,126 424.5,126" class="head"/>
+
+  <text x="28" y="160" class="mute" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" letter-spacing="0.14em">ROUTE / ZERO TOKENS FIRST</text>
+  <rect x="24" y="170" width="792" height="68" rx="14" class="panel"/>
+  <rect x="24" y="170" width="6" height="68" rx="3" class="gold"/>
+  <text x="48" y="200" class="ink" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="16" font-weight="600">Symbolic router</text>
+  <text x="48" y="220" class="mute" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="13">120+ offline rules resolve most asks before any model is called</text>
+
+  <path d="M218 238 v18" class="arrow"/>
+  <polygon points="218,262 213.5,254 222.5,254" class="head"/>
+  <path d="M622 238 v18" class="arrow"/>
+  <polygon points="622,262 617.5,254 626.5,254" class="head"/>
+  <text x="168" y="254" text-anchor="end" class="mute" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="11">match</text>
+  <text x="672" y="254" class="mute" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="11">no match</text>
+
+  <text x="28" y="286" class="mute" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" letter-spacing="0.14em">DECIDE</text>
+  <rect x="24" y="296" width="388" height="56" rx="14" class="panel"/>
+  <rect x="24" y="296" width="6" height="56" rx="3" class="rail"/>
+  <text x="44" y="320" class="ink" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="14" font-weight="600">Skill dispatcher</text>
+  <text x="44" y="338" class="mute" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12">security gate / hosted-mode guard</text>
+
+  <rect x="428" y="296" width="388" height="56" rx="14" class="panel"/>
+  <rect x="428" y="296" width="6" height="56" rx="3" class="gold"/>
+  <text x="448" y="320" class="ink" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="14" font-weight="600">LLM failover</text>
+  <text x="448" y="338" class="mute" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12">Gemini - Groq - Ollama - OpenRouter</text>
+
+  <path d="M218 352 v12" class="arrow"/>
+  <path d="M622 352 v12" class="arrow"/>
+  <path d="M218 364 H622" class="arrow"/>
+  <path d="M420 364 v8" class="arrow"/>
+  <polygon points="420,378 416,370 424,370" class="head"/>
+
+  <rect x="24" y="382" width="792" height="28" rx="10" class="panel"/>
+  <text x="420" y="401" text-anchor="middle" class="ink" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="13" font-weight="600">70+ local skills / code / data / media / deploy / memory</text>
+</svg>
