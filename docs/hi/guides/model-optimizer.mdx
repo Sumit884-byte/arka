@@ -1,0 +1,15 @@
+---
+title: "Model optimizer"
+description: "Hardware और cost preferences के आधार पर local models चुनें।"
+icon: "gauge-high"
+---
+
+```bash
+arka model recommend
+arka model switch qwen2.5-coder:7b
+```
+
+Preferences को `ARKA_MODEL_MODE`, `ARKA_QUANT`,
+`ARKA_MAX_CONTEXT`, `ARKA_PREFERRED_SMALL_MODEL`, और
+`ARKA_PREFERRED_CODING_MODEL` से configure किया जाता है। Recommendations evidence-based और
+केवल preview होती हैं; backend downloads और provider changes स्पष्ट (explicit) ही रहते हैं।

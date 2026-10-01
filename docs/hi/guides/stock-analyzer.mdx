@@ -1,0 +1,14 @@
+---
+title: "Grounded market-data analysis"
+description: "कीमतें गढ़े बिना user द्वारा दिए गए OHLCV data का विश्लेषण करें।"
+icon: "chart-line"
+---
+
+```bash
+arka stock-analyze prices.csv
+arka stock-analyze prices.csv --json
+```
+
+Generalized analyzer user द्वारा दी गई CSV पढ़ता है, एक close/price
+column की पहचान करता है, एक descriptive return और trend की गणना करता है, और source की जानकारी देता है। यह
+market data fetch नहीं करता या गढ़ता नहीं है, और यह वित्तीय सलाह नहीं है।

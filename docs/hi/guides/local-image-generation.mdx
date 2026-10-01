@@ -1,0 +1,38 @@
+---
+title: "Local image generation"
+description: "एक local diffusion server के माध्यम से images generate करें।"
+icon: "image"
+---
+
+Arka एक locally hosted Stable Diffusion WebUI-compatible API का उपयोग कर सकता है:
+
+```bash
+# Start Stable Diffusion WebUI with --api, then:
+arka image generate "a cinematic moonlit observatory" \
+  --output observatory.png --steps 24
+```
+
+जब server `http://127.0.0.1:7860` पर न हो, तब `ARKA_SD_API_URL` set करें।
+Arka prompt और generation settings केवल local server को भेजता है; किसी
+cloud API key की आवश्यकता नहीं है। यदि endpoint उपलब्ध नहीं है, तो error में चुपचाप cloud पर
+fallback करने के बजाय सटीक local setup hint शामिल होता है।
+
+जब आप **local**, **offline**, या **stable diffusion** कहते हैं, तो natural language
+इसी path पर route होती है (cloud `generate_image` पर नहीं):
+
+```fish
+arka "generate image locally of a moonlit observatory"
+arka route "create picture with stable diffusion of a robot"
+# → image generate …
+```
+
+Automatic start/stop lifecycle के लिए, अपने local server को launch करने वाले
+command को configure करें:
+
+```bash
+export ARKA_SD_START_CMD="/path/to/webui.sh --api"
+arka image generate "a space observatory" --output observatory.png
+```
+
+Arka उस command को केवल तभी शुरू करता है जब endpoint down हो, उसके API के तैयार होने की
+प्रतीक्षा करता है, image generate करता है, और केवल उसी process को terminate करता है जिसे उसने शुरू किया था।

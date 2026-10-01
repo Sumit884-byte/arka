@@ -1,0 +1,15 @@
+---
+title: "Model training planner"
+description: "Hardware और dataset guardrails के साथ local fine-tuning की योजना बनाएँ।"
+icon: "brain"
+---
+
+```bash
+arka model train-plan plan "fine-tune a coding model on this repository"
+arka model train-plan plan "classify support tickets" --method qlora --backend mlx
+arka model train-plan validate-data ./dataset
+```
+
+Planner उपलब्ध hardware के आधार पर एक conservative method चुनता है, provenance-aware dataset splits
+की सिफ़ारिश करता है, और quantization या serving से पहले held-out benchmarking को अनिवार्य करता है।
+यह महँगी training को अपने-आप launch नहीं करता।

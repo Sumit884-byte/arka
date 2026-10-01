@@ -1,0 +1,15 @@
+---
+title: "3D rig lab"
+description: "Browser में character skeletons और animation clips का निरीक्षण करें।"
+icon: "cube"
+---
+
+```bash
+arka rig-3d "Robot rig" \
+  --model https://threejs.org/examples/models/gltf/RobotExpressive/RobotExpressive.glb \
+  --out robot-rig
+```
+
+Generated Three.js page model को load करता है, skinned meshes का पता लगाता है,
+skeleton helper दिखाता है, animation clips की सूची बनाता है, और पहला clip चलाता है। एक
+verified GLB/GLTF URL या local asset दें; Arka model URLs गढ़ता नहीं है।

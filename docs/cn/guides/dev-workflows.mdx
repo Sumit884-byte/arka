@@ -1,0 +1,13 @@
+---
+title: "开发者工作流分析器"
+description: "查找变更影响、测试缺口以及需要跟进的文档更新。"
+icon: "diagram-project"
+---
+
+```bash
+arka dev-workflow impact
+arka dev-workflow test-gaps
+arka dev-workflow docs-sync
+```
+
+这些命令会分析当前的 Git diff，而不会修改任何文件。它们也可以通过自然语言调用，例如“这个变更可能会破坏什么？”或“找出这个变更缺少的测试。”

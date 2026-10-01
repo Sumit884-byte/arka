@@ -1,0 +1,13 @@
+---
+title: "3D 绑定实验室"
+description: "在浏览器中检查角色骨骼和动画片段。"
+icon: "cube"
+---
+
+```bash
+arka rig-3d "Robot rig" \
+  --model https://threejs.org/examples/models/gltf/RobotExpressive/RobotExpressive.glb \
+  --out robot-rig
+```
+
+生成的 Three.js 页面会加载模型、检测蒙皮网格、显示骨骼辅助对象、列出动画片段并播放第一个片段。请提供经过验证的 GLB/GLTF URL 或本地素材；Arka 不会编造模型 URL。

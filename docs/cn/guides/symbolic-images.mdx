@@ -1,0 +1,16 @@
+---
+title: "符号化图像合成"
+description: "在确定性的可视化讲解图中复用 AI 生成的素材。"
+icon: "shapes"
+---
+
+当布局可复用、只有素材需要更换时，请使用 Arka 的本地合成器：
+
+```bash
+arka symbolic-image comparison \
+  --left ai-first.png --right data-first.png \
+  --left-title "AI FIRST" --right-title "DATA FIRST" \
+  --output comparison.png
+```
+
+它在本地使用 Pillow，因此不会消耗任何图像生成 token。符号化规则负责处理面板尺寸、标签、分隔线和一致的布局；AI 只需使用一次来创建底层插画，之后这些素材即可在众多讲解图中重复使用。
