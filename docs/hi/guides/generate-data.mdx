@@ -5,7 +5,7 @@ keywords: ["generate", "data", "csv", "json", "fake", "sample", "mock", "world b
 icon: "database"
 ---
 
-Terminal से sample datasets जनरेट करें — या APIs और public sources से **real-world** rows fetch करें। Tests, demos, prototypes, और त्वरित data pulls के लिए उपयोगी।
+Terminal से sample datasets जनरेट करें, या APIs और public sources से **real-world** rows fetch करें। Tests, demos, prototypes, और त्वरित data pulls के लिए उपयोगी।
 
 ## प्राकृतिक भाषा
 
@@ -49,7 +49,7 @@ arka generate data from https://pokeapi.co/api/v2/pokemon?limit=10 as jsonl
 | `url` | किसी भी URL से JSON array/object या CSV fetch करें | `--url`, `--count` |
 | `web` | DuckDuckGo search results rows के रूप में | `--query`, `--count` |
 
-Real sources **500 rows** पर cap होते हैं। जब `--source` set होता है, Arka कभी synthetic या LLM data पर fall back नहीं करता — fetch errors स्पष्ट रूप से रिपोर्ट होते हैं।
+Real sources **500 rows** पर cap होते हैं। जब `--source` set होता है, Arka कभी synthetic या LLM data पर fall back नहीं करता। Arka fetch errors स्पष्ट रूप से रिपोर्ट करता है।
 
 ### World Bank indicators
 

@@ -67,9 +67,9 @@ focus, arrow keys, WASD, action keys, boundary clicks, और animation settle
 waits आज़माती हैं; deep mode pause/reset और repeated-input stability की भी जाँच करता है।
 
 लंबे sessions के लिए, waits को manually जोड़ने के बजाय `--duration` / `--session-duration` का उपयोग करें।
-Responsiveness के लिए Arka अब भी हर individual wait को 10 seconds तक सीमित रखता है,
-लेकिन आंतरिक रूप से कई सुरक्षित wait chunks जोड़ता है और हर chunk के बाद frames capture करता है,
-ताकि लंबे समय तक चलने वाले animation bugs का निरीक्षण किया जा सके।
+Responsiveness के लिए Arka अब भी हर individual wait को 10 seconds तक सीमित रखता है।
+आंतरिक रूप से, यह कई सुरक्षित wait chunks जोड़ता है और हर chunk के बाद frames capture करता है,
+ताकि आप लंबे समय तक चलने वाले animation bugs का निरीक्षण कर सकें।
 
 जब visuals मायने रखते हों और Arka को तब तक check pass होने की बात नहीं कहनी चाहिए जब तक
 वह captured pixels का निरीक्षण न कर ले, तब `--verify` / `--verify-visuals` जोड़ें:
@@ -82,7 +82,7 @@ arka game check http://localhost:5173 --record --play-depth deep --duration 2m -
 Visual verification loaded/final frames के साथ हाल के gameplay frames का sample लेता है
 और उन पर `visual_diagnose` चलाता है। यदि visual diagnosis
 `needs_fix`, medium/high severity issues report करता है, या vision backend उपलब्ध नहीं है,
-तो game check का status `failed` हो जाता है और JSON में
+तो game check का status `failed` हो जाता है। फिर JSON में
 `visual_verification` शामिल होता है, जिसमें checked frames, issues, fixes, और verdict होते हैं।
 किसी game UI या animation के पूरा होने का दावा करने से पहले इसी mode का उपयोग करना चाहिए।
 

@@ -5,7 +5,7 @@ keywords: ["message sessions", "subagent", "gateway", "cross-platform", "channel
 icon: "sitemap"
 ---
 
-Arka **channel sessions** और **sub-agent delegation** प्रदान करता है — [Hermes Agent](https://github.com/NousResearch/hermes-agent) से प्रेरित patterns, कोई अलग product integration नहीं। ये प्रति-channel conversation निरंतरता, webhook session handoff, और isolated background sub-agents जोड़ते हैं।
+Arka **channel sessions** और **sub-agent delegation** प्रदान करता है: [Hermes Agent](https://github.com/NousResearch/hermes-agent) से प्रेरित patterns, कोई अलग product integration नहीं। ये प्रति-channel conversation निरंतरता, webhook session handoff, और isolated background sub-agents जोड़ते हैं।
 
 ## Features
 
@@ -78,7 +78,7 @@ External MCP clients `arka_sessions` action `silence_check` के साथ स
 
 Legacy `HERMES_SESSIONS*` variables aliases के रूप में समर्थित रहते हैं।
 
-Inbound turns sanitized होते हैं — injection patterns और unsafe content storage से पहले ब्लॉक किए जाते हैं।
+Arka inbound turns को sanitize करता है और injection patterns और unsafe content को storage से पहले ब्लॉक करता है।
 
 ## Sub-agent delegation
 
@@ -132,7 +132,7 @@ Report में सक्रिय sub-agent tasks, enabled routines, webhook s
 
 ## Skill manifest gates
 
-Plugin gates `metadata.openclaw`, `metadata.arka`, या `metadata.hermes` का उपयोग करते हैं — सभी उसी तरह merged। विवरण के लिए [OpenClaw से प्रेरित gates](/hi/guides/openclaw-features) देखें।
+Plugin gates `metadata.openclaw`, `metadata.arka`, या `metadata.hermes` का उपयोग करते हैं। Arka तीनों को उसी तरह merge करता है। विवरण के लिए [OpenClaw से प्रेरित gates](/hi/guides/openclaw-features) देखें।
 
 ## Heartbeat integration
 

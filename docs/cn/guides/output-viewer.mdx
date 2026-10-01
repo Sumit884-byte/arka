@@ -5,7 +5,7 @@ keywords: ["output", "viewer", "json", "csv", "markdown", "ui"]
 icon: "table"
 ---
 
-**Arka 输出查看器**是一个轻量级的本地 Web UI，会自动检测数据格式并选择最佳呈现方式 — 表格用于 CSV/JSON 数组、格式化 JSON、渲染后的 markdown、键值布局用于对象，当出现路径时还会显示媒体卡片。
+**Arka 输出查看器**是一个轻量级的本地 Web UI，会自动检测数据格式并选择最佳呈现方式。它会显示用于 CSV/JSON 数组的表格、格式化 JSON、渲染后的 markdown、用于对象的键值布局，以及出现路径时的媒体卡片。
 
 无需 React 构建步骤。仅一个 HTML 外壳加上主包中的一个小型 Python 服务器。
 
@@ -102,7 +102,7 @@ push_to_viewer('{"status":"ok"}', title="Deploy result")
 
 覆盖裁判模型：`arka ai-skill-model judge openrouter/openai/gpt-4o-mini`。
 
-计时（流式时的 TTFA，总延迟）会自动记录，并在启用追踪时导出到 OpenTelemetry（`arka.output.total_ms`、`arka.output.verify.overall` 等）。
+Arka 会自动记录计时（流式时的 TTFA，总延迟），并在启用追踪时将其导出到 OpenTelemetry（`arka.output.total_ms`、`arka.output.verify.overall` 等）。
 
 ## 相关内容
 

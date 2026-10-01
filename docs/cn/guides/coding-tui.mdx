@@ -65,12 +65,12 @@ arka coding-tui .
 `/test` 会确定性地运行与仓库匹配的测试命令（pytest、npm test、cargo test
 等，通过 repo health 检测）。可选路径可以限定运行范围，例如
 `/test tests/test_foo.py`。输出会标记为 **Test run (read-only)**。检测到
-失败时，Arka 会打印失败数量并运行 **Fix pass i/N** — 最多 `--max-fixes`
-次可写目标智能体修复（默认 **1**） — 然后以只读方式重跑测试以显示结果。
+失败时，Arka 会打印失败数量并运行 **Fix pass i/N**：最多 `--max-fixes`
+次可写目标智能体修复（默认 **1**）。随后以只读方式重跑测试以显示结果。
 使用 `/test --no-fix` 可跳过自动修复尝试。
 
-`/run tests` 让只读目标智能体选择策略 — 完整 pytest、聚焦某模块、
-`arka ci --changed`，或 repo_health 检测到的运行器 — 只读失败后同样带一次
+`/run tests` 让只读目标智能体选择策略：完整 pytest、聚焦某模块、
+`arka ci --changed`，或 repo_health 检测到的运行器。只读失败后同样带一次
 自动修复。加上 `--no-fix` 可禁用自动修复，或加 `--fix` 允许智能体从一开始
 就编辑文件（用于自动修复失败后显式再做一轮修复，或多轮修复）。
 

@@ -14,7 +14,7 @@ arka model setup openai-compatible --url https://api.example.com/v1 --model my-m
 arka model doctor
 ```
 
-setup 命令通过 Arka 受保护的 `.env` 处理写入模型偏好与端点配置。它不会下载权重或存储 API 密钥；命令会打印启动命令与提供商相关的后续步骤。使用 `arka integration setup <provider>` 配置 API 密钥，然后通过 `arka model doctor` 检查运行时是否就绪。可用 `arka hybrid status` 与 `arka hybrid run --policy parallel` 将本地模型与托管模型结合使用。
+setup 命令通过 Arka 受保护的 `.env` 处理写入模型偏好与端点配置。它不会下载权重或存储 API 密钥；它会打印启动命令与提供商相关的后续步骤。使用 `arka integration setup <provider>` 配置 API 密钥，然后通过 `arka model doctor` 检查运行时是否就绪。使用 `arka hybrid status` 与 `arka hybrid run --policy parallel` 组合本地模型与托管模型。
 
 对于 LAN 推理集群，可将 Exo 配置为本地的 OpenAI 兼容主机：
 
@@ -26,4 +26,4 @@ arka hybrid run --policy local-only "summarize this code"
 
 Exo 可以汇聚 Mac、Linux 工作站以及其他受信任的机器。请将其端点保留在私有网络内；Arka 将其归类为本地，并在 `local-only` 策略下永远不会将请求转发到托管兜底。
 
-模型顾问还会标注 Apple Silicon/MLX 机会、MoE 模型提示以及推测/MTP 解码提示。这些只是证据标签，并非保证：部署前应核实运行时支持情况以及活跃参数元数据。
+模型顾问还会标注 Apple Silicon/MLX 机会、MoE 模型提示以及推测/MTP 解码提示。这些只是证据标签，并非保证：部署前请核实运行时支持情况以及活跃参数元数据。

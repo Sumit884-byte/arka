@@ -22,9 +22,9 @@ attribution जांचें, और project के scale और performance c
 नई geometry केवल तभी generate करें जब कोई उपयुक्त asset मौजूद न हो या originality का अनुरोध किया गया हो।
 
 Search workflow `baryhuang/mcp-threejs` से प्रेरित native Arka logic है:
-Arka request को एक compact asset query में converts करता है, Sketchfab/MCP
-style results को एक candidate shape में normalize करता है, downloadable GLB/GLTF assets
-को पहले rank करता है, और license/attribution/format metadata report करता है। यदि कोई provider
+Arka request को एक compact asset query में convert करता है और Sketchfab/MCP
+style results को एक candidate shape में normalize करता है। फिर यह downloadable GLB/GLTF assets
+को पहले rank करता है और license/attribution/format metadata report करता है। यदि कोई provider
 configured नहीं है, तो Arka zero candidates return करता है और agent को model
 URLs invent न करने के लिए कहता है।
 
@@ -32,7 +32,7 @@ Satellites जैसी recognizable objects के लिए, material और t
 GLTF/GLB model को प्राथमिकता दें। जब उपयुक्त Three.js asset उपलब्ध हो तो इसे simple
 boxes, spheres, या cylinders से replace न करें।
 Arka पहले एक symbolic reality check apply करता है, फिर model को एक compact
-verification instruction देता है; अनिश्चित objects को एक trusted catalog या
+verification instruction देता है। अनिश्चित objects को एक trusted catalog या
 user-provided URL की आवश्यकता होती है, न कि hallucinated asset URL की।
 
 ## Quick start
@@ -174,7 +174,7 @@ arka compose_3d "desk organizer with phone slot"
 arka compose_3d "desk organizer" --backend llm   # force LLM OBJ path
 ```
 
-`.env` में एक LLM आवश्यक है (chat/compose_slides के समान stack)। Quality Tripo/HF से कम है — जब possible हो `--backend auto` का उपयोग करें।
+`.env` में एक LLM आवश्यक है (chat/compose_slides के समान stack)। Quality Tripo/HF से कम है। जब possible हो `--backend auto` का उपयोग करें।
 
 ## अपना model खोलें
 

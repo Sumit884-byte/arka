@@ -50,7 +50,7 @@ arka game check http://localhost:5173 --play-depth deep --duration 2m --record -
 
 JSON 响应包含 `play_strategy`，其中列出所选深度、原因以及覆盖的边界情况。standard/deep 策略会尝试菜单/开始控件、canvas 聚焦、方向键、WASD、动作键、边界点击以及动画稳定等待；deep 模式还会探测暂停/重置以及重复输入的稳定性。
 
-对于较长的会话，请使用 `--duration` / `--session-duration`，而不是手动串联等待。为保证响应性，Arka 仍会将每次单独等待限制在 10 秒以内，但会在内部组合多个安全的等待片段，并在每个片段后捕获帧，以便检查长时间运行的动画问题。
+对于较长的会话，请使用 `--duration` / `--session-duration`，而不是手动串联等待。为保证响应性，Arka 仍会将每次单独等待限制在 10 秒以内。在内部，它会组合多个安全的等待片段，并在每个片段后捕获帧，以便你检查长时间运行的动画问题。
 
 当视觉效果很重要、且 Arka 在检查完所捕获的像素之前不应宣布检查通过时，请添加 `--verify` / `--verify-visuals`：
 
@@ -59,7 +59,7 @@ arka game check http://localhost:5173 --verify --json
 arka game check http://localhost:5173 --record --play-depth deep --duration 2m --verify --json
 ```
 
-视觉验证会对加载帧/最终帧以及最近的游戏帧进行采样，并对它们运行 `visual_diagnose`。如果视觉诊断报告 `needs_fix`、中/高严重性问题，或视觉后端不可用，游戏检查状态将变为 `failed`，JSON 中会包含 `visual_verification`，列出已检查的帧、问题、修复建议和结论。在宣称游戏 UI 或动画已完成之前，应使用此模式。
+视觉验证会对加载帧/最终帧以及最近的游戏帧进行采样，并对它们运行 `visual_diagnose`。如果视觉诊断报告 `needs_fix`、中/高严重性问题，或视觉后端不可用，游戏检查状态将变为 `failed`。随后 JSON 中会包含 `visual_verification`，列出已检查的帧、问题、修复建议和结论。在宣称游戏 UI 或动画已完成之前，应使用此模式。
 
 该检查会确认页面已加载、包含 canvas、发送键盘操作、捕获截图，并报告页面/控制台错误。它永远不会打开桌面窗口。使用 `--actions '[{"type":"key","key":"ArrowRight"},{"type":"wait","ms":500}]'`
 可以提供自定义的只读游玩序列。

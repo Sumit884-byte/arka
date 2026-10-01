@@ -66,6 +66,6 @@ arka hybrid run --local-only "draft a migration plan"
 arka hybrid config local-only
 ```
 
-`local-only` 会在推理之前过滤候选链，因此不会把托管提供商用作回退。如果
+`local-only` 会在推理之前过滤候选链，因此 Arka 不会把托管提供商用作回退。如果
 没有配置任何可达的 Ollama、vLLM 或 LM Studio 模型，Arka 会返回错误，而
 不是把提示词发送到云端。

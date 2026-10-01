@@ -67,14 +67,14 @@ execute करने के लिए, या बिना पहले plan क
 test, cargo test, आदि — repo health से detect होता है)। Optional path run को
 scope करता है, जैसे `/test tests/test_foo.py`। Output **Test run (read-only)**
 के रूप में लेबल होता है। जब failures detected होते हैं, Arka print करता है कि
-कितने fail हुए और **Fix pass i/N** चलाता है — `--max-fixes` तक writable
-goal-agent passes (default **1**) — फिर परिणाम दिखाने के लिए tests को read-only
+कितने fail हुए और **Fix pass i/N** चलाता है: `--max-fixes` तक writable
+goal-agent passes (default **1**)। फिर यह परिणाम दिखाने के लिए tests को read-only
 में फिर से चलाता है। automatic repair को skip करने के लिए `/test --no-fix` का
 उपयोग करें।
 
-`/run tests` readonly goal agent को strategy चुनने देता है — पूरा pytest, एक
-focused module, `arka ci --changed`, या repo_health-detected runner — readonly
-failures के बाद उसी एक auto-fix pass के साथ। auto-repair बंद करने के लिए
+`/run tests` readonly goal agent को strategy चुनने देता है: पूरा pytest, एक
+focused module, `arka ci --changed`, या repo_health-detected runner। readonly
+failures के बाद यह उसी एक auto-fix pass को लागू करता है। auto-repair बंद करने के लिए
 `--no-fix` जोड़ें, या agent को शुरुआत से files edit करने की अनुमति देने के लिए
 `--fix` (fail हुए auto-fix के बाद एक और स्पष्ट fix round के लिए, या multi-pass
 repair के लिए)।

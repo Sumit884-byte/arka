@@ -9,7 +9,7 @@ boost: 1.5
 Arka एक **टर्मिनल coding copilot** है। आप सादी अंग्रेज़ी में बताते हैं कि क्या चाहिए; Arka सही skill पर request route करता है, स्थानीय रूप से चलाता है, और जोखिम भरे writes को आपके project तक सीमित रखता है। CLI को **agent mode**, **Cursor में MCP tools**, और **repo health gates** के साथ मिलाकर टर्मिनल से बाहर निकले बिना पूरा coding loop चलाएँ।
 
 <Note>
-  **सारांश:** `arka code init .` से repo initialize करें, skill execution के लिए security gates के साथ agent mode चालू रखें, Cursor के अंदर Arka को expose करने के लिए [MCP](/hi/guides/mcp) उपयोग करें, और merges से पहले [repo health](/hi/guides/repo-health) चलाएँ। Arka आपके editor का पूरक है — तेज़ asks, reviews, और CI के लिए टर्मिनल; MCP पर जुड़ने पर inline diffs के लिए Cursor।
+  **सारांश:** `arka code init .` से repo initialize करें और skill execution के लिए security gates के साथ agent mode चालू रखें। Cursor के अंदर Arka को expose करने के लिए [MCP](/hi/guides/mcp) उपयोग करें, और merges से पहले [repo health](/hi/guides/repo-health) चलाएँ। Arka आपके editor का पूरक है: तेज़ asks, reviews, और CI के लिए टर्मिनल; MCP पर जुड़ने पर inline diffs के लिए Cursor।
 </Note>
 
 <Tip>
@@ -26,7 +26,7 @@ Coding करते समय तीन हिस्से साथ काम �
 | **Agent mode** | Security gates के साथ पूरा skill execution (default)। `arka mode agent` से switch करें। |
 | **MCP** | Cursor और अन्य agents को Arka skills दिखाएँ, या CLI से external MCP servers को call करें। देखें [MCP integration](/hi/guides/mcp)। |
 
-Arka आपके editor का विकल्प नहीं है — यह उसका पूरक है। तेज़ asks, reviews, CI, और autonomous edits के लिए टर्मिनल का उपयोग करें; जब Arka MCP पर जुड़ा हो तो inline diffs के लिए Cursor का उपयोग करें।
+Arka आपके editor का विकल्प नहीं है। यह उसका पूरक है। तेज़ asks, reviews, CI, और autonomous edits के लिए टर्मिनल का उपयोग करें; जब Arka MCP पर जुड़ा हो तो inline diffs के लिए Cursor का उपयोग करें।
 
 ## Coding के लिए setup
 
@@ -64,7 +64,7 @@ Arka आपके editor का विकल्प नहीं है — य�
   </Step>
 
   <Step title="वैकल्पिक: fish shell">
-    Fish पूरे 70+ skill router और प्राकृतिक-भाषा aliases (`agent "…"`, `pr_check babysit`, आदि) को अनलॉक करता है। bash/zsh से, स्पष्ट `arka` subcommands का उपयोग करें — वे उसी तरह काम करते हैं।
+    Fish पूरे 70+ skill router और प्राकृतिक-भाषा aliases (`agent "…"`, `pr_check babysit`, आदि) को अनलॉक करता है। bash/zsh से, स्पष्ट `arka` subcommands का उपयोग करें। वे उसी तरह काम करते हैं।
 
     ```bash
     brew install fish   # macOS
@@ -85,7 +85,7 @@ Arka आपके editor का विकल्प नहीं है — य�
 
 ## रोज़ का workflow
 
-प्राकृतिक भाषा या स्पष्ट commands उपयोग करें — Arka दोनों को route करता है।
+प्राकृतिक भाषा या स्पष्ट commands उपयोग करें। Arka दोनों को route करता है।
 
 ### पूछें और समझें
 
