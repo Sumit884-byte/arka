@@ -9,6 +9,6 @@ arka quantize model-f16.gguf --output model-q4.gguf --type Q4_K_M
 arka quantize model-f16.gguf --output model-q4.gguf --type Q4_K_M --run
 ```
 
-The first command previews the `llama-quantize` command. `--run` is required to
-execute it, and the output directory is created automatically. Install a
+The first command previews the `llama-quantize` command. Add `--run` to
+execute it; Arka creates the output directory automatically. Install a
 llama.cpp build exposing `llama-quantize` before running conversions.

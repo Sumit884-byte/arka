@@ -195,7 +195,7 @@ arka mcp call arka arka_agent_hub --args '{"action":"import_memory","all":true}'
 | `agent:claude` | Claude Code | session `MEMORY.md`, Claude project files |
 | `agent:codex` | Codex CLI / App | `~/.codex/AGENTS.md` |
 
-Only files that exist locally are returned by `memory_sources`. Empty files are skipped with an error in the import result.
+`memory_sources` returns only files that exist locally. Empty files are skipped with an error in the import result.
 
 ### Formats
 

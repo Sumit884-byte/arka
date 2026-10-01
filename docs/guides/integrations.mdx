@@ -67,6 +67,6 @@ arka hybrid run --local-only "draft a migration plan"
 arka hybrid config local-only
 ```
 
-`local-only` filters the candidate chain before inference, so hosted providers
-are not used as fallbacks. If no reachable Ollama, vLLM, or LM Studio model is
+`local-only` filters the candidate chain before inference, so Arka does not
+use hosted providers as fallbacks. If no reachable Ollama, vLLM, or LM Studio model is
 configured, Arka returns an error instead of sending the prompt to the cloud.

@@ -5,10 +5,10 @@ keywords: ["comparison", "openclaw", "claude code", "cursor", "aider", "gemini c
 icon: "scale-balanced"
 ---
 
-This page compares **Arka** to other terminal and IDE agents honestly. Arka is not a drop-in replacement for every tool — it is a **local-first terminal agent** with symbolic routing, 70+ built-in skills, MCP server/client support, and OpenTelemetry observability. Use this guide to decide when Arka is the right layer and when another agent should lead.
+This page compares **Arka** to other terminal and IDE agents honestly. Arka is not a drop-in replacement for every tool. It is a **local-first terminal agent** with symbolic routing, 70+ built-in skills, MCP server/client support, and OpenTelemetry observability. Use this guide to decide when Arka is the right layer and when another agent should lead.
 
 <Note>
-  **What Arka is:** A cross-platform CLI (`pipx install "arka-agent[chat]"`) that maps plain English to local skills via offline symbolic rules (120+ patterns) before falling back to LLM routing. Skills run on your machine; LLM calls failover across 24+ providers. Arka also exposes ~80 MCP tools so Cursor, Claude Desktop, and other MCP clients can call Arka as a **tool server** — see [AI agent guide](/guides/ai-agents).
+  **What Arka is:** A cross-platform CLI (`pipx install "arka-agent[chat]"`) that maps plain English to local skills via offline symbolic rules (120+ patterns) before falling back to LLM routing. Skills run on your machine; LLM calls failover across 24+ providers. Arka also exposes ~80 MCP tools so Cursor, Claude Desktop, and other MCP clients can call Arka as a **tool server**. See [AI agent guide](/guides/ai-agents).
 </Note>
 
 ## Comparison at a glance
@@ -27,7 +27,7 @@ This page compares **Arka** to other terminal and IDE agents honestly. Arka is n
 | **Platform support** | macOS, Linux, Windows | Desktop IDE | macOS, Linux | macOS, Linux | Cross-platform (Node) | Cross-platform | Cross-platform | Cross-platform | Cross-platform |
 | **Account required** | No (API keys optional) | Cursor account | Anthropic account | Varies | Google account / API key | Provider API keys | Optional cloud | GitHub account | Varies |
 
-Rows are qualitative — exact feature parity changes quickly as upstream projects ship updates. Treat this table as architecture-level, not a scorecard.
+Rows are qualitative: exact feature parity changes quickly as upstream projects ship updates. Treat this table as architecture-level, not a scorecard.
 
 ## Where Arka wins
 
@@ -44,7 +44,7 @@ ROUTE_MODE=symbolic_only pytest tests/test_nl_routing_coverage.py -v
 
 ### Skill breadth beyond coding
 
-Arka ships local skills for stocks, PDF RAG, deploy, voice, compose-video, Kalshi, repo health, and dozens more — not only file edit and shell. IDE agents excel at code but rarely bundle finance, media, and infra workflows in one terminal entry point.
+Arka ships local skills for stocks, PDF RAG, deploy, voice, compose-video, Kalshi, repo health, and dozens more, not only file edit and shell. IDE agents excel at code but rarely bundle finance, media, and infra workflows in one terminal entry point.
 
 Browse the [Skills catalog](/guides/skills).
 
@@ -80,13 +80,13 @@ Cursor and Claude Code sit inside the editor: inline diffs, LSP awareness, tab c
 
 ### Hosted convenience and enterprise (Copilot CLI, Gemini CLI)
 
-GitHub Copilot CLI integrates org SSO, policy, and repository context through GitHub's cloud. Gemini CLI bundles Google's OAuth, extensions, and MCP hooks under one vendor. Arka is self-managed — you bring keys, config, and optional SigNoz.
+GitHub Copilot CLI integrates org SSO, policy, and repository context through GitHub's cloud. Gemini CLI bundles Google's OAuth, extensions, and MCP hooks under one vendor. Arka is self-managed: you bring keys, config, and optional SigNoz.
 
 **Pick Copilot CLI** for GitHub-native enterprise workflows. **Pick Gemini CLI** when you want Google's extension ecosystem and are already on Gemini.
 
 ### Dedicated agent products (OpenClaw)
 
-[OpenClaw](https://github.com/openclaw/openclaw) is its own agent runtime with a plugin manifest ecosystem. Arka adopts OpenClaw-*inspired* session memory and skill gates ([OpenClaw-inspired features](/guides/openclaw-features)) and can **unify** MCP/memory via Agent Hub — but Arka is not a fork of OpenClaw.
+[OpenClaw](https://github.com/openclaw/openclaw) is its own agent runtime with a plugin manifest ecosystem. Arka adopts OpenClaw-*inspired* session memory and skill gates ([OpenClaw-inspired features](/guides/openclaw-features)) and can **unify** MCP/memory via Agent Hub. However, Arka is not a fork of OpenClaw.
 
 **Pick OpenClaw** if you want the upstream OpenClaw product and plugin catalog as the primary agent. **Pick Arka** if you want symbolic routing, broader built-in skills, and a hub that also serves Claude Code and Cursor.
 
@@ -113,7 +113,7 @@ If you only need one MCP server (e.g. filesystem + git) and your IDE agent alrea
 | MCP tool server other agents call | Cursor as the primary coding surface |
 | Offline symbolic routing to cut routing token cost | Rely on Cursor's built-in agent routing |
 
-**Together:** Connect Cursor to Arka over [MCP](/guides/mcp) — Cursor handles editing; Arka handles specialized skills, repo health, CI, and routing catalog you do not want to reimplement.
+**Together:** Connect Cursor to Arka over [MCP](/guides/mcp). Cursor handles editing; Arka handles specialized skills, repo health, CI, and routing catalog you do not want to reimplement.
 
 ### Arka vs Claude Code
 
@@ -143,7 +143,7 @@ Arka implements OpenClaw-compatible skill manifest gates — plugins can declare
 | Offline skills (calc, weather, local tools) | Google OAuth and Gemini model features |
 | Already using Arka's 24-provider chain | One-shot `gemini` passthrough: `arka gemini` wraps the official CLI |
 
-See [Gemini CLI integration](/guides/gemini-cli) — Arka can invoke Gemini CLI without replacing either tool.
+See [Gemini CLI integration](/guides/gemini-cli). Arka can invoke Gemini CLI without replacing either tool.
 
 ### Arka vs Aider
 
@@ -180,7 +180,7 @@ Arka's [repo map](/guides/repo-map) skill is inspired by Aider-style repo awaren
 
 ## Benchmarks (planned and available today)
 
-Marketing comparisons are weak without measured routing accuracy, model cost, and end-to-end task completion. Arka's [SigNoz integration](/guides/observability) defines three benchmark suites — observability and benchmarks share the same OTel spans.
+Marketing comparisons are weak without measured routing accuracy, model cost, and end-to-end task completion. Arka's [SigNoz integration](/guides/observability) defines three benchmark suites. Observability and benchmarks share the same OTel spans.
 
 | Suite | Measures | Status |
 | --- | --- | --- |

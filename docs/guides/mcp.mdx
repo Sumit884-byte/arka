@@ -118,8 +118,8 @@ arka mcp logs --event server.tools_call
 ```
 
 Logs are JSONL and store sanitized client/server events: timestamp, component,
-method/tool, status, duration, and a short error snippet. Secrets, tokens, and
-authorization-like fields are redacted. By default the file lives under Arka's
+method/tool, status, duration, and a short error snippet. Arka redacts secrets, tokens, and
+authorization-like fields. By default the file lives under Arka's
 config directory at `logs/mcp.jsonl`; set `ARKA_MCP_LOG_PATH` to override it for
 tests or hosted deployments.
 
@@ -315,7 +315,7 @@ In the IDE, explicitly say “use the Arka MCP tools” when needed. Treat
 `arka_route` as the umbrella Arka MCP tool: pass the user's full natural-language
 request to it when you are not certain which narrower Arka tool should run.
 Useful first checks are `arka_heartbeat`, `arka_repo_map`, and `arka_skill`.
-Existing MCP servers are preserved when using `arka agent_hub sync --unify`; use
+`arka agent_hub sync --unify` preserves existing MCP servers; use
 `arka agent_hub adapters` to preview which client files will be updated.
 
 ### Quick start
