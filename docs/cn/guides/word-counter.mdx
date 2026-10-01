@@ -1,0 +1,13 @@
+---
+title: "字数统计"
+description: "在本地统计文本数据，无需将内容发送给 LLM。"
+icon: "font"
+---
+
+```bash
+arka word-counter --file README.md --json
+arka word-counter --text "Paste text here"
+cat draft.md | arka word-counter --stdin --json
+```
+
+该技能会报告单词数、唯一单词数、字符数、不含空格的字符数、行数、句子数，以及按每分钟 200 个单词估算的阅读时间。它会先统计句子边界，并在报告精确单词数之前给出一个透明的粗略估算（每句 15 个单词，即 `sentence_word_estimate`）；这对于快速检查草稿是否处于预期范围内非常有用。

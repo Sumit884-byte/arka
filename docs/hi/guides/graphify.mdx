@@ -1,0 +1,14 @@
+---
+title: "Graphify repository integration"
+description: "Repository dependencies और service relationships को graphs के रूप में export करें।"
+icon: "share-nodes"
+---
+
+```bash
+arka graphify . --format mermaid --output repo.mmd
+arka graphify . --format dot --output repo.dot --render svg
+arka graphify . --format json --output repo.json
+```
+
+Graphify, Arka के मौजूदा repository graph का उपयोग करता है, इसलिए यह local और
+read-only रहता है। DOT rendering के लिए Graphviz (`dot`) का installed होना आवश्यक है।

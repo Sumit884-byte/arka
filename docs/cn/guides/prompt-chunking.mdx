@@ -1,0 +1,16 @@
+---
+title: "提示词分块"
+description: "将超大提示词拆分为有界的 LLM 分块，并安全地综合输出结果。"
+keywords: ["prompt chunking", "long context", "llm", "synthesis"]
+icon: "scissors"
+---
+
+Arka 通常对每个提示词发送一次请求。对于超大输入，可以显式启用分块：
+
+```bash
+ARKA_PROMPT_CHUNKING=1 ARKA_PROMPT_CHUNK_SIZE=12000 arka ask "..."
+```
+
+每个分块独立处理，带标记的结果会被发送到一个最终的综合请求中。综合过程会去除重复内容，并被指示不得编造事实。路由、安全检查和审计元数据仍使用原始提示词。分块默认关闭，可通过向 Python `llm_complete` API 传入 `chunked=True` 按调用启用。
+
+对于受限的上下文窗口，请使用较小的分块大小；无效的大小会回退为 12,000 个字符。

@@ -1,0 +1,20 @@
+---
+title: "Symbolic image composition"
+description: "AI-generated assets को deterministic visual explainers में दोबारा उपयोग करें।"
+icon: "shapes"
+---
+
+जब layout दोबारा उपयोग करने योग्य हो और केवल assets को बदलने की
+ज़रूरत हो, तब Arka के local compositor का उपयोग करें:
+
+```bash
+arka symbolic-image comparison \
+  --left ai-first.png --right data-first.png \
+  --left-title "AI FIRST" --right-title "DATA FIRST" \
+  --output comparison.png
+```
+
+यह locally Pillow का उपयोग करता है, इसलिए यह शून्य image-generation tokens खर्च करता है। Symbolic
+rules panel sizing, labels, dividers, और consistent layout को संभालते हैं; AI का उपयोग
+एक बार underlying illustrations बनाने के लिए किया जा सकता है और फिर उन assets को
+कई explainers में दोबारा उपयोग किया जा सकता है।

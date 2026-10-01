@@ -1,0 +1,69 @@
+---
+title: "Game Studio"
+description: "通过 Arka 生成精致、可玩的浏览器游戏起始项目。"
+icon: "gamepad"
+---
+
+Arka 内置了一个无依赖的游戏起始模板，可在添加框架或素材之前快速制作出美观的游戏原型：
+
+```bash
+arka game create "Solar Drift" --out solar-drift
+```
+
+生成的文件夹包含一个无障碍的 HTML 外壳、响应式视觉样式，以及一个小型 canvas 游戏循环，具备键盘控制、计分、发光效果和响应式尺寸调整。它刻意保持本地化，可放心编辑。在浏览器中打开 `index.html`，或使用任意静态服务器托管该文件夹，然后让 Arka 扩展游戏机制、美术、音效或 Three.js 场景。
+
+自然语言同样适用：“create an awesome browser game called Solar Drift.”现有的 `arka play battle`、国际象棋和锦标赛命令仍可用于模拟和模型基准测试。
+
+## 验证运行中的游戏
+
+当本地开发服务器正在运行时，Arka 可以在无头浏览器中执行一段简短的确定性冒烟测试序列：
+
+```bash
+arka game check http://localhost:5173 --output recordings/game-check --json
+```
+
+添加 `--record` 可捕获菜单切换和游戏过程的 Playwright WebM 录像：
+
+```bash
+arka game check http://localhost:5173 --record --output recordings/game-check --json
+arka "record gameplay video at http://localhost:5173"
+arka "check my game at http://localhost:5173 and verify visuals before saying done"
+```
+
+录制默认处于禁用状态。JSON 响应中除了帧截图外还包含 `video` 路径，以便审查动画时序和游戏行为，或将其传递给 Arka 的视觉修复请求。
+
+启用录制后，Arka 会在页面加载或点击任何控件之前创建带录制功能的 Playwright 浏览器上下文。它会先保存 `frame-000-loaded.png`，然后在菜单点击和键盘/鼠标操作之后捕获帧，最后关闭页面/上下文以完成 WebM 文件。
+
+Arka 会自动规划游玩的程度。在 `--play-depth auto` 模式下，它会选择：
+
+- `smoke`：用于简单的演示/原型
+- `standard`：用于普通的 canvas 游戏
+- `deep`：用于赛车、物理、对战、关卡、WebGL 或重度 3D 游戏
+
+需要时可手动覆盖：
+
+```bash
+arka game check http://localhost:5173 --play-depth smoke --json
+arka game check http://localhost:5173 --play-depth deep --max-actions 20 --record --json
+arka game check http://localhost:5173 --play-depth deep --duration 2m --record --json
+```
+
+JSON 响应包含 `play_strategy`，其中列出所选深度、原因以及覆盖的边界情况。standard/deep 策略会尝试菜单/开始控件、canvas 聚焦、方向键、WASD、动作键、边界点击以及动画稳定等待；deep 模式还会探测暂停/重置以及重复输入的稳定性。
+
+对于较长的会话，请使用 `--duration` / `--session-duration`，而不是手动串联等待。为保证响应性，Arka 仍会将每次单独等待限制在 10 秒以内，但会在内部组合多个安全的等待片段，并在每个片段后捕获帧，以便检查长时间运行的动画问题。
+
+当视觉效果很重要、且 Arka 在检查完所捕获的像素之前不应宣布检查通过时，请添加 `--verify` / `--verify-visuals`：
+
+```bash
+arka game check http://localhost:5173 --verify --json
+arka game check http://localhost:5173 --record --play-depth deep --duration 2m --verify --json
+```
+
+视觉验证会对加载帧/最终帧以及最近的游戏帧进行采样，并对它们运行 `visual_diagnose`。如果视觉诊断报告 `needs_fix`、中/高严重性问题，或视觉后端不可用，游戏检查状态将变为 `failed`，JSON 中会包含 `visual_verification`，列出已检查的帧、问题、修复建议和结论。在宣称游戏 UI 或动画已完成之前，应使用此模式。
+
+该检查会确认页面已加载、包含 canvas、发送键盘操作、捕获截图，并报告页面/控制台错误。它永远不会打开桌面窗口。使用 `--actions '[{"type":"key","key":"ArrowRight"},{"type":"wait","ms":500}]'`
+可以提供自定义的只读游玩序列。
+
+每个操作都会生成一个编号帧，外加一个最终帧。JSON 响应包含 `screenshots`、`visual_errors`、`errors` 以及一个可直接使用的 `fix_prompt`，因此你可以让 Arka 审查捕获的帧，并只修正它观察到的视觉问题。如果未指定 `--output`，帧会保存在临时目录中，审查完成后即可丢弃。
+
+在未提供 `--actions` 参数时，Arka 会先点击一个标签看起来像 Play、Start、Begin、Launch 或 Continue 的可见按钮或链接，然后聚焦 canvas 并发送移动按键。结果会报告 `clicked_controls` 和 `gameplay_started`，有助于区分仅捕获菜单的情况和真正进入游戏的情况。

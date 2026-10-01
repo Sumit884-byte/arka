@@ -1,0 +1,103 @@
+---
+title: "Game Studio"
+description: "Arka से polished, खेलने योग्य browser-game starters generate करें।"
+icon: "gamepad"
+---
+
+Arka में एक dependency-free game starter शामिल है, जिससे framework या assets जोड़ने से पहले
+आकर्षक games का जल्दी prototype बनाया जा सकता है:
+
+```bash
+arka game create "Solar Drift" --out solar-drift
+```
+
+Generated folder में एक accessible HTML shell, responsive visual
+styling, और keyboard controls, score tracking, glow effects, और responsive resizing के साथ
+एक छोटा canvas game loop होता है। यह जानबूझकर local है और edit करने के लिए सुरक्षित है।
+`index.html` को browser में खोलें या folder को किसी भी static
+server से serve करें, फिर Arka से mechanics, art, sound, या Three.js scene को बढ़ाने के लिए कहें।
+
+Natural language भी काम करती है: “create an awesome browser game called Solar
+Drift.” मौजूदा `arka play battle`, chess, और tournament commands simulation और model benchmarking
+के लिए उपलब्ध बने रहते हैं।
+
+## चल रहे game को verify करें
+
+जब कोई local dev server चल रहा हो, तो Arka एक headless browser में एक छोटा deterministic smoke
+sequence खेल सकता है:
+
+```bash
+arka game check http://localhost:5173 --output recordings/game-check --json
+```
+
+Menu transition और gameplay की Playwright WebM recording capture करने के लिए `--record` जोड़ें:
+
+```bash
+arka game check http://localhost:5173 --record --output recordings/game-check --json
+arka "record gameplay video at http://localhost:5173"
+arka "check my game at http://localhost:5173 and verify visuals before saying done"
+```
+
+Recording default रूप से disabled रहती है। JSON response में frame screenshots के साथ `video` path
+भी शामिल होता है, ताकि animation timing और gameplay behavior की समीक्षा की जा सके
+या उन्हें किसी Arka visual-fix request को सौंपा जा सके।
+
+जब recording enabled होती है, तो Arka page load होने या किसी भी control पर click होने से पहले
+recording के साथ Playwright browser context बनाता है। यह पहले
+`frame-000-loaded.png` save करता है, फिर menu clicks और
+keyboard/mouse actions के बाद frames capture करता है, और फिर WebM file को finalize करने के लिए page/context बंद करता है।
+
+Arka अपने-आप योजना बनाता है कि कितना खेलना है। `--play-depth auto` mode में यह चुनता है:
+
+- सरल demos/prototypes के लिए `smoke`
+- सामान्य canvas games के लिए `standard`
+- racing, physics, battle, level, WebGL, या 3D-heavy games के लिए `deep`
+
+ज़रूरत होने पर इसे override करें:
+
+```bash
+arka game check http://localhost:5173 --play-depth smoke --json
+arka game check http://localhost:5173 --play-depth deep --max-actions 20 --record --json
+arka game check http://localhost:5173 --play-depth deep --duration 2m --record --json
+```
+
+JSON response में `play_strategy` शामिल होता है, जिसमें चुनी गई depth, कारण, और
+cover किए गए edge cases होते हैं। Standard/deep strategies menu/start controls, canvas
+focus, arrow keys, WASD, action keys, boundary clicks, और animation settle
+waits आज़माती हैं; deep mode pause/reset और repeated-input stability की भी जाँच करता है।
+
+लंबे sessions के लिए, waits को manually जोड़ने के बजाय `--duration` / `--session-duration` का उपयोग करें।
+Responsiveness के लिए Arka अब भी हर individual wait को 10 seconds तक सीमित रखता है,
+लेकिन आंतरिक रूप से कई सुरक्षित wait chunks जोड़ता है और हर chunk के बाद frames capture करता है,
+ताकि लंबे समय तक चलने वाले animation bugs का निरीक्षण किया जा सके।
+
+जब visuals मायने रखते हों और Arka को तब तक check pass होने की बात नहीं कहनी चाहिए जब तक
+वह captured pixels का निरीक्षण न कर ले, तब `--verify` / `--verify-visuals` जोड़ें:
+
+```bash
+arka game check http://localhost:5173 --verify --json
+arka game check http://localhost:5173 --record --play-depth deep --duration 2m --verify --json
+```
+
+Visual verification loaded/final frames के साथ हाल के gameplay frames का sample लेता है
+और उन पर `visual_diagnose` चलाता है। यदि visual diagnosis
+`needs_fix`, medium/high severity issues report करता है, या vision backend उपलब्ध नहीं है,
+तो game check का status `failed` हो जाता है और JSON में
+`visual_verification` शामिल होता है, जिसमें checked frames, issues, fixes, और verdict होते हैं।
+किसी game UI या animation के पूरा होने का दावा करने से पहले इसी mode का उपयोग करना चाहिए।
+
+Check यह पुष्टि करता है कि page load होता है, उसमें canvas है, यह keyboard actions भेजता है,
+screenshot capture करता है, और page/console errors report करता है। यह कभी भी
+desktop window नहीं खोलता। एक custom read-only play sequence देने के लिए
+`--actions '[{"type":"key","key":"ArrowRight"},{"type":"wait","ms":500}]'` का उपयोग करें।
+
+हर action एक numbered frame के साथ एक final frame बनाता है। JSON response में
+`screenshots`, `visual_errors`, `errors`, और उपयोग के लिए तैयार
+`fix_prompt` होता है, ताकि आप Arka से captured frames की समीक्षा करने और केवल
+उन्हीं visual problems को ठीक करने के लिए कह सकें जो उसे दिखती हैं। `--output` के बिना, frames
+एक temporary directory में रखे जाते हैं और समीक्षा के बाद हटाए जा सकते हैं।
+
+`--actions` argument के बिना, Arka पहले किसी ऐसे दिखाई देने वाले button या link पर click करता है जिसका
+label Play, Start, Begin, Launch, या Continue जैसा दिखता हो, फिर
+canvas पर focus करता है और movement keys भेजता है। Result में `clicked_controls` और
+`gameplay_started` report होते हैं, जिससे केवल menu वाले capture और वास्तविक gameplay में अंतर करने में मदद मिलती है।

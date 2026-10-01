@@ -1,0 +1,33 @@
+---
+title: "本地图像生成"
+description: "通过本地扩散服务器生成图像。"
+icon: "image"
+---
+
+Arka 可以使用本地托管的、兼容 Stable Diffusion WebUI 的 API：
+
+```bash
+# Start Stable Diffusion WebUI with --api, then:
+arka image generate "a cinematic moonlit observatory" \
+  --output observatory.png --steps 24
+```
+
+当服务器不在 `http://127.0.0.1:7860` 上时，请设置 `ARKA_SD_API_URL`。
+Arka 仅将提示词和生成设置发送到本地服务器；无需云端 API 密钥。如果端点不可用，错误信息会包含确切的本地设置提示，而不会静默回退到云端。
+
+当你提到 **local**（本地）、**offline**（离线）或 **stable diffusion** 时，自然语言会路由到此路径（而不是云端的 `generate_image`）：
+
+```fish
+arka "generate image locally of a moonlit observatory"
+arka route "create picture with stable diffusion of a robot"
+# → image generate …
+```
+
+如需自动启动/停止生命周期，请配置用于启动本地服务器的命令：
+
+```bash
+export ARKA_SD_START_CMD="/path/to/webui.sh --api"
+arka image generate "a space observatory" --output observatory.png
+```
+
+Arka 仅在端点宕机时才会启动该命令，等待其 API 就绪后生成图像，并且只会终止由它自己启动的进程。
