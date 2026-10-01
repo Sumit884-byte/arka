@@ -1,4 +1,55 @@
 # Arka
 
+<<<<<<< editor
+> Cross-platform AI terminal agent with 70+ local skills, natural-language routing, voice, MCP for Cursor, and 24-provider LLM failover.
+=======
 > Agent index is [llm.txt](https://arka-agent.mintlify.site/llm.txt).
 > Open that file, then one docs page. Append `.md` for Markdown.
+>>>>>>> git
+
+## How to access these docs
+
+- Every documentation page is available as Markdown by appending `.md` to its URL (for example, `https://arka-agent.mintlify.app/quickstart.md`).
+- The full site as a single Markdown file lives at `/llms-full.txt`.
+- Follow the sections below in order for the fastest ramp: install, then routing model, then MCP integration, then skills.
+
+## Get started
+
+- [Quickstart](https://arka-agent.mintlify.app/quickstart.md): Install with pipx and run your first command in under five minutes.
+- [Environment setup](https://arka-agent.mintlify.app/guides/env-setup.md): Configure providers, API keys, and platform-specific dependencies.
+- [CLI reference](https://arka-agent.mintlify.app/guides/cli.md): Commands, the agent alias, subcommands, and flags.
+- [Troubleshooting](https://arka-agent.mintlify.app/reference/troubleshooting.md): Common errors, diagnostics, and fixes.
+
+## Agents and MCP
+
+- [AI agent guide](https://arka-agent.mintlify.app/guides/ai-agents.md): MCP routing, execution rules, and tool selection for Cursor and Claude agents. Start here if you are an MCP client.
+- [MCP integration](https://arka-agent.mintlify.app/guides/mcp.md): Connect to any Model Context Protocol server over stdio or HTTP.
+- [Agent Hub](https://arka-agent.mintlify.app/guides/agent-hub.md): Shared MCP, memory, and skills for ollama launch agents.
+- [Agent Teams](https://arka-agent.mintlify.app/guides/agent-teams.md): Sequential or parallel workflows across agents, models, and providers.
+- [Council](https://arka-agent.mintlify.app/guides/council.md): Multi-model deliberation for complex decisions.
+- [Self-improve](https://arka-agent.mintlify.app/guides/self-improve.md): Analyze routing gaps and propose test and rule fixes.
+
+## Concepts
+
+- [Routing](https://arka-agent.mintlify.app/concepts/routing.md): Offline symbolic rules that resolve most requests with zero LLM tokens.
+- [LLM orchestration](https://arka-agent.mintlify.app/concepts/llm.md): 24-provider failover, guardrails, and model selection.
+- [Security](https://arka-agent.mintlify.app/concepts/security.md): Prompt-injection blocks, risky-action prompts, destructive shell hard-blocks.
+
+## Skills and integrations
+
+- [Skills catalog](https://arka-agent.mintlify.app/guides/skills.md): 70+ built-in skills spanning media, web, docs, system, dev, and finance.
+- [Plugins](https://arka-agent.mintlify.app/guides/plugins.md): Extend Arka with `skill.json` triggers.
+- [Google Workspace](https://arka-agent.mintlify.app/guides/google-workspace.md): Read Gmail and Google Calendar via one-time OAuth.
+- [Stocks](https://arka-agent.mintlify.app/guides/stocks.md): Market news, fundamentals, sentiment, and AI investment research.
+- [Repo health](https://arka-agent.mintlify.app/guides/repo-health.md): Scan repos for hygiene, tests, and documentation gaps.
+- [Code with Arka](https://arka-agent.mintlify.app/guides/code-with-arka.md): Terminal workflow for setup, edits, review, CI, and IDE integration.
+
+## Reference
+
+- [Configuration](https://arka-agent.mintlify.app/reference/configuration.md): Environment variables, config files, and provider settings.
+- [Aliases](https://arka-agent.mintlify.app/reference/aliases.md): Shorthand commands and skill aliases.
+
+## Optional
+
+- [PyPI package: arka-agent](https://pypi.org/project/arka-agent/)
+- [Source repository](https://github.com/Sumit884-byte/arka)
