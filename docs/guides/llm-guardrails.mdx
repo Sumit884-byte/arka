@@ -17,8 +17,8 @@ ARKA_TOKEN_LIMIT=100000
 ARKA_LATENCY_LIMIT_MS=15000
 ```
 
-Hosted requests are blocked before dispatch when the token or estimated cost
-budget is exceeded. Local-only models are never blocked by cost guardrails.
+Arka blocks hosted requests before dispatch when the token or estimated cost
+budget is exceeded. Cost guardrails never block local-only models.
 Arka stores only aggregate counters in its cache, not prompts.
 
 Grounded mode is enabled by default (`ARKA_GROUNDED_MODE=1`). It blocks
@@ -33,8 +33,8 @@ ARKA_GROUNDED_MODE=0 arka ask "..."
 arka grounding
 ```
 
-Production mode is also enabled by default (`ARKA_PRODUCTION_MODE=1`). Coding
-requests are instructed to include access control, secret-safe data handling,
+Production mode is also enabled by default (`ARKA_PRODUCTION_MODE=1`). Arka
+instructs coding requests to include access control, secret-safe data handling,
 input and output validation, prompt-injection defenses, audit logging, tests,
 error handling, and observability. Disable it only for explicitly disposable
 prototypes.

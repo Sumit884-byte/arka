@@ -13,8 +13,8 @@ arka github-actions status .
 ```
 
 The generated workflow installs the project, runs Ruff, and runs Pytest on
-pushes to `main` and pull requests. Existing workflows are not overwritten
-unless `--force` is explicit. Natural language requests such as “setup GitHub
-Actions in this repo” and “did the production build fail?” are supported. The
+pushes to `main` and pull requests. Arka does not overwrite existing workflows
+unless you pass `--force`. Arka also supports natural language requests such as “setup GitHub
+Actions in this repo” and “did the production build fail?”. The
 status command is read-only and uses the GitHub CLI (`gh`) to inspect recent
 remote runs.

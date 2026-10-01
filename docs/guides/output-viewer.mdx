@@ -5,7 +5,7 @@ keywords: ["output", "viewer", "json", "csv", "markdown", "ui"]
 icon: "table"
 ---
 
-The **Arka Output Viewer** is a lightweight local web UI that auto-detects your data format and renders the best representation — tables for CSV/JSON arrays, formatted JSON, rendered markdown, key-value layouts for objects, and media cards when paths are present.
+The **Arka Output Viewer** is a lightweight local web UI that auto-detects your data format and renders the best representation. It shows tables for CSV/JSON arrays, formatted JSON, rendered markdown, key-value layouts for objects, and media cards when paths are present.
 
 No React build step. One HTML shell plus a small Python server from the main package.
 
@@ -102,7 +102,7 @@ When `ARKA_OUTPUT_VERIFY=1` or `arka ask --verify`, a **judge** task profile (de
 
 Override the judge model: `arka ai-skill-model judge openrouter/openai/gpt-4o-mini`.
 
-Timing (TTFA when streaming, total latency) is recorded automatically and exported to OpenTelemetry when tracing is enabled (`arka.output.total_ms`, `arka.output.verify.overall`, etc.).
+Arka records timing (TTFA when streaming, total latency) automatically and exports it to OpenTelemetry when tracing is enabled (`arka.output.total_ms`, `arka.output.verify.overall`, etc.).
 
 ## Related
 

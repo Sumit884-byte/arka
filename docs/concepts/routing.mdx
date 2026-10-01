@@ -5,7 +5,7 @@ keywords: ["routing", "symbolic", "offline", "skills"]
 icon: "route"
 ---
 
-Arka routes every request through a layered pipeline. Most requests never touch an LLM — symbolic rules in `config.fish` match 120\+ skill patterns offline.
+Arka routes every request through a layered pipeline. Most requests never touch an LLM: symbolic rules in `config.fish` match 120\+ skill patterns offline.
 
 Important: if you type a plain shell command, the shell runs it normally. Arka only gets a chance to route the request when you invoke it through `arka` or an alias like `agent_route`.
 
@@ -47,7 +47,7 @@ Important: if you type a plain shell command, the shell runs it normally. Arka o
 | Plugin triggers | **0** |
 | LLM route (fallback) | **small** (compact catalog only) |
 
-Default mode is `ROUTE_MODE=symbolic` — offline rules first, AI only when needed.
+Default mode is `ROUTE_MODE=symbolic`: offline rules first, AI only when needed.
 
 ## Ambiguous routing
 
@@ -94,7 +94,7 @@ Install [fish shell](https://fishshell.com) to unlock the full 70\+ skill router
 
 The self-improve workflow is also routed as a dedicated skill, so phrases like `self improve routing` can stay local and deterministic while still opening the repo analysis path.
 
-Developer tooling now follows the same offline-first path: `arka ci`, `arka review staged`, `route audit`, and `skill new my_tool --template dev` are handled by symbolic routing before any LLM fallback.
+Developer tooling now follows the same offline-first path: symbolic routing handles `arka ci`, `arka review staged`, `route audit`, and `skill new my_tool --template dev` before any LLM fallback.
 
 For UI work, `build this project from screenshot.png` and similar phrases route to the screenshot-to-design brief skill, which analyzes the image first and then produces an implementation-oriented build plan.
 

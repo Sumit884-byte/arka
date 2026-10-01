@@ -16,9 +16,9 @@ arka model doctor
 
 The setup command writes model preference and endpoint configuration through
 Arka's protected `.env` handling. It does not download weights or store API
-secrets; launch commands and provider-specific next steps are printed. Use
+secrets; it prints launch commands and provider-specific next steps. Use
 `arka integration setup <provider>` for API keys, then `arka model doctor` to
-check runtime readiness. Local and hosted models can be combined with
+check runtime readiness. Combine local and hosted models with
 `arka hybrid status` and `arka hybrid run --policy parallel`.
 
 For a LAN inference cluster, configure Exo as a local OpenAI-compatible host:
@@ -35,5 +35,5 @@ to hosted fallbacks under `local-only`.
 
 The model advisor also annotates Apple Silicon/MLX opportunities, MoE model
 hints, and speculative/MTP decoding hints. These are evidence labels, not
-guarantees: runtime support and active-parameter metadata should be verified
-before deployment.
+guarantees: verify runtime support and active-parameter metadata before
+deployment.

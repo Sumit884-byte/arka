@@ -34,7 +34,7 @@ MEMORY=auto                  # auto | supermemory | local
 MEMORY_AUTODETECT=1          # symbolic autodetect from chat/voice
 ```
 
-Recalled context is injected into `arka ask`, research, and agent loops automatically.
+Arka injects recalled context into `arka ask`, research, and agent loops automatically.
 
 ## Context layers
 
@@ -77,7 +77,7 @@ See [Channel sessions](/guides/hermes-features) and [Session memory](/guides/ope
 
 ## Unified memory
 
-When `UNIFIED_MEMORY=1` (default), Arka routes recall through a single facade that aggregates facts, session notes, and channel turns — without duplicating channel context in `arka ask`.
+When `UNIFIED_MEMORY=1` (default), Arka routes recall through a single facade that aggregates facts, session notes, and channel turns, without duplicating channel context in `arka ask`.
 
 | Command | Example |
 | --- | --- |
