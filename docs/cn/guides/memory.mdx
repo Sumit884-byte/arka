@@ -34,7 +34,7 @@ MEMORY=auto                  # auto | supermemory | local
 MEMORY_AUTODETECT=1          # 从聊天/语音中进行符号自动检测
 ```
 
-回忆到的上下文会自动注入到 `arka ask`、研究和 agent 循环中。
+Arka 会自动将回忆到的上下文注入到 `arka ask`、研究和 agent 循环中。
 
 ## 上下文层
 
@@ -77,7 +77,7 @@ flowchart LR
 
 ## 统一记忆
 
-当 `UNIFIED_MEMORY=1`（默认）时，Arka 通过一个统一的门面路由回忆，聚合事实、会话笔记和频道对话 —— 不会在 `arka ask` 中重复频道上下文。
+当 `UNIFIED_MEMORY=1`（默认）时，Arka 通过一个统一的门面路由回忆，聚合事实、会话笔记和频道对话，且不会在 `arka ask` 中重复频道上下文。
 
 | 命令 | 示例 |
 | ------- | ------- |

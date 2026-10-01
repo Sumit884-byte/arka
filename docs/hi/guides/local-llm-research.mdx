@@ -5,8 +5,8 @@ icon: "magnifying-glass"
 ---
 
 Arka `.third_party/local-llm-research/` में shallow upstream checkouts रखता है
-जिससे offline में reference मिल सके। ये runtime में import नहीं किए जाते और Git
-द्वारा ignore किए जाते हैं। वर्तमान research set:
+जिससे offline में reference मिल सके। Arka इन्हें runtime में import नहीं करता, और Git
+इन्हें ignore करता है। वर्तमान research set:
 
 | Project | License | उपयोगी Arka विचार |
 | --- | --- | --- |
@@ -22,5 +22,5 @@ repository-map एवं verification patterns को पुन: उपयोग
 के license और notices की समीक्षा किए बिना source code copy या vendor dependencies
 न करें; transitive model/runtime licenses project license से भिन्न हो सकते हैं।
 
-Checkouts research के लिए shallow clones के रूप में किए गए थे और version-specific
-व्यवहार पर निर्भर होने से पहले उन्हें refresh किया जाना चाहिए।
+Checkouts research के लिए shallow clones हैं। version-specific
+व्यवहार पर निर्भर होने से पहले उन्हें refresh करें।

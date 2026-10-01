@@ -5,7 +5,7 @@ keywords: ["routing", "symbolic", "offline", "skills"]
 icon: "route"
 ---
 
-Arka हर request को एक layered pipeline के माध्यम से route करता है। अधिकांश requests कभी LLM को छूती ही नहीं — `config.fish` में symbolic नियम 120\+ skill patterns को offline match करते हैं।
+Arka हर request को एक layered pipeline के माध्यम से route करता है। अधिकांश requests कभी LLM को छूती ही नहीं: `config.fish` में symbolic नियम 120\+ skill patterns को offline match करते हैं।
 
 महत्वपूर्ण: यदि आप plain shell command टाइप करते हैं, तो shell उसे सामान्य रूप से चलाता है। Arka को request को route करने का मौका केवल तभी मिलता है जब आप इसे `arka` या `agent_route` जैसे alias के माध्यम से invoke करते हैं।
 
@@ -47,7 +47,7 @@ Arka हर request को एक layered pipeline के माध्यम स
 | Plugin triggers | **0** |
 | LLM route (fallback) | **small** (compact catalog only) |
 
-Default mode `ROUTE_MODE=symbolic` है — पहले offline rules, केवल आवश्यकता होने पर ही AI।
+Default mode `ROUTE_MODE=symbolic` है: पहले offline rules, केवल आवश्यकता होने पर ही AI।
 
 ## Ambiguous routing
 
@@ -94,7 +94,7 @@ arka tell your skills   # voice-friendly summary + active model
 
 Self-improve workflow भी एक समर्पित skill के रूप में route किया जाता है, इसलिए `self improve routing` जैसे phrases local और deterministic रह सकते हैं जबकि अभी भी repo analysis path खोलते हैं।
 
-Developer tooling अब उसी offline-first path का पालन करता है: `arka ci`, `arka review staged`, `route audit`, और `skill new my_tool --template dev` किसी भी LLM fallback से पहले symbolic routing द्वारा संभाले जाते हैं।
+Developer tooling अब उसी offline-first path का पालन करता है: symbolic routing किसी भी LLM fallback से पहले `arka ci`, `arka review staged`, `route audit`, और `skill new my_tool --template dev` को संभालता है।
 
 UI कार्य के लिए, `build this project from screenshot.png` और समान phrases screenshot-to-design brief skill पर route होते हैं, जो पहले image का विश्लेषण करता है और फिर एक implementation-oriented build plan बनाता है।
 

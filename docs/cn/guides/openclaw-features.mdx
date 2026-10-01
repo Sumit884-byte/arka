@@ -25,7 +25,7 @@ arka session-memory clear --long-term    # 重置 MEMORY.md
 arka session-memory clear --all
 ```
 
-当 `SESSION_MEMORY=1` 时，召回的上下文会通过 `context_for()` 注入 Agent 循环中。
+当 `SESSION_MEMORY=1` 时，Arka 会通过 `context_for()` 将召回的上下文注入 Agent 循环中。
 
 ### 环境变量
 
@@ -36,7 +36,7 @@ arka session-memory clear --all
 | `MEMORY_LONGTERM_MAX_LINES` | `100` | `MEMORY.md` 中保留的最大行数 |
 | `MEMORY_AUTO_LONGTERM` | `0` | 自动将每次追加提升为长期记忆 |
 
-存储前会对笔记进行净化 —— 注入模式和不安全内容会被阻止。
+Arka 会在存储前对笔记进行净化，并阻止注入模式和不安全内容。
 
 ## 心跳
 
@@ -49,7 +49,7 @@ arka heartbeat history
 arka heartbeat history --json --limit 10
 ```
 
-心跳数据写入 `~/.cache/fish-agent/heartbeat.json`。每次 `ping()` 会追加到有界的 `history` 环形缓冲（默认 20 条；可用 `HEARTBEAT_HISTORY` 覆盖）。会话记忆和例程等子系统在活动时会自动调用 `ping()`。
+Arka 将心跳数据写入 `~/.cache/fish-agent/heartbeat.json`。每次 `ping()` 会追加到有界的 `history` 环形缓冲（默认 20 条；可用 `HEARTBEAT_HISTORY` 覆盖）。会话记忆和例程等子系统在活动时会自动调用 `ping()`。
 
 ## 技能清单门禁
 

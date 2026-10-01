@@ -5,10 +5,10 @@ keywords: ["comparison", "openclaw", "claude code", "cursor", "aider", "gemini c
 icon: "scale-balanced"
 ---
 
-यह पृष्ठ **Arka** की तुलना अन्य terminal और IDE agents से ईमानदारी से करता है। Arka हर tool के लिए drop-in प्रतिस्थापन नहीं है — यह symbolic routing, 70+ built-in skills, MCP server/client support, और OpenTelemetry observability के साथ एक **local-first terminal agent** है। यह guide उपयोग करें ताकि तय कर सकें कि Arka कब सही layer है और कब किसी अन्य agent को नेतृत्व करना चाहिए।
+यह पृष्ठ **Arka** की तुलना अन्य terminal और IDE agents से ईमानदारी से करता है। Arka हर tool के लिए drop-in प्रतिस्थापन नहीं है। यह symbolic routing, 70+ built-in skills, MCP server/client support, और OpenTelemetry observability के साथ एक **local-first terminal agent** है। यह guide उपयोग करें ताकि तय कर सकें कि Arka कब सही layer है और कब किसी अन्य agent को नेतृत्व करना चाहिए।
 
 <Note>
-  **Arka क्या है:** एक cross-platform CLI (`pipx install "arka-agent[chat]"`) जो offline symbolic rules (120+ patterns) के माध्यम से plain English को local skills पर mapping करता है, LLM routing पर fallback करने से पहले। Skills आपकी मशीन पर चलती हैं; LLM calls 24+ providers में failover होती हैं। Arka ~80 MCP tools भी expose करता है ताकि Cursor, Claude Desktop, और अन्य MCP clients Arka को **tool server** के रूप में call कर सकें — देखें [AI agent guide](/hi/guides/ai-agents)।
+  **Arka क्या है:** एक cross-platform CLI (`pipx install "arka-agent[chat]"`) जो offline symbolic rules (120+ patterns) के माध्यम से plain English को local skills पर mapping करता है, LLM routing पर fallback करने से पहले। Skills आपकी मशीन पर चलती हैं; LLM calls 24+ providers में failover होती हैं। Arka ~80 MCP tools भी expose करता है ताकि Cursor, Claude Desktop, और अन्य MCP clients Arka को **tool server** के रूप में call कर सकें। देखें [AI agent guide](/hi/guides/ai-agents)।
 </Note>
 
 ## एक नज़र में तुलना
@@ -27,7 +27,7 @@ icon: "scale-balanced"
 | **Platform support** | macOS, Linux, Windows | Desktop IDE | macOS, Linux | macOS, Linux | Cross-platform (Node) | Cross-platform | Cross-platform | Cross-platform | Cross-platform |
 | **Account required** | नहीं (API keys optional) | Cursor account | Anthropic account | Varies | Google account / API key | Provider API keys | Optional cloud | GitHub account | Varies |
 
-Rows qualitative हैं — जैसे upstream projects updates ship करते हैं, exact feature parity तेज़ी से बदलता है। इस table को architecture-level के रूप में मानें, scorecard के रूप में नहीं।
+Rows qualitative हैं: जैसे upstream projects updates ship करते हैं, exact feature parity तेज़ी से बदलता है। इस table को architecture-level के रूप में मानें, scorecard के रूप में नहीं।
 
 ## Arka कहाँ जीतता है
 
@@ -44,7 +44,7 @@ ROUTE_MODE=symbolic_only pytest tests/test_nl_routing_coverage.py -v
 
 ### Coding से परे skill breadth
 
-Arka stocks, PDF RAG, deploy, voice, compose-video, Kalshi, repo health, और दर्जनों अन्य के लिए local skills के साथ आता है — केवल file edit और shell ही नहीं। IDE agents code में उत्कृष्ट होते हैं लेकिन शायद ही कभी एक terminal entry point में finance, media, और infra workflows को bundle करते हैं।
+Arka stocks, PDF RAG, deploy, voice, compose-video, Kalshi, repo health, और दर्जनों अन्य के लिए local skills के साथ आता है, केवल file edit और shell ही नहीं। IDE agents code में उत्कृष्ट होते हैं लेकिन शायद ही कभी एक terminal entry point में finance, media, और infra workflows को bundle करते हैं।
 
 [Skills catalog](/hi/guides/skills) ब्राउज़ करें।
 
@@ -80,13 +80,13 @@ Cursor और Claude Code editor के अंदर बैठते हैं: 
 
 ### Hosted सुविधा और enterprise (Copilot CLI, Gemini CLI)
 
-GitHub Copilot CLI GitHub के cloud के माध्यम से org SSO, policy, और repository context को integrate करता है। Gemini CLI Google के OAuth, extensions, और MCP hooks को एक vendor के तहत bundle करता है। Arka self-managed है — आप keys, config, और optional SigNoz लाते हैं।
+GitHub Copilot CLI GitHub के cloud के माध्यम से org SSO, policy, और repository context को integrate करता है। Gemini CLI Google के OAuth, extensions, और MCP hooks को एक vendor के तहत bundle करता है। Arka self-managed है: आप keys, config, और optional SigNoz लाते हैं।
 
 **Copilot CLI चुनें** GitHub-native enterprise workflows के लिए। **Gemini CLI चुनें** जब आप Google का extension ecosystem चाहते हैं और पहले से ही Gemini पर हैं।
 
 ### Dedicated agent products (OpenClaw)
 
-[OpenClaw](https://github.com/openclaw/openclaw) एक plugin manifest ecosystem के साथ अपना agent runtime है। Arka OpenClaw-*inspired* session memory और skill gates ([OpenClaw-inspired features](/hi/guides/openclaw-features)) अपनाता है और Agent Hub के माध्यम से MCP/memory को **unify** कर सकता है — लेकिन Arka OpenClaw का fork नहीं है।
+[OpenClaw](https://github.com/openclaw/openclaw) एक plugin manifest ecosystem के साथ अपना agent runtime है। Arka OpenClaw-*inspired* session memory और skill gates ([OpenClaw-inspired features](/hi/guides/openclaw-features)) अपनाता है और Agent Hub के माध्यम से MCP/memory को **unify** कर सकता है। हालाँकि, Arka OpenClaw का fork नहीं है।
 
 **OpenClaw चुनें** यदि आप primary agent के रूप में upstream OpenClaw product और plugin catalog चाहते हैं। **Arka चुनें** यदि आप symbolic routing, व्यापक built-in skills, और एक hub चाहते हैं जो Claude Code और Cursor को भी serve करे।
 
@@ -113,7 +113,7 @@ GitHub Copilot CLI GitHub के cloud के माध्यम से org SSO,
 | अन्य agents जो call करते हैं वह MCP tool server | Primary coding surface के रूप में Cursor |
 | routing token cost कम करने के लिए Offline symbolic routing | Cursor की built-in agent routing पर निर्भर रहें |
 
-**एक साथ:** Cursor को Arka से [MCP](/hi/guides/mcp) के माध्यम से जोड़ें — Cursor editing संभालता है; Arka specialized skills, repo health, CI, और routing catalog संभालता है जिसे आप reimplement नहीं करना चाहते।
+**एक साथ:** Cursor को Arka से [MCP](/hi/guides/mcp) के माध्यम से जोड़ें। Cursor editing संभालता है; Arka specialized skills, repo health, CI, और routing catalog संभालता है जिसे आप reimplement नहीं करना चाहते।
 
 ### Arka बनाम Claude Code
 
@@ -143,7 +143,7 @@ Arka OpenClaw-compatible skill manifest gates लागू करता है �
 | Offline skills (calc, weather, local tools) | Google OAuth और Gemini model features |
 | पहले से ही Arka की 24-provider chain का उपयोग कर रहे हैं | One-shot `gemini` passthrough: `arka gemini` official CLI को wrap करता है |
 
-देखें [Gemini CLI integration](/hi/guides/gemini-cli) — Arka किसी भी tool को replace किए बिना Gemini CLI invoke कर सकता है।
+देखें [Gemini CLI integration](/hi/guides/gemini-cli)। Arka किसी भी tool को replace किए बिना Gemini CLI invoke कर सकता है।
 
 ### Arka बनाम Aider
 
@@ -180,7 +180,7 @@ Arka का [repo map](/hi/guides/repo-map) skill Aider-style repo awareness स
 
 ## Benchmarks (आज उपलब्ध और नियोजित)
 
-Marketing तुलनाएँ बिना measured routing accuracy, model cost, और end-to-end task completion के कमज़ोर हैं। Arka का [SigNoz integration](/hi/guides/observability) तीन benchmark suites को परिभाषित करता है — observability और benchmarks एक ही OTel spans साझा करते हैं।
+Marketing तुलनाएँ बिना measured routing accuracy, model cost, और end-to-end task completion के कमज़ोर हैं। Arka का [SigNoz integration](/hi/guides/observability) तीन benchmark suites को परिभाषित करता है। Observability और benchmarks एक ही OTel spans साझा करते हैं।
 
 | Suite | Measures | Status |
 | --- | --- | --- |

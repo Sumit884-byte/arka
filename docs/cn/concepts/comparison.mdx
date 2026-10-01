@@ -5,10 +5,10 @@ keywords: ["comparison", "openclaw", "claude code", "cursor", "aider", "gemini c
 icon: "scale-balanced"
 ---
 
-本页诚实地对比 **Arka** 与其他终端及 IDE 智能体。Arka 不是所有工具的即插即用替代品 —— 它是一个 **本地优先的终端智能体**，具备符号路由、70+ 内置技能、MCP 服务端/客户端支持以及 OpenTelemetry 可观测性。使用本指南判断 Arka 何时是合适的一层，何时应让其他智能体主导。
+本页诚实地对比 **Arka** 与其他终端及 IDE 智能体。Arka 不是所有工具的即插即用替代品。它是一个 **本地优先的终端智能体**，具备符号路由、70+ 内置技能、MCP 服务端/客户端支持以及 OpenTelemetry 可观测性。使用本指南判断 Arka 何时是合适的一层，何时应让其他智能体主导。
 
 <Note>
-  **Arka 是什么：** 一个跨平台 CLI（`pipx install "arka-agent[chat]"`），它先通过离线符号规则（120+ 模式）把自然英语映射到本地技能，之后再回退到 LLM 路由。技能在你的机器上运行；LLM 调用可在 24+ 个提供方之间故障切换。Arka 还暴露约 80 个 MCP 工具，让 Cursor、Claude Desktop 及其他 MCP 客户端可以把 Arka 当作 **工具服务器** 来调用 —— 参见 [AI 智能体指南](/cn/guides/ai-agents)。
+  **Arka 是什么：** 一个跨平台 CLI（`pipx install "arka-agent[chat]"`），它先通过离线符号规则（120+ 模式）把自然英语映射到本地技能，之后再回退到 LLM 路由。技能在你的机器上运行；LLM 调用可在 24+ 个提供方之间故障切换。Arka 还暴露约 80 个 MCP 工具，让 Cursor、Claude Desktop 及其他 MCP 客户端可以把 Arka 当作 **工具服务器** 来调用。参见 [AI 智能体指南](/cn/guides/ai-agents)。
 </Note>
 
 ## 一览对比
@@ -27,7 +27,7 @@ icon: "scale-balanced"
 | **平台支持** | macOS、Linux、Windows | 桌面 IDE | macOS、Linux | macOS、Linux | 跨平台（Node） | 跨平台 | 跨平台 | 跨平台 | 跨平台 |
 | **是否需要账号** | 否（API key 可选） | Cursor 账号 | Anthropic 账号 | 视情况 | Google 账号 / API key | 提供方的 API key | 云端可选 | GitHub 账号 | 视情况 |
 
-各行为定性描述 —— 精确的功能对齐会随上游项目发布更新而快速变化。请把此表当作架构层面的参考，而非评分卡。
+各行为定性描述：精确的功能对齐会随上游项目发布更新而快速变化。请把此表当作架构层面的参考，而非评分卡。
 
 ## Arka 的优势
 
@@ -44,7 +44,7 @@ ROUTE_MODE=symbolic_only pytest tests/test_nl_routing_coverage.py -v
 
 ### 超越编码的技能广度
 
-Arka 自带股票、PDF RAG、部署、语音、compose-video、Kalshi、代码库健康检查等数十项本地技能 —— 不仅仅是文件编辑和 shell。IDE 智能体擅长编码，但很少把金融、媒体和基础设施工作流打包在一个终端入口里。
+Arka 自带股票、PDF RAG、部署、语音、compose-video、Kalshi、代码库健康检查等数十项本地技能，不仅仅是文件编辑和 shell。IDE 智能体擅长编码，但很少把金融、媒体和基础设施工作流打包在一个终端入口里。
 
 浏览 [技能目录](/cn/guides/skills)。
 
@@ -80,13 +80,13 @@ Cursor 和 Claude Code 位于编辑器内部：内联 diff、LSP 感知、tab �
 
 ### 托管便利性与企业能力（Copilot CLI、Gemini CLI）
 
-GitHub Copilot CLI 通过 GitHub 的云集成了组织 SSO、策略和仓库上下文。Gemini CLI 把 Google 的 OAuth、扩展和 MCP 钩子打包在一个供应商之下。Arka 是自管理的 —— 你自带 key、配置和可选的 SigNoz。
+GitHub Copilot CLI 通过 GitHub 的云集成了组织 SSO、策略和仓库上下文。Gemini CLI 把 Google 的 OAuth、扩展和 MCP 钩子打包在一个供应商之下。Arka 是自管理的：你自带 key、配置和可选的 SigNoz。
 
 **选择 Copilot CLI** 用于 GitHub 原生的企业工作流。**选择 Gemini CLI** 当你想要 Google 的扩展生态并且已经在使用 Gemini 时。
 
 ### 专门的智能体产品（OpenClaw）
 
-[OpenClaw](https://github.com/openclaw/openclaw) 是它自己的智能体运行时，具有插件清单生态。Arka 采用受 OpenClaw *启发* 的会话记忆和技能守卫（[受 OpenClaw 启发的特性](/cn/guides/openclaw-features)），并可通过 Agent Hub **统一** MCP/记忆 —— 但 Arka 不是 OpenClaw 的分叉。
+[OpenClaw](https://github.com/openclaw/openclaw) 是它自己的智能体运行时，具有插件清单生态。Arka 采用受 OpenClaw *启发* 的会话记忆和技能守卫（[受 OpenClaw 启发的特性](/cn/guides/openclaw-features)），并可通过 Agent Hub **统一** MCP/记忆。不过，Arka 不是 OpenClaw 的分叉。
 
 **选择 OpenClaw** 若你希望上游 OpenClaw 产品及其插件目录作为主要智能体。**选择 Arka** 若你想要符号路由、更广泛的内置技能，以及同时也能服务 Claude Code 和 Cursor 的中枢。
 
@@ -113,7 +113,7 @@ GitHub Copilot CLI 通过 GitHub 的云集成了组织 SSO、策略和仓库上�
 | MCP 工具服务端供其他智能体调用 | 把 Cursor 作为主要的编码界面 |
 | 用离线符号路由降低路由 token 成本 | 依赖 Cursor 内置的智能体路由 |
 
-**联合使用：** 通过 [MCP](/cn/guides/mcp) 把 Cursor 接到 Arka —— Cursor 负责编辑；Arka 负责专门技能、代码库健康、CI 以及你不想重实现的路由目录。
+**联合使用：** 通过 [MCP](/cn/guides/mcp) 把 Cursor 接到 Arka。Cursor 负责编辑；Arka 负责专门技能、代码库健康、CI 以及你不想重实现的路由目录。
 
 ### Arka 与 Claude Code
 
@@ -143,7 +143,7 @@ Arka 实现了兼容 OpenClaw 的技能清单守卫 —— 插件可以声明 `m
 | 离线技能（计算、天气、本地工具） | Google OAuth 和 Gemini 模型特性 |
 | 已经在使用 Arka 的 24 提供方链 | 一次性 `gemini` 透传：`arka gemini` 包装官方 CLI |
 
-参见 [Gemini CLI 集成](/cn/guides/gemini-cli) —— Arka 可以调用 Gemini CLI，而无需替代任一工具。
+参见 [Gemini CLI 集成](/cn/guides/gemini-cli)。Arka 可以调用 Gemini CLI，而无需替代任一工具。
 
 ### Arka 与 Aider
 
@@ -180,7 +180,7 @@ Arka 的 [代码库映射](/cn/guides/repo-map) 技能受 Aider 风格的仓库�
 
 ## 基准测试（已有和计划中）
 
-如果没有度量过的路由准确率、模型成本和端到端任务完成度，营销层面的对比是没有说服力的。Arka 的 [SigNoz 集成](/cn/guides/observability) 定义了三套基准 —— 可观测性和基准共用同一套 OTel span。
+如果没有度量过的路由准确率、模型成本和端到端任务完成度，营销层面的对比是没有说服力的。Arka 的 [SigNoz 集成](/cn/guides/observability) 定义了三套基准。可观测性和基准共用同一套 OTel span。
 
 | 套件 | 度量 | 状态 |
 | --- | --- | --- |

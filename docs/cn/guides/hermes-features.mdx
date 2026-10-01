@@ -5,7 +5,7 @@ keywords: ["message sessions", "subagent", "gateway", "cross-platform", "channel
 icon: "sitemap"
 ---
 
-Arka 提供**频道会话**和**子 Agent 委托** —— 这些模式受 [Hermes Agent](https://github.com/NousResearch/hermes-agent) 启发，并非独立的产品集成。它们添加了按频道的对话连续性、webhook 会话交接以及隔离的后台子 Agent。
+Arka 提供**频道会话**和**子 Agent 委托**：这些模式受 [Hermes Agent](https://github.com/NousResearch/hermes-agent) 启发，并非独立的产品集成。它们添加了按频道的对话连续性、webhook 会话交接以及隔离的后台子 Agent。
 
 ## 特性
 
@@ -76,7 +76,7 @@ Arka 会追加用户轮次，将先前的会话上下文注入 Agent 提示，�
 
 旧版 `HERMES_SESSIONS*` 变量仍作为别名受支持。
 
-入站轮次会被净化 —— 存储前会阻止注入模式和不安全内容。
+Arka 会净化入站轮次，并在存储前阻止注入模式和不安全内容。
 
 ## 子 Agent 委托
 
@@ -117,7 +117,7 @@ arka subagent status
 
 ## 技能清单门禁
 
-插件门禁使用 `metadata.openclaw`、`metadata.arka` 或 `metadata.hermes` —— 全部以相同方式合并。详见 [OpenClaw 启发的门禁](/cn/guides/openclaw-features)。
+插件门禁使用 `metadata.openclaw`、`metadata.arka` 或 `metadata.hermes`。Arka 以相同方式合并这三者。详见 [OpenClaw 启发的门禁](/cn/guides/openclaw-features)。
 
 ## 心跳集成
 

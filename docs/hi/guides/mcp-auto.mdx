@@ -10,7 +10,7 @@ arka mcp-auto configure
 arka mcp-auto configure github context7 --apply
 ```
 
-Arka एक curated catalog का उपयोग करता है, आवश्यक credentials जाँचता है, मौजूदा entries को स्किप करता है, और सभी बदलावों का preview दिखाता है। Configuration मौजूदा Agent Hub MCP फ़ाइल में लिखा जाता है ताकि Cursor, Codex, Claude, और अन्य adapters इसे reuse कर सकें।
+Arka एक curated catalog का उपयोग करता है, आवश्यक credentials जाँचता है, मौजूदा entries को स्किप करता है, और सभी बदलावों का preview दिखाता है। Arka configuration को मौजूदा Agent Hub MCP फ़ाइल में लिखता है ताकि Cursor, Codex, Claude, और अन्य adapters इसे reuse कर सकें।
 
 Catalog में SQLite, time, Puppeteer, Docker, Git, memory, sequential thinking, और reference everything server भी शामिल हैं। Brave Search, Slack, Notion, GitHub, और PostgreSQL credential-gated बने रहते हैं और जब तक उनके environment variable कॉन्फ़िगर नहीं होते, तब तक अनुपलब्ध के रूप में सूचीबद्ध होते हैं।
 
