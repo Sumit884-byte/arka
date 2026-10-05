@@ -266,6 +266,7 @@
             "tab": "Changelog",
             "icon": "newspaper",
             "pages": [
+              "changelog/2026-10-05",
               "changelog/2026-09-28",
               "changelog/2026-09-21",
               "changelog/2026-09-14",
@@ -531,6 +532,7 @@
             "tab": "更新日志",
             "icon": "newspaper",
             "pages": [
+              "cn/changelog/2026-10-05",
               "cn/changelog/2026-09-28",
               "cn/changelog/2026-09-21",
               "cn/changelog/2026-09-14",
@@ -796,6 +798,7 @@
             "tab": "चेंजलॉग",
             "icon": "newspaper",
             "pages": [
+              "hi/changelog/2026-10-05",
               "hi/changelog/2026-09-28",
               "hi/changelog/2026-09-21",
               "hi/changelog/2026-09-14",
