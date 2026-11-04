@@ -45,6 +45,8 @@ jobs:
           tests/test_clipboard_history.py
           tests/test_agent_hub.py
           tests/test_llm_fallback.py
+          tests/test_llm_txt_semantic_verify.py
+          tests/test_memory_relevance.py
           tests/test_convert_media.py::test_route_convert_media
           tests/test_nl_routing_cross_platform.py
 

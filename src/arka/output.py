@@ -2,12 +2,159 @@
 
 from __future__ import annotations
 
+import os
 import re
+import sys
 import time
 
 _BLOCK_RE = re.compile(r"^━━━\s+(.+?)\s+━━━$")
 
 _LAST_ANSWER_DURATION_MS: float | None = None
+_LAST_OUTPUT_TOKENS: int | None = None
+_FOOTER_FILE = "llm-last-footer.json"
+_ANSWER_STREAMED = False
+
+
+def should_stream_answer() -> bool:
+    """TTY answers stream by default. ARKA_STREAM=0 / pytest / pipes stay buffered."""
+    raw = os.environ.get("ARKA_STREAM", "1").strip().lower()
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    if os.environ.get("ARKA_BODY_ONLY", "").strip().lower() in {"1", "true", "yes", "on"}:
+        return False
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return False
+    try:
+        return bool(sys.stdout.isatty())
+    except Exception:
+        return False
+
+
+def mark_answer_streamed() -> None:
+    global _ANSWER_STREAMED
+    _ANSWER_STREAMED = True
+
+
+def consume_answer_streamed() -> bool:
+    global _ANSWER_STREAMED
+    was = _ANSWER_STREAMED
+    _ANSWER_STREAMED = False
+    return was
+
+
+def _write_stream_text(text: str, *, at_line_start: bool) -> bool:
+    for ch in text:
+        if at_line_start and ch != "\n":
+            sys.stdout.write("  ")
+            at_line_start = False
+        sys.stdout.write(ch)
+        at_line_start = ch == "\n"
+    sys.stdout.flush()
+    return at_line_start
+
+
+def stream_llm_answer(
+    system: str,
+    user: str,
+    *,
+    title: str = "Answer",
+    prefix: str = "",
+    suffix: str = "",
+    temperature: float = 0.2,
+    task: str | None = "chat",
+    skill: str | None = None,
+) -> str:
+    """Print the answer header, stream model tokens, then the model footer."""
+    from arka.llm.fallback import llm_stream_complete
+
+    try:
+        from arka.llm.thinking import instruction
+
+        system = f"{system}\n\nThinking preference: {instruction()}"
+    except ImportError:
+        pass
+
+    print(f"━━━ {title} ━━━")
+    print()
+    chunks: list[str] = []
+    at_line_start = True
+    if prefix:
+        chunks.append(prefix)
+        at_line_start = _write_stream_text(prefix, at_line_start=at_line_start)
+        if not prefix.endswith("\n"):
+            at_line_start = _write_stream_text("\n", at_line_start=at_line_start)
+            chunks.append("\n")
+    for delta in llm_stream_complete(
+        system,
+        user,
+        temperature,
+        task=task,
+        skill=skill,
+    ):
+        if not delta:
+            continue
+        chunks.append(delta)
+        at_line_start = _write_stream_text(delta, at_line_start=at_line_start)
+    text = "".join(chunks).strip()
+    if suffix and suffix not in text:
+        extra = f"\n\n{suffix}" if text else suffix
+        chunks.append(extra)
+        at_line_start = _write_stream_text(extra if extra.startswith("\n") else f"\n{extra}", at_line_start=at_line_start)
+        text = "".join(chunks).strip()
+    if not at_line_start:
+        print()
+    print()
+    label = format_model_footer()
+    metrics = format_metrics_footer()
+    docs = active_context7_label()
+    if label:
+        print(f"  Model: {label}")
+    if metrics:
+        print(f"  Quality: {metrics}")
+    if docs:
+        print(f"  Docs: {docs}")
+    mark_answer_streamed()
+    return text
+
+
+def llm_user_answer(
+    system: str,
+    user: str,
+    *,
+    temperature: float = 0.2,
+    task: str | None = "chat",
+    skill: str | None = None,
+    title: str = "Answer",
+    prefix: str = "",
+    suffix: str = "",
+) -> str:
+    """Stream to the terminal when appropriate; otherwise return a buffered completion."""
+    if should_stream_answer():
+        try:
+            return stream_llm_answer(
+                system,
+                user,
+                title=title,
+                prefix=prefix,
+                suffix=suffix,
+                temperature=temperature,
+                task=task,
+                skill=skill,
+            )
+        except Exception:
+            pass
+    from arka.llm.fallback import llm_complete
+
+    return (
+        llm_complete(
+            system,
+            user,
+            temperature,
+            task=task,
+            skill=skill,
+        )
+        or ""
+    )
 
 
 def set_answer_duration_ms(ms: float | None) -> None:
@@ -54,15 +201,94 @@ def response_duration_ms() -> float | None:
         return None
 
 
+def _footer_path():
+    try:
+        from arka.paths import cache_dir
+
+        return cache_dir() / _FOOTER_FILE
+    except ImportError:
+        from pathlib import Path
+
+        return Path.home() / ".cache" / "fish-agent" / _FOOTER_FILE
+
+
+def remember_llm_footer(
+    *,
+    model: str | None = None,
+    duration_ms: float | None = None,
+    output_tokens: int | None = None,
+) -> None:
+    """Persist last answer model/timing/tokens so a later footer process can show tok/s."""
+    global _LAST_ANSWER_DURATION_MS, _LAST_OUTPUT_TOKENS
+    if duration_ms is not None:
+        _LAST_ANSWER_DURATION_MS = duration_ms
+    _LAST_OUTPUT_TOKENS = output_tokens
+    payload = {
+        "model": (model or "").strip(),
+        "duration_ms": duration_ms,
+        "output_tokens": output_tokens,
+        "ts": time.time(),
+    }
+    path = _footer_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(__import__("json").dumps(payload), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def last_output_tokens() -> int | None:
+    if _LAST_OUTPUT_TOKENS and _LAST_OUTPUT_TOKENS > 0:
+        return _LAST_OUTPUT_TOKENS
+    try:
+        data = __import__("json").loads(_footer_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return None
+    if time.time() - float(data.get("ts") or 0) > 180:
+        return None
+    tokens = data.get("output_tokens")
+    try:
+        count = int(tokens)
+    except (TypeError, ValueError):
+        return None
+    return count if count > 0 else None
+
+
+def _format_tps(ms: float | None, tokens: int | None) -> str:
+    if not tokens or tokens <= 0 or not ms or ms <= 0:
+        return ""
+    tps = tokens / (ms / 1000.0)
+    if tps < 0.05:
+        return ""
+    if tps >= 10:
+        return f"{tps:.0f} tok/s"
+    return f"{tps:.1f} tok/s"
+
+
 def format_model_footer(*, model: str | None = None, duration_ms: float | None = None) -> str:
     label = (model or active_model_label() or "").strip()
     if not label:
         return ""
     ms = duration_ms if duration_ms is not None else response_duration_ms()
+    if ms is None:
+        try:
+            data = __import__("json").loads(_footer_path().read_text(encoding="utf-8"))
+            if time.time() - float(data.get("ts") or 0) <= 180:
+                stored = data.get("duration_ms")
+                if stored is not None:
+                    ms = float(stored)
+                if not label and data.get("model"):
+                    label = str(data["model"])
+        except (OSError, ValueError, TypeError):
+            pass
     timing = _format_duration(ms)
+    rate = _format_tps(ms, last_output_tokens())
+    parts = [label]
     if timing:
-        return f"{label} · {timing}"
-    return label
+        parts.append(timing)
+    if rate:
+        parts.append(rate)
+    return " · ".join(parts)
 
 
 def format_metrics_footer() -> str:
@@ -173,6 +399,9 @@ def show_capabilities() -> int:
 
 def show_help() -> int:
     """Print full Arka CLI help (commands, categories, setup)."""
+    from arka.core.banner import print_banner
+
+    print_banner()
     print_section("Arka Help")
     print("Cross-platform AI agent — route plain English to 70+ local skills.")
     print()
@@ -253,6 +482,8 @@ def _print_indented_body(text: str) -> None:
 
 def print_block(title: str, body: str, *, model: str | None = None) -> None:
     """Standard answer block: green-style header, indented body, optional model footer."""
+    if consume_answer_streamed():
+        return
     title = (title or "Answer").strip()
     text = (body or "").strip()
     print(f"━━━ {title} ━━━")

@@ -20,6 +20,9 @@ Arka keeps runtime code under `src/arka/`, executable maintenance helpers in
 | `docs/` | Mintlify documentation |
 | `recordings/` | Curated demo captures (CLI screenshots, terminal transcripts) |
 | `examples/` | Sample configs and harnesses |
+| `examples/scene-3d/`, `examples/websites/` | Curated sample outputs of `arka scene-3d` and the website builder |
+| `marketing/pypi/` | PyPI listing copy (description, tags, download stats) |
+| `visuals/` | SVG assets loaded by `space_visual` and its tests |
 
 New runtime features belong in the narrowest existing boundary under `src/arka/`
 and should be exposed through `dispatch.py` plus a symbolic route when
@@ -62,3 +65,7 @@ Avoid dropping these at the checkout root — they belong under `.arka/`,
 - Ad-hoc `*-bug.md` tickets from local QA
 - Empty legacy folders named `agent/`, `llm/`, `stock/`, or `personas/` (modules
   live under `src/arka/`)
+- Caches and state such as `answer_cache.json`, `folder_cache.json`,
+  `hardware_cache.json`, `habitat.json`, `agent-memory/`, `web-topic-memory/`
+- `arka scene-3d` output folders (`arka-scene/`, `arka-scenes/`); copy a sample
+  worth keeping into `examples/scene-3d/` instead

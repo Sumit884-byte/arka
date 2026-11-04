@@ -151,6 +151,8 @@
                   "guides/pdf-rag",
                   "guides/compose-slides",
                   "guides/compose-video",
+                  "guides/production-animation",
+                  "guides/production-animation-reading",
                   "guides/compose-shorts",
                   "guides/compose-3d",
                   "guides/scene-3d",
@@ -819,10 +821,6 @@
   },
   "navbar": {
     "links": [
-      {
-        "href": "https://sumit884-byte.github.io/arka/",
-        "label": "Homepage"
-      },
       {
         "href": "https://github.com/Sumit884-byte/arka",
         "label": "GitHub"

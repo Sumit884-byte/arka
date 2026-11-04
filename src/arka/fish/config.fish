@@ -2368,8 +2368,10 @@ function _arka_route_mode --description "Routing strategy: symbolic|ai|symbolic_
             echo symbolic_only
         case ai_only llm_only ai-only llm-only
             echo ai_only
-        case hybrid auto symbolic offline '' default
+        case hybrid symbolic
             echo symbolic
+        case auto offline '' default
+            echo symbolic_only
         case '*'
             echo symbolic
     end
@@ -9510,13 +9512,18 @@ function currency_convert --description "Convert amounts between currencies usin
         echo "       arka 'what is 500 EUR in GBP'"
         return 1
     end
+    # Declare out/st at function scope — `set -l` inside if/else is block-local in fish
+    # and would leave $out empty for _arka_pretty_python_output (silent success).
+    set -l out
+    set -l st 1
     if test (count ($py (_arka_py_script arka_currency.py) parse $argv 2>/dev/null)) -gt 0
-        set -l out (_arka_capture_output $py (_arka_py_script arka_currency.py) convert $argv)
+        set out (_arka_capture_output $py (_arka_py_script arka_currency.py) convert $argv)
+        set st $status
     else
         set -l text (_arka_currency_text_from_argv $argv)
-        set -l out (_arka_capture_output $py (_arka_py_script arka_currency.py) convert "$text")
+        set out (_arka_capture_output $py (_arka_py_script arka_currency.py) convert "$text")
+        set st $status
     end
-    set -l st $status
     if test $st -ne 0
         echo $out >&2
         return $st
@@ -11871,7 +11878,7 @@ function _agent_is_advisory_question --description "True if user wants an opinio
         return 1
     end
     # Explicit metrics / monitor requests
-    if string match -qr '(?i)(system\s*monitor|system\s*status|show\s+(me\s+)?(system\s+)?(monitor|resources)|check\s+(cpu|ram|memory|disk|battery)|\b(cpu|ram|memory|disk)\s+(usage|load|percent)|how\s+much\s+(cpu|ram|memory|disk)\s+(left|free|used|available)|\buptime\b|\bbattery\b|\bload\s+average|port_scan|speedtest|system_info|take\s+a\s+screenshot)' "$clean"
+    if string match -qr '(?i)(system\s*monitor|system\s*status|show\s+(me\s+)?(system\s+)?(monitor|resources)|check\s+(cpu|ram|memory|disk|battery)|\b(cpu|ram|memory|disk)\s+(usage|load|percent)|how\s+much\s+(cpu|ram|memory|disk)\s+(left|free|used|available)|\buptime\b|\bbattery\b|\bload\s+average|port_scan|speedtest|system_info|take\s+a\s+screenshot|high\s+cpu\s+process|cpu\s+hogs?|top\s+process|using\s+my\s+cpu)' "$clean"
         return 1
     end
     # Security / malware diagnostics (opinion from gathered evidence, not a live monitor)
@@ -14568,6 +14575,12 @@ function session_memory --description "OpenClaw-style markdown session memory (M
     end
 end
 
+function processes --description "Show live high-CPU or high-RAM processes on this machine"
+    set -l py (_arka_python)
+    set -l script (_arka_py_script arka_processes.py)
+    $py $script $argv
+end
+
 function jsonkit --description "JSON validate, pretty-print, minify, and path get"
     set -l py (_arka_python)
     set -l script (_arka_py_script arka_jsonkit.py)
@@ -15153,8 +15166,12 @@ function web_answer --description "Answer factual questions via web lookup + AI 
     _arka_ui_header "$question" query
 
     set -l py (_arka_python)
-    set -l intent ($py (_arka_py_script arka_chat.py) intent "$question" 2>/dev/null)
-    set -l action (string split -f 1 \t "$intent")
+    set -l action ""
+    # Who/what factoids skip the extra intent process and answer locally.
+    if not string match -rq -i '^(who|what|where|when)\s+' -- "$question"
+        set -l intent ($py (_arka_py_script arka_chat.py) intent "$question" 2>/dev/null)
+        set action (string split -f 1 \t "$intent")
+    end
     if test "$force_deep" = true; or contains -- "$action" SEARCH CALC WEATHER ERROR
         if test "$action" = CALC
             calc $args
@@ -20492,6 +20509,12 @@ function agent --description "Run commands safely: executes safe commands automa
         set interpreted "open_finance"
     else if string match -qr '(news)' "$clean_cmd"
         set interpreted "open_news"
+    else if string match -qr '(?i)(cpu\s+(stats?|statistics|usage|load|util)|show\s+(me\s+)?(the\s+)?cpu\b)' "$clean_cmd"
+        set interpreted "processes stats"
+        set route_source offline
+    else if string match -qr '(?i)(high\s+cpu\s+process|cpu\s+hogs?|top\s+process|using\s+my\s+cpu|show\s+(me\s+)?(the\s+)?cpu\s+process)' "$clean_cmd"
+        set interpreted "processes cpu"
+        set route_source offline
     else if string match -qr '(speedtest|internet.*speed)' "$clean_cmd"
         set interpreted "speedtest"
     else if string match -qr '(port|open.*port)' "$clean_cmd"
@@ -20757,13 +20780,8 @@ function agent --description "Run commands safely: executes safe commands automa
         echo (set_color yellow)"💡 [Offline routing]"(set_color normal)
     end
 
-    if test -z "$interpreted"; and test "$route_mode" = symbolic
-        set interpreted (_agent_llm_route "$cmd" "$available_skills")
-        if test -n "$interpreted"
-            set route_source llm
-            echo (set_color yellow)"💡 [AI routing]"(set_color normal)
-        end
-    end
+    # symbolic / symbolic_only: never invent a skill via LLM (no [AI routing]).
+    # Use ROUTE_MODE=ai or ai_only if you want the model to pick a skill.
 
     # If LLM just echoed the original input, treat as no interpretation
     if test "$interpreted" = "$cmd"

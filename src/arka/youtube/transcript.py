@@ -65,8 +65,13 @@ def _ytdlp_path() -> str | None:
     return shutil_which("yt-dlp")
 
 
-def youtube_search(query: str, limit: int = 10) -> list[tuple[str, str, str]]:
-    """Search YouTube via yt-dlp; return (video_id, title, channel) tuples."""
+def youtube_search(
+    query: str,
+    limit: int = 10,
+    *,
+    with_duration: bool = False,
+) -> list[tuple[str, str, str]] | list[tuple[str, str, str, int]]:
+    """Search YouTube via yt-dlp; return (video_id, title, channel[, duration_sec])."""
     query = query.strip()
     if not query:
         return []
@@ -83,25 +88,32 @@ def youtube_search(query: str, limit: int = 10) -> list[tuple[str, str, str]]:
         "--no-update",
         "--flat-playlist",
         "--print",
-        "%(id)s\t%(title)s\t%(channel)s",
+        "%(id)s\t%(title)s\t%(channel)s\t%(duration)s",
         f"ytsearch{limit}:{query}",
     ]
     proc = subprocess.run(cmd, capture_output=True, text=True, check=False, timeout=120)
     if proc.returncode != 0:
         err = (proc.stderr or proc.stdout or "yt-dlp search failed").strip()
         raise SystemExit(err[:500])
-    entries: list[tuple[str, str, str]] = []
+    entries: list[tuple[str, str, str, int]] = []
     for line in (proc.stdout or "").splitlines():
         line = line.strip()
         if not line or "\t" not in line:
             continue
-        parts = line.split("\t", 2)
+        parts = line.split("\t")
         vid = parts[0].strip()
         title = parts[1].strip() if len(parts) > 1 else vid
         channel = parts[2].strip() if len(parts) > 2 else ""
+        duration_raw = parts[3].strip() if len(parts) > 3 else "0"
+        try:
+            duration_sec = int(float(duration_raw))
+        except (TypeError, ValueError):
+            duration_sec = 0
         if extract_video_id(vid) and len(vid) == 11:
-            entries.append((vid, title, channel))
-    return entries
+            entries.append((vid, title, channel, max(0, duration_sec)))
+    if with_duration:
+        return entries
+    return [(vid, title, channel) for vid, title, channel, _duration in entries]
 
 
 def _caption_languages() -> list[str]:

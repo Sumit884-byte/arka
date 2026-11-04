@@ -252,11 +252,11 @@ def _ensure_llm_sections(root: Path) -> None:
             "\n================================================================================\n"
             "AGENT RULES\n"
             "================================================================================\n\n"
-            "  - Read ONLY llm.txt for repo/architecture questions.\n"
-            "  - Do NOT glob/grep the entire repo unless llm.txt is insufficient.\n"
+            "  - Product docs: https://arka-agent.mintlify.site — start with /llms.txt.\n"
+            "  - This file is a docs index, not a codebase dump. Open specific pages or paths.\n"
             "  - For deltas, read RECENT FILE CHANGES then open only those paths.\n"
             "  - Use repo_map --depth 3 only when the user explicitly requests a full tree scan.\n"
-            "  - Refresh changelog after pulls: arka repo index  (or arka llm sync)\n"
+            "  - Refresh recent files after pulls: arka repo index  (or arka llm sync)\n"
         )
         marker = "================================================================================\nPROJECT SUMMARY"
         if marker in text:

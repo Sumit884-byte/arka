@@ -15,7 +15,7 @@ from arka.paths import config_dir, env_file
 VERSION = 1
 CONFIG_NAME = "config.json"
 DEFAULTS: dict[str, str] = {
-    "ROUTE_MODE": "symbolic",
+    "ROUTE_MODE": "symbolic_only",
     "PROMPT_OPTIMIZE": "1",
     "ARKA_MODEL_MODE": "auto",
     "ARKA_HOSTED_MODE": "auto",

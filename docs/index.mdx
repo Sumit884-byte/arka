@@ -1,18 +1,14 @@
 ---
-title: "Arka — AI terminal agent documentation"
-description: "Official docs for Arka, a cross-platform AI terminal agent with 70+ local skills, natural-language routing, voice, MCP for Cursor, and 24-provider LLM failover. Install with pipx and run your first command in minutes."
-keywords: ["AI terminal agent", "local AI assistant", "natural language CLI", "LLM orchestration", "MCP agent", "developer tools", "arka-agent", "Cursor MCP"]
+title: "Arka documentation"
+description: "Install Arka, connect it to Cursor over MCP, and use local terminal skills. Start at Quickstart."
+keywords: ["arka-agent", "AI terminal agent", "MCP", "Cursor", "CLI"]
 icon: "book-open"
 boost: 2
-og:title: "Arka — AI terminal agent documentation"
-og:description: "70+ local skills, natural-language routing, MCP for Cursor, and 24-provider LLM failover."
 ---
 
-{/* Mintlify emits schema.org JSON-LD (application/ld+json) on every page — Organization, WebSite, TechArticle — from docs.json seo.organization and page frontmatter. */}
+Arka is a **cross-platform AI agent** for your terminal. Say what you want in plain English — Arka routes the request to a local skill, runs it, and can speak the answer back.
 
-Arka is a **cross-platform AI agent** for your terminal. Say what you want in plain English. Arka routes your request to the right local skill, runs it, and speaks the answer back if you want.
-
-Commands run locally. LLM calls go through a **fallback orchestrator** across **24 providers**. You don't need Docker for daily use.
+Commands run on your machine. LLM calls go through a fallback list of providers. You do not need Docker for daily use.
 
 ## Install without building from source
 
@@ -46,8 +42,8 @@ See the [Quickstart](/quickstart) for API keys, fish shell, and optional extras.
     Zero LLM tokens for most requests via offline symbolic rules.
   </Card>
 
-  <Card title="Security" icon="shield-check" href="/concepts/security">
-    Prompt-injection blocks, risky-action prompts, destructive shell hard-blocks.
+  <Card title="AI agents / MCP" icon="robot" href="/guides/ai-agents">
+    How Cursor and Claude should call Arka tools.
   </Card>
 </CardGroup>
 
@@ -81,7 +77,7 @@ arka listen    # "hey arka, what's the weather"
 
 ## Documentation map
 
-Browse by tab in the sidebar: **Get Started**, **Guides**, **Concepts**, **Reference**, and **Changelog**. Use the language switcher for 中文.
+Use the sidebar tabs: **Get Started**, **Guides**, **Concepts**, and **Reference**. Switch language for 中文 or हिंदी.
 
 ### Get started
 
@@ -204,5 +200,5 @@ Browse by tab in the sidebar: **Get Started**, **Guides**, **Concepts**, **Refer
 </AccordionGroup>
 
 <Note>
-  Open source under GPL-2.0. PyPI package: `arka-agent`. Documentation: [arka-agent.mintlify.site](https://arka-agent.mintlify.site).
+  Open source under MIT. PyPI package: `arka-agent`. Documentation: [arka-agent.mintlify.site](https://arka-agent.mintlify.site).
 </Note>

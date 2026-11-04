@@ -211,6 +211,14 @@ def rotate_provider_key(provider: str, exc: Exception | str) -> bool:
     """Mark current key failed and switch to the next. Returns True if rotated."""
     if not rotation_enabled():
         return False
+    try:
+        from arka.llm.provider_health import is_first_token_timeout
+
+        if is_first_token_timeout(exc):
+            return False
+    except ImportError:
+        if "no first token" in str(exc or "").lower():
+            return False
     rot = _get_rotator(provider)
     if len(rot.keys) <= 1:
         return False

@@ -6,6 +6,7 @@ import argparse
 import re
 import sys
 from datetime import date, datetime
+from functools import lru_cache
 from urllib.parse import urlparse
 
 _BRIEF_URL_WORDS_DEFAULT = "30"
@@ -699,14 +700,11 @@ def headline_answer_instructions(question: str, web_context: str = "") -> str:
     return extra
 
 
-def headlines_from_web_context(web_context: str, *, limit: int = 7) -> str:
-    """Build headline bullets from scraped search context without an LLM."""
-    if not (web_context or "").strip():
-        return ""
-
-    lines: list[str] = []
+def parse_news_context_items(web_context: str) -> list[dict[str, str]]:
+    """Parse Source/URL blocks into title, url, snippet dicts."""
+    items: list[dict[str, str]] = []
     seen_urls: set[str] = set()
-    for block in re.split(r"\n{2,}", web_context):
+    for block in re.split(r"\n{2,}", web_context or ""):
         text = block.strip()
         if not text:
             continue
@@ -722,14 +720,30 @@ def headlines_from_web_context(web_context: str, *, limit: int = 7) -> str:
             continue
         if headline_title_looks_like_nav(title):
             continue
+        snippet = ""
+        after = re.split(r"^URL:\s*https?://\S+\s*", text, maxsplit=1, flags=re.M)
+        if len(after) == 2:
+            snippet = sanitize_scraped_news_text(after[1], max_chars=280)
+        if headline_looks_like_engagement(title, snippet):
+            continue
+        if news_snippet_looks_like_filler(title, snippet):
+            continue
         seen_urls.add(url)
-        lines.append(f"- {title} — {url}")
-        if len(lines) >= limit:
-            break
+        items.append({"title": title, "url": url, "snippet": snippet})
+    return items
 
-    if not lines:
+
+def headlines_from_web_context(
+    web_context: str,
+    *,
+    limit: int = 7,
+    place: str = "",
+) -> str:
+    """Build headline bullets from scraped search context without an LLM."""
+    items = pick_news_items(web_context, limit=limit, place=place)
+    if not items:
         return ""
-
+    lines = [f"- {row['title']} — {row['url']}" for row in items]
     return format_headlines_response("\n".join(lines), web_context=web_context)
 
 
@@ -790,6 +804,7 @@ _NEWS_SOURCE_PATTERNS: tuple[tuple[str, str], ...] = (
     ("aljazeera.com", r"\bal\s+jazeera\b"),
     ("ndtv.com", r"\bndtv\b"),
     ("indiatoday.in", r"\bindia\s+today\b"),
+    ("usatoday.com", r"\b(?:usatoday|usa\s*today\.com|usa today newspaper)\b"),
 )
 
 _NEWS_HOST_ALIASES: dict[str, tuple[str, ...]] = {
@@ -806,8 +821,223 @@ def url_matches_news_host(url: str, host: str) -> bool:
     return any(alias in low for alias in aliases)
 
 
+_DISPLAY_OVERRIDES: dict[str, str] = {
+    "united states": "United States",
+    "united kingdom": "United Kingdom",
+    "united arab emirates": "United Arab Emirates",
+    "south korea": "South Korea",
+    "north korea": "North Korea",
+    "south africa": "South Africa",
+    "saudi arabia": "Saudi Arabia",
+    "sri lanka": "Sri Lanka",
+    "new zealand": "New Zealand",
+    "czech republic": "Czech Republic",
+    "hong kong": "Hong Kong",
+}
+
+_EXTRA_COUNTRY_ALIASES: dict[str, str] = {
+    "usa": "United States",
+    "us": "United States",
+    "u.s": "United States",
+    "u.s.a": "United States",
+    "america": "United States",
+    "uk": "United Kingdom",
+    "u.k": "United Kingdom",
+    "britain": "United Kingdom",
+    "great britain": "United Kingdom",
+    "england": "United Kingdom",
+}
+
+_NON_COUNTRY_PLACES = frozenset(
+    {
+        "news",
+        "the news",
+        "world",
+        "the world",
+        "event",
+        "the event",
+        "launch",
+        "brief",
+        "morning",
+        "evening",
+        "gtc",
+        "wwdc",
+        "ces",
+        "apple",
+        "google",
+        "nvidia",
+        "microsoft",
+    }
+)
+_EVENT_PLACE_RE = re.compile(
+    r"(?i)\b(gtc|wwdc|ces|i/?o|keynote|launch|event|conference|unpacked|devday)\b"
+)
+_COUNTRY_TODAY_GENERIC_RE = re.compile(
+    r"(?i)\b(?:what\s+happened|what'?s\s+happening|news|happening)\s+"
+    r"(?:in|across)\s+(?:the\s+)?(?P<place>.+?)\s+today\b"
+)
+_IN_PLACE_TODAY_RE = re.compile(r"(?i)\bin\s+(?:the\s+)?(?P<place>.+?)\s+today\b")
+
+
+def _display_country(canon: str) -> str:
+    low = (canon or "").strip().lower()
+    if low in _DISPLAY_OVERRIDES:
+        return _DISPLAY_OVERRIDES[low]
+    return " ".join(part.capitalize() for part in low.split())
+
+
+@lru_cache(maxsize=1)
+def _country_alias_map() -> dict[str, str]:
+    mapping = dict(_EXTRA_COUNTRY_ALIASES)
+    try:
+        from arka.core.office_titles import FINANCE_OFFICES
+
+        for aliases, canon, _title in FINANCE_OFFICES:
+            display = _display_country(canon)
+            mapping[canon] = display
+            for alias in aliases:
+                mapping[re.sub(r"\s+", " ", alias.lower()).rstrip(".")] = display
+    except ImportError:
+        pass
+    try:
+        from arka.charts.data import COUNTRY_CODES
+
+        for name, code in COUNTRY_CODES.items():
+            key = name.lower().strip()
+            if key in mapping or key in {"world"}:
+                continue
+            if code == "US":
+                mapping[key] = "United States"
+            elif code == "GB":
+                mapping[key] = "United Kingdom"
+            else:
+                mapping[key] = _display_country(key)
+    except ImportError:
+        pass
+    return mapping
+
+
+_CANON_ISO: dict[str, str] = {
+    "united states": "us",
+    "united kingdom": "uk",
+    "india": "in",
+    "canada": "ca",
+    "australia": "au",
+    "new zealand": "nz",
+    "germany": "de",
+    "france": "fr",
+    "japan": "jp",
+    "china": "cn",
+    "south korea": "kr",
+    "north korea": "kp",
+    "italy": "it",
+    "spain": "es",
+    "portugal": "pt",
+    "netherlands": "nl",
+    "belgium": "be",
+    "switzerland": "ch",
+    "austria": "at",
+    "sweden": "se",
+    "norway": "no",
+    "denmark": "dk",
+    "finland": "fi",
+    "ireland": "ie",
+    "iceland": "is",
+    "poland": "pl",
+    "czech republic": "cz",
+    "hungary": "hu",
+    "romania": "ro",
+    "greece": "gr",
+    "ukraine": "ua",
+    "russia": "ru",
+    "turkey": "tr",
+    "israel": "il",
+    "saudi arabia": "sa",
+    "united arab emirates": "ae",
+    "qatar": "qa",
+    "egypt": "eg",
+    "south africa": "za",
+    "nigeria": "ng",
+    "kenya": "ke",
+    "ethiopia": "et",
+    "ghana": "gh",
+    "mexico": "mx",
+    "brazil": "br",
+    "argentina": "ar",
+    "chile": "cl",
+    "colombia": "co",
+    "peru": "pe",
+    "indonesia": "id",
+    "malaysia": "my",
+    "singapore": "sg",
+    "thailand": "th",
+    "vietnam": "vn",
+    "philippines": "ph",
+    "pakistan": "pk",
+    "bangladesh": "bd",
+    "sri lanka": "lk",
+    "nepal": "np",
+    "taiwan": "tw",
+    "hong kong": "hk",
+}
+
+
+@lru_cache(maxsize=1)
+def _country_geo_map() -> dict[str, str]:
+    geos = {display: iso for canon, iso in _CANON_ISO.items() for display in (_display_country(canon),)}
+    geos["United States"] = "us"
+    geos["United Kingdom"] = "uk"
+    try:
+        from arka.charts.data import COUNTRY_CODES
+
+        aliases = _country_alias_map()
+        for name, code in COUNTRY_CODES.items():
+            display = aliases.get(name.lower(), _display_country(name))
+            iso = "uk" if code == "GB" else code.lower()
+            if len(iso) == 2:
+                geos.setdefault(display, iso)
+    except ImportError:
+        pass
+    return geos
+
+
+def resolve_country_place(token: str) -> str:
+    """Map a captured place phrase to a display country, or '' if it is not a place."""
+    raw = re.sub(r"\s+", " ", (token or "").strip().lower()).rstrip(".")
+    if raw.startswith("the "):
+        raw = raw[4:]
+    if not raw or raw in _NON_COUNTRY_PLACES or _EVENT_PLACE_RE.search(raw):
+        return ""
+    aliases = _country_alias_map()
+    if raw in aliases:
+        return aliases[raw]
+    if re.fullmatch(r"[a-z]{2,}(?:\s+[a-z]{2,}){0,3}", raw):
+        return _display_country(raw)
+    return ""
+
+
+def country_news_place(question: str) -> str:
+    """Country name when the user asked what happened there today — not a newspaper."""
+    q = (question or "").strip()
+    if not q:
+        return ""
+    if re.search(r"(?i)\b(?:usatoday|usa\s*today\.com|usa today newspaper)\b", q):
+        return ""
+    match = _COUNTRY_TODAY_GENERIC_RE.search(q) or _IN_PLACE_TODAY_RE.search(q)
+    if not match:
+        return ""
+    return resolve_country_place(match.group("place"))
+
+
+def country_news_geo(place: str) -> str:
+    """Bright Data geo code for a resolved country display name."""
+    return _country_geo_map().get((place or "").strip(), "")
+
+
 def news_source_host(question: str) -> str:
     """Return a host fragment (e.g. bbc.com) when the user names a news outlet."""
+    if country_news_place(question):
+        return ""
     low = (question or "").lower()
     for host, pattern in _NEWS_SOURCE_PATTERNS:
         if re.search(pattern, low):
@@ -843,6 +1073,21 @@ def is_live_news_question(question: str) -> bool:
         return True
     if re.search(r"\bbest\s+(?:\w+\s+){0,4}(?:news|headlines?)\b", low):
         return True
+    if re.search(r"\bwhat\s+happened\b", low):
+        return True
+    if re.search(r"\b(?:gtc|wwdc|kubecon|ces|aws\s+re:?invent|google\s+i/?o)\b", low):
+        return True
+    if re.search(r"\b(?:apple\s+(?:event|launch|keynote)|foldable\s+iphone|iphone\s+duo)\b", low):
+        return True
+    if re.search(r"\b(?:iphone|ipad)\s*(?:1[6-9]|[2-9]\d)\b", low):
+        return True
+    try:
+        from arka.agent.launch_recap import is_launch_recap_question
+
+        if is_launch_recap_question(q):
+            return True
+    except ImportError:
+        pass
     return False
 
 
@@ -888,6 +1133,15 @@ def news_search_query(question: str) -> str:
     if host:
         label = news_source_label(question)
         return f"site:{host} {label} news latest {today}"
+
+    place = country_news_place(question)
+    if place:
+        if place == "United States":
+            return (
+                f"{place} {today} breaking news "
+                "site:apnews.com OR site:reuters.com OR site:bbc.com/news OR site:npr.org"
+            )
+        return f"{place} {today} breaking news"
 
     if tech_focus_from_prompt(question):
         return headlines_search_query(question)
@@ -958,6 +1212,12 @@ _NEWS_RSS_FEEDS: dict[str, str] = {
     "bbc.com": "http://feeds.bbci.co.uk/news/rss.xml",
     "reuters.com": "https://www.reutersagency.com/feed/?taxonomy=best-topics&post_type=best",
     "apnews.com": "https://apnews.com/apf-topnews?output=rss",
+    "npr.org": "https://feeds.npr.org/1001/rss.xml",
+}
+
+_COUNTRY_NEWS_RSS: dict[str, tuple[str, ...]] = {
+    "United States": ("npr.org", "bbc.com"),
+    "United Kingdom": ("bbc.com",),
 }
 
 _NEWS_FILLER_PATTERNS: tuple[str, ...] = (
@@ -1016,7 +1276,124 @@ def headline_title_looks_like_nav(title: str) -> bool:
         return True
     if re.search(r"\b(?:americas|europe|asia)\s+(?:americas|europe|page)\b", t):
         return True
+    if re.search(r"(?i)\b(?:news headlines|latest headlines|national news|breaking news live)\b", t):
+        return True
+    if re.search(r"(?i)\bnews broadcast\b", t):
+        return True
     return t in {"bbc news", "news", "world", "home"}
+
+
+def headline_looks_like_engagement(title: str, snippet: str = "") -> bool:
+    """Drop audience callouts, newsletters, and 'tell us your story' items."""
+    combined = f"{title}\n{snippet}"
+    return bool(
+        re.search(
+            r"(?i)\b("
+            r"wants? to know|tell us|have your say|we want to hear|"
+            r"share your (?:story|experience)|how are .{0,40} you\b|"
+            r"up first newsletter|newsletter\b|listener (?:question|mail)"
+            r")\b",
+            combined,
+        )
+    )
+
+
+_US_STORY_RE = re.compile(
+    r"(?i)\b("
+    r"senate|senator|congress|house|white house|washington|fed(?:eral reserve)?|"
+    r"interest rates?|supreme court|trump|biden|harris|midterm|"
+    r"surgeon general|kennedy center|hhs|rfk|treasury|irs|"
+    r"california|texas|florida|new york|hurricane|wildfire"
+    r")\b"
+)
+_WORLD_ONLY_RE = re.compile(
+    r"(?i)\b("
+    r"kosovo|mecca|houthis?|von der leyen|ukraine|russia|"
+    r"saudi arabia|thaci|pows?"
+    r")\b"
+)
+
+
+def country_story_score(place: str, title: str, snippet: str = "") -> int:
+    """Prefer domestic leads for a country-day recap; keep world items as fillers."""
+    text = f"{title} {snippet}"
+    if headline_looks_like_engagement(title, snippet) or headline_title_looks_like_nav(title):
+        return -100
+    score = 4
+    if place == "United States":
+        if _US_STORY_RE.search(text):
+            score += 8
+        if _WORLD_ONLY_RE.search(text) and not _US_STORY_RE.search(text):
+            score -= 3
+    elif place:
+        tokens = [tok for tok in re.split(r"\W+", place.lower()) if len(tok) > 2]
+        if any(tok in text.lower() for tok in tokens):
+            score += 6
+    return score
+
+
+def pick_news_items(
+    web_context: str,
+    *,
+    limit: int = 5,
+    place: str = "",
+) -> list[dict[str, str]]:
+    """Pick a short, ranked set of stories — not the whole RSS dump."""
+    items = parse_news_context_items(web_context)
+    if not items:
+        return []
+    ranked = sorted(
+        items,
+        key=lambda row: country_story_score(place, row["title"], row.get("snippet", "")),
+        reverse=True,
+    )
+    domestic: list[dict[str, str]] = []
+    world: list[dict[str, str]] = []
+    for row in ranked:
+        title, snippet = row["title"], row.get("snippet", "")
+        if country_story_score(place, title, snippet) < 0:
+            continue
+        text = f"{title} {snippet}"
+        if (
+            place == "United States"
+            and _WORLD_ONLY_RE.search(text)
+            and not _US_STORY_RE.search(text)
+        ):
+            world.append(row)
+        else:
+            domestic.append(row)
+    picked = domestic[:limit]
+    if len(picked) < 2:
+        picked.extend(world[: limit - len(picked)])
+    return picked
+
+
+def format_country_news_brief(place: str, web_context: str) -> str:
+    """Curated country briefing from titles/snippets when the LLM is unavailable."""
+    items = pick_news_items(web_context, limit=4, place=place)
+    if not items:
+        return ""
+    today = current_brief_date(long_form=True)
+    lede_bits: list[str] = []
+    for row in items[:2]:
+        piece = (row.get("snippet") or row["title"]).strip()
+        piece = re.sub(r"\s+", " ", piece).rstrip(" .")
+        if piece and piece.lower() not in {bit.lower() for bit in lede_bits}:
+            lede_bits.append(piece)
+    lede = ". ".join(lede_bits).strip()
+    if lede and not lede.endswith((".", "!", "?")):
+        lede += "."
+    lines = [f"**{place} today ({today})**", ""]
+    if lede:
+        lines.extend([lede, ""])
+    for row in items:
+        link = f"[{row['title']}]({row['url']})"
+        snippet = (row.get("snippet") or "").strip()
+        if snippet and snippet.lower() not in row["title"].lower():
+            lines.append(f"- {link} — {snippet}")
+        else:
+            lines.append(f"- {link}")
+    return "\n".join(lines).strip()
 
 
 def news_snippet_looks_like_filler(title: str, snippet: str = "") -> bool:
@@ -1132,7 +1509,7 @@ def is_valid_news_url(url: str, *, host: str = "") -> bool:
         return False
     low = normalized.lower()
     if "youtube.com/watch" in low or "youtu.be/" in low:
-        return True
+        return bool(host)
     if host and not url_matches_news_host(normalized, host):
         return False
     return is_news_article_url(normalized, host=host) if host else is_news_article_url(normalized)
@@ -1172,15 +1549,48 @@ def is_news_article_url(url: str, *, host: str = "") -> bool:
 
     if len(segments) <= 1:
         return False
+    if (
+        len(segments) >= 3
+        and re.fullmatch(r"20\d{2}", segments[0] or "")
+        and re.fullmatch(r"\d{1,2}", segments[1] or "")
+        and re.fullmatch(r"\d{1,2}", segments[2] or "")
+        and len(segments) == 3
+    ):
+        return False
     tail = segments[-1]
+    section_names = {
+        "news",
+        "world",
+        "politics",
+        "business",
+        "sport",
+        "sports",
+        "tech",
+        "health",
+        "national",
+        "nation",
+        "nation-world",
+        "headlines",
+        "live",
+        "video",
+        "videos",
+        "latest",
+        "breaking",
+        "local",
+        "international",
+        "regional",
+    }
+    if tail.lower() in section_names:
+        return False
     if re.search(r"\d{5,}", tail):
         return True
     if len(tail) > 24 and "-" in tail:
         return True
-    section_names = {"news", "world", "politics", "business", "sport", "tech", "health"}
+    if len(segments) >= 3 and "-" in tail and len(tail) > 16:
+        return True
     if len(segments) == 2 and segments[-1] in section_names:
         return False
-    return len(segments) >= 3
+    return False
 
 
 def extract_youtube_urls(text: str) -> list[str]:
@@ -1305,6 +1715,26 @@ def _finalize_news_context(
     return ctx
 
 
+_SERP_LEDE_RE = re.compile(
+    r"(?i)(?:\b\d+\s+(?:day|days|hour|hours|week|weeks)\s+ago|[A-Z][a-z]{2,8}\s+\d{1,2},\s+\d{4})\s+[—–-]\s+"
+)
+
+
+def looks_like_serp_dump(text: str) -> bool:
+    """True when the reply is glued search-result ledes, not a written answer."""
+    body = re.sub(r"^\[FROM\s+(?:SEARCH|MEMORY)\]\s*", "", (text or "").strip(), flags=re.I)
+    if not body:
+        return False
+    ledes = _SERP_LEDE_RE.findall(body)
+    if len(ledes) >= 2:
+        return True
+    if _SERP_LEDE_RE.search(body) and "..." in body:
+        return True
+    if body.count("...") >= 2 and len(body) < 500:
+        return True
+    return False
+
+
 def news_summary_looks_truncated(text: str) -> bool:
     """True when the summary ends mid-thought or with a dangling ellipsis."""
     body = (text or "").strip()
@@ -1332,8 +1762,59 @@ def trim_incomplete_summary(text: str) -> str:
     return trimmed or body
 
 
-def news_summary_looks_low_quality(text: str, web_context: str = "") -> bool:
+def news_summary_looks_like_ai_filler(text: str) -> bool:
+    """True when the briefing talks about 'coverage' instead of what happened."""
+    return bool(
+        re.search(
+            r"(?i)\b("
+            r"major (?:national )?developments.{0,60}unfolding|"
+            r"(?:breaking news )?stories are unfolding|"
+            r"are being tracked|"
+            r"being covered live|"
+            r"broadcast coverage|"
+            r"coverage of today|"
+            r"latest video updates|"
+            r"across the country\b.*\bbreaking news"
+            r")\b",
+            text or "",
+        )
+    )
+
+
+def news_summary_looks_like_refusal(text: str) -> bool:
+    """True when the model refused instead of briefing the search hits."""
+    return bool(
+        re.search(
+            r"(?i)\b("
+            r"i cannot fulfill|cannot fulfil|do not contain any text|"
+            r"no (?:text or )?content snippets|preventing me from|"
+            r"unable to (?:summarize|verify)|i can't (?:fulfill|summarize)|"
+            r"all configured llm providers failed"
+            r")\b",
+            text or "",
+        )
+    )
+
+
+def news_summary_looks_off_topic(question: str, text: str) -> bool:
+    """True when a country/day recap is actually leftover GTC/CUDA memory."""
+    if not country_news_place(question):
+        return False
+    if re.search(r"(?i)\b(cuda|cudnn|rapids|cublas|tensorrt|npp|vera rubin)\b", question):
+        return False
+    return bool(re.search(r"(?i)\b(cuda|cudnn|rapids|cublas|tensorrt|npp|vera rubin)\b", text or ""))
+
+
+def news_summary_looks_low_quality(text: str, web_context: str = "", question: str = "") -> bool:
     """Reject nav glue, stale evergreen reframes, filler tropes, and truncation."""
+    if question and news_summary_looks_off_topic(question, text):
+        return True
+    if news_summary_looks_like_refusal(text):
+        return True
+    if news_summary_looks_like_ai_filler(text):
+        return True
+    if looks_like_serp_dump(text):
+        return True
     if news_summary_looks_ungrounded(text, web_context):
         return True
     low = (text or "").lower()
@@ -1451,6 +1932,14 @@ def gather_news_web_context(
 
     host = news_source_host(question)
     rss_context = fetch_news_rss_context(host, limit=max_results) if host else ""
+    if not host:
+        place = country_news_place(question)
+        for extra_host in _COUNTRY_NEWS_RSS.get(place, ()):
+            extra = fetch_news_rss_context(extra_host, limit=max_results)
+            if extra:
+                rss_context = _merge_news_context_blocks(
+                    rss_context, extra, max_blocks=max_results
+                )
     if not results:
         finalized = _finalize_news_context(
             question,
@@ -1533,20 +2022,39 @@ def gather_news_web_context(
 def news_summary_prompt(question: str, web_context: str) -> tuple[str, str]:
     """System + user prompts for conversational news summaries."""
     source = news_source_label(question)
+    place = country_news_place(question)
     today = current_brief_date(long_form=True)
     source_hint = f" Prioritize {source} stories." if source else ""
+    if place:
+        source_hint = (
+            f" This is a {place} day recap. Pick the 4 most important stories for {place}. "
+            "Prefer domestic politics, economy, courts, and disasters. "
+            "Drop audience polls, 'tell us', newsletters, and extra world briefs "
+            "unless they clearly affect that country."
+        )
     system = (
         "You are Arka, a helpful assistant. Summarize the latest news in clear, natural prose. "
         "Write like a concise news briefing — not a raw list of URLs. "
-        "Cover the 4–6 most important stories with one or two sentences each. "
+        "Cover the 4 most important stories with two sentences each — pick and trim, "
+        "do not dump every RSS item. "
         "Use markdown links [headline](url) when citing a source. "
-        "CRITICAL: Only state facts explicitly supported by the Search results below. "
+        "CRITICAL: Only state facts from the Search results below. "
+        "Source titles are valid evidence — if snippets are missing, brief from the headlines and URLs. "
+        "Never refuse. Never say you cannot fulfill the request or that there are no snippets. "
         "Do not infer stories from site navigation, section labels, menu text, or page chrome. "
         "Ignore fragments like duplicated words, 'Americas page', or airshow stunt blurbs "
         "unless a full article snippet clearly describes them as today's lead news. "
         "Never describe old launches (e.g. BBC Verify from 2023) as new initiatives. "
         "Do not write vague regional filler ('infrastructure projects and cultural events'). "
+        "Name specific people, places, votes, accidents, or decisions from the sources. "
+        "Do not write meta filler such as 'major developments are unfolding', "
+        "'stories are being tracked', or 'coverage is available'. "
+        "Do not open with 'major national developments' — name the first event. "
+        "Do not cite date-index pages, section fronts, or live news videos. "
+        "Skip 'wants to know', listener questions, and newsletter roundups. "
         "Finish every sentence; do not trail off with '....'. "
+        "Never paste search-result ledes such as '7 days ago — …' or date-stamped blurbs. "
+        "Rewrite the facts in your own words as a briefing. "
         "If the results are thin or ambiguous, say so briefly and summarize only what is verified. "
         "Do not mention weather unless the user asked for it. "
         "Do not describe your search process. Start with a one-sentence overview."
@@ -1555,8 +2063,13 @@ def news_summary_prompt(question: str, web_context: str) -> tuple[str, str]:
         f"Today is {today}.{source_hint}\n\n"
         f"User question: {question.strip()}\n\n"
         f"Search results:\n---\n{web_context.strip()}\n---\n\n"
-        "Write a helpful news summary based only on these results. "
-        "Every story must map to a Source/URL block above."
+        "Write a helpful news briefing based only on these results. "
+        "Pick a few leads and elaborate one beat — do not list every link. "
+        "Every story must map to a Source/URL block above. "
+        "If a block has only a title and URL, use that headline as the story. "
+        "Do not concatenate snippets; synthesize them. "
+        "Do not say the results lack text. "
+        "Do not sound like an AI recap of 'the news' — report the events."
     )
     return system, user
 
@@ -1564,9 +2077,24 @@ def news_summary_prompt(question: str, web_context: str) -> tuple[str, str]:
 def summarize_news_web(question: str) -> str:
     """Fetch news context; named outlets get RSS/search headlines, others may use LLM."""
     host = news_source_host(question)
-    web_context = gather_news_web_context(question)
-    if not (web_context or "").strip():
-        return ""
+    web_context = ""
+    if not host:
+        web_context = gather_news_web_context(question)
+        try:
+            from arka.agent.launch_recap import is_launch_recap_question, summarize_official_launch
+
+            if is_launch_recap_question(question):
+                recap = summarize_official_launch(question, web_context=web_context)
+                if recap:
+                    return recap
+        except ImportError:
+            pass
+        if not (web_context or "").strip():
+            return ""
+    else:
+        web_context = gather_news_web_context(question)
+        if not (web_context or "").strip():
+            return ""
 
     if host:
         formatted = format_named_source_headlines(question, web_context)
@@ -1574,34 +2102,75 @@ def summarize_news_web(question: str) -> str:
             return formatted
         return ""
 
-    headlines = headlines_from_web_context(web_context)
+    place = country_news_place(question)
+    if place:
+        picked = pick_news_items(web_context, limit=4, place=place)
+        if picked:
+            web_context = "\n\n".join(
+                (
+                    f"Source: {row['title']}\nURL: {row['url']}"
+                    + (f"\n{row['snippet']}" if row.get("snippet") else "")
+                )
+                for row in picked
+            )
+    headlines = headlines_from_web_context(web_context, limit=5 if place else 7, place=place)
     try:
         from arka.llm.fallback import llm_complete
     except ImportError:
+        if place:
+            return format_country_news_brief(place, web_context) or headlines
         return headlines
 
-    system, user = news_summary_prompt(question, web_context)
-    reply = trim_incomplete_summary(
-        llm_complete(
+    def _news_brief_chain() -> list[tuple[str, str]] | None:
+        try:
+            from arka.llm.fallback import ordered_model_candidates
+            from arka.llm.provider_health import ttft_tier
+        except ImportError:
+            return None
+        ordered = ordered_model_candidates(task="chat", skill="daily_brief")
+        if not ordered:
+            return None
+        fast = [pair for pair in ordered if ttft_tier(pair[1]) == "fast"]
+        rest = [pair for pair in ordered if ttft_tier(pair[1]) != "fast"]
+        return (fast + rest) if fast else ordered
+
+    def _draft(*, retry: bool = False) -> str:
+        system, user = news_summary_prompt(question, web_context)
+        if retry:
+            user += (
+                "\n\nThe previous draft just pasted search snippets. "
+                "Write a briefing in your own words. No 'N days ago —' ledes "
+                "and no ellipsis-joined blurbs."
+            )
+        raw = llm_complete(
             system,
             user,
             task="chat",
-            skill="web_answer",
+            skill="daily_brief",
             temperature=0.2,
+            chain=_news_brief_chain(),
         )
-        or ""
-    )
-    if not reply:
-        return headlines
-    if news_summary_looks_low_quality(reply, web_context):
-        if headlines:
-            return (
-                "_Could not verify a reliable narrative summary; "
-                "here are the latest headlines instead:_\n\n"
-                f"{headlines}"
-            )
-        return ""
-    return reply
+        return trim_incomplete_summary(raw or "")
+
+    reply = _draft()
+    if reply and not news_summary_looks_low_quality(reply, web_context, question):
+        return reply
+    if not news_summary_looks_like_refusal(reply):
+        retry = _draft(retry=True)
+        if retry and not news_summary_looks_low_quality(retry, web_context, question):
+            return retry
+    if place:
+        curated = format_country_news_brief(place, web_context)
+        if curated:
+            return curated
+    if headlines:
+        lead = (
+            f"Here is what news outlets are reporting in {place} today:"
+            if place
+            else "Here are the latest headlines:"
+        )
+        return f"{lead}\n\n{headlines}"
+    return ""
 
 
 def main() -> int:
