@@ -38,6 +38,29 @@ pours/
 .arka-index
 .local/
 tmp/
+/.tmp/
+/.worktrees/
+/.benchmarks/
+.env.bak.*
+
+# Historical repo-root runtime state (canonical copies live under .arka/ via
+# migrate_scattered_state(); see docs/architecture/repository-layout.md)
+/answer_cache.json
+/folder_cache.json
+/hardware_cache.json
+/habitat.json
+/cli-connector.json
+/self-repair-memory.json
+/agent-memory/
+/web-topic-memory/
+/audit/
+/backups/
+/tasks/
+/screenshots/
+
+# Default `arka scene-3d --out` targets (curated samples live in examples/scene-3d/)
+/arka-scene/
+/arka-scenes/
 
 # Email / MCP debug state (live under config_dir() — .arka/ in editable checkouts)
 email_contacts.json
