@@ -1,0 +1,83 @@
+---
+title: "Production animation notes"
+description: "Short notes on how studios make animation, mapped to Blender docs and Arka MCP."
+icon: "clapperboard"
+---
+
+Condensed notes from the [Blender animation manual](https://docs.blender.org/manual/en/latest/animation/index.html), [shape keys](https://docs.blender.org/manual/en/latest/animation/shape_keys/introduction.html), [NLA](https://docs.blender.org/manual/en/latest/editors/nla/introduction.html), [render engines](https://docs.blender.org/manual/en/latest/render/render_engines.html), and [CLI render](https://docs.blender.org/manual/en/latest/advanced/command_line/render.html). Full ~1 hour lesson: [Production animation reading](/guides/production-animation-reading).
+
+## Studio pipeline (not one Blender file)
+
+| Stage | What gets locked | Typical output |
+|---|---|---|
+| Previs / storyboard | Shots, timing, camera | Animatic |
+| Layout | Camera, blocking, sets | Layout scene |
+| Animation | Performance | Actions / caches |
+| Lighting / lookdev | Mood, materials | Light rig |
+| Render | Frames, not a live timeline | PNG/EXR sequence |
+| Comp / edit | Grade, mux, delivery | Movie |
+
+Production renders **image sequences**, then stitches. Never treat “one MP4 from the 3D app” as the source of truth.
+
+## Blender animation stack
+
+1. **Keyframes** on properties (`location`, `rotation_euler`, `key_blocks["viseme_aa"].value`).
+2. **Actions** — reusable clips (walk, talk, blink).
+3. **NLA** — stack actions as strips instead of one giant F-curve.
+4. **Armatures** — body / cloth / hair deform.
+5. **Shape keys** — face, correctives, blinks. Relative keys blend from **Basis**.
+6. **Drivers / constraints** — wire a jaw bone to a mouth key, or an eye bone to a look-at.
+
+Official: [Animation & Rigging](https://docs.blender.org/manual/en/latest/animation/index.html).
+
+## Shape keys (Tu + Blender manual)
+
+From [relative shape keys](https://docs.blender.org/manual/en/latest/animation/shape_keys/introduction.html) and [workflow](https://docs.blender.org/manual/en/latest/animation/shape_keys/workflow.html):
+
+- **Basis** is the rest mesh. It cannot be keyed.
+- New keys copy Basis. Edit verts — do **not** add or delete vertices.
+- **Value** 0 = reference, 1 = full shape. Blender can extrapolate past 1.
+- Facial work uses **relative** keys. Extreme poses can be split with **New Shape from Mix**.
+- Key the influences in the [Shape Key Editor](https://docs.blender.org/manual/en/latest/editors/dope_sheet/modes/shape_key.html).
+
+VRChat / VTuber practice (Tu): author **A, O, CH + blink**, then expand the rest (Cats). Keep subdivision **unapplied** on the face until keys exist. Arka: `shape_keys_talk` template + `arka.media.visemes`.
+
+## Actions + NLA
+
+The [NLA editor](https://docs.blender.org/manual/en/latest/editors/nla/introduction.html) treats animation as **strips of actions**, not one timeline of keys. Walk cycle, talk clip, and blink track layer independently.
+
+Python (current API): create an action + slot + keyframe strip, or use `obj.keyframe_insert(...)`. Push clips with `nla_tracks.new()` / `strips.new(name, start, action)`. Docs: [bpy quickstart](https://docs.blender.org/api/current/info_quickstart.html), [NlaStrips](https://docs.blender.org/api/current/bpy.types.NlaStrips.html).
+
+## Render like a farm
+
+| Engine | Use |
+|---|---|
+| **Workbench** | Layout, playblasts |
+| **EEVEE** | Fast animation, stylized, lookdev |
+| **Cycles** | Final beauty / VFX |
+
+CLI:
+
+```bash
+blender -b scene.blend -E BLENDER_EEVEE_NEXT -s 1 -e 240 -o //frames/frame_##### -F PNG -a
+ffmpeg -framerate 24 -i frames/frame_%05d.png -c:v libx264 -pix_fmt yuv420p out.mp4
+```
+
+Arka `blender_film` is this loop: bpy script → headless PNG → ffmpeg.
+
+## Arka MCP map
+
+| Studio job | MCP / CLI |
+|---|---|
+| Shot / template | `arka_blender_film` `templates` / `generate` |
+| Talking-head / visemes | `--template shape_keys_talk` |
+| Rigged FBX cycle | `arka_model_video` `animate` |
+| Stitch / mux | `blender_film` `build` or `arka_edit_video` |
+| Read these notes | `arka_markdown` path `production-animation` |
+| 1 hour lesson | `arka_daily_reading` track `production-animation` `--minutes 60` |
+
+```bash
+arka daily_reading today --track production-animation --minutes 60
+arka blender_film notes
+arka blender_film build --template shape_keys_talk -o talk.mp4
+```

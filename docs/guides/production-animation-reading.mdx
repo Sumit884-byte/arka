@@ -1,0 +1,228 @@
+---
+title: "Production animation reading"
+description: "One-hour lesson: how production animation is made, grounded in Blender's official docs, then mapped to Arka."
+icon: "book-open"
+---
+
+A 60-minute sit-down (five concepts). This file is the spine (~20 minutes). The rest of the hour is the official Blender pages linked in each section — read those, do not skim past them. Sources: [Blender animation index](https://docs.blender.org/manual/en/latest/animation/index.html), [shape keys](https://docs.blender.org/manual/en/latest/animation/shape_keys/introduction.html), [shape-key workflow](https://docs.blender.org/manual/en/latest/animation/shape_keys/workflow.html), [Shape Key Editor](https://docs.blender.org/manual/en/latest/editors/dope_sheet/modes/shape_key.html), [NLA](https://docs.blender.org/manual/en/latest/editors/nla/introduction.html), [drivers](https://docs.blender.org/manual/en/latest/animation/drivers/usage.html), [render engines](https://docs.blender.org/manual/en/latest/render/render_engines.html), [output properties](https://docs.blender.org/manual/en/latest/render/output/index.html), [CLI render](https://docs.blender.org/manual/en/latest/advanced/command_line/render.html), [bpy animation](https://docs.blender.org/api/current/info_quickstart.html). Short cheatsheet: [Production animation notes](/guides/production-animation).
+
+## How a production hour is actually spent
+
+Feature and series work is not “open Blender, pose a character, hit render movie.” A shot moves through **departments** that each freeze a different question.
+
+**Story and previs** decide *what happens*. The deliverable is an animatic: boards or blocking on a temp camera, with scratch audio. Timing is already a product. If the joke lands at 3:12, animation is not allowed to wander to 3:40.
+
+**Layout** decides *where the camera is*. Sets, scale, and lens get locked so animation does not fight a moving world. In Blender this is a scene with a camera, proxies, and a frame range — not final meshes.
+
+**Animation** decides *how it feels*. Body first (armature), face second (shape keys or a face rig), then polish (arcs, overlap, holds). The official stack is keyframes, drivers, constraints, armatures, and shape keys — listed together under [Animation & Rigging](https://docs.blender.org/manual/en/latest/animation/index.html) because they are one system, not five hobbies.
+
+**Lighting and lookdev** decide *what it looks like*. Materials and lights change after acting is approved so you do not re-light every take.
+
+**Render** decides *pixels*. Production writes a **frame sequence** (PNG or EXR), not an in-app MP4. The [output properties](https://docs.blender.org/manual/en/latest/render/output/index.html) exist for that: format, frame range, metadata, post. A farm can retry frame 183 without redoing 1–182.
+
+**Comp and edit** decide *delivery*. Grade, grain, titles, muxed dialogue. ffmpeg or a DCC compositor sits after Blender, not inside it.
+
+Why this matters for agents: if you generate one 120-frame Suzanne spin, you have a **playblast**, not a pipeline. A production-grade Arka path is the same loop studios already use: scripted scene → headless frames → stitch. That is `arka blender_film`, not “ask the model for a video file.”
+
+Practical takeaway: write shots as **data** (frame range, fps, camera, who speaks, which clip). The 3D file is an implementation of that data.
+
+## Relative shape keys are the face department
+
+Blender’s [shape-key introduction](https://docs.blender.org/manual/en/latest/animation/shape_keys/introduction.html) is the production rulebook for faces.
+
+Objects carry a **stack**. **Relative** keys are for blending: expressions, visemes, correctives. Each key stores a vertex offset from a reference (usually **Basis**). The visible mesh is the weighted sum of those offsets. **Value** 0 is the reference; 1 is the authored shape. Blender will also extrapolate past 0–1, which is useful for a slightly stronger smile and dangerous if a viseme overshoots into a broken jaw.
+
+**Basis** is the original vertex positions. It sits at the top of the stack and **cannot be keyed**. You never animate Basis. You animate the other keys’ values.
+
+The [workflow page](https://docs.blender.org/manual/en/latest/animation/shape_keys/workflow.html) is strict about topology: add a key (it copies Basis), enter Edit Mode, move vertices, **do not add or delete vertices**. Switch keys in Object Mode; the mesh snaps back to Basis so you can author the next shape cleanly. If you change topology after keys exist, the stack is toast.
+
+**New Shape from Mix** is the studio trick for faces. You sculpt an extreme “hero” expression, then peel it into smaller keys (smile left, smile right, lid, cheek) using a temporary vertex group so keys do not fight. That is how you keep a blink from dragging the mouth.
+
+Keyframe those values in the [Shape Key Editor](https://docs.blender.org/manual/en/latest/editors/dope_sheet/modes/shape_key.html) — a Dope Sheet mode that only shows shape-key influence. Timing lives there, next to the Action Editor when body and face share a shot.
+
+**Tu’s VRChat / VTuber method** ([blend shapes video](https://www.youtube.com/watch?v=Qyrz4JoMP28)) is this workflow with a shipping convention:
+
+1. Join into **FaceBody** (head, eyes, teeth, tongue) and **External** (hair, clothes, ears).
+2. Do **not** apply subdivision / solidify on the face before keys — too many verts to sculpt.
+3. Author **A, O, CH** (the three Cats slots) plus **blink**.
+4. Generate the rest of the viseme set from those three.
+5. Export as one mesh + armature if you need Unity / VRM.
+
+Arka’s `visemes.py` and `shape_keys_talk` template follow that contract in headless bpy: authored `viseme_aa` / `viseme_oh` / `viseme_ch`, Cats-style mixes, then `keyframe_insert` on `key_blocks[name].value`.
+
+Drivers ([usage](https://docs.blender.org/manual/en/latest/animation/drivers/usage.html)) are how a jaw *bone* can push `viseme_aa` without you keying both. Production faces are usually **keys + a few bones**, not “pure bones” or “pure keys.”
+
+Practical takeaway: one mesh, stable topology, three authored visemes, blink, then mixes. That is enough for dialogue. Do not start with a 200-shape MetaHuman clone.
+
+## Actions and NLA are how shots stay editable
+
+If every shot is one long F-curve, a director note (“hold the blink two frames”) means hunting keys. Studios clip acting into **actions** and stack them in the [NLA](https://docs.blender.org/manual/en/latest/editors/nla/introduction.html): reusable segments (walk, sit, talk, blink idle) instead of individual keys.
+
+Think of NLA as an editorial timeline *inside* Blender. A blink track can loop under a talk action. A walk can be retimed without touching mouth keys.
+
+The current [Python API](https://docs.blender.org/api/current/info_quickstart.html) matches that model. Two levels:
+
+**High-level** (what Arka templates use today):
+
+```python
+obj.location.z = 0.0
+obj.keyframe_insert(data_path="location", frame=10, index=2)
+```
+
+**Low-level** (what a tool should emit for reusable clips): create `bpy.data.actions.new`, a **slot** for the ID, a layer, a keyframe strip, then F-curves on a channelbag. Assign `animation_data.action` and `action_slot`. Push a finished action onto NLA with [`NlaStrips.new(name, start, action)`](https://docs.blender.org/api/current/bpy.types.NlaStrips.html).
+
+An [Armature](https://docs.blender.org/api/current/bpy.types.Armature.html) is the body department’s data-block: a bone hierarchy. Shape keys do not replace it. Production characters are **armature for body, keys for face**, sometimes corrective keys driven by bone angles (shin bend → calf corrector).
+
+Practical takeaway: name actions (`act_talk_line02`, `act_blink_loop`). When Arka grows past “key every frame in a Python loop,” the next honest step is **write an Action, then NLA-strip it**. That is how you reuse a viseme clip across shots.
+
+## Render engines and the farm command
+
+[Engine comparison](https://docs.blender.org/manual/en/latest/render/render_engines.html):
+
+- **Workbench** — raster, ugly-on-purpose, layout and modeling. Playblasts.
+- **EEVEE** — real-time raster, PBR-ish, fast. Animation previews, stylized finals, lookdev. [EEVEE](https://docs.blender.org/manual/en/latest/render/eevee/index.html) estimates light; it is not a path tracer.
+- **Cycles** — path tracing. Beauty, VFX, anything that must match real plates.
+
+Studios playblast in Workbench/EEVEE and beauty in Cycles (or EEVEE if the show’s look is toon / NPR). Arka’s film templates prefer `BLENDER_EEVEE_NEXT` then EEVEE then Cycles so a laptop can finish a short.
+
+The [CLI](https://docs.blender.org/manual/en/latest/advanced/command_line/render.html) is the farm:
+
+```bash
+blender -b shot.blend -E CYCLES -s 10 -e 500 -t 2 -a
+blender -b shot.blend -o //render_ -F PNG -x 1 -a
+```
+
+`-b` background, `-E` engine, `-s`/`-e` frame range, `-t` threads, `-a` animation, `-o` output, `-F` format. Frame padding is automatic if the path has no `#`.
+
+Arka’s `run_blender_script` is the bpy equivalent: empty file, Python builds the shot, writes `frame_%05d.png`, then ffmpeg H.264. That matches [output properties](https://docs.blender.org/manual/en/latest/render/output/index.html): sequence first, movie later.
+
+Practical takeaway: agents should never “render MP4 inside bpy” as the only artifact. Keep the PNG folder. Re-stitch is cheap; re-render is not.
+
+## What Arka MCP should do (and now does)
+
+A production agent needs four verbs, not one “make video” blob:
+
+| Verb | Meaning | Tool |
+|---|---|---|
+| **Notes** | Recall the pipeline before inventing keys | `arka_markdown` `production-animation`, `arka_blender_film` `notes` |
+| **Study** | 1 hour curriculum | `arka_daily_reading` track `production-animation` |
+| **Author** | Emit bpy that uses keys / actions | `arka_blender_film` `generate` / `shape_keys_talk` |
+| **Farm** | Headless frames + stitch | `arka_blender_film` `render` / `build` |
+| **Body clip** | Import a rigged FBX cycle | `arka_model_video` `animate` |
+
+`arka_blender_film` used to describe itself as “LLM or template → MP4.” That hid the farm. The tool now exposes `notes` and names the shape-key template. `arka_markdown` resolves alias `production-animation`. Daily reading has a builtin track so a 60-minute session does not invent a random curriculum.
+
+If you are in Cursor and `arka_blender_film` is missing from the live tool list, the MCP server process is stale — reload the Arka MCP server so it picks up this checkout.
+
+```bash
+arka daily_reading today --track production-animation --minutes 60
+arka blender_film notes
+arka blender_film templates
+arka blender_film build --template shape_keys_talk -o /tmp/talk.mp4 --no-llm
+```
+
+Practical takeaway: production grade means **repeatable data + headless frames + named clips**. Pretty pixels are a render setting, not a prompt.
+
+## Worked shot: one line of dialogue (do this in your head, then in Arka)
+
+Lock this data *before* opening Blender:
+
+```json
+{
+  "shot": "A07_talk",
+  "fps": 24,
+  "range": [1, 150],
+  "line": "Ah, oh, check this. Shape keys let me blink, smile, and talk.",
+  "face": ["viseme_aa", "viseme_oh", "viseme_ch", "blink"],
+  "engine": "BLENDER_EEVEE_NEXT",
+  "output": "frames/frame_#####.png"
+}
+```
+
+**Minute 10–20 of your hour:** open the [shape-key workflow](https://docs.blender.org/manual/en/latest/animation/shape_keys/workflow.html) and confirm you can explain why deleting a vertex after Basis exists is fatal. Then open [relative vs absolute](https://docs.blender.org/manual/en/latest/animation/shape_keys/introduction.html) and write one sentence: *relative keys are weighted offsets from Basis; the slider is the weight.*
+
+**Minute 20–30:** author mentally (or in `shape_keys_talk`) the three Cats slots. Say “ah”, “oh”, “ch” out loud. Jaw drop, circular lips, teeth together. That is the entire viseme alphabet if you allow mixes. Blink is a lid key that also shoves iris/shine backward so they do not clip — the same note Tu makes, and the same thing Blender’s Shape Key Editor will show as one channel.
+
+**Minute 30–40:** read [NLA introduction](https://docs.blender.org/manual/en/latest/editors/nla/introduction.html). Draw three tracks on paper: `body` (idle), `face_talk` (the line), `face_blink` (looping 2-frame closures every ~2.5s). If those are one F-curve soup, a note “blink later” means re-timing the mouth. If they are strips, you slide one strip.
+
+**Minute 40–50:** read [EEVEE vs Cycles](https://docs.blender.org/manual/en/latest/render/render_engines.html) and the [CLI render page](https://docs.blender.org/manual/en/latest/advanced/command_line/render.html). Write the farm command for *this* shot:
+
+```bash
+blender -b A07_talk.blend -E BLENDER_EEVEE_NEXT -s 1 -e 150 -o //frames/frame_##### -F PNG -a
+ffmpeg -y -framerate 24 -i frames/frame_%05d.png -i line.mp3 \
+  -c:v libx264 -pix_fmt yuv420p -c:a aac -shortest A07_talk.mp4
+```
+
+Arka’s `blender_film build` is that pair with env vars (`BLENDER_FILM_FRAMES`, `FRAME_COUNT`, `SHAPEKEY_VISEMES`).
+
+**Minute 50–60:** call the MCP the way a TD would, not the way a chatbot would:
+
+1. `arka_blender_film` action `notes` — confirm you are about to farm frames, not “generate a video.”
+2. `arka_markdown` path `production-animation` — keep the cheatsheet in context.
+3. `arka_blender_film` action `templates` — pick `shape_keys_talk` for face, not `monkey_spin`.
+4. `arka_daily_reading` action `today` track `production-animation` minutes `60` — this lesson, saved as today’s session.
+
+## Official bpy recipes (copy these, do not invent a fourth API)
+
+High-level property keys ([quickstart](https://docs.blender.org/api/current/info_quickstart.html)) — what Arka templates use:
+
+```python
+kb = face.data.shape_keys.key_blocks["viseme_aa"]
+kb.value = 1.0
+kb.keyframe_insert(data_path="value", frame=12)
+```
+
+Low-level action slots (same page) — what you graduate to when clips must be reused:
+
+```python
+action = bpy.data.actions.new(name="act_talk_A07")
+slot = action.slots.new(face.id_type, face.name)
+strip = action.layers.new("Layer").strips.new(type="KEYFRAME")
+bag = strip.channelbag(slot, ensure=True)
+fcu = bag.fcurves.new(data_path='key_blocks["viseme_aa"].value')
+fcu.keyframe_points.add(2)
+fcu.keyframe_points[0].co = 1.0, 0.0
+fcu.keyframe_points[1].co = 12.0, 1.0
+adt = face.animation_data_create()
+adt.action = action
+adt.action_slot = slot
+```
+
+NLA publish ([NlaStrips.new](https://docs.blender.org/api/current/bpy.types.NlaStrips.html)):
+
+```python
+track = face.animation_data.nla_tracks.new()
+track.name = "face_talk"
+track.strips.new("A07_talk", 1, action)
+```
+
+If you only remember one API difference from Blender 4.4 → 5.x: **actions have slots**. Assign both `action` and `action_slot` or the clip is silent.
+
+## Failure modes studios already paid for
+
+| Symptom | Usual cause | Fix |
+|---|---|---|
+| Shape keys vanish after export | Multiple objects, leftover modifiers, armature applied | One mesh, one armature modifier, keys on that mesh |
+| Cannot apply subdiv | Keys exist; Blender refuses | Author keys on the low cage; keep subdiv unapplied, or use a keeper addon |
+| Mouth tears | Topology changed after Basis | Never add/remove verts; rebuild keys |
+| Blink pulls the lips | Shared verts, no vertex groups | Split keys with New Shape from Mix + groups |
+| viseme looks “off sync” | Keys on frames, audio on a different clock | Build the viseme table from *audio duration*, then `t = (frame-1)/fps` |
+| EEVEE flicker / missing GI | Raster limits | Accept for playblast; Cycles for beauty |
+| Re-rendered the whole shot for one bad frame | You only kept an MP4 | Keep the PNG/EXR folder |
+| Agent “made a video” that cannot be revised | One prompt, one file, no shot data | Notes → template → frames → stitch |
+
+## What “production grade” means for Arka this week
+
+Honest scope: Arka is a **TD laptop farm**, not a full lighting department. Production-grade *here* means:
+
+- Shot data is explicit (fps, range, line, keys).
+- Face follows official relative keys + the A/O/CH contract.
+- Output is a sequence, then ffmpeg.
+- MCP can *read the notes* and *run the farm* without a human pasting a tutorial.
+
+Not yet production-grade (next lessons on this track): corrective keys driven by bones, NLA publish from `blender_film`, EXR/AOV beauty, Grease Pencil 2D departments, USD/Alembic caches between layout and lighting.
+
+If you only do one thing after this hour: run `arka blender_film notes`, then `arka blender_film build --template shape_keys_talk --no-llm`. Compare the PNG folder to the MP4. The folder is the product.
+
+CONCEPTS: anim.pipeline.stages, anim.shapekeys.relative, anim.nla.actions, anim.render.farm, anim.arka.mcp
+
