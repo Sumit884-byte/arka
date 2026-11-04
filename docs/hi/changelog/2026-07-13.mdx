@@ -1,0 +1,31 @@
+---
+title: "13 जुलाई, 2026 का सप्ताह"
+description: "साप्ताहिक Arka changelog: council deliberation, quiz practice, timezone conversion, slides finetuning, self-improve loop, और CI fixes।"
+icon: "clock-rotate-left"
+---
+
+## नई सुविधाएँ
+
+- **[Arka Council](/hi/guides/council).** Multi-persona deliberation — Socrates, Elon, और Feynman एक ही प्रश्न का स्वतंत्र रूप से उत्तर देते हैं, फिर Arka consensus, tension, और एक verdict को संश्लेषित करता है।
+- **[Quiz practice](/hi/guides/quiz-practice).** किसी भी विषय पर अनंत quizzes, per-topic memory के साथ ताकि प्रश्न कभी दोहराए न जाएँ।
+- **[Timezone conversion](/hi/guides/timezone-convert).** `arka convert 9am PDT to IST` और natural-language date/time conversion; currency `convert` से disambiguate करता है।
+- **[Open URL](/hi/guides/open-url).** `arka open youtube` आपके default browser में sites खोलता है (`play_youtube` से अलग)।
+- **[Interesting facts](/hi/guides/interesting-fact).** web search के बिना lightweight trivia — `tell me something interesting`।
+- **[Self-improve loop](/hi/guides/self-improve).** `arka self improve` codebase का विश्लेषण करता है और वैकल्पिक रूप से `--apply` के साथ fixes लागू करता है।
+- **[Operation modes](/hi/guides/operation-modes).** routing traces के लिए `arka mode debug`; default `agent` mode output साफ़ रखता है।
+- **[Compose slides](/hi/guides/compose-slides).** Executive/pitch/academic style presets, action titles, markdown fallback के साथ validated pptx export।
+- **Frontend visual loop.** Arka अब अपने ही frontend screenshots का निरीक्षण कर सकता है, polish का न्याय कर सकता है, और N passes तक build command को retry कर सकता है।
+- **Domain agents.** Astronomy, metallurgy, fact-check, science flow, Harvard ARK biomedical KG, repo context indexing।
+- **Provider CLI.** live OpenRouter autodetect के साथ `arka provider list/set/show/models`।
+- **MCP पर CSV/TSV table previews.** connected MCP clients के लिए Clean structured previews।
+
+## सुधार
+
+- LLM fallback vLLM को skip करता है जब तक explicitly configured न हो; traces debug mode को छोड़कर छिपे हुए।
+- keys मौजूद होने पर OpenRouter credit errors Gemini/Groq पर fall back होते हैं।
+- Self-improve और goal agent clean user-facing output का उपयोग करते हैं (सामान्य mode में कोई llm.txt dumps नहीं)।
+- CI fix: `ai_only` mode में clipboard routing, `src/` और `tests/` में ruff lint clean।
+
+## Docs
+
+- ऊपर सभी features के लिए नए guide pages; orphan guides (bookmarks, clipboard-history, docker-status, repo-health) navigation में जोड़े गए।

@@ -23,9 +23,9 @@ Generate new geometry only when no suitable asset exists or originality is
 requested.
 
 The search workflow is native Arka logic inspired by `baryhuang/mcp-threejs`:
-Arka converts the request into a compact asset query, normalizes Sketchfab/MCP
-style results into one candidate shape, ranks downloadable GLB/GLTF assets
-first, and reports license/attribution/format metadata. If no provider is
+Arka converts the request into a compact asset query and normalizes Sketchfab/MCP
+style results into one candidate shape. It then ranks downloadable GLB/GLTF assets
+first and reports license/attribution/format metadata. If no provider is
 configured, Arka returns zero candidates and tells the agent not to invent model
 URLs.
 
@@ -33,7 +33,7 @@ For recognizable objects such as satellites, prefer a realistic licensed
 GLTF/GLB model with material and texture maps. Do not replace it with simple
 boxes, spheres, or cylinders when an appropriate Three.js asset is available.
 Arka first applies a symbolic reality check, then gives the model a compact
-verification instruction; uncertain objects require a trusted catalog or a
+verification instruction. Uncertain objects require a trusted catalog or a
 user-provided URL rather than a hallucinated asset URL.
 
 ## Quick start
@@ -175,7 +175,7 @@ arka compose_3d "desk organizer with phone slot"
 arka compose_3d "desk organizer" --backend llm   # force LLM OBJ path
 ```
 
-Requires an LLM in `.env` (same stack as chat/compose_slides). Quality is lower than Tripo/HF — use `--backend auto` when possible.
+Requires an LLM in `.env` (same stack as chat/compose_slides). Quality is lower than Tripo/HF. Use `--backend auto` when possible.
 
 ## Open your model
 

@@ -1,0 +1,30 @@
+---
+title: "Usage dashboard"
+description: "Arka skill usage का locally निरीक्षण करें।"
+icon: "chart-pie"
+---
+
+Skill counters और MCP tool stats के साथ एक browser में देखा जा सकने वाला dashboard serve करें:
+
+```bash
+arka dashboard
+```
+
+Default URL: `http://127.0.0.1:8788/`। JSON stats: `GET /api/stats`।
+
+इसके बजाय एक static HTML file लिखें:
+
+```bash
+arka usage dashboard --output arka-usage-dashboard.html
+arka dashboard build --output arka-usage-dashboard.html
+```
+
+Dashboard skill invocations, MCP tool call counts, average durations,
+और हाल की MCP errors दिखाता है। यह local usage counters और `logs/mcp.jsonl` पढ़ता है;
+prompts, arguments, और secrets store नहीं किए जाते। `ARKA_USAGE_TRACKING=0` से
+skill tracking disable करें।
+
+| Variable | Default | उद्देश्य |
+| -------- | ------- | ------- |
+| `ARKA_DASHBOARD_HOST` | `127.0.0.1` | Listen address |
+| `ARKA_DASHBOARD_PORT` | `8788` | Listen port |

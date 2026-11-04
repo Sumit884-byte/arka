@@ -17,7 +17,7 @@ Arka safety, failover, और local-first routing के लिए default र�
 
 `ARKA_CONFIG_DIR` (या `CONFIG_DIR`), `INSTALL_HOME` (legacy `ARKA_HOME`), या `ARKA_CACHE_DIR` (या `CACHE_DIR`) के साथ override करें।
 
-`ARKA_CONFIG_DIR=/path/to/my-arka-config` set करने से **सभी** user config वहाँ चला जाता है — `.env`, `mcp.json`, `hub/`, `agent-memory/`, `skills/`, और संबंधित paths।
+`ARKA_CONFIG_DIR=/path/to/my-arka-config` set करने से **सभी** user config वहाँ चला जाता है: `.env`, `mcp.json`, `hub/`, `agent-memory/`, `skills/`, और संबंधित paths।
 
 ```bash
 # Show current root + shell export snippet
@@ -66,6 +66,7 @@ SECURITY=1
 | Security | सभी layers चालू (`SECURITY=1`) | किसी भी layer को `0` set करें |
 | NL routing | पहले Offline rules (`ROUTE_MODE=symbolic`) | `ai`, `symbolic_only`, `ai_only` |
 | LLM failover | 429/401/timeout पर Auto (`LLM_AUTO_FALLBACK=1`) | `LLM_AUTO_FALLBACK=0` |
+| Model policy | पहले local फिर hosted (`ARKA_MODEL_POLICY=local-first`) | `hosted-first`, `local-only`, `hosted-only` ([मुफ़्त मॉडल खोजें](/hi/guides/free-models) देखें) |
 | Key rotation | पहले backup keys rotate करें (`API_KEY_ROTATION=1`) | `API_KEY_ROTATION=0` |
 | Voice TTS | Replies speak करें (`AGENT_SPEAK=1`) | `AGENT_SPEAK=0` |
 | Wake listener | `arka listen` तक बंद | `AGENT_WAKE_AUTO=1` |
@@ -74,6 +75,15 @@ SECURITY=1
 | YouTube research | 2 videos (`YT_RESEARCH_MAX=2`) | `--limit N` या env |
 | Reminders | 1 hour default (`REMIND_DEFAULT=1h`) | explicit समय pass करें |
 | Model label | answers के नीचे दिखाएँ (`SHOW_MODEL=1`) | `SHOW_MODEL=0` |
+| Web search timeout | प्रति DuckDuckGo call 20 सेकंड (`DDGS_TIMEOUT=20`) | ≥ 5 कोई भी integer |
+| Web search retries | हार मानने से पहले 2 attempts (`DDGS_RETRIES=2`) | ≥ 1 कोई भी integer |
+
+Web search failures chat को नहीं रोकतीं: अगर DuckDuckGo हर retry पर timeout या error करे, तो chat error लॉग करता है और reply रुकने के बजाय model knowledge से उत्तर देता है। धीमे या अस्थिर network पर दोनों knobs बढ़ाएँ:
+
+```env
+DDGS_TIMEOUT=30
+DDGS_RETRIES=3
+```
 
 ## आवश्यक API keys
 

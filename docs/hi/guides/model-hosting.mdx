@@ -16,10 +16,10 @@ arka model doctor
 
 Setup command Arka के protected `.env` handling के ज़रिये model preference और
 endpoint configuration लिखता है। यह weights डाउनलोड नहीं करता और न API secrets
-स्टोर करता है; launch commands और provider-specific अगले steps print किए जाते हैं।
+स्टोर करता है; यह launch commands और provider-specific अगले steps print करता है।
 API keys के लिए `arka integration setup <provider>` का उपयोग करें, फिर runtime
 readiness जाँचने के लिए `arka model doctor`। लोकल और hosted मॉडलों को
-`arka hybrid status` और `arka hybrid run --policy parallel` के साथ जोड़ा जा सकता है।
+`arka hybrid status` और `arka hybrid run --policy parallel` के साथ जोड़ें।
 
 LAN inference cluster के लिए Exo को एक लोकल OpenAI-compatible host के रूप में
 configure करें:
@@ -36,5 +36,5 @@ endpoint को एक private network पर रखें; Arka इसे local
 
 Model advisor Apple Silicon/MLX अवसरों, MoE model hints, और speculative/MTP
 decoding hints को भी annotate करता है। ये evidence labels हैं, guarantees नहीं:
-deployment से पहले runtime support और active-parameter metadata की पुष्टि करनी
-चाहिए।
+deployment से पहले runtime support और active-parameter metadata की पुष्टि
+करें।

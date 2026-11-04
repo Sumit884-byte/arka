@@ -42,7 +42,7 @@ arka create an impressive interactive 3d robot gallery scene
 | `space` | 星空、泛光 |
 | `museum` | 抛光展厅地板 |
 
-如果省略 `--preset`，Arka 会根据场景规划上下文自动推断。
+如果你省略 `--preset`，Arka 会根据场景规划上下文自动推断。
 
 ## 场景特性
 
@@ -66,7 +66,7 @@ arka scene-3d "Person typing" --intent "working at a desk" \
 
 规划会识别场景设置及所需的模型角色（例如桌子、键盘、显示器和椅子），并包含以米为单位的近似真实尺寸以便按比例放置。还包含放置规则，例如把键盘放在桌上、椅子放在桌前、让坐姿角色对齐键盘。要用已配置的 vLLM/vision 后端为渲染出的模型预览生成描述，请加上 `--describe-model preview.png`。若缺失视觉后端，会产生结构化警告而不会凭空生成描述。
 
-Arka 还会在生成前选择语义化的朝向默认值。例如「Cybertruck vs Ferrari racing game」这样的车辆竞速/游戏提示词默认使用后侧四分之三追车视角，因为竞速游戏通常展示玩家车辆的背面。用户的显式表述仍会覆盖默认：`front view`、`side profile`、`top layout` 或 `show the back` 都会覆盖默认视角。
+Arka 还会在生成前选择语义化的朝向默认值。例如「Cybertruck vs Ferrari racing game」这样的车辆竞速/游戏提示词默认使用后侧四分之三追车视角，因为竞速游戏通常展示玩家车辆的背面。你的显式表述仍会覆盖默认：`front view`、`side profile`、`top layout` 或 `show the back` 都会覆盖默认视角。
 
 ## 参数
 

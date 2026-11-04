@@ -1,0 +1,24 @@
+---
+title: "Week of August 24, 2026"
+description: "Weekly Arka changelog: model-policy control, browser-app launcher, tougher chat and search, and Docker CLI detection fixes."
+icon: "clock-rotate-left"
+---
+
+A quieter week focused on reliability. Highlights below.
+
+## New features
+
+- **[Model policy control](/guides/free-models).** Set `ARKA_MODEL_POLICY` to `local-first`, `hosted-first`, `local-only`, or `hosted-only` to reorder LLM fallback chains without editing config.
+- **[Launch browser apps by name](/guides/open-url).** `arka open brave`, `open chrome`, `open firefox`, `open safari`, `open edge`, `open arc`, `open vivaldi`, and `open opera` now open the desktop app instead of the matching `.com` site.
+
+## Improvements
+
+- **Faster `arka --help`.** The CLI defers loading heavy dependencies (OpenAI SDK, faster-whisper, and others) until the matching subcommand runs, so top-level help returns immediately.
+- **Simple arithmetic in chat.** Questions like `what is 12 * 7 + 3` are recognized as math and routed to the math path directly.
+- **Configurable web search timeouts.** DuckDuckGo lookups honor `DDGS_TIMEOUT` (default 20s) and `DDGS_RETRIES` (default 2) so slow networks no longer stall chat.
+- **Chat survives web failures.** If web-context gathering fails, chat prints the error and continues instead of aborting the turn.
+- **Gemini quota handling.** When Gemini returns a rate or quota error, Arka marks all Gemini models exhausted for the run instead of rotating API keys and retrying.
+
+## Bug fixes
+
+- **[Docker status finds the CLI everywhere](/guides/docker-status).** `arka docker status` now locates the `docker` binary at `/usr/local/bin/docker` and `/usr/bin/docker` when it isn't on `PATH`, and skips host/container parity checks when the CLI is unavailable inside a container.

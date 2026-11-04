@@ -1,0 +1,17 @@
+---
+title: "Hallmark 设计集成"
+description: "在 Arka 中使用 Hallmark 的反 AI 垃圾设计工作流。"
+icon: "certificate"
+---
+
+Arka 为 [Nutlope/hallmark](https://github.com/Nutlope/hallmark) 提供了一个可选适配器。
+Hallmark 是一个采用 MIT 许可证的设计技能，用于构建、审计、重新设计和研究界面。Arka 不会复制 Hallmark 的源代码；它会创建一个受保护的请求，可交由已安装的 Hallmark 技能处理。
+
+```bash
+arka hallmark audit ./src
+arka hallmark redesign ./src
+arka hallmark study screenshot.png
+arka hallmark build "a distinctive developer analytics dashboard"
+```
+
+需要时可使用 `npx skills add nutlope/hallmark` 安装 Hallmark。Arka 将此集成保持为可选，并会在该技能不可用时进行报告。

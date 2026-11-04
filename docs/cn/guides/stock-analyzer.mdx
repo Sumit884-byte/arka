@@ -1,0 +1,12 @@
+---
+title: "基于真实数据的行情分析"
+description: "分析用户提供的 OHLCV 数据，不编造价格。"
+icon: "chart-line"
+---
+
+```bash
+arka stock-analyze prices.csv
+arka stock-analyze prices.csv --json
+```
+
+该通用分析器会读取用户提供的 CSV，识别收盘价/价格列，计算描述性收益率和趋势，并报告数据来源。它不会获取或编造市场数据，也不构成投资建议。

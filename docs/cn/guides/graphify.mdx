@@ -1,0 +1,13 @@
+---
+title: "Graphify 仓库集成"
+description: "将仓库依赖和服务关系导出为图。"
+icon: "share-nodes"
+---
+
+```bash
+arka graphify . --format mermaid --output repo.mmd
+arka graphify . --format dot --output repo.dot --render svg
+arka graphify . --format json --output repo.json
+```
+
+Graphify 使用 Arka 现有的仓库图，因此始终保持本地运行且只读。DOT 渲染需要安装 Graphviz（`dot`）。

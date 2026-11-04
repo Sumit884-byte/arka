@@ -1,0 +1,16 @@
+---
+title: "2.5D parallax scenes"
+description: "Layered 2D artwork से depth जैसी motion बनाएँ।"
+icon: "layer-group"
+---
+
+```bash
+arka parallax-2d "Forest depth" \
+  --layer background.png --layer trees.png --layer character.png \
+  --out forest-parallax
+```
+
+Pointer के हिलने पर layers अपनी depth के आधार पर अलग-अलग गति से चलती हैं।
+यह game menus, animated illustrations, और camera जैसे pans के लिए उपयोगी है,
+वह भी पूरी 3D model pipeline की आवश्यकता के बिना। सबसे अच्छे प्रभाव के लिए layers को पीछे से आगे के क्रम में दें
+और foreground subjects को background से अलग रखें।

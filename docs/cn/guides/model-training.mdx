@@ -1,0 +1,13 @@
+---
+title: "模型训练规划器"
+description: "在硬件和数据集防护措施下规划本地微调。"
+icon: "brain"
+---
+
+```bash
+arka model train-plan plan "fine-tune a coding model on this repository"
+arka model train-plan plan "classify support tickets" --method qlora --backend mlx
+arka model train-plan validate-data ./dataset
+```
+
+规划器会根据可用硬件选择一种保守的方法，推荐考虑数据来源的数据集划分，并要求在量化或部署服务之前进行留出集基准测试。它不会自动启动高成本的训练。

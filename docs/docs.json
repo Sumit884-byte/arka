@@ -118,6 +118,7 @@
                   "guides/hosted-mode",
                   "guides/configuration",
                   "guides/web-dashboard",
+                  "guides/open-webui",
                   "guides/output-viewer"
                 ]
               },
@@ -262,6 +263,21 @@
               "reference/aliases",
               "reference/troubleshooting"
             ]
+          },
+          {
+            "tab": "Changelog",
+            "icon": "newspaper",
+            "pages": [
+              "changelog/2026-10-05",
+              "changelog/2026-09-28",
+              "changelog/2026-09-21",
+              "changelog/2026-09-14",
+              "changelog/2026-09-07",
+              "changelog/2026-08-31",
+              "changelog/2026-08-24",
+              "changelog/2026-08-17",
+              "changelog/2026-07-13"
+            ]
           }
         ]
       },
@@ -370,6 +386,7 @@
                   "cn/guides/hosted-mode",
                   "cn/guides/configuration",
                   "cn/guides/web-dashboard",
+                  "cn/guides/open-webui",
                   "cn/guides/output-viewer"
                 ]
               },
@@ -512,6 +529,21 @@
               "cn/reference/aliases",
               "cn/reference/troubleshooting"
             ]
+          },
+          {
+            "tab": "更新日志",
+            "icon": "newspaper",
+            "pages": [
+              "cn/changelog/2026-10-05",
+              "cn/changelog/2026-09-28",
+              "cn/changelog/2026-09-21",
+              "cn/changelog/2026-09-14",
+              "cn/changelog/2026-09-07",
+              "cn/changelog/2026-08-31",
+              "cn/changelog/2026-08-24",
+              "cn/changelog/2026-08-17",
+              "cn/changelog/2026-07-13"
+            ]
           }
         ]
       },
@@ -620,6 +652,7 @@
                   "hi/guides/hosted-mode",
                   "hi/guides/configuration",
                   "hi/guides/web-dashboard",
+                  "hi/guides/open-webui",
                   "hi/guides/output-viewer"
                 ]
               },
@@ -762,6 +795,21 @@
               "hi/reference/aliases",
               "hi/reference/troubleshooting"
             ]
+          },
+          {
+            "tab": "चेंजलॉग",
+            "icon": "newspaper",
+            "pages": [
+              "hi/changelog/2026-10-05",
+              "hi/changelog/2026-09-28",
+              "hi/changelog/2026-09-21",
+              "hi/changelog/2026-09-14",
+              "hi/changelog/2026-09-07",
+              "hi/changelog/2026-08-31",
+              "hi/changelog/2026-08-24",
+              "hi/changelog/2026-08-17",
+              "hi/changelog/2026-07-13"
+            ]
           }
         ]
       }
@@ -824,23 +872,6 @@
       ]
     }
   },
-  "redirects": [
-    {
-      "source": "/changelog/:slug*",
-      "destination": "/",
-      "permanent": true
-    },
-    {
-      "source": "/cn/changelog/:slug*",
-      "destination": "/cn",
-      "permanent": true
-    },
-    {
-      "source": "/hi/changelog/:slug*",
-      "destination": "/hi",
-      "permanent": true
-    }
-  ],
   "search": {
     "prompt": "Search Arka docs..."
   }

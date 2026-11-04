@@ -6,9 +6,9 @@ icon: "table"
 ---
 
 **Arka Output Viewer** एक हल्का लोकल वेब UI है जो आपके data format को स्वतः पहचानता
-है और सर्वोत्तम प्रतिनिधित्व render करता है — CSV/JSON arrays के लिए tables,
+है और सर्वोत्तम प्रतिनिधित्व render करता है। यह CSV/JSON arrays के लिए tables,
 फ़ॉर्मैटेड JSON, rendered markdown, objects के लिए key-value layouts, और paths
-मौजूद होने पर media cards।
+मौजूद होने पर media cards दिखाता है।
 
 कोई React build step नहीं। एक HTML shell और मुख्य पैकेज से एक छोटा Python सर्वर।
 
@@ -108,8 +108,8 @@ safety (1–5) को score करता है। परिणाम answer foo
 
 Judge model override करें: `arka ai-skill-model judge openrouter/openai/gpt-4o-mini`।
 
-Timing (streaming में TTFA, कुल latency) स्वतः रिकॉर्ड होती है और tracing सक्षम
-होने पर OpenTelemetry में export की जाती है (`arka.output.total_ms`,
+Arka timing (streaming में TTFA, कुल latency) स्वतः रिकॉर्ड करता है और tracing सक्षम
+होने पर उसे OpenTelemetry में export करता है (`arka.output.total_ms`,
 `arka.output.verify.overall`, आदि)।
 
 ## संबंधित

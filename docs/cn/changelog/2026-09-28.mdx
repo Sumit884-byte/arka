@@ -1,0 +1,19 @@
+---
+title: "2026 年 9 月 28 日当周"
+description: "Arka 每周更新日志：更专注的 Open WebUI chat、本地优先的 web chat 模型，以及空回复与纯代码回复的修复。"
+icon: "clock-rotate-left"
+---
+
+本周规模较小，重点在于 Open WebUI chat 体验。要点如下。
+
+## 改进
+
+- **更专注的 Open WebUI chat。** Arka 的 Open WebUI 现在隐藏 Arena 模型选择器和 chat Controls 面板，所有对话都保持在 `arka` 模型上。
+- **Open WebUI 默认开启 web 搜索。** 开箱即用，默认使用 DuckDuckGo。可通过 `ENABLE_WEB_SEARCH` 和 `WEB_SEARCH_ENGINE` 覆盖。
+- **[本地优先的 web chat](/cn/concepts/llm)。** 当 Ollama 运行时，web chat 会先尝试已安装的小型本地模型，再回退到 Gemini 和 Groq。云端免费额度触发限流时，chat 仍能继续回复。
+
+## 问题修复
+
+- **致谢不再重新触发构建。** 像“thanks”“ok great”“got it”这样的回复现在只会得到简短的回应，而不会输出更多代码、HTML 或新的构建。
+- **不再出现空的 chat 回复。** 已退役的云端模型（例如 `gemini-2.0-flash-lite`）会被跳过，不再导致 chat 空白。
+- **[模型保持可用](/cn/guides/free-models)。** 只有当提供方明确报告时（例如 HTTP 410 或 `model_not_found`），Arka 才会将模型标记为已退役。之前被误标为退役的模型会自动恢复。

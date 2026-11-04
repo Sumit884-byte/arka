@@ -62,12 +62,12 @@ OTEL_SERVICE_NAME=arka
 
 Every dispatched skill records a bounded skill name, duration, exit status, execution kind
 (`deterministic`, `llm_skill`, `llm_routed`, `fish`, or `shell`), and whether an LLM was used.
-Secrets and full user prompts are not added to these attributes.
+Arka does not add secrets or full user prompts to these attributes.
 This makes failures in long-running loops and MCP-backed skills visible without
-turning exported logs into a copy of the user's code or credentials.
+turning exported logs into a copy of your code or credentials.
 
 Structured logs include `trace_id` and `span_id` when emitted inside an active
-span — use SigNoz log ↔ trace correlation to jump from a skill failure log to
+span. Use SigNoz log ↔ trace correlation to jump from a skill failure log to
 its trace. Metrics `arka.routing.decisions`, `arka.skill.duration`, and
 `arka.llm.failover` complement span attributes in the Metrics explorer.
 

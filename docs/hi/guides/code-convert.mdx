@@ -1,0 +1,14 @@
+---
+title: "Coding language converter"
+description: "Verification मार्गदर्शन के साथ source code को एक भाषा से दूसरी भाषा में translate करें।"
+icon: "right-left"
+---
+
+```bash
+arka code-convert script.py javascript
+arka code-convert script.py rust --output src/main.rs --apply
+```
+
+Conversion local-first है और तब तक केवल preview होता है जब तक `--output` और `--apply`
+न दिए जाएँ। मौजूदा files कभी overwrite नहीं की जातीं। Conversion के बाद हमेशा target formatter,
+tests, dependency audit, और behavior comparison चलाएँ।

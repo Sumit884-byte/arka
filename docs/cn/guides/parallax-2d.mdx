@@ -1,0 +1,13 @@
+---
+title: "2.5D 视差场景"
+description: "利用分层 2D 美术作品创建具有纵深感的运动效果。"
+icon: "layer-group"
+---
+
+```bash
+arka parallax-2d "Forest depth" \
+  --layer background.png --layer trees.png --layer character.png \
+  --out forest-parallax
+```
+
+当指针移动时，各图层会根据深度以不同的速度移动。这适用于游戏菜单、动态插画以及类似镜头的平移效果，而无需完整的 3D 模型管线。请按从后到前的顺序提供图层，并将前景主体与背景分开，以获得最佳效果。

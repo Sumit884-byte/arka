@@ -9,7 +9,7 @@ boost: 1.5
 Arka is a **terminal coding copilot**. You describe what you need in plain English; Arka routes the request to the right skill, runs it locally, and keeps risky writes scoped to your project. Combine the CLI with **agent mode**, **MCP tools in Cursor**, and **repo health gates** for a full coding loop without leaving the terminal.
 
 <Note>
-  **Summary:** Initialize a repo with `arka code init .`, keep agent mode on for skill execution with security gates, use [MCP](/guides/mcp) to expose Arka inside Cursor, and run [repo health](/guides/repo-health) before merges. Arka complements your editor — terminal for fast asks, reviews, and CI; Cursor for inline diffs when connected over MCP.
+  **Summary:** Initialize a repo with `arka code init .` and keep agent mode on for skill execution with security gates. Use [MCP](/guides/mcp) to expose Arka inside Cursor, and run [repo health](/guides/repo-health) before merges. Arka complements your editor: terminal for fast asks, reviews, and CI; Cursor for inline diffs when connected over MCP.
 </Note>
 
 <Tip>
@@ -26,7 +26,7 @@ Three pieces work together while you code:
 | **Agent mode** | Full skill execution with security gates (default). Switch with `arka mode agent`. |
 | **MCP** | Expose Arka skills to Cursor and other agents, or call external MCP servers from the CLI. See [MCP integration](/guides/mcp). |
 
-Arka is not a replacement for your editor — it complements it. Use the terminal for fast asks, reviews, CI, and autonomous edits; use Cursor for inline diffs when Arka is connected over MCP.
+Arka is not a replacement for your editor. It complements it. Use the terminal for fast asks, reviews, CI, and autonomous edits; use Cursor for inline diffs when Arka is connected over MCP.
 
 ## Setup for coding
 
@@ -64,7 +64,7 @@ Run these once per machine (or per repo) before your daily workflow.
   </Step>
 
   <Step title="Optional: fish shell">
-    Fish unlocks the full 70+ skill router and natural-language aliases (`agent "…"`, `pr_check babysit`, etc.). From bash/zsh, use explicit `arka` subcommands — they work the same.
+    Fish unlocks the full 70+ skill router and natural-language aliases (`agent "…"`, `pr_check babysit`, etc.). From bash/zsh, use explicit `arka` subcommands. They work the same.
 
     ```bash
     brew install fish   # macOS
@@ -85,7 +85,7 @@ Run these once per machine (or per repo) before your daily workflow.
 
 ## Daily workflow
 
-Use natural language or explicit commands — Arka routes both.
+Use natural language or explicit commands. Arka routes both.
 
 ### Ask and explain
 

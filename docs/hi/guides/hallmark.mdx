@@ -1,0 +1,20 @@
+---
+title: "Hallmark design integration"
+description: "Arka से Hallmark के anti-AI-slop design workflow का उपयोग करें।"
+icon: "certificate"
+---
+
+Arka, [Nutlope/hallmark](https://github.com/Nutlope/hallmark) के लिए एक वैकल्पिक adapter प्रदान करता है,
+जो interfaces को build, audit, redesign, और study करने के लिए एक MIT-licensed design skill है।
+Arka, Hallmark का source copy नहीं करता; यह एक guarded request बनाता है
+जिसे installed Hallmark skill को सौंपा जा सकता है।
+
+```bash
+arka hallmark audit ./src
+arka hallmark redesign ./src
+arka hallmark study screenshot.png
+arka hallmark build "a distinctive developer analytics dashboard"
+```
+
+ज़रूरत होने पर `npx skills add nutlope/hallmark` से Hallmark install करें। Arka
+integration को वैकल्पिक रखता है और skill उपलब्ध न होने पर इसकी सूचना देता है।

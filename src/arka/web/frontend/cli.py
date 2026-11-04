@@ -134,9 +134,17 @@ def _open_webui_docker_cmd(
         "-e",
         "DEFAULT_MODELS=arka",
         "-e",
+        "ENABLE_EVALUATION_ARENA_MODELS=false",
+        "-e",
+        "USER_PERMISSIONS_CHAT_CONTROLS=false",
+        "-e",
         "ENABLE_FOLLOW_UP_GENERATION=false",
         "-e",
         "ENABLE_SIGNUP=true",
+        "-e",
+        f"ENABLE_WEB_SEARCH={os.environ.get('ENABLE_WEB_SEARCH', 'true')}",
+        "-e",
+        f"WEB_SEARCH_ENGINE={os.environ.get('WEB_SEARCH_ENGINE', 'duckduckgo')}",
         "-e",
         f"WEBUI_NAME={name}",
         "-e",
@@ -546,7 +554,12 @@ def _run_open_webui_pip(host: str, ui_port: int, bridge_port: int, *, open_brows
     env.setdefault("ENABLE_OLLAMA_API", "false")
     env.setdefault("ENABLE_OPENAI_API", "true")
     env.setdefault("DEFAULT_MODELS", "arka")
+    env.setdefault("ENABLE_EVALUATION_ARENA_MODELS", "false")
+    env.setdefault("USER_PERMISSIONS_CHAT_CONTROLS", "false")
+    env.setdefault("ENABLE_FOLLOW_UP_GENERATION", "false")
     env.setdefault("ENABLE_SIGNUP", "true")
+    env.setdefault("ENABLE_WEB_SEARCH", "true")
+    env.setdefault("WEB_SEARCH_ENGINE", "duckduckgo")
     env.setdefault("PORT", str(ui_port))
     name = _open_webui_name()
     env["WEBUI_NAME"] = name

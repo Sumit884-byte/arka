@@ -56,10 +56,10 @@ OTEL_SERVICE_NAME=arka
 - Supermemory operations
 
 हर dispatched skill एक bounded skill name, duration, exit status, execution kind (`deterministic`, `llm_skill`, `llm_routed`, `fish`, या `shell`), और LLM उपयोग हुआ था या नहीं record करता है।
-इन attributes में secrets और पूरे user prompts नहीं जोड़े जाते।
-इससे long-running loops और MCP-backed skills में failures दिखाई देते हैं — बिना exported logs को user के कोड या credentials की copy बनाए।
+Arka इन attributes में secrets या पूरे user prompts नहीं जोड़ता।
+इससे long-running loops और MCP-backed skills में failures दिखाई देते हैं, बिना exported logs को आपके कोड या credentials की copy बनाए।
 
-Structured logs में `trace_id` और `span_id` शामिल होते हैं जब एक active span के अंदर emit किए जाते हैं — एक skill failure log से उसके trace तक jump करने के लिए SigNoz log ↔ trace correlation का उपयोग करें। Metrics explorer में span attributes के पूरक `arka.routing.decisions`, `arka.skill.duration`, और `arka.llm.failover` metrics हैं।
+Structured logs में `trace_id` और `span_id` शामिल होते हैं जब एक active span के अंदर emit किए जाते हैं। एक skill failure log से उसके trace तक jump करने के लिए SigNoz log ↔ trace correlation का उपयोग करें। Metrics explorer में span attributes के पूरक `arka.routing.decisions`, `arka.skill.duration`, और `arka.llm.failover` metrics हैं।
 
 उपयोगी SigNoz trace filters:
 

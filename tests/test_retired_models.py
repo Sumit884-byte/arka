@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest import mock
 
@@ -28,6 +29,33 @@ def test_record_and_filter_chain():
     assert rm.is_retired("groq", "old-model")
     chain = rm.filter_chain([("groq", "old-model"), ("groq", "llama-3.1-8b-instant")])
     assert chain == [("groq", "llama-3.1-8b-instant")]
+
+
+def test_prune_spurious_retirements():
+    path = rm._cache_path()
+    path.write_text(
+        json.dumps(
+            {
+                "models": [
+                    {
+                        "provider": "ollama",
+                        "model": "qwen3:8b",
+                        "reason": "**Improvement Plan** analyzed proposal focus",
+                    },
+                    {
+                        "provider": "gemini",
+                        "model": "gemini-2.0-flash-lite",
+                        "reason": "HTTP 410 retired",
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert rm.prune_spurious_retirements() == 1
+    assert not rm.is_retired("ollama", "qwen3:8b")
+    assert rm.record_retired("ollama", "llama3.2:1b", reason="Improvement Plan: analyzed") is False
+    assert not rm.is_retired("ollama", "llama3.2:1b")
 
 
 def test_auto_remediate_updates_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

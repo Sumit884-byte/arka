@@ -19,6 +19,7 @@ _KNOWN_RETIRED: set[tuple[str, str]] = {
     ("ollama", "minimax-m2.5:cloud"),
     ("ollama", "minimax-m2.5"),
     ("ollama", "minimax-m2:cloud"),
+    ("gemini", "gemini-2.0-flash-lite"),
 }
 
 _CONFIG_KEYS = (
@@ -49,12 +50,39 @@ def _enabled() -> bool:
 
 
 def is_retired_model_error(msg: str) -> bool:
+    text = str(msg or "")
+    if re.search(r"(?i)\b(?:improvement plan|analyzed|proposal|focus)\b", text) and not re.search(
+        r"(?i)\b(?:status code:\s*410|HTTP\s*410|model_not_found)\b", text
+    ):
+        return False
     return bool(
         re.search(
-            r"(?i)\b410\b|\b(?:retired|deprecated|shut\s*down|no longer available)\b",
-            str(msg or ""),
+            r"(?i)\b410\b|\b(?:retired|deprecated|shut\s*down|no longer available|"
+            r"model_not_found|does not exist or you do not have access)\b",
+            text,
         )
     )
+
+
+def prune_spurious_retirements() -> int:
+    """Drop store rows that were saved from LLM prose, not API retirement errors."""
+    removed = 0
+    with _LOCK:
+        data = _load_store()
+        models = data.get("models") or []
+        keep: list[Any] = []
+        for row in models:
+            if not isinstance(row, dict):
+                continue
+            reason = str(row.get("reason") or "")
+            if reason and not is_retired_model_error(reason):
+                removed += 1
+                continue
+            keep.append(row)
+        if removed:
+            data["models"] = keep
+            _save_store(data)
+    return removed
 
 
 def _normalize_key(provider: str, model_id: str) -> tuple[str, str]:
@@ -160,6 +188,8 @@ def record_retired(provider: str, model_id: str, *, reason: str = "") -> bool:
     """Persist a retired model. Returns True if newly recorded."""
     if not _enabled():
         return False
+    if reason and not is_retired_model_error(reason):
+        return False
     provider, model_id = _normalize_key(provider, model_id)
     if not provider or not model_id:
         return False
@@ -197,6 +227,7 @@ def filter_model_ids(provider: str, model_ids: list[str]) -> list[str]:
 
 
 def filter_chain(chain: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    prune_spurious_retirements()
     return [(p, m) for p, m in chain if not is_retired(p, m)]
 
 

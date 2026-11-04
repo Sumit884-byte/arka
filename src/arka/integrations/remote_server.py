@@ -731,31 +731,48 @@ def _web_chat_fast_chain() -> list[tuple[str, str]] | None:
                 out.append(("groq", piece))
         return out or None
     chain: list[tuple[str, str]] = []
-    if (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or "").strip():
-        chain.append(("gemini", "gemini-2.5-flash"))
-    if (os.environ.get("GROQ_API_KEY") or "").strip():
-        chain.extend(
-            [
-                ("groq", "llama-3.3-70b-versatile"),
-                ("groq", "llama-3.1-8b-instant"),
-            ]
-        )
-    if (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or "").strip():
-        chain.append(("gemini", "gemini-2.0-flash-lite"))
-    # Local/fast fallback when cloud providers rate-limit or fail to stream.
+    # Local first — Gemini free-tier 429s and retired Groq slugs were leaving chat empty.
     try:
         from arka.llm.fallback import build_default_chain, provider_available
 
         if provider_available("ollama"):
             local = os.environ.get("WEB_CHAT_OLLAMA_MODEL", "").strip()
             if not local:
-                for prov, mid in build_default_chain(task="chat"):
-                    if prov == "ollama":
+                try:
+                    from arka.llm.fallback import ollama_model_ids
+
+                    installed = set(ollama_model_ids())
+                except ImportError:
+                    installed = set()
+                for mid in (
+                    "llama3.2:1b",
+                    "llama3.2:3b",
+                    "qwen3:8b",
+                    "llama3.1:8b",
+                ):
+                    if mid in installed:
                         local = mid
                         break
+                if not local:
+                    for prov, mid in build_default_chain(task="chat"):
+                        if prov == "ollama" and not re.search(
+                            r"(?i)embed|llava|vision|:20b|:70b|gpt-oss", mid
+                        ):
+                            local = mid
+                            break
             chain.append(("ollama", local or "qwen3:8b"))
     except ImportError:
         pass
+    if (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or "").strip():
+        try:
+            from arka.llm.fallback import gemini_model_ids
+
+            for mid in gemini_model_ids(include_live=False)[:2]:
+                chain.append(("gemini", mid))
+        except ImportError:
+            chain.append(("gemini", "gemini-2.5-flash"))
+    if (os.environ.get("GROQ_API_KEY") or "").strip():
+        chain.append(("groq", "llama-3.3-70b-versatile"))
     return chain or None
 
 
@@ -806,6 +823,8 @@ _WEBUI_CHAT_SYSTEM = (
     "Give a complete, coherent answer — use as much detail as the question needs. "
     "Do not artificially shorten or stop after one bullet or section unless the user "
     "explicitly asked for a brief answer or a single step. "
+    "When the latest message is thanks, ok, great, or a similar acknowledgment, reply with "
+    "a short welcome — do not emit more code, HTML, or a new build. "
     "When the user explicitly says tell more, continue, next, or go on, continue the same "
     "subject with a new subtopic — never ask what to elaborate on. "
     "When the user asks to build, implement, scaffold, or says 'build it' / 'go ahead' "
@@ -945,6 +964,20 @@ def iter_python_chat(text: str, *, channel: str = "", chat_id: str = ""):
     prompt = text
     user_text = _latest_user_from_agent_text(text)
     prebuilt = _agent_text_has_transcript(text)
+
+    if (
+        not is_webui_meta_prompt(text)
+        and user_text
+    ):
+        try:
+            from arka.integrations.greeting import greeting_text, is_acknowledgment
+
+            if is_acknowledgment(user_text):
+                yield greeting_text(user_text), None
+                yield "", 0
+                return
+        except ImportError:
+            pass
 
     if (
         not is_webui_meta_prompt(text)

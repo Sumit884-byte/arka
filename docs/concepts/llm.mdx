@@ -29,7 +29,28 @@ LLM_AUTO_FALLBACK=1
 API_KEY_ROTATION=1
 ```
 
-When you switch providers with `arka provider set groq` (or `ai-pref groq` in fish), Arka tries to **keep the same model** on the new provider before falling back to that provider's default. Disable with `arka provider set groq --no-keep-model` or `AI_KEEP_MODEL_ON_PROVIDER_SWITCH=0`.
+When you switch providers with `arka provider set groq` (or `ai-pref groq` in fish), Arka tries to **keep the same model** on the new provider before falling back to that provider's default. To disable this, use `arka provider set groq --no-keep-model` or `AI_KEEP_MODEL_ON_PROVIDER_SWITCH=0`.
+
+## Web chat model order
+
+Interactive web chat, such as the [Open WebUI frontend](/guides/open-webui), uses a separate fast chain so replies keep coming when cloud free tiers hit rate limits:
+
+1. A small local Ollama model, when Ollama is running. Arka picks the first installed model from `llama3.2:1b`, `llama3.2:3b`, `qwen3:8b`, and `llama3.1:8b`.
+2. Gemini Flash models, when `GEMINI_API_KEY` or `GOOGLE_API_KEY` is set.
+3. Groq `llama-3.3-70b-versatile`, when `GROQ_API_KEY` is set.
+
+Override the chain or the local model:
+
+```env
+WEB_CHAT_OLLAMA_MODEL=llama3.2:3b
+WEB_CHAT_MODEL_CHAIN=ollama/qwen3:8b,groq/llama-3.3-70b-versatile
+```
+
+Set `WEB_CHAT_FAST=0` to use the standard failover chain instead.
+
+<Note>
+  Short acknowledgments such as "thanks" or "got it" get a brief welcome. Arka doesn't continue the previous build.
+</Note>
 
 ## Per-task profiles
 
@@ -72,11 +93,11 @@ arka benchmark show
 ARKA_BENCHMARK_ORCHESTRATE=1 arka orchestrate --benchmark "how to get free ai credits"
 ```
 
-The benchmark profile follows the routed task, so a request that routes to `web_answer` uses the `chat` benchmark results, while agent-style requests use `agent`.
+The benchmark profile follows the routed task. A request that routes to `web_answer` uses the `chat` benchmark results. Agent-style requests use `agent`.
 
 ## Shared exhaustion cache
 
-One session cache — exhausted models are skipped across skills until reset:
+Arka keeps one session cache. It skips exhausted models across skills until you reset the cache:
 
 ```bash
 arka ai reset-exhaustion
@@ -94,13 +115,13 @@ LLM_AUTO_STOP_SERVERS=1
 
 ## Why skills stay concise
 
-Arka does **not** ask the LLM to memorize 70 skill manuals. Skills are local programs — the model only picks the right name. On LLM route, Arka passes:
+Arka does **not** ask the LLM to memorize 70 skill manuals. Skills are local programs. The model only picks the right name. On LLM route, Arka passes:
 
 - A **compact skill catalog** (registered names only)
 - **Curated routing rules** (high-signal patterns)
 - **Shell aliases** via `ROUTE_ALIASES` for your machine
 
-The route task uses low temperature and a dedicated chain so a fast/cheap model handles classification; heavy lifting runs inside the skill locally.
+The route task uses low temperature and a dedicated chain so a fast, cheap model handles classification. Heavy lifting runs locally inside the skill.
 
 ## Inspect at runtime
 

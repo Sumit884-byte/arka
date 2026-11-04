@@ -1,0 +1,13 @@
+---
+title: "编程语言转换器"
+description: "在不同语言之间转换源代码，并提供验证指导。"
+icon: "right-left"
+---
+
+```bash
+arka code-convert script.py javascript
+arka code-convert script.py rust --output src/main.rs --apply
+```
+
+转换以本地优先，且仅为预览，除非同时提供了 `--output` 和 `--apply`。
+现有文件永远不会被覆盖。转换后请务必运行目标语言的格式化工具、测试、依赖审计以及行为对比。

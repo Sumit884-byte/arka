@@ -1,0 +1,27 @@
+---
+title: "使用情况仪表板"
+description: "在本地查看 Arka 技能的使用情况。"
+icon: "chart-pie"
+---
+
+提供一个可在浏览器中查看的仪表板，包含技能计数器和 MCP 工具统计信息：
+
+```bash
+arka dashboard
+```
+
+默认 URL：`http://127.0.0.1:8788/`。JSON 统计信息：`GET /api/stats`。
+
+也可以改为写出一个静态 HTML 文件：
+
+```bash
+arka usage dashboard --output arka-usage-dashboard.html
+arka dashboard build --output arka-usage-dashboard.html
+```
+
+仪表板会显示技能调用次数、MCP 工具调用次数、平均耗时以及最近的 MCP 错误。它读取本地使用计数器和 `logs/mcp.jsonl`；不会存储提示词、参数和密钥。使用 `ARKA_USAGE_TRACKING=0` 可禁用技能跟踪。
+
+| 变量 | 默认值 | 用途 |
+| -------- | ------- | ------- |
+| `ARKA_DASHBOARD_HOST` | `127.0.0.1` | 监听地址 |
+| `ARKA_DASHBOARD_PORT` | `8788` | 监听端口 |

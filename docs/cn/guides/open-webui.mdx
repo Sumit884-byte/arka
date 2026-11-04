@@ -1,0 +1,59 @@
+---
+title: "Open WebUI 前端"
+description: "在 Open WebUI 中与 Arka 聊天。启动器会将聊天锁定为 arka 模型，并默认开启 DuckDuckGo 网页搜索。"
+keywords: ["open webui", "frontend", "chat", "web search", "duckduckgo"]
+icon: "comments"
+---
+
+`arka frontend open-webui` 会启动 [Open WebUI](https://github.com/open-webui/open-webui)，并通过一个兼容 OpenAI 的桥接连接到你的 Arka 代理。如果你想要一个与 Arka 对话的浏览器聊天界面，而不运行 React [Web 仪表板](/cn/guides/web-dashboard)，可以使用它。
+
+## 前提条件
+
+- 在 `~/.config/arka/.env` 中设置 `REMOTE_TOKEN`。桥接使用它向 `arka serve` 进行身份验证。
+- Docker 正在运行，或已使用 `pip install open-webui` 安装 Open WebUI（Python 3.11+）。
+
+## 启动
+
+```bash
+arka frontend open-webui --open
+```
+
+如果代理后端尚未运行，Arka 会先启动它。然后 Arka 会启动桥接和 Open WebUI。Docker 可用时，Arka 使用 Docker。否则，传入 `--pip` 以使用 pip 安装。
+
+| 标志 | 默认值 | 用途 |
+| --- | --- | --- |
+| `--port` | `3000`（Docker）、`8080`（pip） | Open WebUI 端口 |
+| `--bridge-port` | `8769` | OpenAI 桥接端口 |
+| `--host` | `127.0.0.1` | 桥接监听主机 |
+| `--docker` | Docker 运行时开启 | 在 Docker 中运行 Open WebUI |
+| `--pip` | 关闭 | 从 pip 安装运行 Open WebUI |
+| `--open` | 关闭 | 启动后打开浏览器 |
+
+## 专注的默认设置
+
+启动器会配置 Open WebUI，让每次对话都保持在 Arka 上：
+
+- **单一模型。** `arka` 是唯一的模型。Ollama API 已关闭。
+- **没有 Arena 选择器。** Arena 评估模型已关闭。
+- **没有聊天 Controls。** 聊天 Controls 面板已隐藏。
+- **没有后续建议。** 后续问题生成已关闭。
+- **网页搜索已开启。** 已使用 DuckDuckGo 启用网页搜索。
+
+## 网页搜索设置
+
+在启动前使用环境变量覆盖网页搜索默认值：
+
+| 变量 | 默认值 | 用途 |
+| --- | --- | --- |
+| `ENABLE_WEB_SEARCH` | `true` | 开启或关闭 Open WebUI 网页搜索 |
+| `WEB_SEARCH_ENGINE` | `duckduckgo` | Open WebUI 使用的搜索引擎 |
+
+```bash
+ENABLE_WEB_SEARCH=false arka frontend open-webui
+```
+
+## 聊天行为
+
+Web 聊天会先尝试一个小型本地 Ollama 模型，然后回退到 Gemini 和 Groq。参见 [Web 聊天模型顺序](/cn/concepts/llm#web-聊天模型顺序)。
+
+对于 "thanks"、"ok great" 或 "got it" 这类简短的确认语，Arka 会回复一句简短的欢迎语。Arka 不会继续之前的构建，也不会发送更多代码。

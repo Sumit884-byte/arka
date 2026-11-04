@@ -25,7 +25,7 @@ arka session-memory clear --long-term    # MEMORY.md रीसेट करे�
 arka session-memory clear --all
 ```
 
-जब `SESSION_MEMORY=1` हो, तो recalled context `context_for()` के ज़रिए agent loops में inject होता है।
+जब `SESSION_MEMORY=1` हो, तो Arka recalled context को `context_for()` के ज़रिए agent loops में inject करता है।
 
 ### Environment variables
 
@@ -36,7 +36,7 @@ arka session-memory clear --all
 | `MEMORY_LONGTERM_MAX_LINES` | `100` | `MEMORY.md` में रखी अधिकतम lines |
 | `MEMORY_AUTO_LONGTERM` | `0` | हर append को स्वचालित रूप से long-term पर promote करें |
 
-Notes को storage से पहले sanitize किया जाता है — injection patterns और unsafe content ब्लॉक किए जाते हैं।
+Arka storage से पहले notes को sanitize करता है और injection patterns व unsafe content को ब्लॉक करता है।
 
 ## Heartbeat
 
@@ -49,7 +49,7 @@ arka heartbeat history
 arka heartbeat history --json --limit 10
 ```
 
-Heartbeat data `~/.cache/fish-agent/heartbeat.json` में लिखा जाता है। हर `ping()` एक bounded `history` ring में append करता है (default 20 events; `HEARTBEAT_HISTORY` से override करें)। Session memory और routines जैसी subsystems गतिविधि पर स्वचालित रूप से `ping()` call करती हैं।
+Arka heartbeat data `~/.cache/fish-agent/heartbeat.json` में लिखता है। हर `ping()` एक bounded `history` ring में append करता है (default 20 events; `HEARTBEAT_HISTORY` से override करें)। Session memory और routines जैसी subsystems गतिविधि पर स्वचालित रूप से `ping()` call करती हैं।
 
 ## Skill manifest gates
 

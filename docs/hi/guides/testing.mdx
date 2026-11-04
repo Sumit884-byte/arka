@@ -55,7 +55,7 @@ arka qa extreme --json
 
 यह सामान्य QA plan को correctness, quality gates, security/privacy, reliability/operations, और release readiness के लिए स्पष्ट constraints में विस्तारित करता है। इसमें unit tests, Gherkin/acceptance tests, integration और contract tests, e2e/smoke tests, mutation testing, test coverage, static analysis, secrets/privacy checks, dependency safety, observability, performance, rollback, configuration validation, backward compatibility, documentation, और migration integrity शामिल हैं।
 
-Arka को हर claim को evidence-backed मानना चाहिए: यदि mutation testing, coverage, security scanning, SLOs, या कोई production metric वर्तमान project में measure नहीं किया जा सकता, तो वह ईमानदारी से यह report करता है — pass का आविष्कार करने के बजाय।
+Arka को हर claim को evidence-backed मानना चाहिए। यदि mutation testing, coverage, security scanning, SLOs, या कोई production metric वर्तमान project में measure नहीं किया जा सकता, तो वह ईमानदारी से यह report करता है, pass का आविष्कार करने के बजाय।
 
 Dev extras install करें (इसमें `pytest` और `ruff` शामिल हैं):
 
@@ -152,5 +152,5 @@ python3 scripts/check_docs.py docs   # internal docs links + frontmatter
 ```
 
 <Note>
-  कुछ tests को optional extras (`[chat]`, `[charts]`, `[drawings]`) या API keys की आवश्यकता होती है। जिन tests को network access की आवश्यकता होती है, वे आमतौर पर mock किए जाते हैं — यदि कोई test import पर fail हो, तो पहले matching extra install करें।
+  कुछ tests को optional extras (`[chat]`, `[charts]`, `[drawings]`) या API keys की आवश्यकता होती है। जिन tests को network access की आवश्यकता होती है, वे आमतौर पर mock किए जाते हैं। यदि कोई test import पर fail हो, तो पहले matching extra install करें।
 </Note>

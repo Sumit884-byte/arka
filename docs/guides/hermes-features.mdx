@@ -5,7 +5,7 @@ keywords: ["message sessions", "subagent", "gateway", "cross-platform", "channel
 icon: "sitemap"
 ---
 
-Arka provides **channel sessions** and **sub-agent delegation** — patterns inspired by [Hermes Agent](https://github.com/NousResearch/hermes-agent), not a separate product integration. They add per-channel conversation continuity, webhook session handoff, and isolated background sub-agents.
+Arka provides **channel sessions** and **sub-agent delegation**: patterns inspired by [Hermes Agent](https://github.com/NousResearch/hermes-agent), not a separate product integration. They add per-channel conversation continuity, webhook session handoff, and isolated background sub-agents.
 
 ## Features
 
@@ -78,7 +78,7 @@ External MCP clients can check the same tokens with `arka_sessions` action `sile
 
 Legacy `HERMES_SESSIONS*` variables remain supported as aliases.
 
-Inbound turns are sanitized — injection patterns and unsafe content are blocked before storage.
+Arka sanitizes inbound turns and blocks injection patterns and unsafe content before storage.
 
 ## Sub-agent delegation
 
@@ -132,7 +132,7 @@ This command is read-only. It does not stop or restart agents, routines, or serv
 
 ## Skill manifest gates
 
-Plugin gates use `metadata.openclaw`, `metadata.arka`, or `metadata.hermes` — all merged the same way. See [OpenClaw-inspired gates](/guides/openclaw-features) for details.
+Plugin gates use `metadata.openclaw`, `metadata.arka`, or `metadata.hermes`. Arka merges all three the same way. See [OpenClaw-inspired gates](/guides/openclaw-features) for details.
 
 ## Heartbeat integration
 

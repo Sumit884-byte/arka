@@ -5,8 +5,8 @@ icon: "magnifying-glass"
 ---
 
 Arka keeps shallow upstream checkouts in `.third_party/local-llm-research/` for
-offline reference. They are not imported into the runtime and are ignored by
-Git. The current research set is:
+offline reference. Arka does not import them into the runtime, and
+Git ignores them. The current research set is:
 
 | Project | License | Useful Arka ideas |
 | --- | --- | --- |
@@ -22,5 +22,5 @@ verification patterns. Do not copy source code or vendor dependencies without
 reviewing each repository’s license and notices; transitive model/runtime
 licenses may differ from the project license.
 
-The checkouts were made as shallow clones for research and should be refreshed
+The checkouts are shallow clones for research. Refresh them
 before relying on version-specific behavior.

@@ -5,7 +5,7 @@ keywords: ["n8n", "workflow", "automation", "webhook", "HTTP Request", "integrat
 icon: "diagram-project"
 ---
 
-[n8n](https://n8n.io/) is a workflow automation tool. Arka does not ship a separate n8n server — it exposes two HTTP surfaces you call from n8n **HTTP Request** nodes:
+[n8n](https://n8n.io/) is a workflow automation tool. Arka does not ship a separate n8n server. It exposes two HTTP surfaces you call from n8n **HTTP Request** nodes:
 
 | Endpoint | Arka service | Best for |
 | --- | --- | --- |
@@ -133,7 +133,7 @@ export REMOTE_TOKEN="your-railway-remote-token"
 arka n8n status
 ```
 
-Set `REMOTE_TOKEN` and provider keys in Railway Variables. See [Deploy coding skills to Railway](/guides/railway-coding-skills) for the full hosted setup. Prefer HTTPS and keep tokens in n8n credentials — not in workflow JSON exports.
+Set `REMOTE_TOKEN` and provider keys in Railway Variables. See [Deploy coding skills to Railway](/guides/railway-coding-skills) for the full hosted setup. Prefer HTTPS and keep tokens in n8n credentials, not in workflow JSON exports.
 
 ## CLI reference
 

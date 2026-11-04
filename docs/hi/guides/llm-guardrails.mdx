@@ -17,9 +17,9 @@ ARKA_TOKEN_LIMIT=100000
 ARKA_LATENCY_LIMIT_MS=15000
 ```
 
-Token या अनुमानित लागत बजट पार होने पर hosted requests dispatch से पहले block कर
-दी जाती हैं। Local-only मॉडलों को cost guardrails द्वारा कभी block नहीं किया
-जाता। Arka अपने cache में केवल aggregate counters स्टोर करता है, prompts नहीं।
+Token या अनुमानित लागत बजट पार होने पर Arka hosted requests को dispatch से पहले block
+करता है। Cost guardrails Local-only मॉडलों को कभी block नहीं
+करते। Arka अपने cache में केवल aggregate counters स्टोर करता है, prompts नहीं।
 
 Grounded mode डिफ़ॉल्ट रूप से सक्षम है (`ARKA_GROUNDED_MODE=1`)। यह unrequested
 mock data को block करता है और model-facing requests को निर्देश देता है कि वर्तमान
@@ -33,10 +33,10 @@ ARKA_GROUNDED_MODE=0 arka ask "..."
 arka grounding
 ```
 
-Production mode भी डिफ़ॉल्ट रूप से सक्षम है (`ARKA_PRODUCTION_MODE=1`)। Coding
+Production mode भी डिफ़ॉल्ट रूप से सक्षम है (`ARKA_PRODUCTION_MODE=1`)। Arka coding
 requests को access control, secret-safe data handling, input और output
 validation, prompt-injection defenses, audit logging, tests, error handling, और
-observability शामिल करने का निर्देश दिया जाता है। इसे केवल स्पष्ट रूप से
+observability शामिल करने का निर्देश देता है। इसे केवल स्पष्ट रूप से
 disposable prototypes के लिए अक्षम करें।
 
 Data minimization डिफ़ॉल्ट रूप से schema-only mode

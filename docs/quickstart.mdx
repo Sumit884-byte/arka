@@ -47,7 +47,7 @@ arka ask "what is Rust?"
 
 ## Before you begin
 
-Arka uses a docs-as-code approach — this site is built on [Mintlify](https://mintlify.com) and deployed at [arka-agent.mintlify.site](https://arka-agent.mintlify.site). To use Arka itself, you need:
+Arka uses a docs-as-code approach. This site is built on [Mintlify](https://mintlify.com) and deployed at [arka-agent.mintlify.site](https://arka-agent.mintlify.site). To use Arka itself, you need:
 
 - **Python 3.11\+**
 - At least one LLM API key (Gemini or Groq recommended for free tiers)
@@ -55,7 +55,7 @@ Arka uses a docs-as-code approach — this site is built on [Mintlify](https://m
 
 ## Install (no build from source)
 
-Most users should install the **`arka-agent`** package directly. You do not need to clone the repo, run `./scripts/refetch.sh`, or compile anything — `pip` / `pipx` downloads a ready-to-run CLI.
+In most cases, install the **`arka-agent`** package directly. You do not need to clone the repo, run `./scripts/refetch.sh`, or compile anything. `pip` / `pipx` downloads a ready-to-run CLI.
 
 <Tabs>
   <Tab title="pipx (recommended)">
@@ -114,7 +114,7 @@ Most users should install the **`arka-agent`** package directly. You do not need
 </Tabs>
 
 <Check>
-  After install, `which arka` should print a path under pipx’s venv or your active Python environment. Run `arka doctor` — you should see **Skills: full (70+)** when fish is installed, or **portable** mode otherwise.
+  After install, `which arka` should print a path under pipx’s venv or your active Python environment. Run `arka doctor`. You should see **Skills: full (70+)** when fish is installed, or **portable** mode otherwise.
 </Check>
 
 ### Use Arka from any terminal

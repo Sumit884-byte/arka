@@ -47,7 +47,7 @@ arka ask "what is Rust?"
 
 ## शुरू करने से पहले
 
-Arka docs-as-code अपनाता है — यह साइट [Mintlify](https://mintlify.com) पर बनी है और [arka-agent.mintlify.site](https://arka-agent.mintlify.site) पर deploy होती है। खुद Arka उपयोग करने के लिए, आपको चाहिए:
+Arka docs-as-code अपनाता है। यह साइट [Mintlify](https://mintlify.com) पर बनी है और [arka-agent.mintlify.site](https://arka-agent.mintlify.site) पर deploy होती है। खुद Arka उपयोग करने के लिए, आपको चाहिए:
 
 - **Python 3.11\+**
 - कम से कम एक LLM API key (Gemini या Groq — free tier के लिए अनुशंसित)
@@ -55,7 +55,7 @@ Arka docs-as-code अपनाता है — यह साइट [Mintlify](h
 
 ## Install (source से build नहीं)
 
-अधिकांश उपयोगकर्ताओं को सीधे **`arka-agent`** पैकेज install करना चाहिए। आपको repo clone करने, `./scripts/refetch.sh` चलाने, या कुछ compile करने की ज़रूरत नहीं है — `pip` / `pipx` एक तैयार CLI download करता है।
+अधिकांश मामलों में, सीधे **`arka-agent`** पैकेज install करें। आपको repo clone करने, `./scripts/refetch.sh` चलाने, या कुछ compile करने की ज़रूरत नहीं है। `pip` / `pipx` एक तैयार CLI download करता है।
 
 <Tabs>
   <Tab title="pipx (अनुशंसित)">
@@ -114,7 +114,7 @@ Arka docs-as-code अपनाता है — यह साइट [Mintlify](h
 </Tabs>
 
 <Check>
-  Install के बाद, `which arka` को pipx के venv या आपके सक्रिय Python environment के अंतर्गत एक path प्रिंट करना चाहिए। `arka doctor` चलाएँ — fish install होने पर आपको **Skills: full (70+)** दिखना चाहिए, अन्यथा **portable** mode।
+  Install के बाद, `which arka` को pipx के venv या आपके सक्रिय Python environment के अंतर्गत एक path प्रिंट करना चाहिए। `arka doctor` चलाएँ। fish install होने पर आपको **Skills: full (70+)** दिखना चाहिए, अन्यथा **portable** mode।
 </Check>
 
 ### किसी भी टर्मिनल से Arka उपयोग करें

@@ -5,7 +5,7 @@ keywords: ["n8n", "workflow", "automation", "webhook", "HTTP Request", "integrat
 icon: "diagram-project"
 ---
 
-[n8n](https://n8n.io/) 是一款工作流自动化工具。Arka 不附带单独的 n8n 服务器 —— 它暴露两个 HTTP 接口，供你在 n8n **HTTP Request** 节点中调用：
+[n8n](https://n8n.io/) 是一款工作流自动化工具。Arka 不附带单独的 n8n 服务器。它暴露两个 HTTP 接口，供你在 n8n **HTTP Request** 节点中调用：
 
 | 端点 | Arka 服务 | 适用场景 |
 | --- | --- | --- |
@@ -133,7 +133,7 @@ export REMOTE_TOKEN="your-railway-remote-token"
 arka n8n status
 ```
 
-在 Railway Variables 中设置 `REMOTE_TOKEN` 和提供商 API key。完整的托管步骤参见 [将编码技能部署到 Railway](/cn/guides/railway-coding-skills)。请优先使用 HTTPS，并将令牌保存在 n8n 凭据中 —— 而不是工作流的 JSON 导出里。
+在 Railway Variables 中设置 `REMOTE_TOKEN` 和提供商 API key。完整的托管步骤参见 [将编码技能部署到 Railway](/cn/guides/railway-coding-skills)。请优先使用 HTTPS，并将令牌保存在 n8n 凭据中，而不是工作流的 JSON 导出里。
 
 ## CLI 参考
 

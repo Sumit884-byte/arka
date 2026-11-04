@@ -1,0 +1,19 @@
+---
+title: "Week of September 28, 2026"
+description: "Weekly Arka changelog: a more focused Open WebUI chat, local-first web chat models, and fixes for empty and code-only replies."
+icon: "clock-rotate-left"
+---
+
+A small week focused on the Open WebUI chat experience. Highlights below.
+
+## Improvements
+
+- **Focused Open WebUI chat.** Arka's Open WebUI now hides the Arena model picker and the chat Controls panel, so every conversation stays on the `arka` model.
+- **Web search on by default in Open WebUI.** Web search is enabled with DuckDuckGo out of the box. Override it with `ENABLE_WEB_SEARCH` and `WEB_SEARCH_ENGINE`.
+- **[Local-first web chat](/concepts/llm).** When Ollama is running, web chat tries a small installed local model first and falls back to Gemini and Groq afterward. Chat keeps responding when cloud free tiers hit rate limits.
+
+## Bug fixes
+
+- **Thanks no longer restarts a build.** Replies like "thanks", "ok great", or "got it" now get a short welcome instead of more code, HTML, or a new build.
+- **No more empty chat replies.** Retired cloud models, such as `gemini-2.0-flash-lite`, are skipped instead of leaving chat blank.
+- **[Models stay available](/guides/free-models).** Arka only marks a model as retired when the provider actually reports it (for example, HTTP 410 or `model_not_found`). Models that were wrongly marked retired are restored automatically.

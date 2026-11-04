@@ -17,7 +17,7 @@ icon: "gear"
 
 可通过 `ARKA_CONFIG_DIR`（或 `CONFIG_DIR`）、`INSTALL_HOME`（旧版 `ARKA_HOME`）或 `ARKA_CACHE_DIR`（或 `CACHE_DIR`）覆盖。
 
-设置 `ARKA_CONFIG_DIR=/path/to/my-arka-config` 会将**所有**用户配置移到该处 —— 包括 `.env`、`mcp.json`、`hub/`、`agent-memory/`、`skills/` 及相关路径。
+设置 `ARKA_CONFIG_DIR=/path/to/my-arka-config` 会将**所有**用户配置移到该处：包括 `.env`、`mcp.json`、`hub/`、`agent-memory/`、`skills/` 及相关路径。
 
 ```bash
 # 显示当前根路径 + shell 导出片段
@@ -66,6 +66,7 @@ SECURITY=1
 | 安全 | 所有层开启（`SECURITY=1`） | 将任一层设为 `0` |
 | NL 路由 | 优先离线规则（`ROUTE_MODE=symbolic`） | `ai`、`symbolic_only`、`ai_only` |
 | LLM 故障切换 | 遇 429/401/超时自动切换（`LLM_AUTO_FALLBACK=1`） | `LLM_AUTO_FALLBACK=0` |
+| 模型策略 | 优先尝试本地再托管（`ARKA_MODEL_POLICY=local-first`） | `hosted-first`、`local-only`、`hosted-only`（参见[查找免费模型](/cn/guides/free-models)） |
 | 密钥轮换 | 先轮换备份密钥（`API_KEY_ROTATION=1`） | `API_KEY_ROTATION=0` |
 | 语音 TTS | 朗读回复（`AGENT_SPEAK=1`） | `AGENT_SPEAK=0` |
 | 唤醒监听 | 关闭直至 `arka listen` | `AGENT_WAKE_AUTO=1` |
@@ -74,6 +75,15 @@ SECURITY=1
 | YouTube 研究 | 2 个视频（`YT_RESEARCH_MAX=2`） | `--limit N` 或环境变量 |
 | 提醒 | 默认 1 小时（`REMIND_DEFAULT=1h`） | 传入显式时间 |
 | 模型标签 | 在答案下方显示（`SHOW_MODEL=1`） | `SHOW_MODEL=0` |
+| 网络搜索超时 | 每次 DuckDuckGo 调用 20 秒（`DDGS_TIMEOUT=20`） | 任意 ≥ 5 的整数 |
+| 网络搜索重试 | 放弃前尝试 2 次（`DDGS_RETRIES=2`） | 任意 ≥ 1 的整数 |
+
+网络搜索失败不会阻塞聊天：若 DuckDuckGo 每次重试都超时或报错，聊天会记录错误并改用模型知识回答，而不是让回复卡住。在网络较慢或不稳定时可调高两项：
+
+```env
+DDGS_TIMEOUT=30
+DDGS_RETRIES=3
+```
 
 ## 关键 API 密钥
 
