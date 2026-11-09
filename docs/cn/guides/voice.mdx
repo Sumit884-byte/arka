@@ -7,7 +7,7 @@ icon: "microphone"
 
 Arka 支持通过唤醒词监听器、多种 STT 引擎和 TTS 回复的免手操作使用。
 
-## 快速开始
+## 快速开始 {#quick-start}
 
 ```bash
 arka listen
@@ -16,7 +16,7 @@ arka listen
 
 TTS 回复默认开启（`AGENT_SPEAK=1`）。设置 `AGENT_SPEAK=0` 可禁用。
 
-## 唤醒词监听器
+## 唤醒词监听器 {#wake-word-listener}
 
 在运行 `arka listen` 之前，监听器**默认关闭**。若要在登录时自动启动 shell：
 
@@ -30,7 +30,7 @@ AGENT_WAKE_AUTO=1
 arka reload --listen
 ```
 
-## STT 引擎
+## STT 引擎 {#stt-engines}
 
 Arka 会自动选择最佳可用引擎（`STT=auto`，`LISTEN_ENGINE=auto`）：
 
@@ -54,7 +54,7 @@ LISTEN_ENGINE=vosk
 pip install "arka-agent[voice]"
 ```
 
-## TTS 后端
+## TTS 后端 {#tts-backends}
 
 Arka 使用 Edge TTS 或 Sarvam 朗读回复：
 
@@ -65,7 +65,7 @@ arka speak-lang en-US    # 英语
 
 Sarvam 支持印度语言。Edge TTS 对大多数区域设置可离线工作。
 
-## 远程服务器
+## 远程服务器 {#remote-server}
 
 使用 `arka serve` 运行远程 STT/TTS 服务器，通过手机与 PC 上的 Agent 进行交互：
 
@@ -73,11 +73,109 @@ Sarvam 支持印度语言。Edge TTS 对大多数区域设置可离线工作。
 arka serve
 ```
 
-## 多轮对话
+### 通过 API key 使用 Arka 后端 {#use-arka-backend-with-an-api-key}
+
+你也可以从自己的应用、脚本或本地前端调用 Arka 的远程后端。访问令牌就是 API key：设置 `REMOTE_TOKEN`，启动服务器，然后将该令牌作为 bearer token 传入。
+
+```bash
+# ~/.config/arka/.env
+REMOTE_TOKEN=replace-with-a-long-random-token
+REMOTE_HOST=127.0.0.1
+REMOTE_PORT=8765
+
+arka serve
+```
+
+检查后端是否可访问：
+
+```bash
+curl -s http://127.0.0.1:8765/v1/health
+```
+
+调用 agent 端点：
+
+```bash
+curl -s http://127.0.0.1:8765/v1/agent \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $REMOTE_TOKEN" \
+  -d '{"text":"check repo health","remote_speak":false}'
+```
+
+响应结构：
+
+```json
+{
+  "ok": true,
+  "exit_code": 0,
+  "output": "...",
+  "speak_text": ""
+}
+```
+
+在 JavaScript 中调用：
+
+```js
+const response = await fetch("http://127.0.0.1:8765/v1/agent", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${process.env.REMOTE_TOKEN}`,
+  },
+  body: JSON.stringify({
+    text: "summarize this repo",
+    remote_speak: false,
+  }),
+});
+
+const data = await response.json();
+console.log(data.output);
+```
+
+常用端点：
+
+| 端点 | 方法 | 用途 |
+| --- | --- | --- |
+| `/v1/health` | `GET` | 健康检查，不运行 agent |
+| `/v1/agent` | `POST` | 从 API 客户端运行 Arka 请求 |
+| `/v1/transcribe` | `POST` | 配置本地 STT 后转写上传的 WAV 音频 |
+| `/v1/handoff` | `GET`/`POST` | 列出或添加交接项 |
+
+配置：
+
+| 变量 | 默认值 | 用途 |
+| --- | --- | --- |
+| `REMOTE_TOKEN` | 首次运行 `arka serve` 时生成 | 用于 `Authorization: Bearer ...` 或 `X-Arka-Token` 的 API key |
+| `REMOTE_HOST` | `0.0.0.0` | 绑定地址；仅限本地访问时使用 `127.0.0.1` |
+| `REMOTE_PORT` | `8765` | HTTP 端口 |
+| `REMOTE_TIMEOUT` | `600` | 单个 agent 请求的最长秒数 |
+| `AGENT_SPEAK` | 服务端强制为 `0` | 防止 API 请求在本地播放 TTS |
+
+如需更严格的入站自动化接口，请改用 webhook 服务器：
+
+```bash
+WEBHOOK_ENABLED=1 WEBHOOK_TOKEN=$REMOTE_TOKEN arka webhook serve
+curl -s http://127.0.0.1:8767/v1/inbox \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $REMOTE_TOKEN" \
+  -d '{"text":"summarize this deployment event","source":"ci","chat_id":"deploy-42"}'
+```
+
+除非你位于提供 HTTPS、速率限制和日志的可信反向代理之后，否则请将后端绑定到 `127.0.0.1`。不要在请求体中放入提供商密钥；请在服务器上的 Arka `.env` 中配置它们。
+
+故障排除：
+
+| 症状 | 解决方法 |
+| --- | --- |
+| `401 unauthorized` | 确认请求使用 `Authorization: Bearer $REMOTE_TOKEN`，并且 Arka 加载的是同一个 `.env` 文件 |
+| `missing text` | 发送包含非空 `text` 字段的 JSON |
+| 请求挂起 | 降低 `REMOTE_TIMEOUT`，检查 `arka background processes`，并查看 Arka 正在运行的 shell 命令 |
+| 本地可用但远程不可用 | 保持 `REMOTE_HOST=127.0.0.1`，并通过添加 HTTPS 和速率限制的反向代理/隧道对外暴露 |
+
+## 多轮对话 {#multi-turn-conversation}
 
 语音会话在多轮之间保持上下文。说出 "hey arka" 加上您的请求，然后继续对话而无需重复唤醒词，直到会话超时。
 
-## 从语音记忆
+## 从语音记忆 {#memory-from-voice}
 
 设置 `MEMORY_AUTODETECT=1`（默认），Arka 会自动检测语音和聊天中的 "remember that …" 短语：
 

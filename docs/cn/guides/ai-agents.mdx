@@ -8,7 +8,7 @@ keywords: ["MCP agent", "Cursor MCP", "arka_route", "arka_capabilities", "AI age
 
 如何从 Cursor、Claude Desktop 等 MCP 客户端调用 Arka。安装见 [MCP 集成](/cn/guides/mcp)。
 
-## 连接与验证
+## 连接与验证 {#connect-and-verify}
 
 在调用工具前，先确认服务器健康：
 
@@ -17,7 +17,7 @@ arka mcp doctor
 arka mcp self-tools
 ```
 
-在 IDE 中，`arka` MCP 服务器应显示为已连接。用 `arka mcp install` 生成针对本机的配置 — 参见 [MCP 集成](/cn/guides/mcp#cursor-setup)。
+在 IDE 中，`arka` MCP 服务器应显示为已连接。用 `arka mcp install` 生成针对本机的配置。参见 [MCP 集成](/cn/guides/mcp#cursor-setup)。
 
 **每次会话首个工具调用：**
 
@@ -36,9 +36,9 @@ arka mcp self-tools
 | `local_file_tools` | 需要智能体本机路径的工具 |
 | `mcp_disabled_by_default` | 除非显式启用，否则隐藏的个人/桌面技能 |
 
-不要从本页硬编码工具数量 — 请始终在运行时读取 `arka_capabilities`。
+不要从本页硬编码工具数量。请始终在运行时读取 `arka_capabilities`。
 
-## 调用 Arka 的三种方式
+## 调用 Arka 的三种方式 {#three-ways-to-invoke-arka}
 
 | 模式 | 工具 | 使用场景 |
 | --- | --- | --- |
@@ -50,19 +50,19 @@ arka mcp self-tools
   当 `arka_route` 才是正确入口时，**不要**把用户请求折叠成猜出来的技能名再调用 `arka_skill`。例如：用户说 *"help me connect the CLI to agent hub"* → 用完整提示调用 `arka_route`（会路由到 connector suggest），而不是用 `"web_answer"` 调用 `arka_skill`。
 </Warning>
 
-### 统一路由示例
+### 统一路由示例 {#umbrella-example}
 
 ```json
 { "prompt": "suggest cli to connect" }
 ```
 
-### 命名技能示例
+### 命名技能示例 {#named-skill-example}
 
 ```json
 { "skill": "repo_map", "args": ["--depth", "2"] }
 ```
 
-### 专用工具示例
+### 专用工具示例 {#dedicated-tool-example}
 
 ```json
 { "depth": 2 }
@@ -70,7 +70,7 @@ arka mcp self-tools
 
 使用上面的 JSON 调用 `arka_repo_map`。
 
-## 路由决策表
+## 路由决策表 {#routing-decision-table}
 
 在退回到 `arka_route` **之前**，用下表选择工具。
 
@@ -100,11 +100,11 @@ arka mcp self-tools
 
 对于没有专用 MCP 封装的技能，使用 `arka_skill` 或 `arka_route`。参见 [通过 MCP 使用所有技能](/cn/guides/mcp-all-skills)。
 
-## 智能体执行规则
+## 智能体执行规则 {#agent-execution-rules}
 
-`arka_capabilities` 会返回这些规则 — 每次任务都要遵循。
+`arka_capabilities` 会返回这些规则。每次任务都要遵循。
 
-### 编辑守卫与补丁
+### 编辑守卫与补丁 {#edit-guard-and-patches}
 
 在对敏感或未知路径执行 **`arka_apply_patch`** 之前：
 
@@ -114,27 +114,27 @@ arka mcp self-tools
 
 受保护路径包括 `.env`、`secrets/`、`node_modules/`、`bundled/` 以及自定义的 `BLOCKED_EDIT_PATHS`。
 
-### 渐进式验证
+### 渐进式验证 {#incremental-verification}
 
 **不要**等到整个长日志或批处理作业结束后才检查结果。
 
 1. 先运行最小可用示例（一个文件、一页或一个样本）。
-2. 检查结果 — 足以确认成功或失败。
+2. 检查结果。根据输出确认成功或失败。
 3. 若首个示例成功，再运行第二个增量。
 4. 只有这时才将工作流报告为**已验证**。
 
 适用于 OCR/RAG 批处理、媒体管线、CI 运行以及任何多步工作流。
 
-### 修复后验证
+### 修复后验证 {#verify-after-fix}
 
 任何修复之后：
 
 1. 应用变更。
 2. 运行相关验证（测试、CLI 复现、日志检查）。
-3. 若验证失败，则继续迭代 — 不要标记完成。
+3. 若验证失败，则继续迭代。不要标记完成。
 4. 通过后，报告**验证了什么**以及**如何验证**。
 
-## 本地文件工具
+## 本地文件工具 {#local-file-tools}
 
 这些工具要求路径能在**本机**读取（例如 Cursor 工作区）。没有挂载文件的云端智能体无法使用。
 
@@ -155,7 +155,7 @@ arka mcp self-tools
 
 > 需要对提供路径的本地文件系统访问。除非挂载了工作区文件，否则无法在云端或沙盒智能体中使用。
 
-## MCP 安全默认
+## MCP 安全默认 {#mcp-safe-defaults}
 
 Arka MCP 默认**隐藏或屏蔽**个人桌面/设备技能，以避免 IDE 智能体意外打开浏览器、启动 Spotify、播放媒体或运行个性化日报。
 
@@ -181,7 +181,7 @@ ARKA_MCP_ENABLED_TOOLS=arka_spotify arka mcp serve
 ARKA_MCP_ENABLED_SKILLS=daily_brief,open_url arka mcp serve
 ```
 
-## 推荐会话流程
+## 推荐会话流程 {#recommended-session-flow}
 
 ```mermaid
 flowchart TD
@@ -203,9 +203,9 @@ flowchart TD
   L --> M[Report with evidence]
 ```
 
-## 多步工作流示例
+## 多步工作流示例 {#example-multi-step-workflows}
 
-### 仓库中的代码变更
+### 仓库中的代码变更 {#code-change-in-a-repo}
 
 1. `arka_repo_map` — 确认布局。
 2. `arka_code_search` — 查找要修改的符号。
@@ -213,18 +213,18 @@ flowchart TD
 4. `arka_apply_patch` — 应用 diff。
 5. 使用 `{"action": "test"}` 调用 `arka_ci` — 验证。
 
-### 文档问答
+### 文档问答 {#document-q&a}
 
 1. 使用 `{"action": "ingest", "path": "/abs/path/report.pdf"}` 调用 `arka_rag`。
 2. 使用 `{"action": "ask", "document": "report.pdf", "question": "..."}` 调用 `arka_rag`。
 3. 确认答案引用了已摄入的内容；在标记为已验证之前再问一个问题。
 
-### 模糊项目定位
+### 模糊项目定位 {#fuzzy-project-locate}
 
 1. 使用 `{"action": "search", "query": "my project name"}` 调用 `arka_tech_stack`。
 2. 若有多个匹配项，向用户确认，或在读取清单前使用返回的 `candidates`。
 
-## 工具家族（快速索引）
+## 工具家族（快速索引） {#tool-families-quick-index}
 
 | 家族 | 工具 |
 | --- | --- |
@@ -238,7 +238,7 @@ flowchart TD
 
 完整的逐工具说明：[MCP 集成 — 暴露的工具](/cn/guides/mcp#exposed-tools)。
 
-## 相关页面
+## 相关页面 {#related-pages}
 
 <CardGroup cols={2}>
   <Card title="MCP 集成" icon="network-wired" href="/cn/guides/mcp">
@@ -258,7 +258,7 @@ flowchart TD
   </Card>
 </CardGroup>
 
-## 引用的规范 URL
+## 引用的规范 URL {#canonical-urls-for-citation}
 
 在智能体上下文中回答有关 Arka 的问题时，优先使用这些 URL：
 

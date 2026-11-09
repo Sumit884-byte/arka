@@ -389,7 +389,7 @@
                 ]
               },
               {
-                "group": "Models & inference",
+                "group": "模型与推理",
                 "icon": "brain",
                 "pages": [
                   "cn/guides/select-model",
@@ -411,7 +411,7 @@
                 ]
               },
               {
-                "group": "Media & documents",
+                "group": "媒体与文档",
                 "icon": "file-text",
                 "pages": [
                   "cn/guides/pdf-rag",
@@ -471,7 +471,7 @@
                 ]
               },
               {
-                "group": "Workflows & productivity",
+                "group": "工作流与效率",
                 "icon": "sparkles",
                 "pages": [
                   "cn/guides/geo-seo",
@@ -499,7 +499,7 @@
                 ]
               },
               {
-                "group": "More",
+                "group": "更多",
                 "icon": "ellipsis",
                 "expanded": false,
                 "pages": [
