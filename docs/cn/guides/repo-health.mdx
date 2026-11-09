@@ -7,7 +7,9 @@ icon: "heart-pulse"
 
 扫描当前仓库以查找常见的测试和 lint 工具，然后运行快速健康检查。
 
-## 自然语言
+对于 Arka 仓库本身，较新的 `arka ci` 命令能更贴近地镜像 GitHub Actions 门禁。使用 `arka review` 进行本地 diff 审查；需要检查 fish/Python/测试的一致性时，使用 `arka route audit`。
+
+## 自然语言 {#natural-language}
 
 ```bash
 arka check repo health
@@ -15,7 +17,7 @@ arka run project tests
 arka scan what checks are available
 ```
 
-## CLI 命令
+## CLI 命令 {#cli-commands}
 
 | 命令 | 描述 |
 | ------- | ----------- |
@@ -24,7 +26,60 @@ arka scan what checks are available
 | `repo_health run --test` | 仅运行测试检查 |
 | `repo_health run --lint` | 仅运行 lint 检查 |
 
-## 检测到的工具
+## 相关的 Arka 开发者工具 {#related-arka-developer-tools}
+
+| 命令 | 描述 |
+| --- | --- |
+| `arka ci` | 运行仓库专用的 CI 镜像（`ruff` + 定向 `pytest`） |
+| `arka ci --full` | 在快速 CI 镜像之后追加完整的 pytest 测试套件 |
+| `arka ci --fix` | 将第一个失败的门禁交给目标代理处理 |
+| `arka ci --json` | 为脚本和仪表板输出机器可读的门禁结果 |
+| `arka ci --changed` | 针对已改动 Python 文件和相关测试的快速门禁 |
+| `arka review --staged` | 根据项目规则审查暂存的改动 |
+| `arka review --staged --fail-on-hints` | 将审查警告用作 CI/pre-commit 门禁 |
+| `arka review --json` | 输出结构化的报告和警告字段 |
+| `arka route audit` | 报告符号规则 / fish / 测试之间的一致性缺口 |
+| `arka lint this repo` | 为项目中任意语言运行检测到的 lint 工具 |
+| `arka skill new <name> --template dev` | 搭建新的插件技能脚手架 |
+| `arka security` | 扫描已跟踪文件中可能的密钥和不安全模式 |
+| `arka hooks install` | 安装增量 CI/审查的 pre-commit 检查 |
+| `arka hooks status` | 查看 Arka 的 pre-commit 钩子 |
+| `arka hooks restore` | 恢复安装 Arka 之前的钩子备份 |
+| `arka dev-doctor` | 预检仓库、工作流和开发者工具的设置 |
+| `arka dev-tools list` | 显示支持的 API 测试、浏览器调试和 DevOps 工具 |
+| `arka dev-tools list --json` | 为脚本输出外部开发者工具目录 |
+
+Arka 通过当前激活的 Python 解释器运行 Ruff 和 Pytest，因此本地门禁使用与 `arka` 安装相同的虚拟环境。在发布或合并之前使用 `--full` 运行完整的测试套件。
+
+## 外部开发者工具目录 {#external-developer-tool-catalog}
+
+Arka 能识别工程师在终端周边常用的工具：
+
+| 领域 | 工具 | Arka 跟踪它们的原因 |
+| --- | --- | --- |
+| API 测试 | Postman、Insomnia | API 请求集合、环境、GraphQL/REST 检查以及手动复现记录 |
+| 调试 / 浏览器工具 | Chrome DevTools、Firefox Developer Edition | 控制台/网络/性能证据以及跨浏览器调试指导 |
+| DevOps 相关 | Docker、Kubernetes、GitHub Actions、Terraform、Prometheus、Jenkins | 本地服务、CI/CD、基础设施、可观测性和部署检查 |
+
+使用：
+
+```bash
+arka dev-tools list
+arka dev-tools list --json
+arka dev-doctor
+```
+
+自然语言示例：
+
+```bash
+arka show API testing tools like Postman and Insomnia
+arka check Docker Kubernetes Terraform tools
+arka what browser debugging tools can Arka use
+```
+
+这些检查有意设计为只读。Arka 将缺失的可选工具报告为设置提示，而不是硬性失败，因此 `arka dev-doctor` 仍会专注于对当前项目真正重要的仓库门禁。
+
+## 检测到的工具 {#detected-tools}
 
 Arka 会查找：
 
@@ -35,3 +90,64 @@ Arka 会查找：
 - **Make：** 当 `Makefile` 定义了 `test` 目标时的 `make test`
 
 在仓库内时从当前 git 根目录运行，否则从当前目录运行。
+
+对于通常需要手动设置的集成，请使用统一向导：
+
+```bash
+arka integration status
+arka integration list
+arka integration status --provider sentry
+arka integration doctor --provider github
+arka integration status --json
+arka integration remove sentry --yes
+arka integration setup context7 --key YOUR_KEY
+arka integration setup signoz --key YOUR_KEY
+arka integration setup openrouter --key YOUR_KEY
+arka integration setup railway --key YOUR_TOKEN
+arka integration doctor
+```
+
+它还支持模型提供商（OpenRouter、OpenAI、Anthropic）、部署提供商（Railway、Vercel）以及媒体/记忆工具。`doctor` 会报告缺失的可选集成，但不会打印凭据值。
+
+也支持生产力工具：
+
+```bash
+arka integration setup notion
+arka integration setup jira
+arka integration setup teams
+arka integration setup supabase
+arka integration setup firebase
+arka integration setup stripe
+arka integration setup netlify
+arka integration setup render
+arka integration setup fly
+```
+当选择了相应集成时，它还会报告缺失的可选 CLI（`gh`、`railway` 和 `vercel`）。
+
+仓库和协作类凭据使用相同的流程：
+
+```bash
+arka integration setup github
+arka integration setup slack
+arka integration setup google
+arka connect gh --key YOUR_TOKEN
+printf '%s' "$LINEAR_API_KEY" | arka integration setup linear --key-stdin
+```
+
+你可以说 `fix GitHub issues in my code`。Arka 会将其路由到限定在仓库范围内的编码代理：在已认证时通过 `gh` 查看 issue，复现问题，在本地编辑，并运行相关测试。请先使用 `gh auth login` 进行认证；没有访问权限或未经验证时，Arka 不会声称 issue 已修复。
+
+对于通常需要手动设置的集成，请使用搜索提供商向导。它会将密钥保存在 Arka 的用户 `.env` 中，并支持 Serper、Tavily 和 Brave Search：
+
+```bash
+arka search setup serper --key YOUR_KEY
+arka search status
+```
+
+省略 `--key` 可使用交互式隐藏输入提示；在 CI 和脚本中保留 `--key`：
+
+```bash
+arka integration setup serper
+arka integration setup all
+```
+
+这些命令也接受自然语言，例如：`set up Serper`、`show available integrations` 或 `check my Sentry integration`。

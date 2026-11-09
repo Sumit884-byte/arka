@@ -1,85 +1,244 @@
 ---
 title: "如何用 Arka 写代码"
-description: "Arka 终端编码实用工作流 —— 设置、日常命令、运行模式、IDE 集成与五分钟示例。"
+description: "Arka 终端编码工作流：arka code init、agent 模式、仓库健康检查、CI 修复以及 Cursor MCP 集成，无需离开 CLI 即可完成编辑、审查、测试的完整循环。"
+keywords: ["coding with arka", "terminal copilot", "Cursor MCP", "agent mode", "repo health", "developer workflow"]
 icon: "laptop-code"
+boost: 1.5
 ---
 
-Arka 是面向终端的**编码副驾驶**：用自然语言描述需求，Arka 将请求路由到合适技能并在本地执行，写入操作限定在你初始化的代码项目内。配合 **agent 模式**、**Cursor MCP** 与 **仓库健康检查**，即可形成完整的终端编码循环。
+Arka 是一个**终端编码副驾驶**。你用自然语言描述需求；Arka 将请求路由到合适的技能，在本地运行，并把有风险的写入限定在你的项目内。将 CLI 与 **agent 模式**、**Cursor 中的 MCP 工具** 和 **仓库健康门禁** 结合起来，无需离开终端即可完成完整的编码循环。
+
+<Note>
+  **摘要：** 用 `arka code init .` 初始化仓库，并保持 agent 模式开启，以便在安全门禁下执行技能。使用 [MCP](/cn/guides/mcp) 在 Cursor 中暴露 Arka，并在合并前运行[仓库健康检查](/cn/guides/repo-health)。Arka 是编辑器的补充：终端用于快速提问、审查和 CI；通过 MCP 连接后，Cursor 用于行内 diff。
+</Note>
 
 <Tip>
-  首次使用？先完成[快速开始](/cn/quickstart)，然后在目标仓库中运行 `arka code init .`。
+  首次使用？先完成[快速开始](/cn/quickstart)，然后在你正在开发的仓库中运行 `arka code init .`。
 </Tip>
 
-## 概览
+## 概览 {#overview}
 
-编码时三个能力协同工作：
+编码时，三个部分协同工作：
 
-| 能力 | 作用 |
+| 部分 | 作用 |
 | --- | --- |
-| **路由** | 离线符号规则选择技能；必要时才调用 LLM。见[路由概念](/cn/concepts/routing)。 |
-| **Agent 模式** | 默认模式，完整技能执行与安全网关。`arka mode agent`。 |
-| **MCP** | 向 Cursor 等编辑器暴露 Arka 技能，或从 CLI 调用外部 MCP 服务。见 [MCP 集成](/cn/guides/mcp)。 |
+| **路由** | 离线符号规则选择技能；仅在需要时回退到 LLM。参见[路由的工作原理](/cn/concepts/routing)。 |
+| **Agent 模式** | 在安全门禁下完整执行技能（默认）。使用 `arka mode agent` 切换。 |
+| **MCP** | 向 Cursor 和其他智能体暴露 Arka 技能，或从 CLI 调用外部 MCP 服务器。参见 [MCP 集成](/cn/guides/mcp)。 |
 
-## 编码环境设置
+Arka 不是编辑器的替代品，而是它的补充。用终端进行快速提问、审查、CI 和自主编辑；在 Arka 通过 MCP 连接后，用 Cursor 查看行内 diff。
+
+## 编码环境设置 {#setup-for-coding}
+
+在日常工作流之前，每台机器（或每个仓库）运行一次以下步骤。
+
+<Steps>
+  <Step title="确认 agent 模式">
+    Agent 模式是默认模式。验证或切换：
+
+    ```bash
+    arka mode list
+    arka mode agent
+    ```
+  </Step>
+
+  <Step title="初始化代码项目">
+    将写入限定在一个仓库根目录内：
+
+    ```bash
+    cd ~/dev/myapp
+    arka dev init .
+    arka dev status
+    ```
+
+    也可以使用旧别名：`arka code init .`。目标代理、`self improve --apply` 及其他写入类技能会一直限定在此文件夹内，直到你运行 `arka code clear` 或初始化另一个路径。
+  </Step>
+
+  <Step title="包含空格的路径">
+    从其他目录初始化时，只需给项目路径加一次引号；Arka 会在内部保留该路径，供后续 CLI 和 MCP 调用使用：
+
+    ```bash
+    arka code init "/Users/sumitmishra/dev/3d space simulation"
+    ```
+  </Step>
+
+  <Step title="可选：fish shell">
+    Fish 可解锁完整的 70+ 技能路由器和自然语言别名（`agent "…"`、`pr_check babysit` 等）。在 bash/zsh 中，请使用显式的 `arka` 子命令。它们的效果相同。
+
+    ```bash
+    brew install fish   # macOS
+    ```
+  </Step>
+
+  <Step title="连接 Cursor（推荐）">
+    让 IDE 智能体通过 MCP 调用 Arka 技能：
+
+    ```bash
+    arka mcp doctor
+    arka mcp install
+    ```
+
+    将打印出的片段复制到 **Cursor Settings → MCP**（或使用 Arka 仓库中项目级的 `.cursor/mcp.json`）。如需在多个编码智能体之间共享 MCP，请运行 `arka agent_hub sync --unify`。参见 [Agent Hub](/cn/guides/agent-hub) 和 [MCP 集成](/cn/guides/mcp)。
+  </Step>
+</Steps>
+
+## 日常工作流 {#daily-workflow}
+
+使用自然语言或显式命令。Arka 都能路由。
+
+### 提问与解释 {#ask-and-explain}
+
+在陌生的代码库中快速定位：
 
 ```bash
-arka mode agent
-cd ~/dev/myapp
-arka code init .
-arka mcp doctor
-arka mcp install          # 将输出合并到 Cursor MCP 配置
-arka agent_hub sync --unify   # 可选：多代理共享 MCP
+arka ask "where is routing handled?"
+arka gemini explain asyncio
+arka repo_map
 ```
 
-可选安装 [fish shell](https://fishshell.com) 以启用完整 70+ 技能路由与自然语言别名。
+`arka ask` 运行网页问答技能；`gemini explain` 使用 Gemini CLI 集成来提供面向代码的解释。使用[仓库地图](/cn/guides/repo-map)获取当前项目的结构化目录树。
 
-## 日常工作流
+### 编辑代码 {#edit-code}
 
-| 场景 | 示例命令 |
+| 任务 | 命令 |
 | --- | --- |
-| 提问 / 解释 | `arka ask "路由在哪里处理？"`、`arka gemini explain asyncio` |
-| 编辑代码 | `arka goal 重构 auth 并运行 pytest`、`arka surgical-edit …`、`arka structure .` |
-| 审查 | `arka review --staged`、`arka teammate-review .` |
-| 测试与 CI | `arka ci`、`arka repo_health run`、`arka pr_check babysit` |
-| 自我改进 | `arka self improve routing`、`arka self improve routing --apply` |
+| 多步骤自主工作 | `arka goal refactor auth and run pytest` |
+| 确定性的技能序列 | `arka coding-workflow feature --task "add rate limiting"` |
+| 定向文本替换 | `arka surgical-edit edit src/app.py "old" "new" --yes` |
+| 布局 / 整洁度审计 | `arka structure .` |
+| 专注的 TUI 工作区 | `arka dev tui .`（别名：`arka coding-tui .`） |
 
-## 运行模式
+[目标代理](/cn/guides/goal-agent)最适合开放式任务（调试、配置环境、运行测试）。[编码工作流](/cn/guides/coding-workflows)会在执行前列出明确的技能序列，适合需要可预测步骤的场景。[结构检查](/cn/guides/structure)是只读的；它会建议移动，但从不移动文件。
+
+### 审查 {#review}
+
+在提交前发现问题：
+
+```bash
+arka dev review
+arka dev ship
+arka council "is this API change safe to ship?"
+arka teammate-review .
+```
+
+`arka dev ship` 一步完成暂存区审查和仅针对改动的 CI。`arka dev review`（或 `arka review --staged`）根据项目规则检查 diff，并为没有对应测试的已改动源文件给出**测试缺口**提示。[Council](/cn/guides/council) 为设计决策运行多角色审议。[队友式评审](/cn/guides/teammate-review)利用工作区发现来标记跨服务影响。
+
+参见完整的[开发者循环](/cn/guides/dev)指南。
+
+### 测试与 CI {#test-and-ci}
+
+在提交 PR 之前，先在本地为改动设置门禁：
+
+```bash
+arka dev test
+arka dev test --fix
+arka ci
+arka repo_health run
+arka dev pr babysit
+```
+
+`arka dev test` 运行仅针对改动的 CI 门禁（与 `arka ci --changed` 相同）。在任何项目中都可以使用 `repo_health` 进行通用的 lint/测试检测。`arka dev pr babysit` 会循环检查 GitHub CI，直到 PR 可以合并。参见[仓库健康](/cn/guides/repo-health)和[开发者循环](/cn/guides/dev)。
+
+<Note>
+  安装 pre-commit 钩子以启用增量门禁：`arka dev hooks install` 会在每次提交时运行 `arka ci --changed` 和 `arka review --staged --fail-on-hints`。
+</Note>
+
+### 自我改进 {#self-improve}
+
+当你在开发 Arka 本身（或任何带有测试和路由的仓库）时：
+
+```bash
+arka self improve              # plan only
+arka self improve routing      # focused plan
+arka self improve routing --apply   # goal agent implements fixes
+```
+
+默认只生成计划；`--apply` 需要 agent 模式。参见[自我改进循环](/cn/guides/self-improve)。
+
+## 编码时的运行模式 {#operation-modes-while-coding}
 
 | 模式 | 适用场景 |
 | --- | --- |
-| `agent` | 默认 —— 执行技能与写入 |
-| `ask` | 只读探索 |
-| `plan` | 仅输出计划，不执行 |
-| `debug` | 查看路由与 LLM 回退轨迹 |
-
-详见英文版 [Operation modes](/guides/operation-modes)（中文页待补充）。
-
-## 五分钟示例
+| `agent` | **默认**：运行技能、应用编辑、执行 shell |
+| `ask` | 只读探索；有风险的操作会被阻止 |
+| `plan` | 只勾勒步骤而不执行（例如在大型重构之前） |
+| `debug` | 查看路由轨迹和 LLM 回退（用于故障排除） |
 
 ```bash
+arka mode plan
+arka "refactor the auth module and add tests"
+arka mode agent
+arka goal refactor the auth module and add tests
+```
+
+使用 **plan** 预览 Arka 将要执行的操作；切换回 **agent** 以实际执行。完整说明：[运行模式](/cn/guides/operation-modes)。
+
+## Cursor 与 IDE 集成 {#cursor-and-ide-integration}
+
+| 集成 | 命令 / 路径 |
+| --- | --- |
+| 在 Cursor 中将 Arka 作为 MCP 服务器 | `arka mcp install` → 合并到 `~/.cursor/mcp.json` |
+| 面向智能体的项目规则 | `arka_project_rules` MCP 工具，或仓库中的 `AGENTS.md` / `.cursor/rules` |
+| 多个智能体的共享中心 | `arka agent_hub sync --unify` |
+| 中心状态 | `arka agent_hub status` |
+
+在 Cursor 聊天中，让智能体调用 `arka_ask`、`arka_skill`、`arka_repo_map` 或 `arka_recall`。在终端中，可以通过 `arka mcp call arka <tool>` 使用相同的工具。
+
+## 示例会话 {#example-session}
+
+在刚克隆的仓库中，一个真实的五分钟流程：
+
+<CodeGroup>
+
+```bash Setup
+cd myapp
 arka code init .
+arka mode agent
+```
+
+```bash Explore
 arka ask "where is routing handled?"
+arka repo_map
+```
+
+```bash Review & gate
+git add -p
 arka review --staged
 arka ci --changed
+```
+
+```bash Improve (Arka repo)
 arka self improve routing
 ```
 
-## 延伸阅读
+</CodeGroup>
+
+你已经熟悉了代码库、审查了暂存的改动、运行了快速 CI 镜像，并（在 Arka 仓库中）生成了自我改进计划，全程无需离开终端。
+
+## 后续步骤 {#next-steps}
 
 <CardGroup cols={2}>
   <Card title="目标代理" icon="bullseye" href="/cn/guides/goal-agent">
-    多步骤自主编码任务。
+    带步数预算的自主多步骤编码任务。
+  </Card>
+
+  <Card title="编码工作流" icon="diagram-project" href="/cn/guides/coding-workflows">
+    用于功能开发、缺陷修复和审计的确定性技能序列。
   </Card>
 
   <Card title="MCP 集成" icon="network-wired" href="/cn/guides/mcp">
-    Cursor 与外部 MCP 服务器连接。
+    将 Arka 连接到 Cursor 和外部 MCP 服务器。
+  </Card>
+
+  <Card title="自我改进" icon="arrows-rotate" href="/cn/guides/self-improve">
+    分析路由、测试和文档；在安全门禁下应用修复。
   </Card>
 
   <Card title="仓库健康" icon="heart-pulse" href="/cn/guides/repo-health">
-    本地 CI 镜像与审查门禁。
+    本地 CI 镜像、审查门禁和 pre-commit 钩子。
   </Card>
 
-  <Card title="完整英文指南" icon="laptop-code" href="/guides/code-with-arka">
-    How to code with Arka（完整版）。
+  <Card title="Agent Hub" icon="hub" href="/cn/guides/agent-hub">
+    为 ollama launch 智能体共享 MCP、记忆和技能。
   </Card>
 </CardGroup>

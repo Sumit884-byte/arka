@@ -1,15 +1,20 @@
 ---
-title: "MCP 集成"
-description: "将 Arka 连接到任何 Model Context Protocol (MCP) 服务器 — stdio 或 HTTP — 列出工具、调用工具以及检查健康状况。"
-keywords: ["mcp", "model context protocol", "integration", "tools"]
+title: "面向 Cursor 和 Claude 的 MCP 集成"
+description: "将 Arka 连接到 Model Context Protocol 服务器（stdio 或 HTTP），向 Cursor 和 Claude Desktop 暴露 70+ 项 Arka 技能，并从 CLI 列出工具、调用工具以及检查健康状况。"
+keywords: ["mcp", "model context protocol", "Cursor", "Claude Desktop", "integration", "arka mcp server"]
 icon: "network-wired"
+boost: 1.5
 ---
 
-Arka 可以从终端连接到**任何 MCP 服务器** — 与 Cursor、Claude Desktop 和其他 AI 客户端所使用的 [Model Context Protocol](https://modelcontextprotocol.io) 相同。
+Arka 可以从终端连接到**任何 MCP 服务器**。它与 Cursor、Claude Desktop 和其他 AI 客户端所使用的 [Model Context Protocol](https://modelcontextprotocol.io) 相同。
+
+Arka 既是 MCP 客户端（调用 SigNoz、文件系统及其他服务器），也是 MCP 服务器（向 Cursor 暴露技能）。配置文件为 `~/.config/arka/mcp.json`。从 `arka mcp list`、`arka mcp add`、`arka mcp tools`、`arka mcp call` 开始。工具路由：[AI 智能体指南](/cn/guides/ai-agents)。IDE 工作流：[如何用 Arka 写代码](/cn/guides/code-with-arka)。
+
+MCP 服务器也可以加入 Arka 的通用插件目录。添加服务器后，使用 `arka plugin doctor` 和 `arka plugin inspect <name>` 检查其规范化后的能力和权限，然后再将请求路由给它。Agent Hub 会将同一目录与 Arka 的技能清单一起导出。
 
 配置位于 `~/.config/arka/mcp.json`，采用与 Cursor 兼容的 `mcpServers` 格式。
 
-## 快速开始
+## 快速开始 {#quick-start}
 
 ```bash
 # List configured servers
@@ -48,7 +53,7 @@ arka "mcp status"
 arka "list mcp tools from signoz"
 ```
 
-## 配置格式
+## 配置格式 {#config-format}
 
 `~/.config/arka/mcp.json`：
 
@@ -69,18 +74,18 @@ arka "list mcp tools from signoz"
 }
 ```
 
-Stdio 服务器使用 `command` + `args`。远程服务器使用 `url` + 可选的 `headers`。可选的 `env` 值支持 `${env:VAR_NAME}` 替换。
+Stdio 服务器使用 `command` \+ `args`。远程服务器使用 `url` \+ 可选的 `headers`。可选的 `env` 值支持 `${env:VAR_NAME}` 替换。
 
-## 传输方式
+## 传输方式 {#transports}
 
 | 传输方式 | 配置 | 示例 |
-|-----------|--------|---------|
-| **stdio** | `command` + `args` | `npx -y @modelcontextprotocol/server-filesystem /tmp` |
-| **HTTP/SSE** | `url` + `headers` | 位于 `http://localhost:8000/mcp` 的 SigNoz MCP |
+| --- | --- | --- |
+| **stdio** | `command` \+ `args` | `npx -y @modelcontextprotocol/server-filesystem /tmp` |
+| **HTTP/SSE** | `url` \+ `headers` | 位于 `http://localhost:8000/mcp` 的 SigNoz MCP |
 
-Arka 为远程服务器复用现有的 HTTP MCP 客户端，并为 stdio 使用内置的按行分隔 JSON-RPC 客户端 — 无需额外依赖。
+Arka 为远程服务器复用现有的 HTTP MCP 客户端，并为 stdio 使用内置的按行分隔 JSON-RPC 客户端。无需额外依赖。
 
-## 可选的 Python SDK
+## 可选的 Python SDK {#optional-python-sdk}
 
 ```bash
 pip install mcp
@@ -88,27 +93,80 @@ pip install mcp
 
 Arka 不安装 SDK 也能工作。如果安装了，Arka 会检测到（`arka mcp status` 会显示 `sdk on`）。
 
-## SigNoz MCP
+## SigNoz MCP {#signoz-mcp}
 
-针对 SigNoz，Arka 还附带了带追踪的辅助功能（`arka signoz status`、目标自愈）。通用的 `arka mcp` 可与任何 MCP 服务器一起使用 — 不仅限于 SigNoz。
+针对 SigNoz，Arka 还附带了带追踪的辅助功能（`arka signoz status`、目标自愈）。通用的 `arka mcp` 可与任何 MCP 服务器一起使用，不仅限于 SigNoz。
 
 ```bash
 arka mcp add signoz --url http://localhost:8000/mcp --header SIGNOZ-API-KEY=$SIGNOZ_API_KEY
 arka mcp tools signoz
 ```
 
-## 命令参考
+## MCP 日志 {#mcp-logs}
+
+当 Cursor、Claude 或其他 MCP 客户端报告类似生产环境的问题时（例如 `Connection closed`、无效的工具参数、未知工具或服务器错误状态），请使用 MCP 日志：
+
+```bash
+arka mcp logs
+arka mcp logs -n 100 --json
+arka mcp logs --event server.tools_call
+```
+
+日志采用 JSONL 格式，存储经过清理的客户端/服务器事件：时间戳、组件、方法/工具、状态、耗时以及简短的错误片段。Arka 会对密钥、令牌和类似授权信息的字段进行脱敏。默认情况下，该文件位于 Arka 配置目录下的 `logs/mcp.jsonl`；在测试或托管部署中，可设置 `ARKA_MCP_LOG_PATH` 覆盖该路径。
+
+## Three.js 模型 MCP {#three-js-model-mcp}
+
+Arka 内置了 [`baryhuang/mcp-threejs`](https://github.com/baryhuang/mcp-threejs) 预设。这是一个由 Sketchfab 支持的 MCP 服务器，用于查找可下载的、与 Three.js 兼容的 3D 资产。当场景需要真实物体（例如卫星、航天器、车辆、房间、桌子或人物）时，它非常有用。Arka 应优先使用有许可证的 GLTF/GLB 资产，而不是粗糙的几何占位体。
+
+先预览配置：
+
+```bash
+arka mcp preset threejs
+```
+
+将其应用到 Arka 的 MCP 配置：
+
+```bash
+arka mcp preset threejs --apply
+arka mcp tools threejs
+```
+
+该预设使用 Docker：
+
+```json
+{
+  "mcpServers": {
+    "threejs": {
+      "command": "docker",
+      "args": ["run", "--rm", "-i", "buryhuang/mcp-server-threejs:latest"],
+      "env": {
+        "SKETCHFAB_ACCESS_TOKEN": "${env:SKETCHFAB_ACCESS_TOKEN}",
+        "SKETCHFAB_REFRESH_TOKEN": "${env:SKETCHFAB_REFRESH_TOKEN}",
+        "SKETCHFAB_CLIENT_ID": "${env:SKETCHFAB_CLIENT_ID}",
+        "SKETCHFAB_CLIENT_SECRET": "${env:SKETCHFAB_CLIENT_SECRET}"
+      }
+    }
+  }
+}
+```
+
+如需实时查询下载链接，请设置 Sketchfab OAuth 变量。没有令牌时，服务器可能可以启动，但模型查询/下载 URL 可能会失败，具体取决于上游 API。
+
+## 命令参考 {#commands-reference}
 
 | 命令 | 描述 |
-|---------|-------------|
+| --- | --- |
 | `arka mcp list` | 列出已配置的 MCP 服务器 |
 | `arka mcp add <name> <command> [args...]` | 添加 stdio 服务器 |
 | `arka mcp add <name> --url <url>` | 添加 HTTP/SSE 服务器 |
 | `arka mcp add <name> --url <url> --header KEY=VAL` | 添加带认证头的 HTTP 服务器 |
+| `arka mcp preset threejs [--apply]` | 预览/应用 Three.js 模型 MCP 服务器预设 |
 | `arka mcp remove <name>` | 移除服务器 |
 | `arka mcp tools <server>` | 列出服务器的工具 |
 | `arka mcp call <server> <tool> [--args '{}']` | 调用工具 |
 | `arka mcp status` | 所有服务器的连接健康状况 |
+| `arka mcp logs [-n 50] [--json]` | 显示最近经过清理的 MCP 客户端/服务器事件 |
+| `arka mcp self-tools` | 列出 Arka 原生的 MCP 工具 |
 | `arka mcp serve` | 将 Arka 作为本地 stdio MCP 服务器启动 |
 | `arka mcp install` | 打印与 Cursor/Claude 兼容的 `mcp.json` 片段 |
 | `arka mcp doctor` | 验证本地 Arka MCP 服务器能否启动 |
@@ -117,11 +175,131 @@ arka mcp tools signoz
   MCP 工具调用会为每次调用打开一个新连接。对于高频使用，建议将服务器保持在本地（stdio）或低延迟 HTTP 端点上。
 </Note>
 
-## 将 Arka 作为 MCP 服务器
+## 将 Arka 作为 MCP 服务器 {#arka-as-mcp-server}
 
-其他智能体（Cursor、Claude Desktop、OpenClaw、Codex 等）可以通过 MCP 调用 Arka 技能和内存 — 使用与 Arka 作为 MCP **客户端**时相同的 stdio 传输。
+其他智能体（Cursor、Claude Desktop、OpenClaw、Codex 等）可以通过 MCP 调用 Arka 技能和记忆。这使用与 Arka 作为 MCP **客户端**时相同的 stdio 传输。
 
-### 快速开始
+### Cursor 设置 {#cursor-setup}
+
+在 Cursor 中将 Arka 用作 MCP 服务器，让编辑器智能体可以调用 `arka_ask`、`arka_recall`、`arka_skill` 以及 Arka 导出的其他工具。
+
+<Steps>
+  <Step title="安装 Arka">
+    从仓库（可编辑安装）或你的虚拟环境安装：
+
+    ```bash
+    cd /path/to/arka
+    python -m venv venv-arka
+    source venv-arka/bin/activate
+    pip install -e .
+    arka mcp doctor
+    ```
+
+    `arka mcp doctor` 的输出应以 `summary ok` 结尾，并报告当前的工具数量。
+  </Step>
+
+  <Step title="添加 MCP 配置">
+    **方案 A：项目级**（在 Arka 仓库中工作时推荐）：从仓库根目录复制或符号链接 `.cursor/mcp.json`。Cursor 会为该工作区自动加载它。
+
+    **方案 B：全局**：打开 **Cursor Settings → MCP**，将 `arka` 条目合并到 `~/.cursor/mcp.json`：
+
+    ```bash
+    arka mcp install
+    ```
+
+    示例片段（路径因机器而异，请使用 `arka mcp install` 生成你自己的）：
+
+    ```json
+    {
+      "mcpServers": {
+        "arka": {
+          "command": "/Users/you/dev/arka/venv-arka/bin/arka",
+          "args": ["mcp", "serve"],
+          "env": {
+            "ARKA_CONFIG_DIR": "/Users/you/.config/arka"
+          }
+        }
+      }
+    }
+    ```
+
+    仓库辅助文件：
+
+    | 文件 | 用途 |
+    | --- | --- |
+    | `.cursor/mcp.json` | 项目级 Cursor MCP（仅 Arka） |
+    | `hub/adapters/cursor_mcp_snippet.json` | 可复制粘贴的片段 + 安装步骤 |
+    | `mcp.json` | 可用于中枢的配置（Arka + 可选的 context7） |
+  </Step>
+
+  <Step title="重启 Cursor">
+    完全退出并重新打开 Cursor，或使用 **Settings → MCP → Reload**。`arka` 服务器应显示为已连接，并显示当前的 Arka 工具数量。
+  </Step>
+
+  <Step title="工具调用示例">
+    在 Cursor 聊天中，让智能体使用 Arka MCP 工具：
+
+    - **召回记忆**：使用 `{"goal": "project conventions"}` 调用 `arka_recall`
+    - **向 Arka 提问**：使用 `{"prompt": "summarize this repo"}` 调用 `arka_ask`
+    - **运行技能**：使用 `{"skill": "repo_map"}` 调用 `arka_skill`
+    - **仓库布局**：使用 `{"depth": 2}` 调用 `arka_repo_map`
+
+    在终端中（相同的工具，无需 Cursor）：
+
+    ```bash
+    arka mcp call arka arka_recall --args '{"goal":"theme"}'
+    arka mcp call arka arka_ask --args '{"prompt":"what is arka?"}'
+    ```
+  </Step>
+</Steps>
+
+## IDE 与智能体设置 {#ide-and-agent-setup}
+
+Arka 暴露标准的 stdio MCP 服务器，因此同一个生成的条目可用于大多数兼容 MCP 的 IDE。请生成针对本机的片段，而不是从本页复制路径：
+
+```bash
+arka mcp install
+```
+
+将打印出的 `mcpServers.arka` 条目添加到客户端的 MCP JSON 文件中，然后重启或重新加载其 MCP 面板。该条目为：
+
+```json
+{
+  "command": "/absolute/path/to/arka",
+  "args": ["mcp", "serve"]
+}
+```
+
+如果 IDE 无法解析你的虚拟环境，请使用绝对路径的 Python 可执行文件并以模块方式调用：
+
+```json
+{
+  "command": "/absolute/path/to/venv/bin/python",
+  "args": ["-m", "arka", "mcp", "serve"]
+}
+```
+
+| 客户端 | 配置位置 / 操作 |
+| --- | --- |
+| **Cursor** | Settings → MCP，或项目中的 `.cursor/mcp.json` |
+| **VS Code / GitHub Copilot** | 工作区中的 `.vscode/mcp.json`，或 MCP 服务器设置界面 |
+| **Claude Desktop** | macOS：`~/Library/Application Support/Claude/claude_desktop_config.json`；Linux：`~/.config/Claude/claude_desktop_config.json` |
+| **Windsurf** | MCP 设置 → 添加服务器，或 `~/.codeium/windsurf/mcp_config.json` |
+| **Cline** | Cline MCP Servers 面板 → 从 JSON 安装 |
+| **Continue** | 在 Continue 的 MCP 配置中添加服务器（使用生成的 stdio 条目） |
+| **Zed** | Settings → Context Servers → 添加 `arka` 命令服务器 |
+| **Codex CLI** | `~/.codex/config.toml` 中的 MCP 配置，或运行 `codex mcp add arka -- arka mcp serve` |
+
+配置任意客户端后，先验证连接，再让智能体使用 Arka：
+
+```bash
+arka mcp doctor
+arka mcp self-tools
+```
+
+在 IDE 中，必要时明确说明“使用 Arka MCP 工具”。将 `arka_route` 视为 Arka 的总括 MCP 工具：当你不确定应运行哪个更具体的 Arka 工具时，把用户完整的自然语言请求传给它。适合首先检查的工具有 `arka_heartbeat`、`arka_repo_map` 和 `arka_skill`。`arka agent_hub sync --unify` 会保留现有的 MCP 服务器；使用 `arka agent_hub adapters` 预览哪些客户端文件会被更新。
+
+### 快速开始 {#quick-start}
 
 ```bash
 # Start the server (stdio — used by MCP clients automatically)
@@ -137,19 +315,6 @@ arka mcp install --write-config
 arka mcp doctor
 ```
 
-**Cursor** 的 `~/.cursor/mcp.json` 示例：
-
-```json
-{
-  "mcpServers": {
-    "arka": {
-      "command": "arka",
-      "args": ["mcp", "serve"]
-    }
-  }
-}
-```
-
 在 PATH 中没有 `arka` 的可编辑安装：
 
 ```json
@@ -163,52 +328,89 @@ arka mcp doctor
 }
 ```
 
-运行 `arka mcp install` 以打印适合您机器的正确命令。
+运行 `arka mcp install` 以打印适合你机器的正确命令。
 
-### 暴露的工具
+### 暴露的工具 {#exposed-tools}
 
 | 工具 | 描述 |
-|------|-------------|
-| `arka_ask` | 向 Arka 提问（网页、内存、计算、天气、聊天） |
+| --- | --- |
+| `arka_ask` | 向 Arka 提问（网页、记忆、计算、天气、聊天） |
 | `arka_remember` | 存储事实、笔记或频道回合 |
-| `arka_recall` | 按目标召回统一内存 |
-| `arka_skill` | 调用命名的 Arka 技能 |
+| `arka_recall` | 按目标召回统一记忆 |
+| `arka_skill` | 调用指定名称的 Arka 技能 |
+| `arka_route` | 总括工具：通过 Arka 技能/MCP 支持的能力路由并执行完整的自然语言请求 |
 | `arka_repo_map` | 仓库布局和 Python 符号 |
-| `arka_heartbeat` | 智能体心跳 — ping、状态或最近活动历史 |
-| `arka_sessions` | 频道会话 — 列出、状态、上下文、恢复、静默检查、推送、重置 |
-| `arka_routines` | 计划例程 — 列出、添加、删除、启用或禁用 |
-| `arka_session_memory` | OpenClaw Markdown 内存 — 追加、搜索、上下文、状态、清空 |
-| `arka_subagent` | Hermes 子智能体委派 — 生成、列出、状态、恢复结果 |
-| `arka_project_rules` | Cursor 风格项目规则 — AGENTS.md、CLAUDE.md、`.cursor/rules` |
-| `arka_webhook` | Webhook 网关 — 状态或健康检查 |
-| `arka_view_data` | 预览 CSV/TSV 表格为纯文本 |
-| `arka_clipboard` | 剪贴板历史 — 列出、保存、获取或清空 |
+| `arka_heartbeat` | 智能体心跳：ping、状态或最近活动历史 |
+| `arka_sessions` | 频道会话：列出、状态、上下文、恢复、静默检查、推送、重置 |
+| `arka_routines` | 计划例程：列出、添加、删除、启用或禁用 |
+| `arka_session_memory` | OpenClaw Markdown 记忆：追加、搜索、上下文、状态、清空 |
+| `arka_subagent` | Hermes 子智能体委派：生成、列出、状态、恢复 |
+| `arka_project_rules` | Cursor 风格项目规则：AGENTS.md、CLAUDE.md、`.cursor/rules` |
+| `arka_music_generate` | 生成音乐：Pollinations elevenmusic 或 ffmpeg 音调合成 |
+| `arka_meme` | 本地表情包模板：Drake、对比、vibe-coding，可选库存照片 |
+| `arka_infographic` | 自适应信息图 PNG：根据条目数量采用网格/径向布局 |
+| `arka_media_styles` | 列出表情包、视频和信息图的视觉风格预设 |
+| `arka_tech_stack` | 模糊查找项目文件夹，不完全匹配时确认，读取清单文件并推荐技术栈 |
+| `arka_fetch_lyrics` | 获取歌词并翻译，可选生成翻译版翻唱 |
+| `arka_safety_advice` | 精选的危机指导：家庭暴力、骚扰（固定预案，不是 LLM 法律建议） |
+| `arka_local_music` | 离线音乐：本地 ffmpeg 旋律（无云 API） |
+| `arka_webhook` | Webhook 网关：状态或健康检查 |
+| `arka_view_data` | 将 CSV/TSV 表格预览为纯文本 |
+| `arka_clipboard` | 剪贴板历史：列出、保存、获取或清空 |
 | `arka_share` | 分享最近一次 LLM 回复（含模型、提供商、token、延迟与输出，支持 markdown 或 JSON） |
-| `arka_remind` | 提醒 — 列出、添加或取消 |
-| `arka_bookmarks` | 书签 — 列出、保存、搜索、获取或删除 |
-| `arka_docker` | Docker — 健康、容器、镜像或日志 |
-| `arka_jsonkit` | JSON — 校验、美化、压缩或按路径取值 |
-| `arka_timekit` | 时间 — 当前时间、时区转换或相对偏移 |
-| `arka_urlkit` | URL 工具 — 解析、规范化或 slugify |
-| `arka_password` | 密码 — 生成一次性密码（不入库） |
-| `arka_spotify` | Spotify — 搜索曲目（不播放） |
-| `arka_textkit` | 文本工具 — UUID、哈希或 Base64 编解码 |
-| `arka_calendar` | 日历 — 今日行程（macOS 日历） |
-| `arka_platform` | 平台 — 查看或检测系统能力 |
-| `arka_personalize` | 个性化 — 资料状态、技能推荐、快速开始 |
-| `arka_persona` | 人设 — 列出或查看人设配置 |
-| `arka_github` | GitHub — 解析仓库或获取近期动态 |
-| `arka_price` | 比价 — 列出零售源或解析查询 |
-| `arka_config` | 配置 — 列出文件/目录或显示路径（只读） |
-| `arka_sports` | 体育 — 实时比分或联赛列表 |
-| `arka_qr` | 二维码 — 将文本/URL 编码为 ASCII 图案 |
-| `arka_currency` | 汇率换算 — 金额转换或自然语言查询 |
-| `arka_disk` | 磁盘空间 — 用量摘要或分类占用 |
-| `arka_repo_health` | 仓库健康 — 扫描或运行 lint/测试检查 |
-| `arka_agent_hub` | Agent Hub — 状态、适配器、检测、诊断、列表、内存来源或从 IDE 导入内存 |
+| `arka_remind` | 提醒：列出、添加或取消 |
+| `arka_bookmarks` | 书签：列出、保存、搜索、获取或删除 |
+| `arka_docker` | Docker：健康、容器、镜像或日志 |
+| `arka_jsonkit` | JSON：校验、美化、压缩或按路径取值 |
+| `arka_timekit` | 时间：当前时间、时区转换或相对偏移 |
+| `arka_urlkit` | URL 工具：解析、规范化或 slugify |
+| `arka_password` | 密码：生成一次性密钥（不保存） |
+| `arka_spotify` | Spotify：搜索曲目；在 MCP 个人技能安全模式下默认隐藏 |
+| `arka_textkit` | 文本工具：UUID、哈希或 Base64 编解码 |
+| `arka_calendar` | 日历：今日行程（macOS Calendar.app） |
+| `arka_platform` | 平台：查看或检测系统能力 |
+| `arka_personalize` | 个性化：资料状态、技能提示、快速开始 |
+| `arka_persona` | 人设：列出或查看人设配置 |
+| `arka_github` | GitHub：解析仓库或获取近期动态 |
+| `arka_price` | 比价：列出零售源或解析查询 |
+| `arka_config` | 配置：列出文件/目录或显示路径（只读） |
+| `arka_sports` | 体育：实时比分或联赛列表 |
+| `arka_qr` | 二维码：将文本/URL 编码为 ASCII 图案 |
+| `arka_currency` | 汇率：金额转换或解析自然语言查询 |
+| `arka_disk` | 磁盘空间：用量摘要或分类占用 |
+| `arka_repo_health` | 仓库健康：扫描或运行 lint/测试检查 |
+| `arka_agent_hub` | Agent Hub：状态、适配器、检测、诊断、列表、记忆来源或从 IDE 导入记忆 |
 | `arka_team_run` | 运行智能体团队工作流 |
 
-### Agent Hub
+### MCP 安全默认设置 {#mcp-safe-defaults}
+
+Arka MCP 默认隐藏或阻止个人桌面/设备类技能，这样 IDE 智能体就不会意外打开 Brave、启动 Spotify、播放媒体或运行个性化每日简报。这不会改变本地 Fish/CLI 的行为。
+
+默认禁用的 MCP 示例：
+
+- `arka_spotify`
+- `play_spotify`、`spotify_control`、`spotify_brave_debug`
+- `play_song`、`play_youtube`、`play_movie`、`stop_music`
+- `open_url`、`open`、`browse`、`open_urls`
+- `search_web`、`browse_web`、`agent_browser`
+- `daily_brief`
+
+无头/开发安全的工具，例如 `browser_check`、`web_screenshot`、`automate`、仓库工具、代码工具、数据工具和 `arka_route`，仍然可用。
+
+只有在信任 MCP 客户端可以操作你的桌面/浏览器/媒体状态时才启用：
+
+```bash
+ARKA_MCP_ENABLE_PERSONAL_SKILLS=1 arka mcp serve
+```
+
+如需更精细的覆盖：
+
+```bash
+ARKA_MCP_ENABLED_TOOLS=arka_spotify arka mcp serve
+ARKA_MCP_ENABLED_SKILLS=daily_brief,open_url arka mcp serve
+```
+
+### Agent Hub {#agent-hub}
 
 `agent_hub sync` 将 MCP 配置复制到中枢，并确保 **arka** 自服务器条目存在，以便其他启动智能体可以合并它：
 
@@ -219,19 +421,61 @@ arka agent_hub adapters    # see which agent configs would gain hub servers
 
 中枢环境变量（`ARKA_MCP_CONFIG`、`ARKA_HUB_DIR`）已在 [Agent Hub](/cn/guides/agent-hub) 中记录。
 
-#### 通过 MCP 从 IDE 导入内存
+#### 通过 MCP 导入 IDE 记忆 {#import-ide-memory-via-mcp}
 
-`arka_agent_hub` 可列出并导入 Cursor、Codex、OpenClaw、Arka 会话笔记及中枢导出：
+`arka_agent_hub` 可以列出并导入来自 Cursor、Codex、OpenClaw、Arka 会话笔记和中枢导出的记忆：
 
 ```bash
+# List importable memory files on this machine
 arka mcp call arka arka_agent_hub --args '{"action":"memory_sources"}'
+
+# Import one IDE source or everything detected
 arka mcp call arka arka_agent_hub --args '{"action":"import_memory","source":"cursor"}'
 arka mcp call arka arka_agent_hub --args '{"action":"import_memory","all":true}'
+
+# Import an explicit export file
+arka mcp call arka arka_agent_hub --args '{"action":"import_memory","path":"~/.config/arka/hub/memory/summary.json"}'
 ```
 
 | `action` | 参数 | 返回 |
 | --- | --- | --- |
-| `memory_sources` | — | 本地存在的 `{ id, name, ide, files, file_count }` 数组 |
-| `import_memory` | `path` 或 `source` / `ide` / `agent` 或 `all: true` | `{ ok, facts_imported, notes_imported, imports, errors }` |
+| `memory_sources` | — | 本地存在的来源的 `{ id, name, ide, files, file_count }` 数组 |
+| `import_memory` | `path` **或** `source` / `ide` / `agent` **或** `all: true` | `{ ok, facts_imported, notes_imported, imports, errors }` |
 
-详见 [Agent Hub — 内存导入](/cn/guides/agent-hub#内存导入)。
+`arka_agent_hub` 的其他操作：`status`、`adapters`、`detect`、`doctor`、`list`。来源 ID 和格式详见 [Agent Hub：记忆导入](/cn/guides/agent-hub#内存导入)。
+
+## 使用 Arka MCP 扩展 Arka {#using-arka-mcp-to-extend-arka}
+
+添加技能时，先亲自使用 MCP 工作流：用 Arka 自己的 MCP 工具发现缺口，再将新能力接回 CLI 路由。
+
+### 示例工作流 {#example-workflow}
+
+```bash
+# Verify the local MCP server
+arka mcp doctor
+
+# Inspect repo layout and health (same tools Cursor agents call)
+arka mcp call arka arka_repo_map --args '{"depth":2,"path":"/path/to/arka"}'
+arka mcp call arka arka_repo_health --args '{"path":"/path/to/arka"}'
+
+# List Arka's native MCP surface
+arka mcp self-tools
+
+# From fish / NL
+arka "list arka mcp tools"
+arka "show agent heartbeat"
+arka "validate json package.json"
+```
+
+当某个工具存在于 MCP 服务器上但缺少自然语言路由时（例如 `arka_heartbeat` 或 `arka_jsonkit`），请添加：
+
+1. Python 模块中的 `route_command()`
+2. `src/arka/routing/symbolic.py` 中的 `route_*()`
+3. `config.fish` 中的 Fish 辅助函数 `_agent_is_*_request` / `_agent_route_*`
+4. `tests/test_*_routing.py` 和 `tests/test_nl_routing_coverage.py` 中的测试
+
+这样可以让 Cursor MCP、终端自然语言和 `ROUTE_MODE=symbolic_only` 保持同步。
+
+## 浏览器安全 {#browser-safety}
+
+MCP 请求不会隐式打开网站或桌面浏览器窗口。请使用 `browser_check`、`web_screenshot` 或 `automate` 等无头技能进行检查。如果某个工作流确实需要有界面的标签页，请在获得用户批准后，使用 `allow_browser: true` 调用 `arka_skill` 工具。这可以防止模型生成的 URL 意外启动浏览器。
